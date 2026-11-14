@@ -1,0 +1,6 @@
+{
+  "name": "Pixel Quest",
+  "description": "เกม Pixel RPG ผจญภัย ล่ามอนสเตอร์ เปลี่ยนอาชีพ ตีบวกอาวุธ พร้อมระบบบันทึกอัตโนมัติ",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,259 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: var(--font-pixel), var(--font-thai), ui-sans-serif, system-ui, sans-serif;
+  --color-hp: var(--hp);
+  --color-mp: var(--mp);
+  --color-exp: var(--exp);
+  --color-gold: var(--gold);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  color-scheme: dark;
+  --background: #0e0f1a;
+  --foreground: #f3ecd9;
+  --card: #1b1c2e;
+  --card-foreground: #f3ecd9;
+  --popover: #1b1c2e;
+  --popover-foreground: #f3ecd9;
+  --primary: #e8b64c;
+  --primary-foreground: #1a1423;
+  --secondary: #2a2c45;
+  --secondary-foreground: #f3ecd9;
+  --muted: #23243a;
+  --muted-foreground: #a6a192;
+  --accent: #4fc3a1;
+  --accent-foreground: #0e0f1a;
+  --destructive: #e5484d;
+  --border: #45405e;
+  --input: #2a2c45;
+  --ring: #e8b64c;
+  --chart-1: #e8b64c;
+  --chart-2: #4fc3a1;
+  --chart-3: #4c8bf5;
+  --chart-4: #e5484d;
+  --chart-5: #c77dff;
+  --radius: 0rem;
+  --hp: #e5484d;
+  --mp: #4c8bf5;
+  --exp: #c77dff;
+  --gold: #f2c94c;
+  --sidebar: #1b1c2e;
+  --sidebar-foreground: #f3ecd9;
+  --sidebar-primary: #e8b64c;
+  --sidebar-primary-foreground: #1a1423;
+  --sidebar-accent: #2a2c45;
+  --sidebar-accent-foreground: #f3ecd9;
+  --sidebar-border: #45405e;
+  --sidebar-ring: #e8b64c;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  .pixel-panel {
+    background: var(--card);
+    border: 3px solid var(--border);
+    box-shadow:
+      inset 0 0 0 2px #0e0f1a,
+      4px 4px 0 0 rgba(0, 0, 0, 0.55);
+  }
+  .pixel-btn {
+    border: 2px solid #0e0f1a;
+    box-shadow:
+      inset -2px -2px 0 0 rgba(0, 0, 0, 0.35),
+      inset 2px 2px 0 0 rgba(255, 255, 255, 0.18);
+  }
+  .pixel-btn:active {
+    box-shadow: inset 2px 2px 0 0 rgba(0, 0, 0, 0.35);
+  }
+  .pixelated {
+    image-rendering: pixelated;
+  }
+
+  .gem-art-wrap {
+    position: relative;
+    display: grid;
+    width: 76px;
+    height: 76px;
+    flex: 0 0 76px;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 0.65rem;
+    image-rendering: pixelated;
+  }
+
+  .gem-art-wrap-large {
+    width: 136px;
+    height: 136px;
+    flex-basis: 136px;
+  }
+
+  .gem-art-grid {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    image-rendering: pixelated;
+    filter: drop-shadow(0 0 9px rgba(255, 255, 255, 0.24));
+  }
+
+  .gem-art-pixel {
+    display: block;
+    image-rendering: pixelated;
+  }
+
+  .gem-art-sparkle {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    animation: gem-sparkle 2.4s steps(2, end) infinite;
+  }
+
+  .gem-art-sparkle-one {
+    top: 18%;
+    right: 19%;
+  }
+
+  .gem-art-sparkle-two {
+    bottom: 18%;
+    left: 18%;
+    animation-delay: 1.2s;
+  }
+
+  .gem-art-orbit {
+    position: absolute;
+    width: 83%;
+    height: 34%;
+    border: 1px solid;
+    border-radius: 50%;
+    transform: rotate(-28deg);
+    animation: gem-orbit 5s linear infinite;
+  }
+
+  .gem-motion-float .gem-art-grid,
+  .gem-motion-bounce .gem-art-grid {
+    animation: gem-float 2.8s ease-in-out infinite;
+  }
+
+  .gem-motion-bounce .gem-art-grid {
+    animation-duration: 1.6s;
+  }
+
+  .gem-motion-pulse .gem-art-grid {
+    animation: gem-pulse 1.8s ease-in-out infinite;
+  }
+
+  .gem-motion-wings .gem-art-grid {
+    animation: gem-wings 1.4s steps(2, end) infinite;
+  }
+
+  .gem-motion-sparkle .gem-art-grid {
+    animation: gem-float 2.2s ease-in-out infinite;
+    filter: drop-shadow(0 0 5px rgba(253, 230, 138, 0.48));
+  }
+
+  @keyframes gem-float {
+    0%, 100% { transform: translateY(2px); }
+    50% { transform: translateY(-4px); }
+  }
+
+  @keyframes gem-pulse {
+    0%, 100% { transform: scale(0.96); filter: brightness(0.95) drop-shadow(0 0 6px rgba(251, 146, 60, 0.35)); }
+    50% { transform: scale(1.04); filter: brightness(1.2) drop-shadow(0 0 14px rgba(253, 230, 138, 0.65)); }
+  }
+
+  @keyframes gem-wings {
+    0%, 100% { transform: scaleX(0.96) translateY(1px); }
+    50% { transform: scaleX(1.04) translateY(-2px); }
+  }
+
+  @keyframes gem-sparkle {
+    0%, 100% { opacity: 0.2; transform: scale(0.7); }
+    50% { opacity: 1; transform: scale(1.4); }
+  }
+
+  @keyframes gem-orbit {
+    from { transform: rotate(-28deg); }
+    to { transform: rotate(332deg); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .gem-art-wrap *,
+    .gem-art-orbit {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+    }
+  }
+
+  .asset-no-bg {
+    mix-blend-mode: normal;
+    isolation: isolate;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 600px) {
+  .game-ui {
+    transform: scale(0.78);
+    transform-origin: bottom left;
+    width: 128.21%;
+    height: 128.21%;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 440px) {
+  .game-ui {
+    transform: scale(0.68);
+    width: 147.06%;
+    height: 147.06%;
+  }
+}

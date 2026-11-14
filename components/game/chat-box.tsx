@@ -1,0 +1,147 @@
+'use client'
+
+import { useEffect, useRef, useState } from 'react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
+import { game, submitChat, type ChatType } from '@/lib/game/engine'
+import { useGame } from '@/lib/game/use-game'
+import { cn } from '@/lib/utils'
+
+const TYPE_STYLE: Record<ChatType, string> = {
+  system: 'text-accent',
+  player: 'text-foreground',
+  gm: 'text-gold',
+  loot: 'text-[#7ae582]',
+  error: 'text-destructive',
+  npc: 'text-[#ffd6a5]',
+}
+
+const TYPE_TAG: Record<ChatType, string> = {
+  system: '[ระบบ]',
+  player: '',
+  gm: '[GM]',
+  loot: '[ไอเทม]',
+  error: '[!]',
+  npc: '[NPC]',
+}
+
+export function ChatBox() {
+  const g = useGame()
+  const [text, setText] = useState('')
+  const [isOpen, setIsOpen] = useState(true)
+  const [position, setPosition] = useState({ x: 8, y: 0 })
+  const dragRef = useRef({ active: false, moved: false, offsetX: 0, offsetY: 0 })
+  const listRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const move = (event: PointerEvent) => {
+      if (!dragRef.current.active) return
+      event.preventDefault()
+      event.stopPropagation()
+      dragRef.current.moved = true
+      setPosition({
+        x: Math.max(4, Math.min(window.innerWidth - 260, event.clientX - dragRef.current.offsetX)),
+        y: Math.max(4, Math.min(window.innerHeight - 96, event.clientY - dragRef.current.offsetY)),
+      })
+    }
+    const stop = () => { dragRef.current.active = false }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', stop)
+    return () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', stop)
+    }
+  }, [])
+
+  const startDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    const rect = event.currentTarget.parentElement?.getBoundingClientRect()
+    if (!rect) return
+    dragRef.current = { active: true, moved: false, offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top }
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+  }
+  const lastId = g.chat.at(-1)?.id ?? 0
+
+  useEffect(() => {
+    const el = listRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [lastId, isOpen])
+
+  return (
+    <div
+      onPointerDown={(event) => event.stopPropagation()}
+      className="pointer-events-auto pixel-panel absolute z-20 flex w-[min(16rem,calc(100vw-1rem))] touch-none flex-col bg-card/90 shadow-lg"
+      style={{ left: position.x, top: position.y || undefined, bottom: position.y ? undefined : '7rem' }}
+    >
+      
+      {/* แถบหัวข้อแชท + ปุ่มกดพับ/ขยาย */}
+      <div
+        onPointerDown={startDrag}
+        onClick={() => {
+          if (!dragRef.current.moved) setIsOpen((open) => !open)
+          dragRef.current.moved = false
+        }}
+        className="flex items-center justify-between px-2.5 py-1 bg-secondary/70 border-b border-border text-[11px] font-semibold cursor-pointer select-none text-foreground"
+      >
+        <span>💬 แชท ({g.chat.length})</span>
+        <button type="button" aria-label="พับหน้าต่างแชท" className="p-0.5 hover:opacity-80">
+          {isOpen ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
+        </button>
+      </div>
+
+      {/* ส่วนเนื้อหาแชทและฟอร์มพิมพ์ จะแสดงก็ต่อเมื่อ isOpen เป็น true */}
+      {isOpen && (
+        <>
+          <div
+            ref={listRef}
+            className="h-14 overflow-y-auto px-2 py-1 text-[11px] leading-snug md:h-24"
+            role="log"
+            aria-live="polite"
+            aria-label="ช่องแชท"
+          >
+            {g.chat.map((m) => (
+              <p key={m.id} className={cn('break-words', TYPE_STYLE[m.type])}>
+                {TYPE_TAG[m.type] && <span className="mr-1 opacity-80">{TYPE_TAG[m.type]}</span>}
+                {m.author && <span className="mr-1 text-primary">{m.author}:</span>}
+                {m.text}
+              </p>
+            ))}
+          </div>
+          <form
+            className="flex border-t border-border"
+            onSubmit={(e) => {
+              e.preventDefault()
+              submitChat(text)
+              setText('')
+              ;(document.activeElement as HTMLElement | null)?.blur()
+            }}
+          >
+            <label htmlFor="chat-input" className="sr-only">
+              พิมพ์ข้อความแชท
+            </label>
+            <input
+              id="chat-input"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onFocus={() => {
+                game.keys.clear()
+                game.attackHeld = false
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') (e.target as HTMLInputElement).blur()
+                if (e.key === 'Enter' && (e.nativeEvent.isComposing || e.keyCode === 229)) e.preventDefault()
+              }}
+              maxLength={140}
+              autoComplete="off"
+              placeholder="พิมพ์แชท..."
+              className="min-w-0 flex-1 bg-transparent px-2 py-1 text-xs text-foreground outline-none placeholder:text-muted-foreground"
+            />
+            <button type="submit" className="px-2.5 py-1 text-xs text-primary hover:bg-secondary">
+              ส่ง
+            </button>
+          </form>
+        </>
+      )}
+    </div>
+  )
+}

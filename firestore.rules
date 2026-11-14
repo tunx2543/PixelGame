@@ -1,0 +1,202 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return request.auth.token.email_verified == true;
+    }
+
+    function isUserAccountOwner(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId)) &&
+        get(/databases/$(database)/documents/users/$(userId)).data.uid == request.auth.uid;
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'displayName', 'createdAt', 'updatedAt']) &&
+        isValidId(data.uid) &&
+        data.uid == request.auth.uid &&
+        data.email is string &&
+        data.email.size() >= 3 &&
+        data.email.size() <= 320 &&
+        data.displayName is string &&
+        data.displayName.size() >= 1 &&
+        data.displayName.size() <= 100 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidCharacterSave(data, characterId) {
+      return data.keys().hasAll([
+          'id',
+          'ownerId',
+          'name',
+          'jobId',
+          'level',
+          'exp',
+          'hp',
+          'mp',
+          'gold',
+          'diamonds',
+          'mapId',
+          'playTime',
+          'saveData',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id',
+          'ownerId',
+          'name',
+          'jobId',
+          'level',
+          'exp',
+          'hp',
+          'mp',
+          'gold',
+          'diamonds',
+          'mapId',
+          'playTime',
+          'saveData',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.id == characterId &&
+        data.id.size() <= 64 &&
+        isValidId(data.ownerId) &&
+        data.ownerId == request.auth.uid &&
+        data.name is string &&
+        data.name.size() >= 1 &&
+        data.name.size() <= 24 &&
+        data.jobId is string &&
+        data.jobId.size() >= 1 &&
+        data.jobId.size() <= 32 &&
+        data.jobId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.level is int &&
+        data.level >= 1 &&
+        data.level <= 999 &&
+        data.exp is int &&
+        data.exp >= 0 &&
+        data.hp is int &&
+        data.hp >= 0 &&
+        data.mp is int &&
+        data.mp >= 0 &&
+        data.gold is int &&
+        data.gold >= 0 &&
+        data.diamonds is int &&
+        data.diamonds >= 0 &&
+        data.mapId is string &&
+        data.mapId.size() >= 1 &&
+        data.mapId.size() <= 32 &&
+        data.mapId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.playTime is number &&
+        data.playTime >= 0 &&
+        data.saveData is map &&
+        data.saveData.keys().size() <= 40 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && isEmailVerified() && isValidId(userId) && userId == request.auth.uid;
+      allow list: if false;
+      allow create: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(userId) &&
+        userId == request.auth.uid &&
+        isValidUserProfile(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(userId) &&
+        userId == request.auth.uid &&
+        isValidUserProfile(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['email', 'displayName', 'updatedAt']);
+      allow delete: if false;
+
+      match /characters/{characterId} {
+        allow get: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(userId) &&
+          isValidId(characterId) &&
+          userId == request.auth.uid &&
+          isUserAccountOwner(userId) &&
+          existing().ownerId == request.auth.uid;
+
+        allow list: if isSignedIn() &&
+          isEmailVerified() &&
+          userId == request.auth.uid &&
+          existing().ownerId == request.auth.uid;
+
+        allow create: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(userId) &&
+          isValidId(characterId) &&
+          userId == request.auth.uid &&
+          isValidCharacterSave(incoming(), characterId) &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          isUserAccountOwner(userId);
+
+        allow update: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(userId) &&
+          isValidId(characterId) &&
+          userId == request.auth.uid &&
+          isValidCharacterSave(incoming(), characterId) &&
+          incoming().id == existing().id &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'name',
+            'jobId',
+            'level',
+            'exp',
+            'hp',
+            'mp',
+            'gold',
+            'diamonds',
+            'mapId',
+            'playTime',
+            'saveData',
+            'updatedAt'
+          ]) &&
+          isUserAccountOwner(userId);
+
+        allow delete: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(userId) &&
+          isValidId(characterId) &&
+          userId == request.auth.uid &&
+          isUserAccountOwner(userId) &&
+          existing().ownerId == request.auth.uid;
+      }
+    }
+  }
+}

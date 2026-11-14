@@ -1,0 +1,151 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Private authenticated player account record isolated to the owning user.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the account owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Verified account email address.",
+          "maxLength": 320
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Account display name.",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the account profile was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the account profile was last updated."
+        }
+      },
+      "required": ["uid", "email", "displayName", "createdAt", "updatedAt"]
+    },
+    "CharacterSave": {
+      "title": "CharacterSave",
+      "description": "Playable RPG character slot and full cloud save state owned by a user.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Character slot document ID.",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the character owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "In-game character name.",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "jobId": {
+          "type": "string",
+          "description": "Current RPG class/job identifier.",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "level": {
+          "type": "integer",
+          "description": "Current character level."
+        },
+        "exp": {
+          "type": "integer",
+          "description": "Current character experience points."
+        },
+        "hp": {
+          "type": "integer",
+          "description": "Current character health points."
+        },
+        "mp": {
+          "type": "integer",
+          "description": "Current character mana points."
+        },
+        "gold": {
+          "type": "integer",
+          "description": "Current gold currency."
+        },
+        "diamonds": {
+          "type": "integer",
+          "description": "Current diamond currency."
+        },
+        "mapId": {
+          "type": "string",
+          "description": "Current map identifier.",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "playTime": {
+          "type": "number",
+          "description": "Total play time in seconds."
+        },
+        "saveData": {
+          "type": "object",
+          "description": "Native Firestore map containing full SaveData state."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the character was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the character was last saved."
+        }
+      },
+      "required": [
+        "id",
+        "ownerId",
+        "name",
+        "jobId",
+        "level",
+        "exp",
+        "hp",
+        "mp",
+        "gold",
+        "diamonds",
+        "mapId",
+        "playTime",
+        "saveData",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private user account profiles keyed by Firebase Auth UID."
+    },
+    "/users/{userId}/characters/{characterId}": {
+      "schema": { "$ref": "#/entities/CharacterSave" },
+      "description": "Player character slots and cloud RPG saves owned by the parent user."
+    }
+  }
+}
