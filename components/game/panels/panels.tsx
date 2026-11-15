@@ -11,6 +11,7 @@ import { GachaPanel } from './gacha-panel'
 import { GemShopPanel } from './gem-shop-panel'
 import { FriendsPanel } from './friends-panel'
 import { GmSummonPanel } from './gm-summon-panel'
+import { DevToolsPanel } from './dev-tools-panel'
 import { InventoryPanel } from './inventory-panel'
 import { RebirthPanel } from './rebirth-panel'
 import { JobPanel } from './job-panel'
@@ -37,6 +38,8 @@ export function Panels() {
       return <TradePanel />
     case 'gm-summon':
       return <GmSummonPanel />
+    case 'dev-tools':
+      return <DevToolsPanel />
     case 'inventory':
       return <InventoryPanel />
     case 'rebirth':
@@ -99,12 +102,14 @@ export function PxButton({
   onClick,
   disabled,
   variant = 'primary',
+  type = 'button',
   className,
 }: {
   children: ReactNode
   onClick?: () => void
   disabled?: boolean
   variant?: 'primary' | 'secondary' | 'accent' | 'danger'
+  type?: 'button' | 'submit'
   className?: string
 }) {
   const styles = {
@@ -115,7 +120,7 @@ export function PxButton({
   }[variant]
   return (
     <button
-      type="button"
+      type={type}
       onClick={onClick}
       disabled={disabled}
       className={`pixel-btn px-3 py-1.5 text-xs hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 ${styles} ${className ?? ''}`}

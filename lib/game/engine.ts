@@ -26,7 +26,7 @@ import {
   type CloudCharacterRecord,
 } from '@/lib/firebase/characters'
 import { cancelTradeRequest, createBan, createTrade, publishAnnouncement, sendFriendRequest, sendWhisper } from './social'
-import { PERMANENT_GM_UID } from './permissions'
+import { isGmAccountUser, PERMANENT_GM_GAME_UID, PERMANENT_GM_UID } from './permissions'
 import {
   applyLevelAndRewards,
   COMBAT_PETS,
@@ -48,6 +48,20 @@ import {
   type QuestState,
   type TowerState,
 } from './systems'
+import {
+  claimDailyMission,
+  onDailyMissionCompleted,
+  recordDailyMissionProgress,
+} from './daily-missions'
+
+if (typeof window !== 'undefined') {
+  onDailyMissionCompleted((mission) => {
+    if (game.p) {
+      say('loot', `★ สำเร็จภารกิจรายวัน: "${mission.title}" — เปิดเมนูเควสต์เพื่อรับรางวัล!`)
+      notify()
+    }
+  })
+}
 
 export const SAVE_KEY = 'pixel-rpg-save-v1'
 const GM_UNLOCK = '/openmodgm24156'
@@ -55,9 +69,22 @@ const GM_UNLOCK = '/openmodgm24156'
 const ACTIVE_SLOT_STORAGE_KEY = 'pixel-rpg-active-slot'
 let activeAccountUserId: string | null = null
 let activeAccountUid: number | undefined
+let activeAccountGameUid: string | undefined
+let activeAccountIsGm = false
 let activeCharacterSlot =
   typeof window !== 'undefined' ? (localStorage.getItem(ACTIVE_SLOT_STORAGE_KEY) || 'slot_1') : 'slot_1'
 let pendingGameUid: { userId: string; promise: Promise<number | undefined> } | null = null
+
+export function isCurrentAccountGm(): boolean {
+  const fbUser = firebaseAuth.currentUser
+  if (fbUser) return isGmAccountUser(fbUser)
+  return false
+}
+
+export function getActiveAccountGameUid(): string | undefined {
+  if (isCurrentAccountGm()) return PERMANENT_GM_GAME_UID
+  return activeAccountGameUid
+}
 
 export function setActiveCharacterSlot(slotId: string) {
   activeCharacterSlot = slotId || 'slot_1'
@@ -107,14 +134,53 @@ function claimLegacySave(userId: string): SaveData | null {
   }
 }
 
-export function setGameAccountIdentity(userId: string | null, uid?: number) {
-  if (activeAccountUserId !== userId) activeAccountUid = undefined
+export function setGameAccountIdentity(
+  userId: string | null,
+  uid?: number,
+  gameUid?: string,
+  isGm?: boolean,
+) {
+  if (activeAccountUserId !== userId) {
+    activeAccountUid = undefined
+    activeAccountGameUid = undefined
+    activeAccountIsGm = false
+  }
   activeAccountUserId = userId
   if (uid !== undefined) activeAccountUid = uid
+  if (gameUid !== undefined) {
+    activeAccountGameUid = gameUid
+    const parsed = Number(gameUid)
+    if (Number.isSafeInteger(parsed)) activeAccountUid = parsed
+  }
+  if (isGm !== undefined) {
+    activeAccountIsGm = isGm
+  } else if (userId && firebaseAuth.currentUser?.uid === userId) {
+    activeAccountIsGm = isGmAccountUser(firebaseAuth.currentUser)
+    if (activeAccountIsGm) {
+      activeAccountGameUid = PERMANENT_GM_GAME_UID
+      activeAccountUid = PERMANENT_GM_UID
+    }
+  }
 }
 
 export async function resolveGameUid(userId: string): Promise<number | undefined> {
   setGameAccountIdentity(userId)
+  const fbUser = firebaseAuth.currentUser
+  if (fbUser && fbUser.uid === userId) {
+    try {
+      const identity = await ensureUserProfile(fbUser)
+      const numericUid = Number(identity.gameUid)
+      setGameAccountIdentity(
+        userId,
+        Number.isSafeInteger(numericUid) ? numericUid : undefined,
+        identity.gameUid,
+        identity.isGm,
+      )
+      return Number.isSafeInteger(numericUid) ? numericUid : undefined
+    } catch {
+      // Fall through cleanly if Firestore profile read is unavailable.
+    }
+  }
   if (activeAccountUid !== undefined) return activeAccountUid
   if (pendingGameUid?.userId === userId) return pendingGameUid.promise
 
@@ -170,6 +236,7 @@ export interface SaveData {
   y: number
   gm: boolean
   uid?: number
+  gameUid?: string
   god: boolean
   invisible?: boolean
   speed: number
@@ -274,7 +341,7 @@ interface Projectile {
   flatDmg?: number
 }
 
-export type PanelId = 'shop' | 'gem-shop' | 'enhance' | 'job' | 'storage' | 'character' | 'gacha' | 'rebirth' | 'friends' | 'trade' | 'inventory' | 'gm-summon' | 'pets' | 'quests'
+export type PanelId = 'shop' | 'gem-shop' | 'enhance' | 'job' | 'storage' | 'character' | 'gacha' | 'rebirth' | 'friends' | 'trade' | 'inventory' | 'gm-summon' | 'dev-tools' | 'pets' | 'quests'
 export type ChatType = 'system' | 'player' | 'gm' | 'loot' | 'error' | 'npc'
 export interface ChatMsg {
   id: number
@@ -795,6 +862,7 @@ function collectGroundDrops() {
       duration: 2.8,
     })
     say('loot', `เก็บ ${ITEMS[drop.itemId].name} x${drop.qty}`)
+    recordDailyMissionProgress({ itemsLooted: drop.qty })
   }
 }
 
@@ -812,6 +880,11 @@ function killMonster(m: Monster) {
   const gold = Math.round(baseGold * (petBonus?.goldMul ?? 1))
   const expGain = Math.round(def.exp * (petBonus?.expMul ?? 1))
   p.gold += gold
+  recordDailyMissionProgress({
+    kills: 1,
+    bossKills: def.boss ? 1 : 0,
+    goldEarned: gold,
+  })
   addFloat(m.x, m.y - 30, `+${gold}G`, '#f2c94c', 9)
   gainExp(expGain)
   if (p.petState?.activePetId) {
@@ -952,6 +1025,7 @@ export function castSkill(index: number) {
     addEffect({ type: 'ring', x: p.x, y: p.y - 6, r: 38, color: skill.color, max: 0.55 })
     addFloat(p.x, p.y - 30, `+${recovered} HP`, skill.color)
     say('system', `${skill.name} ฟื้นฟู HP ${recovered}`)
+    recordDailyMissionProgress({ skillsUsed: 1 })
     notify()
     return
   }
@@ -991,6 +1065,7 @@ export function castSkill(index: number) {
   game.skillCd[skill.id] = skill.cooldown
   game.attackAnim = 0.22
   addFloat(p.x, p.y - 30, skill.name, skill.color, 9)
+  recordDailyMissionProgress({ skillsUsed: 1 })
 }
 
 function hurtPlayer(rawAtk: number) {
@@ -1079,7 +1154,7 @@ export function action() {
 
 export function castGmSkill(skill: 'invisible' | 'summon' | 'immortal') {
   const p = player()
-  if (!p.gm) return
+  if (!p.gm || !isCurrentAccountGm()) return
   if (skill === 'invisible') {
     p.invisible = !p.invisible
     say('gm', `ล่องหน: ${p.invisible ? 'เปิด' : 'ปิด'}`)
@@ -1096,15 +1171,179 @@ export function castGmSkill(skill: 'invisible' | 'summon' | 'immortal') {
 
 export function summonGmItem(itemId: string) {
   const p = player()
-  if (!p.gm || !GM_ITEMS[itemId]) return
+  if (!p.gm || !isCurrentAccountGm() || !GM_ITEMS[itemId]) return
   if (addItem(itemId, 1)) say('gm', `เสก ${GM_ITEMS[itemId].name} สำเร็จ`)
   else say('error', 'กระเป๋าเต็ม')
   saveGame()
   notify()
 }
 
+export function devSetLevel(level: number) {
+  const p = player()
+  if (!p.gm || !isCurrentAccountGm()) return
+  const lv = Math.max(1, Math.min(MAX_LEVEL, Math.floor(level)))
+  const before = getStats()
+  p.level = lv
+  p.exp = 0
+  onLevelUp(before)
+  say('gm', `[DEV] ตั้งเลเวลเป็น ${lv}`)
+  saveGame()
+  notify()
+}
+
+export function devAddGold(amount: number) {
+  const p = player()
+  if (!p.gm || !isCurrentAccountGm()) return
+  const delta = Math.floor(amount)
+  if (!Number.isFinite(delta)) return
+  p.gold = Math.max(0, Math.min(2_000_000_000, p.gold + delta))
+  say('gm', `[DEV] ปรับ Gold เป็น ${p.gold.toLocaleString()} G`)
+  saveGame()
+  notify()
+}
+
+export function devAddDiamonds(amount: number) {
+  const p = player()
+  if (!p.gm || !isCurrentAccountGm()) return
+  const delta = Math.floor(amount)
+  if (!Number.isFinite(delta)) return
+  p.diamonds = Math.max(0, Math.min(1_000_000_000, (p.diamonds ?? 0) + delta))
+  say('gm', `[DEV] ปรับเพชรเป็น ${p.diamonds.toLocaleString()} D`)
+  saveGame()
+  notify()
+}
+
+export function devAddPoints(statDelta: number, skillDelta: number) {
+  const p = player()
+  if (!p.gm || !isCurrentAccountGm()) return
+  p.statPoints = Math.max(0, (p.statPoints ?? 0) + Math.floor(statDelta))
+  p.skillPoints = Math.max(0, (p.skillPoints ?? 0) + Math.floor(skillDelta))
+  say('gm', `[DEV] แต้มสเตตัส ${p.statPoints} · แต้มสกิล ${p.skillPoints}`)
+  saveGame()
+  notify()
+}
+
+export function devSetSpeed(speed: number) {
+  const p = player()
+  if (!p.gm || !isCurrentAccountGm()) return
+  p.speed = Math.max(0.5, Math.min(5, Number(speed) || 1))
+  say('gm', `[DEV] ความเร็ว x${p.speed}`)
+  saveGame()
+  notify()
+}
+
+export function devHealFull() {
+  const p = player()
+  if (!p.gm || !isCurrentAccountGm()) return
+  const s = getStats()
+  p.hp = s.maxHp
+  p.mp = s.maxMp
+  say('gm', '[DEV] ฟื้นฟู HP/MP เต็ม 100%')
+  saveGame()
+  notify()
+}
+
+export function devChangeJob(jobId: string) {
+  const p = player()
+  if (!p.gm || !isCurrentAccountGm() || !JOBS[jobId]) return
+  applyJob(jobId)
+  say('gm', `[DEV] เปลี่ยนอาชีพเป็น ${JOBS[jobId].name} (${jobId})`)
+  saveGame()
+  notify()
+}
+
+export function devTeleport(mapId: string) {
+  const p = player()
+  if (!p.gm || !isCurrentAccountGm() || !MAPS[mapId]) return
+  const map = MAPS[mapId]
+  changeMap(map.id, map.spawn.x, map.spawn.y)
+  say('gm', `[DEV] วาร์ปไปยัง ${map.name}`)
+  saveGame()
+  notify()
+}
+
+export function devSpawnMonster(monsterId: string, count = 1) {
+  const p = player()
+  if (!p.gm || !isCurrentAccountGm() || !MONSTERS[monsterId]) return
+  const n = Math.max(1, Math.min(20, Math.floor(count)))
+  const map = currentMap()
+  for (let i = 0; i < n; i++) {
+    const a = rand(0, Math.PI * 2)
+    let x = p.x + Math.cos(a) * 40
+    let y = p.y + Math.sin(a) * 40
+    if (boxBlocked(map, x, y, 6, 6)) {
+      x = p.x
+      y = p.y
+    }
+    const m = makeMonster(monsterId, x, y)
+    m.respawnAt = Infinity
+    game.monsters.push(m)
+  }
+  say('gm', `[DEV] เรียก ${MONSTERS[monsterId].name} x${n}`)
+  notify()
+}
+
+export function devKillAllMonsters() {
+  const p = player()
+  if (!p.gm || !isCurrentAccountGm()) return
+  let n = 0
+  for (const m of game.monsters) {
+    if (!m.dead) {
+      killMonster(m)
+      n++
+    }
+  }
+  say('gm', `[DEV] กำจัดมอนสเตอร์ในแมพ ${n} ตัว`)
+  saveGame()
+  notify()
+}
+
+export function devGiveItem(itemId: string, qty = 1, plus = 0) {
+  const p = player()
+  if (!p.gm || !isCurrentAccountGm() || !ITEMS[itemId]) return false
+  const safeQty = Math.max(1, Math.min(999, Math.floor(qty)))
+  const safePlus = Math.max(0, Math.min(MAX_PLUS, Math.floor(plus)))
+  const ok = addItem(itemId, safeQty, safePlus)
+  if (ok) say('gm', `[DEV] เสก ${ITEMS[itemId].name}${safePlus ? ` +${safePlus}` : ''} x${safeQty}`)
+  else say('error', 'กระเป๋าเต็ม')
+  saveGame()
+  notify()
+  return ok
+}
+
+export function devSetTowerFloor(highestFloor: number) {
+  const p = player()
+  if (!p.gm || !isCurrentAccountGm()) return
+  const safeFloor = Math.max(0, Math.min(200, Math.floor(highestFloor)))
+  p.towerState = {
+    ...(p.towerState ?? createDefaultTowerState()),
+    highestFloor: safeFloor,
+  }
+  say('gm', `[DEV] ตั้งชั้นหอคอยสูงสุดที่ผ่านเป็นชั้น ${safeFloor}`)
+  saveGame()
+  notify()
+}
+
+export function devBroadcastAnnouncement(rawBody: string) {
+  const p = player()
+  if (!p.gm || !isCurrentAccountGm()) return
+  const body = rawBody.trim().slice(0, 240)
+  if (!body) return
+  game.announcement = {
+    body,
+    authorId: firebaseAuth.currentUser?.uid ?? 'gm-0000',
+    until: Date.now() + 12_000,
+  }
+  say('gm', `[ประกาศ GM] ${body}`)
+  notify()
+}
+
 export function openPanel(id: PanelId) {
-  if (id === 'gm-summon' && !game.p?.gm) return
+  if ((id === 'gm-summon' || id === 'dev-tools') && (!game.p?.gm || !isCurrentAccountGm())) {
+    say('error', 'สงวนสิทธิ์เฉพาะบัญชี GM/Dev (ffsmilepay53@gmail.com)')
+    notify()
+    return
+  }
   game.panel = id
   notify()
 }
@@ -1243,6 +1482,7 @@ export function enhance(id: string): EnhanceResult {
   p.gold -= cost.gold
   removeItemId('enhance_stone', cost.stones)
   p.questState = recordQuestProgress(p.questState, { enhances: 1 }, p.kills)
+  recordDailyMissionProgress({ enhances: 1 })
   const rate = enhanceRate(it.plus)
   let res: EnhanceResult
   if (Math.random() < rate) {
@@ -1364,6 +1604,28 @@ export function claimQuestReward(questId: string): { ok: boolean; message: strin
   return { ok: true, message: `รับรางวัลสำเร็จ (${parts.join(' · ')})` }
 }
 
+export async function claimDailyMissionReward(missionId: string): Promise<{ ok: boolean; message: string }> {
+  if (!game.p) return { ok: false, message: 'ไม่พบข้อมูลตัวละคร' }
+  const p = game.p
+  return claimDailyMission(missionId, (mission) => {
+    applyLevelAndRewards(
+      p,
+      {
+        gold: mission.rewardGold,
+        exp: mission.rewardExp,
+        diamonds: mission.rewardDiamonds,
+        stones: mission.rewardStones,
+      },
+      () => getStats(p),
+      getInventoryCapacity(p),
+    )
+    saveGame()
+    notify()
+    say('loot', `รับรางวัลภารกิจรายวัน "${mission.title}" สำเร็จ!`)
+    return true
+  })
+}
+
 export function availableJobs() {
   const p = player()
   return Object.values(JOBS).filter((j) => j.from === p.jobId)
@@ -1458,6 +1720,7 @@ export function submitChat(raw: string) {
 const PUBLIC_HELP = ['/help - ดูคำสั่ง', '/save - บันทึกเกม', '/pos - ดูตำแหน่ง', '/friend <UID> - เพิ่มเพื่อน', '/trade <UID> - ขอแลกเปลี่ยน', '/whisper <UID> <ข้อความ> - กระซิบ', '/clear - ล้างแชท']
 
 const GM_HELP = [
+  '/dev - เปิดหน้าต่าง Dev Console (เฉพาะ GM UID 0000)',
   '/level <เลข> - ตั้งเลเวล',
   '/exp <เลข> - เพิ่ม EXP',
   '/gold <เลข> - เพิ่มเงิน',
@@ -1476,9 +1739,9 @@ const GM_HELP = [
   '/mobs - รายการไอดีมอนสเตอร์',
   '/job <ไอดี> - เปลี่ยนอาชีพทันที',
   '/jobs - รายการไอดีอาชีพ',
-  '/ban (UID)_(วินาที)_(เหตุผล) - แบนผู้เล่น เช่น /ban 00001_3600_ใช้บอท',
+  '/ban (UID)_(วินาที)_(เหตุผล) - แบนผู้เล่น เช่น /ban 0001_3600_ใช้บอท',
   '/gmchat <ข้อความ> - ประกาศแถบด้านบน',
-  '/closegm - ปิดโหมด GM',
+  '/closegm - ปิดโหมด GM ชั่วคราว',
 ]
 
 function runCommand(text: string) {
@@ -1490,13 +1753,19 @@ function runCommand(text: string) {
     return Number.isFinite(n) ? n : d
   }
 
-  if (cmd === GM_UNLOCK) {
-    if (p.uid !== PERMANENT_GM_UID) {
-      say('error', 'คำสั่งนี้ใช้ได้เฉพาะ UID 00000')
+  if (cmd === GM_UNLOCK || cmd === '/dev') {
+    if (!isCurrentAccountGm()) {
+      say('error', 'คำสั่งนี้สงวนเฉพาะ GM บัญชี ffsmilepay53@gmail.com (UID 0000)')
       return
     }
     p.gm = true
-    say('gm', 'โหมด GM เปิดอยู่แล้วสำหรับบัญชีหลัก')
+    p.gameUid = PERMANENT_GM_GAME_UID
+    p.uid = PERMANENT_GM_UID
+    if (cmd === '/dev') {
+      openPanel('dev-tools')
+    } else {
+      say('gm', 'โหมด GM/Dev เปิดใช้งานแล้วสำหรับ UID 0000 (ffsmilepay53@gmail.com)')
+    }
     saveGame()
     notify()
     return
@@ -1504,7 +1773,7 @@ function runCommand(text: string) {
   switch (cmd) {
     case '/help':
       PUBLIC_HELP.forEach((l) => say('system', l))
-      if (p.gm) say('gm', 'พิมพ์ /gm เพื่อดูคำสั่ง GM')
+      if (p.gm && isCurrentAccountGm()) say('gm', 'พิมพ์ /gm เพื่อดูคำสั่ง GM หรือ /dev เพื่อเปิด Dev Console')
       return
     case '/save':
       saveGame()
@@ -1670,19 +1939,19 @@ function runCommand(text: string) {
     '/gmchat': () => {
       const body = args.join(' ').trim()
       if (!body) return say('error', 'ใช้ /gmchat <ข้อความ>')
-      void publishAnnouncement(body).then((result) => { say(result.ok ? 'gm' : 'error', result.message); notify() })
+      devBroadcastAnnouncement(body)
     },
     '/closegm': () => {
       p.gm = false
       p.god = false
       p.speed = 1
-      say('system', 'ปิดโหมด GM แล้ว')
+      say('system', 'ปิดโหมด GM ชั่วคราวแล้ว (พิมพ์ /dev เพื่อเปิดใหม่ได้ตลอด)')
     },
   }
 
   const fn = gmCommands[cmd]
   if (!fn) return say('error', `ไม่รู้จักคำสั่ง ${cmd} พิมพ์ /help`)
-  if (!p.gm) return say('error', 'คุณไม่มีสิทธิ์ใช้คำสั่งนี้')
+  if (!p.gm || !isCurrentAccountGm()) return say('error', 'คุณไม่มีสิทธิ์ใช้คำสั่งนี้ (สงวนเฉพาะ GM ffsmilepay53@gmail.com)')
   fn()
   saveGame()
 }
@@ -1707,7 +1976,18 @@ async function saveCloudGame(p: SaveData) {
   try {
     const fbUser = firebaseAuth.currentUser
     if (fbUser) {
-      setGameAccountIdentity(fbUser.uid)
+      const gmAllowed = isGmAccountUser(fbUser)
+      p.gm = gmAllowed
+      if (!gmAllowed) {
+        p.god = false
+        p.invisible = false
+        p.speed = 1
+        if (p.jobId === 'gm') p.jobId = 'novice'
+      } else {
+        p.gameUid = PERMANENT_GM_GAME_UID
+        p.uid = PERMANENT_GM_UID
+      }
+      setGameAccountIdentity(fbUser.uid, p.uid, p.gameUid, gmAllowed)
       localStorage.setItem(localSaveKey(), JSON.stringify(p))
       await saveUserCharacter(fbUser.uid, activeCharacterSlot, p)
       return
@@ -1904,10 +2184,13 @@ export function loadGame(d: SaveData) {
   const shoes = sanitizeEquipment('shoes')
   const cloak = sanitizeEquipment('cloak')
   const accessory = sanitizeEquipment('accessory')
+  const gmAllowed = isCurrentAccountGm()
+  const resolvedGameUid = gmAllowed ? PERMANENT_GM_GAME_UID : activeAccountGameUid
+  const resolvedNumericUid = gmAllowed ? PERMANENT_GM_UID : activeAccountUid
   const p: SaveData = {
     version: 1,
     name: d.name.slice(0, 16) || 'นักผจญภัย',
-    jobId: JOBS[d.jobId] && d.jobId !== 'gm' ? d.jobId : 'novice',
+    jobId: JOBS[d.jobId] && (d.jobId !== 'gm' || gmAllowed) ? d.jobId : 'novice',
     level: Math.max(1, Math.min(MAX_LEVEL, Math.floor(d.level || 1))),
     exp: Math.max(0, d.exp || 0),
     hp: d.hp || 1,
@@ -1928,8 +2211,9 @@ export function loadGame(d: SaveData) {
     mapId: MAPS[d.mapId] ? d.mapId : 'town',
     x: Number.isFinite(d.x) ? d.x : (MAPS.town.spawn.x + 0.5) * TILE,
     y: Number.isFinite(d.y) ? d.y : (MAPS.town.spawn.y + 0.5) * TILE,
-    uid: activeAccountUid,
-    gm: activeAccountUid === PERMANENT_GM_UID,
+    uid: resolvedNumericUid,
+    gameUid: resolvedGameUid,
+    gm: gmAllowed,
     god: false,
     invisible: false,
     speed: 1,
@@ -1953,6 +2237,9 @@ export function loadGame(d: SaveData) {
 
 export function newGame(name: string) {
   const town = MAPS.town
+  const gmAllowed = isCurrentAccountGm()
+  const resolvedGameUid = gmAllowed ? PERMANENT_GM_GAME_UID : activeAccountGameUid
+  const resolvedNumericUid = gmAllowed ? PERMANENT_GM_UID : activeAccountUid
   const p: SaveData = {
     version: 1,
     name: name.trim().slice(0, 16) || 'นักผจญภัย',
@@ -1981,8 +2268,9 @@ export function newGame(name: string) {
     mapId: 'town',
     x: (town.spawn.x + 0.5) * TILE,
     y: (town.spawn.y + 0.5) * TILE,
-    gm: activeAccountUid === PERMANENT_GM_UID,
-    uid: activeAccountUid,
+    gm: gmAllowed,
+    uid: resolvedNumericUid,
+    gameUid: resolvedGameUid,
     god: false,
     invisible: false,
     speed: 1,

@@ -35,6 +35,7 @@ import {
   setGameAccountIdentity,
   type SaveData,
 } from '@/lib/game/engine'
+import { recordDailyMissionProgress } from '@/lib/game/daily-missions'
 import {
   calculateEnemyAttack,
   calculatePlayerAttack,
@@ -338,6 +339,12 @@ export function TowerArena() {
         leveledTo: applied.leveledTo,
       })
       setPhase('VICTORY')
+      recordDailyMissionProgress({
+        kills: 1,
+        bossKills: spec.isBossFloor ? 1 : 0,
+        towerClears: 1,
+        goldEarned,
+      })
 
       if (applied.leveledTo > applied.leveledFrom) {
         playLevelUpSfx(mutedRef.current)
@@ -382,6 +389,7 @@ export function TowerArena() {
         nextSave.mp -= skill.mp
         setSkillCds((prev) => ({ ...prev, [skill.id]: skill.cooldown }))
         setAttackCd(Math.max(attackCd, 0.2))
+        recordDailyMissionProgress({ skillsUsed: 1 })
       } else {
         setAttackCd(job.attackSpeed)
       }

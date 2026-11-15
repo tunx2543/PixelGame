@@ -5,7 +5,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { onAuthStateChanged, type User } from 'firebase/auth'
 import { Plus, Shield, Trash2, UserCheck } from 'lucide-react'
 import { auth } from '@/lib/firebase/client'
-import { CHARACTER_SLOTS, type CloudCharacterRecord } from '@/lib/firebase/characters'
+import { CHARACTER_SLOTS, ensureUserProfile, type CloudCharacterRecord } from '@/lib/firebase/characters'
+import { PERMANENT_GM_UID } from '@/lib/game/permissions'
 import { JOBS } from '@/lib/game/data'
 import {
   deleteAccountCharacter,
@@ -32,13 +33,17 @@ export function TitleScreen() {
   const [selectedSlotForNew, setSelectedSlotForNew] = useState<string>('slot_1')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [isLoadingSave, setIsLoadingSave] = useState(true)
+  const [cloudError, setCloudError] = useState('')
 
   const refreshCharacters = useCallback(async (currentUser: User | null) => {
     setIsLoadingSave(true)
     setConfirmDeleteId(null)
+    setCloudError('')
     try {
       if (currentUser) {
-        setGameAccountIdentity(currentUser.uid)
+        const identity = await ensureUserProfile(currentUser)
+        const numericUid = identity.isGm ? PERMANENT_GM_UID : Number(identity.gameUid)
+        setGameAccountIdentity(currentUser.uid, numericUid, identity.gameUid, identity.isGm)
         const list = await listAccountCharacters()
         if (list.length === 0) {
           // Migrate any legacy/local save into slot_1 on first login if present
@@ -64,7 +69,11 @@ export function TitleScreen() {
         setGuestSave(local)
         setMode(local ? 'list' : 'new')
       }
-    } catch {
+    } catch (error) {
+      console.error('Failed to load cloud characters:', error)
+      if (currentUser) {
+        setCloudError('ไม่สามารถโหลดข้อมูลตัวละครจากคลาวด์ได้ กรุณาลองใหม่อีกครั้ง')
+      }
       const fallback = readSave()
       setGuestSave(fallback)
       setMode(fallback ? 'list' : 'new')
@@ -152,6 +161,17 @@ export function TitleScreen() {
             <p role="status" className="py-8 text-center text-sm text-muted-foreground">
               กำลังโหลดข้อมูลตัวละคร...
             </p>
+          ) : user && cloudError ? (
+            <div className="flex flex-col items-center gap-3 py-4 text-center">
+              <p className="text-xs text-destructive">{cloudError}</p>
+              <button
+                type="button"
+                onClick={() => void refreshCharacters(user)}
+                className="pixel-btn bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:brightness-110"
+              >
+                ลองโหลดข้อมูลใหม่
+              </button>
+            </div>
           ) : user && mode === 'list' && cloudChars.length > 0 ? (
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between">

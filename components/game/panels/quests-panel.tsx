@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { Check, Coins, Gem, Hammer, Sparkles } from 'lucide-react'
-import { claimQuestReward } from '@/lib/game/engine'
+import { Check, Cloud, Coins, Dices, Gem, Hammer, Sparkles } from 'lucide-react'
+import { claimDailyMissionReward, claimQuestReward } from '@/lib/game/engine'
+import { useDailyMissions } from '@/lib/game/daily-missions'
 import { playQuestClaimSfx } from '@/lib/game/sfx'
 import {
   QUEST_DEFS,
@@ -19,8 +20,10 @@ import { PanelFrame, PxButton } from './panels'
 
 export function QuestsPanel() {
   const { p } = useGame()
+  const dailyState = useDailyMissions()
   const [tab, setTab] = useState<QuestCategory>('daily')
   const [notice, setNotice] = useState<string | null>(null)
+  const [claimingId, setClaimingId] = useState<string | null>(null)
   if (!p) return null
 
   const qs = sanitizeQuestState(p.questState, p.kills)
@@ -28,11 +31,24 @@ export function QuestsPanel() {
   const ps = sanitizePetState(p.petState, p.ownedGemItems, p.equippedGemCompanion)
 
   const filtered = QUEST_DEFS.filter((q) => q.category === tab)
+  const randomMissions = dailyState.board?.missions ?? []
+
+  const handleClaimRandomMission = async (missionId: string) => {
+    if (claimingId) return
+    setClaimingId(missionId)
+    try {
+      const res = await claimDailyMissionReward(missionId)
+      if (res.ok) playQuestClaimSfx(false)
+      setNotice(res.message)
+    } finally {
+      setClaimingId(null)
+    }
+  }
 
   return (
     <PanelFrame
       title="กระดานเควสต์และภารกิจ"
-      subtitle={`ภารกิจรายวัน (${qs.dailyDate}) รีเซ็ตทุกวัน · เควสต์ความสำเร็จรับได้ตลอด`}
+      subtitle={`ภารกิจสุ่มประจำวัน (${dailyState.board?.dateKey ?? qs.dailyDate}) รีเซ็ตทุกวัน · เควสต์ความสำเร็จรับได้ตลอด`}
     >
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -44,7 +60,7 @@ export function QuestsPanel() {
                 tab === 'daily' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              ภารกิจรายวัน
+              ภารกิจรายวัน{dailyState.claimableCount > 0 ? ` (${dailyState.claimableCount})` : ''}
             </button>
             <button
               type="button"
@@ -67,7 +83,125 @@ export function QuestsPanel() {
           </p>
         )}
 
+        {tab === 'daily' && (
+          <div className="space-y-2.5 border-2 border-primary/40 bg-primary/5 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Dices className="size-4 text-primary" aria-hidden />
+                <h3 className="text-sm font-bold text-primary">ภารกิจสุ่มประจำวัน (Daily Missions)</h3>
+              </div>
+              <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                <Cloud className="size-3.5 text-accent" aria-hidden />
+                {dailyState.isCloud
+                  ? dailyState.syncing
+                    ? 'กำลังบันทึกขึ้น Firestore...'
+                    : 'ซิงค์บน Firestore แล้ว'
+                  : 'โหมด Guest (บันทึกในเครื่อง)'}
+              </span>
+            </div>
+
+            {dailyState.error && (
+              <p className="border border-destructive/50 bg-destructive/10 px-2.5 py-1.5 text-[11px] text-destructive">
+                {dailyState.error}
+              </p>
+            )}
+
+            {dailyState.loading ? (
+              <p className="py-4 text-center text-xs text-muted-foreground">กำลังสุ่มและโหลดภารกิจประจำวัน...</p>
+            ) : (
+              <div className="space-y-2">
+                {randomMissions.map((mission) => {
+                  const current = Math.min(mission.target, mission.progress)
+                  const ready = !mission.claimed && current >= mission.target
+                  const pct = Math.min(100, Math.round((current / Math.max(1, mission.target)) * 100))
+
+                  return (
+                    <div
+                      key={mission.id}
+                      className={`border-2 p-3 ${
+                        ready
+                          ? 'border-accent bg-accent/10'
+                          : mission.claimed
+                            ? 'border-border/50 bg-muted/30 opacity-75'
+                            : 'border-border bg-background/70'
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-bold text-foreground">{mission.title}</h4>
+                            {mission.claimed && (
+                              <span className="inline-flex items-center gap-1 text-[11px] text-accent">
+                                <Check className="size-3.5" aria-hidden /> รับแล้ว
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">{mission.description}</p>
+
+                          <div className="flex items-center gap-2 pt-1">
+                            <div className="h-2 flex-1 overflow-hidden border border-[#0e0f1a] bg-muted">
+                              <div
+                                className={`h-full transition-[width] ${ready || mission.claimed ? 'bg-accent' : 'bg-primary'}`}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <span className="text-xs font-semibold tabular-nums text-foreground">
+                              {formatNum(current)} / {formatNum(mission.target)}
+                            </span>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-3 pt-1 text-[11px] tabular-nums">
+                            {mission.rewardGold > 0 && (
+                              <span className="inline-flex items-center gap-1 text-gold">
+                                <Coins className="size-3" aria-hidden /> +{formatNum(mission.rewardGold)} G
+                              </span>
+                            )}
+                            {mission.rewardDiamonds > 0 && (
+                              <span className="inline-flex items-center gap-1 text-cyan-200">
+                                <Gem className="size-3" aria-hidden /> +{formatNum(mission.rewardDiamonds)} เพชร
+                              </span>
+                            )}
+                            {mission.rewardExp > 0 && (
+                              <span className="inline-flex items-center gap-1 text-[#dca8ff]">
+                                <Sparkles className="size-3" aria-hidden /> +{formatNum(mission.rewardExp)} EXP
+                              </span>
+                            )}
+                            {mission.rewardStones > 0 && (
+                              <span className="inline-flex items-center gap-1 text-foreground">
+                                <Hammer className="size-3" aria-hidden /> หินตีบวก x{mission.rewardStones}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="shrink-0 self-center">
+                          <PxButton
+                            variant={ready ? 'accent' : 'secondary'}
+                            disabled={!ready || claimingId === mission.id}
+                            onClick={() => void handleClaimRandomMission(mission.id)}
+                          >
+                            {mission.claimed
+                              ? 'รับรางวัลแล้ว'
+                              : claimingId === mission.id
+                                ? 'กำลังรับ...'
+                                : ready
+                                  ? 'รับรางวัล'
+                                  : 'ยังไม่ครบ'}
+                          </PxButton>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="space-y-2.5">
+          {tab === 'daily' && (
+            <p className="text-xs font-semibold text-muted-foreground">ภารกิจประจำวันเพิ่มเติม</p>
+          )}
           {filtered.map((quest) => {
             const current = Math.min(quest.target, getQuestMetricValue(quest.metric, qs, ts, ps))
             const claimed = isQuestClaimed(quest, qs)

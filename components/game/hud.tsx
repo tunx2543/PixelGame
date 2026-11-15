@@ -2,10 +2,23 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { Castle, ChevronDown, ChevronUp, Gem, LogOut, PawPrint, ScrollText, UsersRound } from 'lucide-react'
+import { Castle, ChevronDown, ChevronUp, Gem, LogOut, PawPrint, ScrollText, Terminal, UsersRound } from 'lucide-react'
 import { useGame } from '@/lib/game/use-game'
-import { castGmSkill, currentJob, game, getStats, notify, openPanel, quitToTitle, saveGame } from '@/lib/game/engine'
+import {
+  castGmSkill,
+  currentJob,
+  game,
+  getActiveAccountGameUid,
+  getStats,
+  isCurrentAccountGm,
+  notify,
+  openPanel,
+  quitToTitle,
+  saveGame,
+} from '@/lib/game/engine'
 import { expToNext, MAX_LEVEL } from '@/lib/game/data'
+import { useDailyMissions } from '@/lib/game/daily-missions'
+import { PERMANENT_GM_GAME_UID } from '@/lib/game/permissions'
 import { countClaimableQuests } from '@/lib/game/systems'
 import { formatNum } from './format'
 
@@ -25,6 +38,7 @@ function Bar({ label, value, max, color }: { label: string; value: number; max: 
 
 export function Hud({ onOpenCheckin }: { onOpenCheckin?: () => void }) {
   const { p } = useGame()
+  const dailyMissions = useDailyMissions()
   const [isOpenProfile, setIsOpenProfile] = useState(true)
 
   if (!p) return null
@@ -32,7 +46,10 @@ export function Hud({ onOpenCheckin }: { onOpenCheckin?: () => void }) {
   const s = getStats(p)
   const job = currentJob()
   const need = expToNext(p.level)
-  const claimableQuests = countClaimableQuests(p.questState, p.towerState, p.petState, p.kills)
+  const isGmDev = Boolean(p.gm && isCurrentAccountGm())
+  const displayGameUid = isGmDev ? PERMANENT_GM_GAME_UID : (p.gameUid ?? getActiveAccountGameUid())
+  const claimableQuests =
+    countClaimableQuests(p.questState, p.towerState, p.petState, p.kills) + dailyMissions.claimableCount
 
   return (
     <div className="pointer-events-auto pixel-panel absolute left-2 top-2 z-20 w-[min(14rem,calc(100vw-1rem))] p-2 shadow-lg md:left-3 md:top-3">
@@ -42,7 +59,7 @@ export function Hud({ onOpenCheckin }: { onOpenCheckin?: () => void }) {
       >
         <div className="flex items-center gap-1.5 truncate">
           <p className="truncate text-xs font-semibold text-foreground">
-            {p.gm && <span className="mr-1 text-gold">[GM]</span>}
+            {isGmDev && <span className="mr-1 text-gold">[GM]</span>}
             {p.name}
           </p>
           <p className="shrink-0 text-[10px] text-primary">Lv.{p.level} {job.name}</p>
@@ -59,18 +76,33 @@ export function Hud({ onOpenCheckin }: { onOpenCheckin?: () => void }) {
             <Bar label="MP" value={p.mp} max={s.maxMp} color="bg-mp" />
             <Bar label="EXP" value={p.level >= MAX_LEVEL ? need : p.exp} max={need} color="bg-exp" />
           </div>
-          <div className="mt-1 flex items-center gap-3 text-[11px]">
-            <p className="text-gold">{formatNum(p.gold)} G</p>
-            <p className="text-cyan-200">{formatNum(p.diamonds ?? 0)} D</p>
+          <div className="mt-1 flex items-center justify-between gap-2 text-[11px]">
+            <div className="flex items-center gap-2.5">
+              <p className="text-gold">{formatNum(p.gold)} G</p>
+              <p className="text-cyan-200">{formatNum(p.diamonds ?? 0)} D</p>
+            </div>
+            {displayGameUid && (
+              <span className={`font-mono text-[10px] font-bold ${isGmDev ? 'text-amber-300' : 'text-muted-foreground'}`}>
+                UID:{displayGameUid}
+              </span>
+            )}
           </div>
-          {p.gm && (
+          {isGmDev && (
             <div className="mt-2 border-t border-gold/40 pt-2">
-              <p className="mb-1 text-[10px] font-semibold text-gold">GM SKILLS</p>
+              <p className="mb-1 text-[10px] font-semibold text-gold">GM · DEV TOOLS (UID 0000)</p>
               <div className="grid grid-cols-3 gap-1">
                 <button type="button" onClick={() => castGmSkill('invisible')} className="pixel-btn bg-gold/20 px-1 py-1 text-[9px] text-gold">ล่องหน</button>
                 <button type="button" onClick={() => castGmSkill('summon')} className="pixel-btn bg-gold/20 px-1 py-1 text-[9px] text-gold">เสกของ</button>
                 <button type="button" onClick={() => castGmSkill('immortal')} className="pixel-btn bg-gold/20 px-1 py-1 text-[9px] text-gold">อมตะ</button>
               </div>
+              <button
+                type="button"
+                onClick={() => openPanel('dev-tools')}
+                className="pixel-btn mt-1 flex w-full items-center justify-center gap-1 border border-amber-400/60 bg-amber-400/20 px-2 py-1 text-[10px] font-bold text-amber-300 hover:bg-amber-400/30"
+              >
+                <Terminal className="size-3" aria-hidden />
+                เปิดระบบ Dev Console
+              </button>
             </div>
           )}
           <div className="mt-2 grid grid-cols-2 gap-1">
@@ -96,6 +128,36 @@ export function Hud({ onOpenCheckin }: { onOpenCheckin?: () => void }) {
             <button type="button" onClick={() => { game.socialMenuOpen = !game.socialMenuOpen; game.panel = null; notify() }} className="pixel-btn grid place-items-center bg-accent/20 p-1.5 text-accent hover:bg-accent/30" aria-label="เปิดรายชื่อเพื่อน" title="รายชื่อเพื่อน"><UsersRound className="size-3.5" aria-hidden /></button>
             <button type="button" onClick={() => quitToTitle()} className="pixel-btn flex items-center justify-center gap-1 bg-secondary px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground" title="กลับหน้าล็อคอินตัวละคร"><LogOut className="size-3" aria-hidden /> สลับตัว</button>
           </div>
+
+          {dailyMissions.board && (
+            <button
+              type="button"
+              onClick={() => openPanel('quests')}
+              className="mt-2 w-full border border-border/70 bg-muted/40 p-1.5 text-left transition-colors hover:border-primary/60"
+            >
+              <div className="mb-1 flex items-center justify-between text-[9px] font-semibold text-primary">
+                <span>ภารกิจสุ่มวันนี้</span>
+                {dailyMissions.claimableCount > 0 && (
+                  <span className="text-accent">รับรางวัลได้ {dailyMissions.claimableCount}</span>
+                )}
+              </div>
+              <div className="space-y-0.5">
+                {dailyMissions.board.missions.map((m) => {
+                  const done = m.progress >= m.target
+                  return (
+                    <div key={m.id} className="flex items-center justify-between gap-1 text-[9px]">
+                      <span className={`truncate ${m.claimed ? 'text-muted-foreground line-through' : done ? 'text-accent font-semibold' : 'text-foreground/90'}`}>
+                        {m.title}
+                      </span>
+                      <span className={`shrink-0 tabular-nums ${m.claimed ? 'text-muted-foreground' : done ? 'text-accent font-semibold' : 'text-muted-foreground'}`}>
+                        {m.claimed ? 'รับแล้ว' : `${Math.min(m.target, m.progress)}/${m.target}`}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </button>
+          )}
         </div>
       )}
     </div>

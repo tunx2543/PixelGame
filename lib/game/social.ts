@@ -1,5 +1,10 @@
 'use client'
 
+import { auth as firebaseAuth } from '@/lib/firebase/client'
+import {
+  respondToFriendRequest as respondToFriendRequestFirebase,
+  sendFriendRequestByGameUid,
+} from '@/lib/firebase/friends'
 import { getOptionalClient } from '@/lib/supabase/client'
 import type { InvItem, SaveData } from './engine'
 
@@ -30,8 +35,16 @@ async function resolveTargetId(target: string): Promise<string | null> {
 }
 
 export async function sendFriendRequest(targetUserId: string): Promise<SocialResult> {
+  if (firebaseAuth.currentUser) {
+    try {
+      const res = await sendFriendRequestByGameUid(targetUserId)
+      return { ok: res.ok, message: res.message }
+    } catch {
+      return { ok: false, message: 'ส่งคำขอเพื่อนไม่สำเร็จ กรุณาตรวจสอบ UID อีกครั้ง' }
+    }
+  }
   const supabase = getOptionalClient()
-  if (!supabase) return { ok: false, message: OFFLINE_MESSAGE }
+  if (!supabase) return { ok: false, message: 'กรุณาเข้าสู่ระบบ Google ก่อนเพิ่มเพื่อนด้วย UID' }
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { ok: false, message: 'กรุณาเข้าสู่ระบบก่อน' }
   const targetId = await resolveTargetId(targetUserId)
@@ -43,6 +56,13 @@ export async function sendFriendRequest(targetUserId: string): Promise<SocialRes
 }
 
 export async function respondFriendRequest(requesterId: string, decision: 'accepted' | 'declined'): Promise<SocialResult> {
+  if (firebaseAuth.currentUser) {
+    try {
+      return await respondToFriendRequestFirebase(requesterId, decision)
+    } catch {
+      return { ok: false, message: 'ตอบกลับคำขอเพื่อนไม่สำเร็จ' }
+    }
+  }
   const supabase = getOptionalClient()
   if (!supabase) return { ok: false, message: OFFLINE_MESSAGE }
   const { data, error } = await supabase.rpc('respond_friend_request', { requester_id: requesterId, decision })

@@ -2,7 +2,19 @@
 
 import { useState } from 'react'
 import { ITEMS } from '@/lib/game/data'
-import { canEquip, consumeItem, currentJob, getInventoryCapacity, getStats, itemLabel, itemPower, unequip } from '@/lib/game/engine'
+import {
+  canEquip,
+  consumeItem,
+  currentJob,
+  getActiveAccountGameUid,
+  getInventoryCapacity,
+  getStats,
+  isCurrentAccountGm,
+  itemLabel,
+  itemPower,
+  unequip,
+} from '@/lib/game/engine'
+import { PERMANENT_GM_GAME_UID } from '@/lib/game/permissions'
 import { useGame } from '@/lib/game/use-game'
 import { formatNum, formatPlayTime } from '../format'
 import { ItemIcon, ItemSlot } from '../item-icon'
@@ -18,7 +30,11 @@ export function CharacterPanel() {
   const def = item ? ITEMS[item.itemId] : null
   const equipErr = item && def && (def.kind === 'weapon' || def.kind === 'armor') ? canEquip(item) : null
 
+  const isGmDev = Boolean(p.gm && isCurrentAccountGm())
+  const displayGameUid = isGmDev ? PERMANENT_GM_GAME_UID : (p.gameUid ?? getActiveAccountGameUid() ?? '-')
+
   const stats: [string, string][] = [
+    ['UID', isGmDev ? `${displayGameUid} (GM·DEV)` : displayGameUid],
     ['อาชีพ', job.name],
     ['เลเวล', String(p.level)],
     ['แต้มสเตตัส', String(p.statPoints ?? 0)],

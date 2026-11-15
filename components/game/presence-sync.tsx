@@ -1,22 +1,88 @@
 'use client'
 
 import { useEffect } from 'react'
+import { onAuthStateChanged, type User } from 'firebase/auth'
+import { auth as firebaseAuth } from '@/lib/firebase/client'
+import { ensureUserProfile } from '@/lib/firebase/characters'
 import { createClient } from '@/lib/supabase/client'
-import { PERMANENT_GM_UID } from '@/lib/game/permissions'
+import { isGmAccountUser, PERMANENT_GM_GAME_UID, PERMANENT_GM_UID } from '@/lib/game/permissions'
 import { game, notify, resolveGameUid, saveGame, say, setGameAccountIdentity, subscribe } from '@/lib/game/engine'
 
 let lastPrivateMessageId = 0
 
 export function PresenceSync() {
   useEffect(() => {
-    let supabase: ReturnType<typeof createClient>
+    let stopped = false
+
+    const syncFirebaseIdentity = async (fbUser: User | null) => {
+      const player = game.p
+      if (stopped || !player) return
+
+      if (!fbUser) {
+        return
+      }
+
+      const isGm = isGmAccountUser(fbUser)
+      if (isGm) {
+        const changed =
+          !player.gm ||
+          player.gameUid !== PERMANENT_GM_GAME_UID ||
+          player.uid !== PERMANENT_GM_UID
+        player.gm = true
+        player.gameUid = PERMANENT_GM_GAME_UID
+        player.uid = PERMANENT_GM_UID
+        setGameAccountIdentity(fbUser.uid, PERMANENT_GM_UID, PERMANENT_GM_GAME_UID, true)
+        if (changed) notify()
+      }
+
+      try {
+        const identity = await ensureUserProfile(fbUser)
+        if (stopped || !game.p) return
+        const p = game.p
+        const numUid = identity.isGm ? PERMANENT_GM_UID : Number(identity.gameUid)
+        const changed =
+          p.gm !== identity.isGm ||
+          p.gameUid !== identity.gameUid ||
+          p.uid !== numUid
+
+        setGameAccountIdentity(fbUser.uid, numUid, identity.gameUid, identity.isGm)
+        p.gameUid = identity.gameUid
+        p.uid = numUid
+        p.gm = identity.isGm
+        if (!identity.isGm) {
+          p.god = false
+          p.invisible = false
+          p.speed = 1
+          if (p.jobId === 'gm') p.jobId = 'novice'
+        }
+        if (changed) {
+          saveGame()
+          notify()
+        }
+      } catch {
+        // Keep cached identity if Firestore sync temporarily fails.
+      }
+    }
+
+    const unsubFbAuth = onAuthStateChanged(firebaseAuth, (fbUser) => {
+      void syncFirebaseIdentity(fbUser)
+    })
+    void syncFirebaseIdentity(firebaseAuth.currentUser)
+
+    let supabase: ReturnType<typeof createClient> | null = null
     try {
       supabase = createClient()
     } catch {
-      return
+      supabase = null
     }
 
-    let stopped = false
+    if (!supabase) {
+      return () => {
+        stopped = true
+        unsubFbAuth()
+      }
+    }
+
     let syncing = false
     let channelReady = false
     let lastSync = 0
@@ -62,13 +128,14 @@ export function PresenceSync() {
 
     const stopChannel = () => {
       channelReady = false
-      if (channel) void supabase.removeChannel(channel)
+      if (channel && supabase) void supabase.removeChannel(channel)
       channel = null
       remotePlayers.clear()
       game.remotePlayers = []
     }
 
     const startChannel = (userId: string) => {
+      if (!supabase) return
       if (channel) void supabase.removeChannel(channel)
       channelReady = false
       channel = supabase
@@ -92,7 +159,7 @@ export function PresenceSync() {
         y: player.y,
         level: player.level,
         uid,
-        gm: uid === PERMANENT_GM_UID,
+        gm: Boolean(player.gm),
         facing: game.facing,
         moving: game.moving,
         attackAnim: game.attackAnim,
@@ -103,7 +170,7 @@ export function PresenceSync() {
 
     const loadPrivateMessages = async () => {
       const userId = boundUserId
-      if (!userId || stopped) return
+      if (!userId || stopped || !supabase) return
       const { data: whispers, error } = await supabase
         .from('private_messages')
         .select('id, sender_id, body')
@@ -119,7 +186,12 @@ export function PresenceSync() {
     }
 
     const sync = async (force = false) => {
-      if (syncing || (!force && Date.now() - lastSync < 5000)) return
+      if (syncing || (!force && Date.now() - lastSync < 5000) || !supabase) return
+      if (firebaseAuth.currentUser) {
+        await syncFirebaseIdentity(firebaseAuth.currentUser)
+        lastSync = Date.now()
+        return
+      }
       syncing = true
       try {
         const { data } = await supabase.auth.getUser()
@@ -130,6 +202,7 @@ export function PresenceSync() {
           boundUserId = null
           const hadPrivileges = player.gm || player.uid !== undefined || player.god || player.invisible || player.speed !== 1 || player.jobId === 'gm'
           player.uid = undefined
+          player.gameUid = undefined
           player.gm = false
           player.god = false
           player.invisible = false
@@ -142,6 +215,7 @@ export function PresenceSync() {
         if (boundUserId && boundUserId !== data.user.id) {
           stopChannel()
           player.uid = undefined
+          player.gameUid = undefined
           player.gm = false
           player.god = false
           player.invisible = false
@@ -161,7 +235,8 @@ export function PresenceSync() {
           lastSync = Date.now()
           return
         }
-        const isGm = uid === PERMANENT_GM_UID
+        // Only Firebase-verified ffsmilepay53@gmail.com holds GM privileges.
+        const isGm = isGmAccountUser(firebaseAuth.currentUser)
         const identityChanged = player.uid !== uid || player.gm !== isGm
         player.uid = uid
         player.gm = isGm
@@ -232,6 +307,7 @@ export function PresenceSync() {
 
     return () => {
       stopped = true
+      unsubFbAuth()
       unsubscribe()
       window.clearInterval(syncTimer)
       window.clearInterval(whisperTimer)

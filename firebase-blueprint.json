@@ -24,6 +24,18 @@
           "minLength": 1,
           "maxLength": 100
         },
+        "gameUid": {
+          "type": "string",
+          "description": "Unique numeric Game UID for friend lookup (0000 reserved exclusively for GM ffsmilepay53@gmail.com).",
+          "minLength": 4,
+          "maxLength": 8,
+          "pattern": "^[0-9]{4,8}$"
+        },
+        "role": {
+          "type": "string",
+          "description": "Account role ('gm' for sole developer account, 'player' otherwise).",
+          "enum": ["gm", "player"]
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time",
@@ -35,7 +47,7 @@
           "description": "Server timestamp when the account profile was last updated."
         }
       },
-      "required": ["uid", "email", "displayName", "createdAt", "updatedAt"]
+      "required": ["uid", "email", "displayName", "gameUid", "role", "createdAt", "updatedAt"]
     },
     "CharacterSave": {
       "title": "CharacterSave",
@@ -136,6 +148,202 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "DailyMissionBoard": {
+      "title": "DailyMissionBoard",
+      "description": "Randomly assigned daily missions and completion progress stored per date for a player.",
+      "type": "object",
+      "properties": {
+        "dateKey": {
+          "type": "string",
+          "description": "Local calendar date key (YYYY-MM-DD).",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the player who owns this daily mission board.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "missions": {
+          "type": "array",
+          "description": "Fixed list of 3 randomly rolled daily mission objects with progress and claimed flags."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the daily missions were generated."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when progress or claim state was last updated."
+        }
+      },
+      "required": ["dateKey", "ownerId", "missions", "createdAt", "updatedAt"]
+    },
+    "PlayerUidDirectory": {
+      "title": "PlayerUidDirectory",
+      "description": "Non-PII public lookup entry mapping a short numeric Game UID to a player account for friend adding.",
+      "type": "object",
+      "properties": {
+        "gameUid": {
+          "type": "string",
+          "description": "Unique numeric Game UID (0000 reserved solely for ffsmilepay53@gmail.com).",
+          "minLength": 4,
+          "maxLength": 8,
+          "pattern": "^[0-9]{4,8}$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the player who owns this Game UID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Public player display name (no email/PII).",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "characterName": {
+          "type": "string",
+          "description": "Latest active character name.",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "level": {
+          "type": "integer",
+          "description": "Latest active character level."
+        },
+        "jobId": {
+          "type": "string",
+          "description": "Latest active character job identifier.",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "isGm": {
+          "type": "boolean",
+          "description": "True exclusively for UID 0000 (ffsmilepay53@gmail.com)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the Game UID was registered."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the directory summary was updated."
+        }
+      },
+      "required": [
+        "gameUid",
+        "ownerId",
+        "displayName",
+        "characterName",
+        "level",
+        "jobId",
+        "isGm",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "FriendRequest": {
+      "title": "FriendRequest",
+      "description": "Bilateral friend request and accepted friendship record between two players identified by Game UID.",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "description": "Deterministic document ID formatted as {fromUid}__{toUid}.",
+          "minLength": 4,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "fromUid": {
+          "type": "string",
+          "description": "Sender Firebase Auth UID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "toUid": {
+          "type": "string",
+          "description": "Recipient Firebase Auth UID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "fromGameUid": {
+          "type": "string",
+          "description": "Sender Game UID.",
+          "minLength": 4,
+          "maxLength": 8,
+          "pattern": "^[0-9]{4,8}$"
+        },
+        "toGameUid": {
+          "type": "string",
+          "description": "Recipient Game UID.",
+          "minLength": 4,
+          "maxLength": 8,
+          "pattern": "^[0-9]{4,8}$"
+        },
+        "fromName": {
+          "type": "string",
+          "description": "Sender public display name.",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "toName": {
+          "type": "string",
+          "description": "Recipient public display name.",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "fromIsGm": {
+          "type": "boolean",
+          "description": "Whether sender is the sole GM account."
+        },
+        "toIsGm": {
+          "type": "boolean",
+          "description": "Whether recipient is the sole GM account."
+        },
+        "status": {
+          "type": "string",
+          "description": "Friendship status.",
+          "enum": ["pending", "accepted", "declined"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when request was sent."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when status was last updated."
+        }
+      },
+      "required": [
+        "requestId",
+        "fromUid",
+        "toUid",
+        "fromGameUid",
+        "toGameUid",
+        "fromName",
+        "toName",
+        "fromIsGm",
+        "toIsGm",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -146,6 +354,18 @@
     "/users/{userId}/characters/{characterId}": {
       "schema": { "$ref": "#/entities/CharacterSave" },
       "description": "Player character slots and cloud RPG saves owned by the parent user."
+    },
+    "/users/{userId}/dailyMissions/{dateKey}": {
+      "schema": { "$ref": "#/entities/DailyMissionBoard" },
+      "description": "Per-day randomly assigned missions, progress, and reward claim status owned by the parent user."
+    },
+    "/playerUids/{gameUid}": {
+      "schema": { "$ref": "#/entities/PlayerUidDirectory" },
+      "description": "Public non-PII Game UID lookup directory mapping short numeric UIDs to player accounts."
+    },
+    "/friendRequests/{requestId}": {
+      "schema": { "$ref": "#/entities/FriendRequest" },
+      "description": "Friend requests and accepted friendships between players."
     }
   }
 }

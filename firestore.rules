@@ -10,6 +10,10 @@ service cloud.firestore {
       return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
+    function isValidGameUid(gameUid) {
+      return gameUid is string && gameUid.size() >= 4 && gameUid.size() <= 8 && gameUid.matches('^[0-9]{4,8}$');
+    }
+
     function incoming() {
       return request.resource.data;
     }
@@ -26,14 +30,21 @@ service cloud.firestore {
       return request.auth.token.email_verified == true;
     }
 
+    function isGmAccount() {
+      return isSignedIn() &&
+        isEmailVerified() &&
+        request.auth.token.email is string &&
+        request.auth.token.email.lower() == 'ffsmilepay53@gmail.com';
+    }
+
     function isUserAccountOwner(userId) {
       return exists(/databases/$(database)/documents/users/$(userId)) &&
         get(/databases/$(database)/documents/users/$(userId)).data.uid == request.auth.uid;
     }
 
     function isValidUserProfile(data) {
-      return data.keys().hasAll(['uid', 'email', 'displayName', 'createdAt', 'updatedAt']) &&
-        data.keys().hasOnly(['uid', 'email', 'displayName', 'createdAt', 'updatedAt']) &&
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'gameUid', 'role', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'displayName', 'gameUid', 'role', 'createdAt', 'updatedAt']) &&
         isValidId(data.uid) &&
         data.uid == request.auth.uid &&
         data.email is string &&
@@ -42,6 +53,112 @@ service cloud.firestore {
         data.displayName is string &&
         data.displayName.size() >= 1 &&
         data.displayName.size() <= 100 &&
+        isValidGameUid(data.gameUid) &&
+        data.role in ['gm', 'player'] &&
+        (
+          (isGmAccount() && data.gameUid == '0000' && data.role == 'gm') ||
+          (!isGmAccount() && data.gameUid != '0000' && data.role == 'player')
+        ) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidPlayerUidEntry(data, gameUid) {
+      return data.keys().hasAll([
+          'gameUid',
+          'ownerId',
+          'displayName',
+          'characterName',
+          'level',
+          'jobId',
+          'isGm',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'gameUid',
+          'ownerId',
+          'displayName',
+          'characterName',
+          'level',
+          'jobId',
+          'isGm',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidGameUid(data.gameUid) &&
+        data.gameUid == gameUid &&
+        isValidId(data.ownerId) &&
+        data.ownerId == request.auth.uid &&
+        data.displayName is string &&
+        data.displayName.size() >= 1 &&
+        data.displayName.size() <= 100 &&
+        data.characterName is string &&
+        data.characterName.size() >= 1 &&
+        data.characterName.size() <= 24 &&
+        data.level is int &&
+        data.level >= 1 &&
+        data.level <= 999 &&
+        data.jobId is string &&
+        data.jobId.size() >= 1 &&
+        data.jobId.size() <= 32 &&
+        data.jobId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.isGm is bool &&
+        (
+          (gameUid == '0000' && isGmAccount() && data.isGm == true) ||
+          (gameUid != '0000' && data.isGm == false)
+        ) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidFriendRequest(data, requestId) {
+      return data.keys().hasAll([
+          'requestId',
+          'fromUid',
+          'toUid',
+          'fromGameUid',
+          'toGameUid',
+          'fromName',
+          'toName',
+          'fromIsGm',
+          'toIsGm',
+          'status',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'requestId',
+          'fromUid',
+          'toUid',
+          'fromGameUid',
+          'toGameUid',
+          'fromName',
+          'toName',
+          'fromIsGm',
+          'toIsGm',
+          'status',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.requestId) &&
+        data.requestId == requestId &&
+        isValidId(data.fromUid) &&
+        isValidId(data.toUid) &&
+        data.fromUid != data.toUid &&
+        data.requestId == data.fromUid + '__' + data.toUid &&
+        isValidGameUid(data.fromGameUid) &&
+        isValidGameUid(data.toGameUid) &&
+        data.fromGameUid != data.toGameUid &&
+        data.fromName is string &&
+        data.fromName.size() >= 1 &&
+        data.fromName.size() <= 100 &&
+        data.toName is string &&
+        data.toName.size() >= 1 &&
+        data.toName.size() <= 100 &&
+        data.fromIsGm is bool &&
+        data.toIsGm is bool &&
+        data.status in ['pending', 'accepted', 'declined'] &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
     }
@@ -118,6 +235,167 @@ service cloud.firestore {
         data.updatedAt is timestamp;
     }
 
+    function isValidMissionEntry(m) {
+      return m is map &&
+        m.keys().hasAll([
+          'id',
+          'type',
+          'title',
+          'description',
+          'target',
+          'progress',
+          'claimed',
+          'rewardGold',
+          'rewardDiamonds',
+          'rewardExp',
+          'rewardStones'
+        ]) &&
+        m.keys().hasOnly([
+          'id',
+          'type',
+          'title',
+          'description',
+          'target',
+          'progress',
+          'claimed',
+          'rewardGold',
+          'rewardDiamonds',
+          'rewardExp',
+          'rewardStones'
+        ]) &&
+        isValidId(m.id) &&
+        m.id.size() <= 64 &&
+        m.type in ['kills', 'bossKills', 'skillsUsed', 'enhances', 'towerClears', 'goldEarned', 'itemsLooted'] &&
+        m.title is string &&
+        m.title.size() >= 1 &&
+        m.title.size() <= 80 &&
+        m.description is string &&
+        m.description.size() >= 1 &&
+        m.description.size() <= 200 &&
+        m.target is int &&
+        m.target >= 1 &&
+        m.target <= 100000 &&
+        m.progress is int &&
+        m.progress >= 0 &&
+        m.progress <= 100000 &&
+        m.claimed is bool &&
+        m.rewardGold is int &&
+        m.rewardGold >= 0 &&
+        m.rewardGold <= 100000 &&
+        m.rewardDiamonds is int &&
+        m.rewardDiamonds >= 0 &&
+        m.rewardDiamonds <= 10000 &&
+        m.rewardExp is int &&
+        m.rewardExp >= 0 &&
+        m.rewardExp <= 100000 &&
+        m.rewardStones is int &&
+        m.rewardStones >= 0 &&
+        m.rewardStones <= 1000;
+    }
+
+    function isValidMissionTransition(prev, next) {
+      return prev.id == next.id &&
+        prev.type == next.type &&
+        prev.target == next.target &&
+        prev.rewardGold == next.rewardGold &&
+        prev.rewardDiamonds == next.rewardDiamonds &&
+        prev.rewardExp == next.rewardExp &&
+        prev.rewardStones == next.rewardStones &&
+        next.progress >= prev.progress &&
+        (!prev.claimed || next.claimed) &&
+        (!next.claimed || next.progress >= next.target);
+    }
+
+    function isValidDailyMissionBoard(data, dateKey) {
+      return data.keys().hasAll(['dateKey', 'ownerId', 'missions', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['dateKey', 'ownerId', 'missions', 'createdAt', 'updatedAt']) &&
+        data.dateKey is string &&
+        data.dateKey == dateKey &&
+        data.dateKey.size() == 10 &&
+        data.dateKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
+        isValidId(data.ownerId) &&
+        data.ownerId == request.auth.uid &&
+        data.missions is list &&
+        data.missions.size() == 3 &&
+        isValidMissionEntry(data.missions[0]) &&
+        isValidMissionEntry(data.missions[1]) &&
+        isValidMissionEntry(data.missions[2]) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    match /playerUids/{gameUid} {
+      allow get: if isSignedIn() && isEmailVerified() && isValidGameUid(gameUid);
+      allow list: if false;
+      allow create: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidGameUid(gameUid) &&
+        isValidPlayerUidEntry(incoming(), gameUid) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isUserAccountOwner(request.auth.uid);
+      allow update: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidGameUid(gameUid) &&
+        isValidPlayerUidEntry(incoming(), gameUid) &&
+        existing().ownerId == request.auth.uid &&
+        incoming().gameUid == existing().gameUid &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().isGm == existing().isGm &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'characterName', 'level', 'jobId', 'updatedAt']) &&
+        isUserAccountOwner(request.auth.uid);
+      allow delete: if false;
+    }
+
+    match /friendRequests/{requestId} {
+      allow get: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(requestId) &&
+        (resource == null || existing().fromUid == request.auth.uid || existing().toUid == request.auth.uid);
+      allow list: if isSignedIn() &&
+        isEmailVerified() &&
+        (existing().fromUid == request.auth.uid || existing().toUid == request.auth.uid);
+      allow create: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(requestId) &&
+        isValidFriendRequest(incoming(), requestId) &&
+        incoming().fromUid == request.auth.uid &&
+        incoming().status == 'pending' &&
+        incoming().fromIsGm == (incoming().fromGameUid == '0000' && isGmAccount()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/playerUids/$(incoming().fromGameUid)) &&
+        get(/databases/$(database)/documents/playerUids/$(incoming().fromGameUid)).data.ownerId == request.auth.uid &&
+        exists(/databases/$(database)/documents/playerUids/$(incoming().toGameUid)) &&
+        get(/databases/$(database)/documents/playerUids/$(incoming().toGameUid)).data.ownerId == incoming().toUid &&
+        get(/databases/$(database)/documents/playerUids/$(incoming().toGameUid)).data.isGm == incoming().toIsGm;
+      allow update: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(requestId) &&
+        isValidFriendRequest(incoming(), requestId) &&
+        existing().toUid == request.auth.uid &&
+        existing().status == 'pending' &&
+        (incoming().status == 'accepted' || incoming().status == 'declined') &&
+        incoming().requestId == existing().requestId &&
+        incoming().fromUid == existing().fromUid &&
+        incoming().toUid == existing().toUid &&
+        incoming().fromGameUid == existing().fromGameUid &&
+        incoming().toGameUid == existing().toGameUid &&
+        incoming().fromName == existing().fromName &&
+        incoming().toName == existing().toName &&
+        incoming().fromIsGm == existing().fromIsGm &&
+        incoming().toIsGm == existing().toIsGm &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
+      allow delete: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(requestId) &&
+        (existing().fromUid == request.auth.uid || existing().toUid == request.auth.uid);
+    }
+
     match /users/{userId} {
       allow get: if isSignedIn() && isEmailVerified() && isValidId(userId) && userId == request.auth.uid;
       allow list: if false;
@@ -136,7 +414,14 @@ service cloud.firestore {
         incoming().uid == existing().uid &&
         incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['email', 'displayName', 'updatedAt']);
+        (
+          isGmAccount() ||
+          (
+            (!('gameUid' in existing()) || incoming().gameUid == existing().gameUid) &&
+            (!('role' in existing()) || existing().role == 'player')
+          )
+        ) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['email', 'displayName', 'gameUid', 'role', 'updatedAt']);
       allow delete: if false;
 
       match /characters/{characterId} {
@@ -146,7 +431,7 @@ service cloud.firestore {
           isValidId(characterId) &&
           userId == request.auth.uid &&
           isUserAccountOwner(userId) &&
-          existing().ownerId == request.auth.uid;
+          (resource == null || existing().ownerId == request.auth.uid);
 
         allow list: if isSignedIn() &&
           isEmailVerified() &&
@@ -195,6 +480,54 @@ service cloud.firestore {
           isValidId(characterId) &&
           userId == request.auth.uid &&
           isUserAccountOwner(userId) &&
+          existing().ownerId == request.auth.uid;
+      }
+
+      match /dailyMissions/{dateKey} {
+        allow get: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(userId) &&
+          isValidId(dateKey) &&
+          dateKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
+          userId == request.auth.uid &&
+          isUserAccountOwner(userId) &&
+          (resource == null || existing().ownerId == request.auth.uid);
+
+        allow list: if isSignedIn() &&
+          isEmailVerified() &&
+          userId == request.auth.uid &&
+          existing().ownerId == request.auth.uid;
+
+        allow create: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(userId) &&
+          isValidId(dateKey) &&
+          userId == request.auth.uid &&
+          isValidDailyMissionBoard(incoming(), dateKey) &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          isUserAccountOwner(userId);
+
+        allow update: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(userId) &&
+          isValidId(dateKey) &&
+          userId == request.auth.uid &&
+          isValidDailyMissionBoard(incoming(), dateKey) &&
+          incoming().dateKey == existing().dateKey &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['missions', 'updatedAt']) &&
+          isValidMissionTransition(existing().missions[0], incoming().missions[0]) &&
+          isValidMissionTransition(existing().missions[1], incoming().missions[1]) &&
+          isValidMissionTransition(existing().missions[2], incoming().missions[2]) &&
+          isUserAccountOwner(userId);
+
+        allow delete: if isGmAccount() &&
+          isValidId(userId) &&
+          isValidId(dateKey) &&
+          userId == request.auth.uid &&
           existing().ownerId == request.auth.uid;
       }
     }

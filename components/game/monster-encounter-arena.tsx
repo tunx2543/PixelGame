@@ -29,6 +29,7 @@ import {
   setGameAccountIdentity,
   type SaveData,
 } from '@/lib/game/engine'
+import { recordDailyMissionProgress } from '@/lib/game/daily-missions'
 import {
   calculateEnemyAttack,
   calculatePlayerAttack,
@@ -287,6 +288,12 @@ export function MonsterEncounterArena() {
       setVictoryResult(outcome)
       setStreak((s) => s + 1)
       setPhase('VICTORY')
+      recordDailyMissionProgress({
+        kills: 1,
+        bossKills: defeatedEnemy.rarity !== 'normal' ? 1 : 0,
+        goldEarned: outcome.goldEarned,
+        itemsLooted: outcome.drops.length,
+      })
 
       if (outcome.leveledUpTo > outcome.leveledUpFrom) {
         playLevelUpSfx(mutedRef.current)
@@ -340,6 +347,7 @@ export function MonsterEncounterArena() {
         nextSave.mp -= skill.mp
         setSkillCds((prev) => ({ ...prev, [skill.id]: skill.cooldown }))
         setAttackCd(Math.max(attackCd, 0.2))
+        recordDailyMissionProgress({ skillsUsed: 1 })
       } else {
         setAttackCd(job.attackSpeed)
       }
@@ -480,6 +488,7 @@ export function MonsterEncounterArena() {
     setEnhanceNotice(res.message)
     if (res.outcome === 'error') return
     setSave(res.nextSave)
+    recordDailyMissionProgress({ enhances: 1 })
     playEnhanceSfx(res.outcome === 'success', mutedRef.current)
     appendLog(res.message, res.outcome === 'success' ? 'crit' : 'system')
     void syncSaveToStorageAndCloud(res.nextSave, userRef.current, slotRef.current)
