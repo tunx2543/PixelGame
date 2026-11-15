@@ -527,8 +527,7 @@ service cloud.firestore {
               !isValidDailyMissionBoard(existing(), dateKey) &&
               (!('ownerId' in existing()) || existing().ownerId == request.auth.uid) &&
               incoming().createdAt == request.time &&
-              incoming().updatedAt == request.time &&
-              incoming().diff(existing()).affectedKeys().hasOnly(['dateKey', 'ownerId', 'missions', 'createdAt', 'updatedAt'])
+              incoming().updatedAt == request.time
             )
           );
 

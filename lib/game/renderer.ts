@@ -1,13 +1,14 @@
 import { ITEMS, JOBS, MONSTERS, type MonsterSprite } from './data'
 import { GEM_SHOP_ITEMS } from './gem-shop'
 import { currentMap, game } from './engine'
-import { TILE } from './maps'
+import { T, TILE } from './maps'
 import { getMonsterModelSpec } from './models-2d'
 import {
   type Dir,
   humanSprite,
   jobHumanColors,
   mapCanvas,
+  mapObjectSprite,
   monsterSprite,
   npcSprite,
   type SpriteAction,
@@ -20,6 +21,12 @@ const THEME_BG: Record<string, string> = {
   forest: '#10291a',
   cave: '#0b0b16',
   volcano: '#140808',
+  abyss: '#0c0814',
+  sky: '#72aee6',
+  crystal: '#121029',
+  frost: '#b8d0e8',
+  dream: '#315743',
+  colosseum: '#3c3228',
 }
 
 function drawGemItemPixels(
@@ -169,6 +176,37 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   ctx.setTransform(s, 0, 0, s, -camX * s, -camY * s)
   ctx.drawImage(mapCanvas(map), 0, 0)
 
+  const minTx = Math.max(0, Math.floor(camX / TILE) - 2)
+  const maxTx = Math.min(map.width - 1, Math.ceil((camX + viewW) / TILE) + 2)
+  const minTy = Math.max(0, Math.floor(camY / TILE) - 2)
+  const maxTy = Math.min(map.height - 1, Math.ceil((camY + viewH) / TILE) + 2)
+
+  // Subtle animated tile glints (water, lava, ice, magic circles)
+  const glintPhase = Math.floor(t * 2.4)
+  for (let ty = minTy; ty <= maxTy; ty++) {
+    for (let tx = minTx; tx <= maxTx; tx++) {
+      const tile = map.tiles[ty * map.width + tx]
+      if (tile === T.WATER && (tx * 7 + ty * 13 + glintPhase) % 11 === 0) {
+        ctx.fillStyle = 'rgba(202, 240, 248, 0.35)'
+        ctx.fillRect(tx * TILE + 3 + ((tx + glintPhase) % 6), ty * TILE + 4 + ((ty * 3) % 7), 4, 1)
+      } else if (tile === T.LAVA && (tx * 5 + ty * 11 + glintPhase) % 9 === 0) {
+        ctx.fillStyle = 'rgba(255, 224, 102, 0.55)'
+        ctx.fillRect(tx * TILE + 4 + ((tx * 2 + glintPhase) % 5), ty * TILE + 5 + ((ty * 3) % 6), 3, 2)
+      } else if (tile === T.MAGIC_CIRCLE) {
+        const cx = (tx + 0.5) * TILE
+        const cy = (ty + 0.5) * TILE
+        const pulse = 0.45 + Math.sin(t * 3.5 + tx) * 0.25
+        ctx.save()
+        ctx.strokeStyle = `rgba(199, 125, 255, ${pulse})`
+        ctx.lineWidth = 1.1
+        ctx.beginPath()
+        ctx.ellipse(cx, cy, 9 + Math.sin(t * 2.5) * 1.5, 6 + Math.sin(t * 2.5), 0, 0, Math.PI * 2)
+        ctx.stroke()
+        ctx.restore()
+      }
+    }
+  }
+
   if (map.theme === 'volcano') {
     ctx.fillStyle = `rgba(255,120,0,${0.04 + Math.sin(t * 2) * 0.02})`
     ctx.fillRect(0, 0, mapW, mapH)
@@ -193,7 +231,39 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     }
   }
 
-  if (map.id === 'town') drawFountain(ctx, 20 * TILE, 14 * TILE, t)
+  if (map.id === 'town') drawFountain(ctx, 22 * TILE, 16 * TILE, t)
+
+  const visibleObjects = map.objects.filter(
+    (obj) => obj.tx >= minTx - 1 && obj.tx <= maxTx + 1 && obj.ty >= minTy - 1 && obj.ty <= maxTy + 2,
+  )
+
+  // Ground glow halos for light-emitting RPG objects
+  for (const obj of visibleObjects) {
+    const ox = (obj.tx + 0.5) * TILE
+    const oy = (obj.ty + 0.72) * TILE
+    const flicker = 0.85 + Math.sin(t * 7 + obj.tx * 1.7 + obj.ty) * 0.15
+    if (obj.kind === 'lamp_post' || obj.kind === 'torch' || obj.kind === 'campfire' || obj.kind === 'anvil_forge') {
+      ctx.fillStyle = `rgba(255, 190, 90, ${0.14 * flicker})`
+      ctx.beginPath()
+      ctx.ellipse(ox, oy, 16 * flicker, 11 * flicker, 0, 0, Math.PI * 2)
+      ctx.fill()
+    } else if (obj.kind === 'magma_brazier') {
+      ctx.fillStyle = `rgba(255, 105, 30, ${0.18 * flicker})`
+      ctx.beginPath()
+      ctx.ellipse(ox, oy, 18 * flicker, 12 * flicker, 0, 0, Math.PI * 2)
+      ctx.fill()
+    } else if (obj.kind === 'crystal_spire' || obj.kind === 'ice_spire') {
+      ctx.fillStyle = `rgba(114, 239, 221, ${0.13 * flicker})`
+      ctx.beginPath()
+      ctx.ellipse(ox, oy, 15, 10, 0, 0, Math.PI * 2)
+      ctx.fill()
+    } else if (obj.kind === 'dream_shrine') {
+      ctx.fillStyle = `rgba(255, 179, 198, ${0.16 * flicker})`
+      ctx.beginPath()
+      ctx.ellipse(ox, oy, 20, 13, 0, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
 
   for (const drop of game.groundDrops) {
     const item = ITEMS[drop.itemId]
@@ -214,6 +284,20 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
 
   type Ent = { y: number; draw: () => void }
   const ents: Ent[] = []
+
+  for (const obj of visibleObjects) {
+    const ox = (obj.tx + 0.5) * TILE
+    const oy = (obj.ty + 0.88) * TILE
+    const objFrame = Math.floor(t * 5 + obj.tx * 0.7 + obj.ty) % 3
+    const img = mapObjectSprite(obj.kind, objFrame, obj.variant ?? 0)
+    ents.push({
+      y: oy,
+      draw: () => {
+        shadow(ctx, ox, oy, Math.min(11, Math.max(5, img.width * 0.34)))
+        ctx.drawImage(img, Math.round(ox - img.width / 2), Math.round(oy - img.height + 2))
+      },
+    })
+  }
 
   for (const n of map.npcs) {
     const fx = n.x * TILE
@@ -578,13 +662,67 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
 
   ctx.setTransform(1, 0, 0, 1, 0, 0)
 
-  if (map.theme === 'cave' || map.theme === 'forest' || map.theme === 'volcano') {
+  // Ambient weather / biome particles in screen space
+  if (map.theme === 'frost' || map.theme === 'dream' || map.theme === 'volcano' || map.theme === 'abyss' || map.theme === 'forest' || map.theme === 'crystal' || map.theme === 'sky') {
+    ctx.save()
+    const count = map.theme === 'sky' ? 14 : 24
+    for (let i = 0; i < count; i++) {
+      if (map.theme === 'sky') {
+        const px = ((i * 197 + t * (16 + (i % 4) * 5)) % (cw + 80)) - 40
+        const py = ((i * 113 + Math.sin(t * 0.4 + i) * 10) % ch)
+        ctx.fillStyle = 'rgba(255,255,255,0.22)'
+        ctx.fillRect(Math.round(px), Math.round(py), Math.round(14 * dpr), Math.round(4 * dpr))
+      } else if (map.theme === 'volcano' || map.theme === 'abyss') {
+        const px = ((i * 173 + Math.sin(t * 1.5 + i) * 20) % cw + cw) % cw
+        const py = ch - ((t * (28 + (i % 5) * 8) + i * 91) % ch)
+        ctx.fillStyle = i % 2 ? '#ff7b00' : '#ffd166'
+        ctx.globalAlpha = 0.55
+        ctx.fillRect(Math.round(px), Math.round(py), Math.max(2, Math.round(1.5 * dpr)), Math.max(2, Math.round(1.5 * dpr)))
+      } else if (map.theme === 'frost') {
+        const px = ((i * 151 + t * 18 + Math.sin(t * 1.2 + i) * 16) % cw + cw) % cw
+        const py = (t * (32 + (i % 4) * 10) + i * 83) % ch
+        ctx.fillStyle = i % 2 ? '#ffffff' : '#caf0f8'
+        ctx.globalAlpha = 0.72
+        ctx.fillRect(Math.round(px), Math.round(py), Math.max(2, Math.round(1.6 * dpr)), Math.max(2, Math.round(1.6 * dpr)))
+      } else if (map.theme === 'dream') {
+        const px = ((i * 163 + t * 22 + Math.sin(t + i) * 24) % cw + cw) % cw
+        const py = (t * (20 + (i % 3) * 8) + i * 79) % ch
+        ctx.fillStyle = i % 2 ? '#ffb3c6' : '#ffe5ec'
+        ctx.globalAlpha = 0.8
+        ctx.fillRect(Math.round(px), Math.round(py), Math.max(2, Math.round(2 * dpr)), Math.max(2, Math.round(1.3 * dpr)))
+      } else if (map.theme === 'forest') {
+        const px = ((i * 139 + Math.sin(t * 0.9 + i * 2) * 32) % cw + cw) % cw
+        const py = ((i * 107 + Math.cos(t * 0.7 + i) * 26) % ch + ch) % ch
+        ctx.fillStyle = i % 2 ? '#d9ed92' : '#99e2b4'
+        ctx.globalAlpha = 0.35 + Math.sin(t * 3 + i) * 0.25
+        ctx.fillRect(Math.round(px), Math.round(py), Math.max(2, Math.round(1.5 * dpr)), Math.max(2, Math.round(1.5 * dpr)))
+      } else {
+        const px = ((i * 149 + Math.cos(t * 0.8 + i) * 28) % cw + cw) % cw
+        const py = ch - ((t * 18 + i * 89) % ch)
+        ctx.fillStyle = i % 2 ? '#72efdd' : '#c77dff'
+        ctx.globalAlpha = 0.55
+        ctx.fillRect(Math.round(px), Math.round(py), Math.max(2, Math.round(1.5 * dpr)), Math.max(2, Math.round(1.5 * dpr)))
+      }
+    }
+    ctx.restore()
+  }
+
+  if (map.theme === 'cave' || map.theme === 'forest' || map.theme === 'volcano' || map.theme === 'abyss' || map.theme === 'crystal') {
     const sx = (p.x - camX) * s
     const sy = (p.y - 8 - camY) * s
-    const inner = (map.theme === 'cave' ? 50 : 110) * s
-    const outer = (map.theme === 'cave' ? 150 : 260) * s
+    const inner = (map.theme === 'cave' ? 54 : map.theme === 'abyss' ? 95 : 110) * s
+    const outer = (map.theme === 'cave' ? 165 : map.theme === 'abyss' ? 245 : 270) * s
     const g = ctx.createRadialGradient(sx, sy, inner, sx, sy, outer)
-    const dark = map.theme === 'cave' ? 'rgba(3,3,12,0.88)' : map.theme === 'forest' ? 'rgba(5,20,10,0.45)' : 'rgba(30,0,0,0.5)'
+    const dark =
+      map.theme === 'cave'
+        ? 'rgba(3,3,12,0.84)'
+        : map.theme === 'forest'
+          ? 'rgba(5,20,10,0.42)'
+          : map.theme === 'abyss'
+            ? 'rgba(14,4,26,0.58)'
+            : map.theme === 'crystal'
+              ? 'rgba(12,8,34,0.38)'
+              : 'rgba(30,0,0,0.48)'
     g.addColorStop(0, 'rgba(0,0,0,0)')
     g.addColorStop(1, dark)
     ctx.fillStyle = g
@@ -602,6 +740,16 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     ctx.strokeText(str, x, y)
     ctx.fillStyle = color
     ctx.fillText(str, x, y)
+  }
+
+  for (const obj of visibleObjects) {
+    if (!obj.label) continue
+    const ox = (obj.tx + 0.5) * TILE
+    const oy = (obj.ty + 0.5) * TILE
+    if (Math.hypot(p.x - ox, p.y - oy) < 42) {
+      const [lx, ly] = toS(ox, oy - 22)
+      text(obj.label, lx, ly, '#ffe8a3', 8)
+    }
   }
 
   for (const pt of map.portals) {
@@ -689,15 +837,15 @@ function shadow(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) 
 function drawFountain(ctx: CanvasRenderingContext2D, cx: number, cy: number, t: number) {
   ctx.fillStyle = '#7d7a72'
   ctx.beginPath()
-  ctx.ellipse(cx, cy, 17, 13, 0, 0, Math.PI * 2)
+  ctx.ellipse(cx, cy, 19, 14.5, 0, 0, Math.PI * 2)
   ctx.fill()
   ctx.fillStyle = '#a19d92'
   ctx.beginPath()
-  ctx.ellipse(cx, cy - 1, 16, 12, 0, 0, Math.PI * 2)
+  ctx.ellipse(cx, cy - 1, 18, 13.5, 0, 0, Math.PI * 2)
   ctx.fill()
   ctx.fillStyle = '#3a7bd5'
   ctx.beginPath()
-  ctx.ellipse(cx, cy, 13, 9, 0, 0, Math.PI * 2)
+  ctx.ellipse(cx, cy, 14.5, 10, 0, 0, Math.PI * 2)
   ctx.fill()
   ctx.strokeStyle = 'rgba(170, 215, 255, 0.7)'
   ctx.lineWidth = 1

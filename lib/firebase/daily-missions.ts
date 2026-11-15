@@ -308,12 +308,18 @@ function isValidRemoteMissionEntry(raw: unknown): raw is DailyMissionEntry {
   )
 }
 
+function isFirestoreTimestamp(val: unknown): boolean {
+  if (!val || typeof val !== 'object') return false
+  const t = val as { toMillis?: unknown; seconds?: unknown; nanoseconds?: unknown }
+  return typeof t.toMillis === 'function' || (typeof t.seconds === 'number' && typeof t.nanoseconds === 'number')
+}
+
 function isValidRemoteBoard(data: unknown, dateKey: string, userId: string): boolean {
   if (!data || typeof data !== 'object') return false
   const d = data as Record<string, unknown>
   if (Object.keys(d).length !== 5) return false
   if (d.dateKey !== dateKey || d.ownerId !== userId) return false
-  if (!d.createdAt || !d.updatedAt) return false
+  if (!isFirestoreTimestamp(d.createdAt) || !isFirestoreTimestamp(d.updatedAt)) return false
   if (!Array.isArray(d.missions) || d.missions.length !== 3) return false
   return (
     isValidRemoteMissionEntry(d.missions[0]) &&

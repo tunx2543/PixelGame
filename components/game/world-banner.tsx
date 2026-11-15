@@ -2,14 +2,15 @@
 
 import { currentMap, game } from '@/lib/game/engine'
 import { useGame } from '@/lib/game/use-game'
+import { MapMinimap } from './map-minimap'
 
 export function WorldBanner() {
   useGame()
   const map = currentMap()
   const announcement = game.announcement && game.announcement.until > Date.now() ? game.announcement : null
-  if (map.id !== 'abyss' && map.id !== 'volcano' && !announcement) return null
-
   const isAbyss = map.id === 'abyss'
+  const showDungeonCard = map.id === 'abyss' || map.id === 'volcano'
+
   return (
     <>
       {announcement && (
@@ -18,16 +19,21 @@ export function WorldBanner() {
           <div className="mt-0.5 truncate text-xs font-semibold text-white">{announcement.body}</div>
         </aside>
       )}
-      {(map.id === 'abyss' || map.id === 'volcano') && <aside className="pointer-events-none absolute right-2 top-2 z-10 hidden w-44 overflow-hidden rounded-md border border-white/15 bg-black/35 shadow-xl sm:block">
-      <img
-        src={isAbyss ? '/images/art/dungeon-banner.png' : '/images/art/demon-lord.png'}
-        alt={isAbyss ? 'ภาพดันเจี้ยน Abyss' : 'ภาพราชาปีศาจ'}
-        className="asset-no-bg h-16 w-full object-cover opacity-80"
-      />
-      <div className="px-2 py-1 text-[10px] font-semibold tracking-wide text-white/90">
-        {isAbyss ? 'ABYSS DUNGEON' : 'DEMON LORD CITADEL'}
+      <div className="pointer-events-none absolute right-2 top-2 z-20 flex flex-col items-end gap-1.5 md:right-3 md:top-3">
+        <MapMinimap />
+        {showDungeonCard && (
+          <aside className="pointer-events-none hidden w-44 overflow-hidden border-2 border-border bg-card/90 shadow-xl sm:block">
+            <img
+              src={isAbyss ? '/images/art/dungeon-banner.png' : '/images/art/demon-lord.png'}
+              alt={isAbyss ? 'ภาพดันเจี้ยน Abyss' : 'ภาพราชาปีศาจ'}
+              className="asset-no-bg h-14 w-full object-cover opacity-85"
+            />
+            <div className="px-2 py-1 text-[10px] font-semibold tracking-wide text-white/90">
+              {isAbyss ? 'ABYSS DUNGEON' : 'DEMON LORD CITADEL'}
+            </div>
+          </aside>
+        )}
       </div>
-    </aside>}
     </>
   )
 }

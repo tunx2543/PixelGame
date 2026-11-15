@@ -1,5 +1,5 @@
 import type { MonsterSprite, WeaponType } from './data'
-import { T, TILE, type MapDef } from './maps'
+import { T, TILE, type MapDef, type MapObjectKind } from './maps'
 import {
   getJobModelSpec,
   getMonsterModelSpec,
@@ -2019,10 +2019,50 @@ function drawBase(ctx: CanvasRenderingContext2D, tile: number, rng: () => number
       return speckle(ctx, rng, '#5a9e4b', ['#6bb35a', '#4c8a3f', '#78c267'], 0.12)
     case T.DARKGRASS:
       return speckle(ctx, rng, '#2f6b3a', ['#3a7d45', '#25572f', '#447f4c'], 0.14)
+    case T.SAKURA_GRASS:
+      return speckle(ctx, rng, '#4b9b69', ['#5eb57a', '#ffb7d5', '#ffd6e7', '#3c8557'], 0.16)
     case T.PATH:
       return speckle(ctx, rng, '#c9a86a', ['#b8955a', '#d9bc84', '#a88850'], 0.16)
     case T.SAND:
       return speckle(ctx, rng, '#e6cf8f', ['#d6bd7c', '#f0dca4'], 0.12)
+    case T.SNOW:
+      return speckle(ctx, rng, '#e6eff8', ['#d4e4f4', '#ffffff', '#c5d8ec'], 0.15)
+    case T.ICE: {
+      speckle(ctx, rng, '#9be0f7', ['#bfefff', '#74c6e8', '#e6fbff'], 0.16)
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(3, 4, 4, 1)
+      ctx.fillRect(10, 11, 3, 1)
+      return
+    }
+    case T.COBBLESTONE: {
+      speckle(ctx, rng, '#9e9b93', ['#b0aca3', '#8c8980', '#bfbbb0'], 0.16)
+      ctx.fillStyle = '#6f6c64'
+      ctx.fillRect(0, 7, TILE, 1)
+      ctx.fillRect(0, 15, TILE, 1)
+      ctx.fillRect(7, 0, 1, 7)
+      ctx.fillRect(15, 8, 1, 7)
+      return
+    }
+    case T.WOOD_FLOOR: {
+      ctx.fillStyle = '#a47148'
+      ctx.fillRect(0, 0, TILE, TILE)
+      ctx.fillStyle = '#8a5a3b'
+      for (let y = 3; y < TILE; y += 4) ctx.fillRect(0, y, TILE, 1)
+      ctx.fillStyle = '#ba8558'
+      ctx.fillRect(2, 1, 5, 1)
+      ctx.fillRect(9, 9, 5, 1)
+      return
+    }
+    case T.CARPET: {
+      ctx.fillStyle = '#9e2a2b'
+      ctx.fillRect(0, 0, TILE, TILE)
+      ctx.fillStyle = '#f4d35e'
+      ctx.fillRect(0, 0, 1, TILE)
+      ctx.fillRect(TILE - 1, 0, 1, TILE)
+      ctx.fillStyle = '#b83739'
+      ctx.fillRect(4, 4, 8, 8)
+      return
+    }
     case T.PLAZA: {
       speckle(ctx, rng, '#b5b0a6', ['#a8a397', '#c4bfb4'], 0.15)
       ctx.fillStyle = '#8f8a80'
@@ -2030,6 +2070,76 @@ function drawBase(ctx: CanvasRenderingContext2D, tile: number, rng: () => number
       ctx.fillRect(0, 8, TILE, 1)
       ctx.fillRect(0, 0, 1, 8)
       ctx.fillRect(8, 8, 1, 8)
+      return
+    }
+    case T.SKY_TILE: {
+      speckle(ctx, rng, '#e8eef5', ['#ffffff', '#cfd9e8', '#f5f0dc'], 0.14)
+      ctx.fillStyle = '#c8b37a'
+      ctx.fillRect(0, 0, TILE, 1)
+      ctx.fillRect(0, 0, 1, TILE)
+      return
+    }
+    case T.RUINS_FLOOR: {
+      speckle(ctx, rng, '#737582', ['#626470', '#878998', '#4f6d52'], 0.18)
+      ctx.fillStyle = '#4e505c'
+      ctx.fillRect(0, 0, TILE, 1)
+      ctx.fillRect(8, 0, 1, 8)
+      ctx.fillRect(0, 8, TILE, 1)
+      return
+    }
+    case T.GOLD_PAVING: {
+      speckle(ctx, rng, '#d8cba8', ['#ece2c6', '#c2b38c'], 0.12)
+      ctx.fillStyle = '#e0aa3e'
+      ctx.fillRect(0, 0, TILE, 1)
+      ctx.fillRect(0, 0, 1, TILE)
+      ctx.fillStyle = '#b38629'
+      ctx.fillRect(7, 7, 2, 2)
+      return
+    }
+    case T.MAGIC_CIRCLE: {
+      drawBase(ctx, T.PLAZA, rng)
+      ctx.strokeStyle = '#9d4edd'
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.arc(8, 8, 6, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.fillStyle = '#e0aaff'
+      ctx.fillRect(7, 2, 2, 2)
+      ctx.fillRect(7, 12, 2, 2)
+      ctx.fillRect(2, 7, 2, 2)
+      ctx.fillRect(12, 7, 2, 2)
+      ctx.fillStyle = '#72efdd'
+      ctx.fillRect(7, 7, 2, 2)
+      return
+    }
+    case T.BRIDGE_H: {
+      ctx.fillStyle = '#7f5539'
+      ctx.fillRect(0, 0, TILE, TILE)
+      for (let x = 0; x < TILE; x += 4) {
+        ctx.fillStyle = x % 8 === 0 ? '#a47148' : '#94623d'
+        ctx.fillRect(x, 2, 3, TILE - 4)
+        ctx.fillStyle = '#583823'
+        ctx.fillRect(x + 3, 2, 1, TILE - 4)
+      }
+      ctx.fillStyle = '#c8956b'
+      ctx.fillRect(0, 0, TILE, 2)
+      ctx.fillRect(0, TILE - 2, TILE, 2)
+      ctx.fillStyle = '#4a2e1b'
+      ctx.fillRect(0, 2, TILE, 1)
+      return
+    }
+    case T.BRIDGE_V: {
+      ctx.fillStyle = '#7f5539'
+      ctx.fillRect(0, 0, TILE, TILE)
+      for (let y = 0; y < TILE; y += 4) {
+        ctx.fillStyle = y % 8 === 0 ? '#a47148' : '#94623d'
+        ctx.fillRect(2, y, TILE - 4, 3)
+        ctx.fillStyle = '#583823'
+        ctx.fillRect(2, y + 3, TILE - 4, 1)
+      }
+      ctx.fillStyle = '#c8956b'
+      ctx.fillRect(0, 0, 2, TILE)
+      ctx.fillRect(TILE - 2, 0, 2, TILE)
       return
     }
     case T.CAVEFLOOR:
@@ -2055,7 +2165,7 @@ function drawTile(ctx: CanvasRenderingContext2D, tile: number, base: number, var
   }
   switch (tile) {
     case T.FLOWER: {
-      drawBase(ctx, T.GRASS, rng)
+      drawBase(ctx, base === T.SAKURA_GRASS ? T.SAKURA_GRASS : T.GRASS, rng)
       const cols = ['#ffd6e0', '#fff3b0', '#ff5d8f', '#cdb4db', '#ffffff']
       for (let i = 0; i < 3; i++) {
         const x = 2 + Math.floor(rng() * 11)
@@ -2077,6 +2187,24 @@ function drawTile(ctx: CanvasRenderingContext2D, tile: number, base: number, var
         p(x, y, '#6aa6ef', 3, 1)
       }
       p(0, 0, '#2f66b3', TILE, 1)
+      return
+    }
+    case T.CLOUD_VOID: {
+      p(0, 0, '#72aee6', TILE, TILE)
+      p(1, 3, '#cde8ff', 10, 6)
+      p(4, 2, '#ffffff', 8, 5)
+      p(7, 9, '#a5d1f8', 7, 5)
+      return
+    }
+    case T.CASTLE_WALL: {
+      p(0, 0, '#6c757d', TILE, TILE)
+      p(0, 0, '#adb5bd', TILE, 2)
+      p(2, 0, '#495057', 3, 2)
+      p(10, 0, '#495057', 3, 2)
+      p(0, 7, '#495057', TILE, 1)
+      p(7, 3, '#495057', 1, 4)
+      p(14, 8, '#495057', 1, 7)
+      p(0, 14, '#343a40', TILE, 2)
       return
     }
     case T.TREE: {
@@ -2109,6 +2237,9 @@ function drawTile(ctx: CanvasRenderingContext2D, tile: number, base: number, var
       drawBase(ctx, base, rng)
       p(7, 12, '#5c3d2e', 2, 4)
       p(3, 14, 'rgba(0,0,0,0.25)', 10, 2)
+      const isSnowy = base === T.SNOW
+      const mainCol = isSnowy ? '#225444' : '#1b4332'
+      const hiCol = isSnowy ? '#d8ecfa' : '#2d6a4f'
       const layers = [
         [7, 0, 2],
         [6, 1, 4],
@@ -2123,10 +2254,10 @@ function drawTile(ctx: CanvasRenderingContext2D, tile: number, base: number, var
         [2, 10, 12],
         [3, 11, 10],
       ]
-      for (const [x, y, w] of layers) p(x, y, '#1b4332', w, 1)
-      p(6, 2, '#2d6a4f', 2, 2)
-      p(5, 5, '#2d6a4f', 3, 1)
-      p(4, 8, '#2d6a4f', 3, 2)
+      for (const [x, y, w] of layers) p(x, y, mainCol, w, 1)
+      p(6, 2, hiCol, 2, 2)
+      p(5, 5, hiCol, 3, 1)
+      p(4, 8, hiCol, 3, 2)
       p(10, 9, '#081c15', 4, 2)
       return
     }
@@ -2155,7 +2286,7 @@ function drawTile(ctx: CanvasRenderingContext2D, tile: number, base: number, var
       return
     }
     case T.CRYSTAL: {
-      drawBase(ctx, T.CAVEFLOOR, rng)
+      drawBase(ctx, base === T.CAVEFLOOR ? T.CAVEFLOOR : base, rng)
       p(3, 13, 'rgba(0,0,0,0.3)', 10, 2)
       p(7, 2, '#72efdd', 2, 11)
       p(4, 6, '#56cfe1', 2, 7)
@@ -2280,6 +2411,288 @@ export function mapCanvas(map: MapDef) {
   return c
 }
 
+export function mapObjectSprite(kind: MapObjectKind, frame = 0, variant = 0): HTMLCanvasElement {
+  const f = Math.abs(frame) % 3
+  return cached(`obj2d|${kind}|${f}|${variant}`, () => {
+    switch (kind) {
+      case 'lamp_post': {
+        const s = new PixelSurface(16, 28)
+        s.rect(6, 23, 4, 2, '#343a40')
+        s.line(7, 9, 7, 23, '#495057', 2)
+        s.rect(5, 5, 6, 4, '#ffd166')
+        s.rect(6, 6, 4, 2, f === 1 ? '#fff3b0' : '#ffea85')
+        s.rect(4, 4, 8, 1, '#212529')
+        s.px(7, 3, '#495057')
+        return s.toCanvas(true)
+      }
+      case 'market_stall': {
+        const s = new PixelSurface(26, 26)
+        const clothA = variant % 2 === 0 ? '#d62828' : '#2a6f97'
+        const clothB = '#f8f9fa'
+        s.rect(3, 16, 20, 7, '#8a5a3b')
+        s.rect(3, 15, 20, 2, '#b07d4f')
+        s.rect(3, 9, 2, 8, '#5c3d2e')
+        s.rect(21, 9, 2, 8, '#5c3d2e')
+        for (let x = 2; x < 24; x += 2) {
+          s.rect(x, 4, 2, 5, (x / 2) % 2 === 0 ? clothA : clothB)
+        }
+        s.rect(5, 13, 4, 2, '#f4a261')
+        s.rect(11, 13, 3, 2, '#7ae582')
+        s.rect(16, 13, 4, 2, '#e63946')
+        return s.toCanvas(true)
+      }
+      case 'anvil_forge': {
+        const s = new PixelSurface(24, 24)
+        // Stone hearth + fire glow
+        s.rect(2, 6, 10, 14, '#6c757d')
+        s.rect(4, 3, 6, 4, '#495057')
+        s.rect(4, 13, 6, 5, '#e85d04')
+        s.rect(5, 14 + (f % 2), 4, 3, f === 0 ? '#ffb703' : '#ffd166')
+        // Iron anvil beside forge
+        s.rect(14, 17, 7, 3, '#495057')
+        s.rect(16, 14, 4, 3, '#adb5bd')
+        s.rect(13, 12, 9, 2, '#ced4da')
+        s.px(19, 10, '#f4a261')
+        return s.toCanvas(true)
+      }
+      case 'well': {
+        const s = new PixelSurface(20, 24)
+        s.rect(4, 13, 12, 8, '#8d99ae')
+        s.rect(6, 14, 8, 3, '#3a7bd5')
+        s.rect(5, 7, 2, 7, '#6b4226')
+        s.rect(13, 7, 2, 7, '#6b4226')
+        s.rect(3, 4, 14, 3, '#b23a48')
+        s.rect(9, 8, 2, 5, '#cdb57f')
+        return s.toCanvas(true)
+      }
+      case 'statue': {
+        const s = new PixelSurface(18, 28)
+        s.rect(4, 21, 10, 5, '#8d99ae')
+        s.rect(5, 19, 8, 2, '#adb5bd')
+        s.rect(6, 11, 6, 8, '#ced4da')
+        s.rect(7, 6, 4, 5, '#e9ecef')
+        s.rect(5, 12, 2, 5, '#adb5bd')
+        s.line(12, 8, 12, 17, '#ffd166', 1)
+        s.px(9, 4, '#ffd60a')
+        return s.toCanvas(true)
+      }
+      case 'barrel_cluster': {
+        const s = new PixelSurface(20, 18)
+        s.rect(2, 7, 7, 9, '#8a5a3b')
+        s.rect(2, 9, 7, 1, '#495057')
+        s.rect(2, 13, 7, 1, '#495057')
+        s.rect(10, 8, 8, 8, '#b07d4f')
+        s.line(10, 8, 17, 15, '#6b4226', 1)
+        s.rect(5, 3, 6, 5, '#7f5539')
+        return s.toCanvas(true)
+      }
+      case 'bench': {
+        const s = new PixelSurface(22, 16)
+        s.rect(3, 5, 16, 4, '#a47148')
+        s.rect(3, 9, 16, 3, '#c8956b')
+        s.rect(4, 12, 2, 3, '#343a40')
+        s.rect(16, 12, 2, 3, '#343a40')
+        return s.toCanvas(true)
+      }
+      case 'notice_board': {
+        const s = new PixelSurface(22, 22)
+        s.rect(5, 14, 2, 6, '#5c3d2e')
+        s.rect(15, 14, 2, 6, '#5c3d2e')
+        s.rect(3, 4, 16, 11, '#8a5a3b')
+        s.rect(4, 5, 14, 9, '#6b4226')
+        s.rect(5, 6, 4, 5, '#fff3b0')
+        s.rect(11, 6, 5, 4, '#f8f9fa')
+        s.px(7, 6, '#e63946')
+        s.px(13, 6, '#4cc9f0')
+        return s.toCanvas(true)
+      }
+      case 'guild_banner': {
+        const s = new PixelSurface(14, 26)
+        const flagCol = variant % 2 === 0 ? '#c1121f' : '#5a189a'
+        s.rect(6, 3, 2, 21, '#adb5bd')
+        s.rect(3, 5, 8, 1, '#ffd166')
+        s.rect(4, 6, 6, 11, flagCol)
+        s.rect(6, 8, 2, 4, '#ffd60a')
+        s.px(4, 17, flagCol)
+        s.px(9, 17, flagCol)
+        return s.toCanvas(true)
+      }
+      case 'campfire': {
+        const s = new PixelSurface(18, 18)
+        s.rect(4, 12, 10, 3, '#6b4226')
+        s.rect(5, 14, 8, 2, '#8d99ae')
+        s.rect(6, 8 - (f % 2), 6, 5, '#f77f00')
+        s.rect(7, 6 + (f % 2), 4, 5, '#fcbf49')
+        s.px(8, 5, '#fff3b0')
+        if (f === 2) s.px(10, 4, '#fff3b0')
+        return s.toCanvas(true)
+      }
+      case 'tent': {
+        const s = new PixelSurface(26, 22)
+        for (let row = 0; row < 12; row++) {
+          const half = Math.floor(row * 0.85) + 2
+          s.rect(13 - half, 5 + row, half * 2, 1, variant % 2 === 0 ? '#d4a373' : '#4a7c59')
+        }
+        s.rect(10, 11, 6, 6, '#2b2d42')
+        s.line(13, 4, 13, 17, '#7f5539', 1)
+        return s.toCanvas(true)
+      }
+      case 'scarecrow': {
+        const s = new PixelSurface(18, 24)
+        s.rect(8, 10, 2, 12, '#6b4226')
+        s.rect(3, 11, 12, 2, '#6b4226')
+        s.rect(6, 10, 6, 6, '#3a86ff')
+        s.rect(7, 6, 4, 4, '#f4d35e')
+        s.rect(5, 5, 8, 2, '#b07d4f')
+        return s.toCanvas(true)
+      }
+      case 'ruin_pillar': {
+        const s = new PixelSurface(16, 26)
+        s.rect(4, 20, 8, 4, '#6c757d')
+        s.rect(5, 7, 6, 13, '#8d99ae')
+        s.rect(4, 5, 7, 2, '#adb5bd')
+        s.rect(5, 13, 3, 3, '#4f772d')
+        return s.toCanvas(true)
+      }
+      case 'chest_decor': {
+        const s = new PixelSurface(16, 16)
+        s.rect(2, 5, 12, 9, '#8a5a3b')
+        s.rect(2, 5, 12, 2, '#e9c46a')
+        s.rect(2, 9, 12, 1, '#e9c46a')
+        s.rect(7, 8, 2, 3, '#ffd60a')
+        return s.toCanvas(true)
+      }
+      case 'totem': {
+        const s = new PixelSurface(16, 26)
+        s.rect(6, 6, 4, 18, '#7f5539')
+        s.rect(4, 8, 8, 5, '#a47148')
+        s.px(5, 10, '#e63946')
+        s.px(9, 10, '#e63946')
+        s.rect(3, 5, 2, 2, '#ffb703')
+        s.rect(11, 5, 2, 2, '#ffb703')
+        return s.toCanvas(true)
+      }
+      case 'torch': {
+        const s = new PixelSurface(14, 24)
+        s.rect(6, 10, 2, 12, '#495057')
+        s.rect(5, 8, 4, 3, '#6c757d')
+        s.rect(5, 4 + (f % 2), 4, 4, '#ff7b00')
+        s.rect(6, 3 + (f % 2), 2, 3, '#ffd166')
+        return s.toCanvas(true)
+      }
+      case 'mine_cart': {
+        const s = new PixelSurface(22, 18)
+        s.rect(2, 15, 18, 2, '#5c3d2e')
+        s.rect(4, 7, 14, 7, '#6c757d')
+        s.rect(5, 5, 4, 3, '#ffd60a')
+        s.rect(10, 4, 4, 4, '#72efdd')
+        s.rect(5, 13, 3, 3, '#343a40')
+        s.rect(14, 13, 3, 3, '#343a40')
+        return s.toCanvas(true)
+      }
+      case 'crystal_spire': {
+        const s = new PixelSurface(18, 26)
+        s.rect(7, 3, 4, 19, '#4cc9f0')
+        s.rect(4, 10, 3, 12, '#7209b7')
+        s.rect(11, 9, 3, 13, '#4895ef')
+        s.rect(8, 4, 2, 10, '#e0fbfc')
+        return s.toCanvas(true)
+      }
+      case 'magma_brazier': {
+        const s = new PixelSurface(18, 22)
+        s.rect(4, 12, 10, 7, '#343a40')
+        s.rect(3, 10, 12, 3, '#495057')
+        s.rect(5, 5 + (f % 2), 8, 5, '#e85d04')
+        s.rect(6, 3 + (f % 2), 6, 4, '#ffb703')
+        s.px(8, 2, '#fff3b0')
+        return s.toCanvas(true)
+      }
+      case 'skull_pile': {
+        const s = new PixelSurface(18, 16)
+        s.rect(5, 6, 8, 7, '#e9e3d5')
+        s.rect(6, 9, 2, 2, '#2b2d42')
+        s.rect(10, 9, 2, 2, '#2b2d42')
+        s.rect(3, 12, 12, 2, '#d6d0c0')
+        return s.toCanvas(true)
+      }
+      case 'sky_arch': {
+        const s = new PixelSurface(26, 28)
+        s.rect(3, 8, 4, 18, '#e9ecef')
+        s.rect(19, 8, 4, 18, '#e9ecef')
+        s.rect(2, 4, 22, 4, '#f8f9fa')
+        s.rect(5, 5, 16, 2, '#ffd166')
+        return s.toCanvas(true)
+      }
+      case 'ice_spire': {
+        const s = new PixelSurface(18, 26)
+        s.rect(7, 3, 4, 20, '#90e0ef')
+        s.rect(4, 11, 3, 12, '#48cae4')
+        s.rect(11, 10, 3, 13, '#ade8f4')
+        s.rect(8, 4, 2, 11, '#ffffff')
+        return s.toCanvas(true)
+      }
+      case 'sakura_tree': {
+        const s = new PixelSurface(24, 28)
+        s.rect(10, 15, 4, 11, '#6b4226')
+        s.rect(5, 5, 14, 11, '#ff8fab')
+        s.rect(3, 7, 18, 7, '#ffb3c6')
+        s.rect(6, 4, 10, 4, '#ffc2d1')
+        s.px(7, 8, '#ffe5ec')
+        s.px(14, 10, '#ffe5ec')
+        return s.toCanvas(true)
+      }
+      case 'dream_shrine': {
+        const s = new PixelSurface(24, 26)
+        s.rect(5, 8, 3, 16, '#d62828')
+        s.rect(16, 8, 3, 16, '#d62828')
+        s.rect(2, 4, 20, 3, '#d62828')
+        s.rect(4, 9, 16, 2, '#b5171e')
+        s.rect(10, 7, 4, 2, '#ffd166')
+        return s.toCanvas(true)
+      }
+      case 'colosseum_pillar': {
+        const s = new PixelSurface(18, 28)
+        s.rect(4, 22, 10, 4, '#c2b38c')
+        s.rect(5, 6, 8, 16, '#ece2c6')
+        s.rect(7, 7, 1, 14, '#d8cba8')
+        s.rect(10, 7, 1, 14, '#d8cba8')
+        s.rect(3, 4, 12, 3, '#e0aa3e')
+        return s.toCanvas(true)
+      }
+      case 'wagon': {
+        const s = new PixelSurface(26, 20)
+        s.rect(4, 6, 16, 7, '#b07d4f')
+        s.rect(5, 4, 12, 4, '#e9ecef')
+        s.rect(3, 12, 20, 2, '#7f5539')
+        s.rect(5, 13, 4, 4, '#5c3d2e')
+        s.rect(16, 13, 4, 4, '#5c3d2e')
+        return s.toCanvas(true)
+      }
+      case 'flower_cart': {
+        const s = new PixelSurface(22, 18)
+        s.rect(4, 9, 14, 5, '#8a5a3b')
+        s.rect(5, 6, 4, 3, '#ff5d8f')
+        s.rect(10, 5, 4, 4, '#fff3b0')
+        s.rect(14, 7, 3, 2, '#72efdd')
+        s.rect(6, 14, 3, 3, '#495057')
+        s.rect(13, 14, 3, 3, '#495057')
+        return s.toCanvas(true)
+      }
+      case 'sign_arrow':
+      default: {
+        const s = new PixelSurface(16, 20)
+        s.rect(7, 8, 2, 10, '#6b4226')
+        s.rect(3, 4, 10, 5, '#c8956b')
+        s.rect(11, 5, 2, 3, '#c8956b')
+        s.rect(5, 6, 5, 1, '#5c3d2e')
+        return s.toCanvas(true)
+      }
+    }
+  })
+}
+
+const iconCache = new Map<string, string>()
+
 /* ---------------- Item icons ---------------- */
 
 const ICONS: Record<string, string[]> = {
@@ -2298,7 +2711,6 @@ const ICONS: Record<string, string[]> = {
   scroll: ['..........', '.nnnnnnnn.', '.cccccccc.', '.ckkkkkkc.', '.cccccccc.', '.ckkkkcc..', '.cccccccc.', '.nnnnnnnn.', '..........', '..........'],
 }
 
-const iconCache = new Map<string, string>()
 export function itemIconUrl(icon: string, color: string) {
   const key = `${icon}|${color}`
   const hit = iconCache.get(key)
