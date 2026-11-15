@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import { auth as firebaseAuth } from '@/lib/firebase/client'
+import { formatGameUid } from '@/lib/game/permissions'
 import { createTrade, sendFriendRequest, sendWhisper } from '@/lib/game/social'
 import { game, notify, openPanel } from '@/lib/game/engine'
 
@@ -92,6 +94,8 @@ export function PlayerActionMenu() {
   }
 
   if (!target) return null
+  const targetGameUid = target.gameUid ?? formatGameUid(target.uid)
+  const friendTargetArg = firebaseAuth.currentUser ? targetGameUid : target.userId
 
   return (
     <div
@@ -103,7 +107,7 @@ export function PlayerActionMenu() {
       <div className="mb-2 flex items-center justify-between border-b border-border pb-2">
         <div className="min-w-0">
           <p className="truncate text-xs font-bold text-foreground">{target.displayName}</p>
-          <p className="text-[10px] text-primary">พร้อมติดต่อ</p>
+          <p className="text-[10px] text-primary">UID {targetGameUid} • Lv.{target.level}</p>
         </div>
         <button
           type="button"
@@ -118,7 +122,7 @@ export function PlayerActionMenu() {
         <button
           type="button"
           className="pixel-button secondary px-1 py-2 text-[10px]"
-          onClick={() => run(sendFriendRequest(target.userId))}
+          onClick={() => run(sendFriendRequest(friendTargetArg))}
         >
           เพิ่มเพื่อน
         </button>

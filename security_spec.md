@@ -8,6 +8,7 @@
 5. **Sole GM & UID `0000` Reservation**: Only `request.auth.token.email_verified == true && request.auth.token.email == 'ffsmilepay53@gmail.com'` can hold `role: 'gm'`, claim `/playerUids/0000`, set `isGm: true`, or delete their own `dailyMissions` doc for Dev testing. All other users must hold `role: 'player'`, `isGm: false`, and a non-`0000` numeric `gameUid`.
 6. **PII Isolation in UID Directory**: `/playerUids/{gameUid}` stores zero PII (`email` forbidden) and disables `list` queries (`allow list: if false`) to prevent player enumeration while supporting exact `get` lookup by Game UID.
 7. **Bilateral Friend Integrity**: `/friendRequests/{requestId}` requires `requestId == fromUid + '__' + toUid`, prevents self-requests, verifies both `fromGameUid` and `toGameUid` exist in `/playerUids` matching `fromUid`/`toUid`, restricts `list` to `fromUid == request.auth.uid || toUid == request.auth.uid`, and enforces terminal state locking (`accepted`/`declined` cannot revert to `pending`).
+8. **Live World Presence Isolation & Anti-Spoofing**: `/worldPresence/{userId}` stores zero PII (`email` forbidden), allows writes/deletes strictly for `userId == request.auth.uid` with verified email and parent `/users/{userId}` ownership, enforces `updatedAt == request.time`, restricts `gm: true` / `uid: 0` / `gameUid: '0000'` solely to `isGmAccount()`, requires `invisible == false`, and caps `list` queries via `request.query.limit <= 60`.
 
 ## 2. The "Dirty Dozen" Adversarial Payloads
 1. **Cross-user profile read**: Authenticated as `userB`, `get(/users/userA)` -> `PERMISSION_DENIED`.
@@ -27,4 +28,6 @@
 15. **Non-GM claiming UID 0000 or GM role**: Authenticated as `other@gmail.com`, create `/playerUids/0000` or set `role: 'gm'` in `/users/userB` -> `PERMISSION_DENIED`.
 16. **UID directory scraping**: Authenticated user calls `list(/playerUids)` -> `PERMISSION_DENIED`.
 17. **Self-friend or forged friend request**: Create `/friendRequests/userA__userA` or spoof `fromUid: "userB"` or accept own outgoing request -> `PERMISSION_DENIED`.
-
+18. **Presence GM spoofing**: Non-GM user writes `/worldPresence/userB` with `gm: true` or `uid: 0` -> `PERMISSION_DENIED`.
+19. **Cross-user presence hijack**: `userB` attempts to overwrite or delete `/worldPresence/userA` -> `PERMISSION_DENIED`.
+20. **Unbounded presence dump**: Client queries `/worldPresence` without `limit` or with `limit > 60` -> `PERMISSION_DENIED`.

@@ -190,6 +190,17 @@ export function MapMinimap() {
       }
     }
 
+    // Visible Remote Players (cyan / gold for GM)
+    for (const other of game.remotePlayers) {
+      if (other.invisible || other.mapId !== cur.id) continue
+      const rx = Math.round((other.x / TILE) * MINIMAP_SCALE)
+      const ry = Math.round((other.y / TILE) * MINIMAP_SCALE)
+      ctx.fillStyle = '#0e0f1a'
+      ctx.fillRect(rx - 2, ry - 2, 4, 4)
+      ctx.fillStyle = other.gm ? '#ffd60a' : '#8be9fd'
+      ctx.fillRect(rx - 1, ry - 1, 2, 2)
+    }
+
     // Player Marker (bright emerald with dark outline)
     const playerX = Math.round((player.x / TILE) * MINIMAP_SCALE)
     const playerY = Math.round((player.y / TILE) * MINIMAP_SCALE)

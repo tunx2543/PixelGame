@@ -258,6 +258,7 @@ export interface SaveData {
 export interface RemotePlayer {
   userId: string
   uid: number
+  gameUid?: string
   displayName: string
   classId: string
   jobId: string

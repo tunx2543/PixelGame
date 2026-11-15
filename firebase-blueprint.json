@@ -344,6 +344,111 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "WorldPresence": {
+      "title": "WorldPresence",
+      "description": "Non-PII real-time map position and avatar state of an active online player.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the online player.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "gameUid": {
+          "type": "string",
+          "description": "Unique numeric Game UID displayed next to player name.",
+          "minLength": 4,
+          "maxLength": 8,
+          "pattern": "^[0-9]{4,8}$"
+        },
+        "uid": {
+          "type": "integer",
+          "description": "Numeric player UID (0 reserved exclusively for GM)."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Active character name shown overhead.",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "jobId": {
+          "type": "string",
+          "description": "Active character job class identifier.",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "mapId": {
+          "type": "string",
+          "description": "Current RPG map identifier.",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "x": {
+          "type": "number",
+          "description": "World X coordinate in pixels."
+        },
+        "y": {
+          "type": "number",
+          "description": "World Y coordinate in pixels."
+        },
+        "level": {
+          "type": "integer",
+          "description": "Current character level."
+        },
+        "gm": {
+          "type": "boolean",
+          "description": "Whether the player holds verified GM privileges."
+        },
+        "facing": {
+          "type": "string",
+          "description": "Sprite facing direction.",
+          "enum": ["up", "down", "left", "right"]
+        },
+        "moving": {
+          "type": "boolean",
+          "description": "Whether the character is currently walking."
+        },
+        "attackAnim": {
+          "type": "number",
+          "description": "Remaining attack swing timer in seconds."
+        },
+        "invisible": {
+          "type": "boolean",
+          "description": "Must be false for public presence entries."
+        },
+        "heartbeatMs": {
+          "type": "integer",
+          "description": "Client epoch millisecond heartbeat counter."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Firestore server timestamp (request.time) for staleness detection."
+        }
+      },
+      "required": [
+        "userId",
+        "gameUid",
+        "uid",
+        "displayName",
+        "jobId",
+        "mapId",
+        "x",
+        "y",
+        "level",
+        "gm",
+        "facing",
+        "moving",
+        "attackAnim",
+        "invisible",
+        "heartbeatMs",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -366,6 +471,10 @@
     "/friendRequests/{requestId}": {
       "schema": { "$ref": "#/entities/FriendRequest" },
       "description": "Friend requests and accepted friendships between players."
+    },
+    "/worldPresence/{userId}": {
+      "schema": { "$ref": "#/entities/WorldPresence" },
+      "description": "Non-PII live map presence documents for rendering nearby players in real time."
     }
   }
 }

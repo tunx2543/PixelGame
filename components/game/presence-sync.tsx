@@ -4,6 +4,18 @@ import { useEffect } from 'react'
 import { onAuthStateChanged, type User } from 'firebase/auth'
 import { auth as firebaseAuth } from '@/lib/firebase/client'
 import { ensureUserProfile } from '@/lib/firebase/characters'
+import {
+  PRESENCE_HEARTBEAT_MS,
+  PRESENCE_MOVE_THROTTLE_MS,
+  PRESENCE_STALE_MS,
+  type RemotePlayerSnapshot,
+  pruneStaleRemotePlayers,
+} from '@/lib/firebase/presence-helpers'
+import {
+  removeWorldPresence,
+  subscribeMapPresence,
+  upsertWorldPresence,
+} from '@/lib/firebase/presence'
 import { createClient } from '@/lib/supabase/client'
 import { isGmAccountUser, PERMANENT_GM_GAME_UID, PERMANENT_GM_UID } from '@/lib/game/permissions'
 import { game, notify, resolveGameUid, saveGame, say, setGameAccountIdentity, subscribe } from '@/lib/game/engine'
@@ -13,13 +25,180 @@ let lastPrivateMessageId = 0
 export function PresenceSync() {
   useEffect(() => {
     let stopped = false
+    let activeFbUser: User | null = firebaseAuth.currentUser
+    let readyProfileUid: string | null = null
+    let subscribedFbUid: string | null = null
+    let subscribedMapId: string | null = null
+    let unsubFbPresence: (() => void) | null = null
+    let fbPublishInFlight = false
+    let lastFbPublishAt = 0
+    let lastFbPruneAt = 0
+    let hasPublishedFbPresence = false
+    let lastSentState = {
+      mapId: '',
+      x: Number.NaN,
+      y: Number.NaN,
+      facing: '',
+      moving: false,
+      jobId: '',
+      level: 0,
+      name: '',
+      attacking: false,
+      invisible: false,
+    }
+
+    const fbRemotePlayers = new Map<string, RemotePlayerSnapshot>()
+
+    const stopFbPresence = (deleteDocForUid?: string | null) => {
+      if (unsubFbPresence) {
+        unsubFbPresence()
+        unsubFbPresence = null
+      }
+      subscribedFbUid = null
+      subscribedMapId = null
+      fbRemotePlayers.clear()
+      if (deleteDocForUid && hasPublishedFbPresence) {
+        hasPublishedFbPresence = false
+        void removeWorldPresence(deleteDocForUid)
+      } else {
+        hasPublishedFbPresence = false
+      }
+      if (game.remotePlayers.length > 0) {
+        game.remotePlayers = []
+        notify()
+      }
+    }
+
+    const ensureFbMapSubscription = (user: User, mapId: string) => {
+      if (stopped || !user.emailVerified) return
+      if (subscribedFbUid === user.uid && subscribedMapId === mapId && unsubFbPresence) return
+
+      if (unsubFbPresence) {
+        unsubFbPresence()
+        unsubFbPresence = null
+      }
+      fbRemotePlayers.clear()
+      game.remotePlayers = []
+      notify()
+
+      subscribedFbUid = user.uid
+      subscribedMapId = mapId
+      unsubFbPresence = subscribeMapPresence(
+        user.uid,
+        mapId,
+        fbRemotePlayers,
+        (players) => {
+          if (stopped) return
+          game.remotePlayers = players
+          notify()
+        },
+        () => {
+          // Errors logged by subscribeMapPresence; keep UI non-blocking.
+        },
+      )
+    }
+
+    const publishFbPresenceIfNeeded = async (force = false) => {
+      const user = activeFbUser
+      const player = game.p
+      if (stopped || !user || !user.emailVerified || readyProfileUid !== user.uid || !player) {
+        return
+      }
+
+      if (player.invisible) {
+        if (hasPublishedFbPresence) {
+          hasPublishedFbPresence = false
+          lastSentState.invisible = true
+          void removeWorldPresence(user.uid)
+        }
+        return
+      }
+
+      const now = Date.now()
+      const attacking = game.attackAnim > 0
+      const dist = Number.isFinite(lastSentState.x)
+        ? Math.hypot(player.x - lastSentState.x, player.y - lastSentState.y)
+        : Number.POSITIVE_INFINITY
+
+      const criticalChange =
+        lastSentState.mapId !== player.mapId ||
+        lastSentState.facing !== game.facing ||
+        lastSentState.moving !== game.moving ||
+        lastSentState.jobId !== player.jobId ||
+        lastSentState.level !== player.level ||
+        lastSentState.name !== player.name ||
+        lastSentState.invisible !== Boolean(player.invisible) ||
+        (!lastSentState.attacking && attacking)
+
+      const movedEnough = dist >= 2
+      const heartbeatDue = now - lastFbPublishAt >= PRESENCE_HEARTBEAT_MS
+
+      if (!force && !criticalChange && !movedEnough && !heartbeatDue) {
+        return
+      }
+      if (!force && !criticalChange && now - lastFbPublishAt < PRESENCE_MOVE_THROTTLE_MS) {
+        return
+      }
+      if (fbPublishInFlight) return
+
+      fbPublishInFlight = true
+      lastFbPublishAt = now
+      lastSentState = {
+        mapId: player.mapId,
+        x: player.x,
+        y: player.y,
+        facing: game.facing,
+        moving: game.moving,
+        jobId: player.jobId,
+        level: player.level,
+        name: player.name,
+        attacking,
+        invisible: Boolean(player.invisible),
+      }
+
+      try {
+        const ok = await upsertWorldPresence({
+          userId: user.uid,
+          isGm: Boolean(player.gm && isGmAccountUser(user)),
+          gameUid: player.gameUid,
+          uid: player.uid,
+          name: player.name,
+          jobId: player.jobId,
+          mapId: player.mapId,
+          x: player.x,
+          y: player.y,
+          level: player.level,
+          facing: game.facing,
+          moving: game.moving,
+          attackAnim: game.attackAnim,
+          invisible: Boolean(player.invisible),
+          nowMs: now,
+        })
+        if (ok) {
+          hasPublishedFbPresence = true
+        }
+      } catch {
+        // Keep game loop running; next heartbeat or move retries automatically.
+      } finally {
+        fbPublishInFlight = false
+      }
+    }
 
     const syncFirebaseIdentity = async (fbUser: User | null) => {
+      const prevUid = activeFbUser?.uid ?? null
+      activeFbUser = fbUser
       const player = game.p
       if (stopped || !player) return
 
       if (!fbUser) {
+        readyProfileUid = null
+        stopFbPresence(prevUid)
         return
+      }
+
+      if (prevUid && prevUid !== fbUser.uid) {
+        readyProfileUid = null
+        stopFbPresence(prevUid)
       }
 
       const isGm = isGmAccountUser(fbUser)
@@ -37,7 +216,7 @@ export function PresenceSync() {
 
       try {
         const identity = await ensureUserProfile(fbUser)
-        if (stopped || !game.p) return
+        if (stopped || !game.p || activeFbUser?.uid !== fbUser.uid) return
         const p = game.p
         const numUid = identity.isGm ? PERMANENT_GM_UID : Number(identity.gameUid)
         const changed =
@@ -55,10 +234,13 @@ export function PresenceSync() {
           p.speed = 1
           if (p.jobId === 'gm') p.jobId = 'novice'
         }
+        readyProfileUid = fbUser.uid
         if (changed) {
           saveGame()
           notify()
         }
+        ensureFbMapSubscription(fbUser, p.mapId)
+        void publishFbPresenceIfNeeded(true)
       } catch {
         // Keep cached identity if Firestore sync temporarily fails.
       }
@@ -68,6 +250,37 @@ export function PresenceSync() {
       void syncFirebaseIdentity(fbUser)
     })
     void syncFirebaseIdentity(firebaseAuth.currentUser)
+
+    const fbTickTimer = window.setInterval(() => {
+      const user = activeFbUser
+      const player = game.p
+      if (stopped || !user || !user.emailVerified || !player) return
+
+      if (readyProfileUid === user.uid) {
+        ensureFbMapSubscription(user, player.mapId)
+        void publishFbPresenceIfNeeded(false)
+      }
+
+      const now = Date.now()
+      if (fbRemotePlayers.size > 0 && now - lastFbPruneAt >= 1000) {
+        lastFbPruneAt = now
+        const before = fbRemotePlayers.size
+        const nextList = pruneStaleRemotePlayers(fbRemotePlayers, now, PRESENCE_STALE_MS)
+        if (nextList.length !== before) {
+          game.remotePlayers = nextList
+          notify()
+        }
+      }
+    }, 100)
+
+    const onPageHide = () => {
+      const uid = activeFbUser?.uid
+      if (uid && hasPublishedFbPresence) {
+        hasPublishedFbPresence = false
+        void removeWorldPresence(uid)
+      }
+    }
+    window.addEventListener('pagehide', onPageHide)
 
     let supabase: ReturnType<typeof createClient> | null = null
     try {
@@ -79,7 +292,10 @@ export function PresenceSync() {
     if (!supabase) {
       return () => {
         stopped = true
+        window.removeEventListener('pagehide', onPageHide)
+        window.clearInterval(fbTickTimer)
         unsubFbAuth()
+        stopFbPresence(activeFbUser?.uid ?? null)
       }
     }
 
@@ -188,6 +404,10 @@ export function PresenceSync() {
     const sync = async (force = false) => {
       if (syncing || (!force && Date.now() - lastSync < 5000) || !supabase) return
       if (firebaseAuth.currentUser) {
+        if (boundUserId) {
+          stopChannel()
+          boundUserId = null
+        }
         await syncFirebaseIdentity(firebaseAuth.currentUser)
         lastSync = Date.now()
         return
@@ -235,7 +455,6 @@ export function PresenceSync() {
           lastSync = Date.now()
           return
         }
-        // Only Firebase-verified ffsmilepay53@gmail.com holds GM privileges.
         const isGm = isGmAccountUser(firebaseAuth.currentUser)
         const identityChanged = player.uid !== uid || player.gm !== isGm
         player.uid = uid
@@ -290,6 +509,7 @@ export function PresenceSync() {
     const syncTimer = window.setInterval(() => void sync(true), 5000)
     const whisperTimer = window.setInterval(() => void loadPrivateMessages(), 2000)
     const broadcastTimer = window.setInterval(() => {
+      if (firebaseAuth.currentUser) return
       const now = Date.now()
       if (remotePlayers.size && now - lastPlayerPrune >= 1000) {
         lastPlayerPrune = now
@@ -307,7 +527,10 @@ export function PresenceSync() {
 
     return () => {
       stopped = true
+      window.removeEventListener('pagehide', onPageHide)
+      window.clearInterval(fbTickTimer)
       unsubFbAuth()
+      stopFbPresence(activeFbUser?.uid ?? null)
       unsubscribe()
       window.clearInterval(syncTimer)
       window.clearInterval(whisperTimer)

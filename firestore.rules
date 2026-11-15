@@ -324,6 +324,87 @@ service cloud.firestore {
         data.updatedAt is timestamp;
     }
 
+    function isValidWorldPresence(data, userId) {
+      return data.keys().hasAll([
+          'userId',
+          'gameUid',
+          'uid',
+          'displayName',
+          'jobId',
+          'mapId',
+          'x',
+          'y',
+          'level',
+          'gm',
+          'facing',
+          'moving',
+          'attackAnim',
+          'invisible',
+          'heartbeatMs',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'userId',
+          'gameUid',
+          'uid',
+          'displayName',
+          'jobId',
+          'mapId',
+          'x',
+          'y',
+          'level',
+          'gm',
+          'facing',
+          'moving',
+          'attackAnim',
+          'invisible',
+          'heartbeatMs',
+          'updatedAt'
+        ]) &&
+        isValidId(data.userId) &&
+        data.userId == userId &&
+        data.userId == request.auth.uid &&
+        isValidGameUid(data.gameUid) &&
+        data.uid is int &&
+        data.uid >= 0 &&
+        data.uid <= 99999999 &&
+        data.displayName is string &&
+        data.displayName.size() >= 1 &&
+        data.displayName.size() <= 24 &&
+        data.jobId is string &&
+        data.jobId.size() >= 1 &&
+        data.jobId.size() <= 32 &&
+        data.jobId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.mapId is string &&
+        data.mapId.size() >= 1 &&
+        data.mapId.size() <= 32 &&
+        data.mapId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.x is number &&
+        data.x >= 0 &&
+        data.x <= 5000 &&
+        data.y is number &&
+        data.y >= 0 &&
+        data.y <= 5000 &&
+        data.level is int &&
+        data.level >= 1 &&
+        data.level <= 999 &&
+        data.gm is bool &&
+        (
+          (data.gm == true && isGmAccount() && data.uid == 0 && data.gameUid == '0000') ||
+          (data.gm == false && data.uid > 0 && data.gameUid != '0000')
+        ) &&
+        data.facing in ['up', 'down', 'left', 'right'] &&
+        data.moving is bool &&
+        data.attackAnim is number &&
+        data.attackAnim >= 0 &&
+        data.attackAnim <= 5 &&
+        data.invisible is bool &&
+        data.invisible == false &&
+        data.heartbeatMs is int &&
+        data.heartbeatMs >= 0 &&
+        data.updatedAt is timestamp;
+    }
+
     match /playerUids/{gameUid} {
       allow get: if isSignedIn() && isEmailVerified() && isValidGameUid(gameUid);
       allow list: if false;
@@ -394,6 +475,58 @@ service cloud.firestore {
         isEmailVerified() &&
         isValidId(requestId) &&
         (existing().fromUid == request.auth.uid || existing().toUid == request.auth.uid);
+    }
+
+    match /worldPresence/{userId} {
+      allow get: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(userId) &&
+        (resource == null || existing().userId == request.auth.uid || existing().invisible == false);
+
+      allow list: if isSignedIn() &&
+        isEmailVerified() &&
+        resource.data.mapId is string &&
+        request.query.limit != null &&
+        request.query.limit <= 60;
+
+      allow create: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(userId) &&
+        userId == request.auth.uid &&
+        isUserAccountOwner(userId) &&
+        isValidWorldPresence(incoming(), userId) &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(userId) &&
+        userId == request.auth.uid &&
+        isUserAccountOwner(userId) &&
+        isValidWorldPresence(incoming(), userId) &&
+        incoming().userId == existing().userId &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'gameUid',
+          'uid',
+          'displayName',
+          'jobId',
+          'mapId',
+          'x',
+          'y',
+          'level',
+          'gm',
+          'facing',
+          'moving',
+          'attackAnim',
+          'invisible',
+          'heartbeatMs',
+          'updatedAt'
+        ]);
+
+      allow delete: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(userId) &&
+        userId == request.auth.uid;
     }
 
     match /users/{userId} {
