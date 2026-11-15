@@ -53,6 +53,7 @@ import {
   onDailyMissionCompleted,
   recordDailyMissionProgress,
 } from './daily-missions'
+import { pickNewerSave } from './save-sync'
 
 if (typeof window !== 'undefined') {
   onDailyMissionCompleted((mission) => {
@@ -342,7 +343,7 @@ interface Projectile {
   flatDmg?: number
 }
 
-export type PanelId = 'shop' | 'gem-shop' | 'enhance' | 'job' | 'storage' | 'character' | 'gacha' | 'rebirth' | 'friends' | 'trade' | 'inventory' | 'gm-summon' | 'dev-tools' | 'pets' | 'quests'
+export type PanelId = 'shop' | 'gem-shop' | 'enhance' | 'job' | 'storage' | 'character' | 'gacha' | 'rebirth' | 'friends' | 'trade' | 'inventory' | 'gm-summon' | 'dev-tools' | 'pets' | 'quests' | 'models'
 export type ChatType = 'system' | 'player' | 'gm' | 'loot' | 'error' | 'npc'
 export interface ChatMsg {
   id: number
@@ -388,6 +389,7 @@ export const game = {
     until: number
   }>,
   socialTargetId: null as string | null,
+  socialTargetMeta: null as null | { userId: string; displayName: string; gameUid?: string },
   tradeTargetId: null as string | null,
   tradeId: null as number | null,
   nearNpc: null as NpcDef | null,
@@ -1671,6 +1673,12 @@ export function changeJob(jobId: string) {
   if (!job || job.from !== p.jobId) return say('error', 'ไม่สามารถเปลี่ยนเป็นอาชีพนี้ได้'), notify()
   if (p.level < job.reqLevel) return say('error', `ต้องการเลเวล ${job.reqLevel}`), notify()
   if (p.gold < job.cost) return say('error', 'เงินไม่พอ'), notify()
+  const w = p.equipment.weapon
+  const wDef = w ? ITEMS[w.itemId] : null
+  const weaponNeedsUnequip = Boolean(w && (!wDef || !wDef.weaponType || !job.weaponTypes.includes(wDef.weaponType)))
+  if (weaponNeedsUnequip && p.inventory.length >= getInventoryCapacity(p) && p.storage.length >= STORAGE_SIZE) {
+    return say('error', 'กระเป๋าและคลังเต็ม ไม่สามารถถอดอาวุธเดิมได้'), notify()
+  }
   p.gold -= job.cost
   applyJob(jobId)
   say('system', `เปลี่ยนอาชีพเป็น ${job.name} สำเร็จ!`)
@@ -1684,9 +1692,15 @@ function applyJob(jobId: string) {
   const w = p.equipment.weapon
   const wDef = w ? ITEMS[w.itemId] : null
   if (w && (!wDef || !wDef.weaponType || !currentJob().weaponTypes.includes(wDef.weaponType))) {
-    p.inventory.push(w)
-    p.equipment.weapon = null
-    say('system', `ถอด ${itemLabel(w)} เพราะอาชีพใหม่ใช้ไม่ได้`)
+    if (p.inventory.length < getInventoryCapacity(p)) {
+      p.inventory.push(w)
+      p.equipment.weapon = null
+      say('system', `ถอด ${itemLabel(w)} เพราะอาชีพใหม่ใช้ไม่ได้`)
+    } else if (p.storage.length < STORAGE_SIZE) {
+      p.storage.push(w)
+      p.equipment.weapon = null
+      say('system', `กระเป๋าเต็ม จึงย้าย ${itemLabel(w)} เข้าคลังแล้ว`)
+    }
   }
   game.skillCd = {}
   const s = getStats()
@@ -2149,7 +2163,17 @@ export async function loadCloudGame() {
       const selected = chars.find((c) => c.id === activeCharacterSlot) ?? chars[0]
       if (selected) {
         activeCharacterSlot = selected.id
-        return selected.saveData
+        const localSlotSave = readSave()
+        const resolved = pickNewerSave(selected.saveData, localSlotSave)
+        if (resolved.localIsNewer && resolved.save) {
+          try {
+            await saveUserCharacter(fbUser.uid, activeCharacterSlot, resolved.save)
+          } catch {
+            // Keep newer local save even if background sync fails.
+          }
+          return resolved.save
+        }
+        return resolved.save ?? selected.saveData
       }
       const accountSave = readSave()
       if (accountSave) {
@@ -2234,6 +2258,8 @@ function resetRuntime() {
   game.attackHeld = false
   game.skillCd = {}
   game.bubble = null
+  game.socialTargetId = null
+  game.socialTargetMeta = null
   game.lootToast = null
   game.killToasts = []
   game.time = 0
@@ -2440,9 +2466,19 @@ export function update(dt: number) {
   game.petAttackCd = Math.max(0, game.petAttackCd - dt)
   for (const k in game.skillCd) game.skillCd[k] -= dt
   game.combatT += dt
+  const prevNearNpcId = game.nearNpc?.id ?? null
+  let uiDirty = false
   if (game.killToasts.some((t) => t.until <= game.time)) {
     game.killToasts = game.killToasts.filter((t) => t.until > game.time)
-    notify()
+    uiDirty = true
+  }
+  if (game.lootToast && game.lootToast.until <= game.time) {
+    game.lootToast = null
+    uiDirty = true
+  }
+  if (game.announcement && game.announcement.until <= Date.now()) {
+    game.announcement = null
+    uiDirty = true
   }
 
   let mx = 0
@@ -2479,6 +2515,9 @@ export function update(dt: number) {
       game.nearNpc = n
       break
     }
+  }
+  if ((game.nearNpc?.id ?? null) !== prevNearNpcId) {
+    uiDirty = true
   }
 
   if (game.attackHeld) basicAttack()
@@ -2540,10 +2579,15 @@ export function update(dt: number) {
     if (game.combatT > 4) {
       const s = getStats()
       const rate = map.safe ? 0.08 : 0.025
+      const prevHp = p.hp
+      const prevMp = p.mp
       p.hp = Math.min(s.maxHp, p.hp + Math.max(1, Math.floor(s.maxHp * rate)))
       p.mp = Math.min(s.maxMp, p.mp + Math.max(1, Math.floor(s.maxMp * rate)))
+      if (p.hp !== prevHp || p.mp !== prevMp) uiDirty = true
     }
   }
+
+  if (uiDirty) notify()
 
   game.saveT += dt
   if (game.saveT >= 10) saveGame()

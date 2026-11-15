@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { onAuthStateChanged, type User } from 'firebase/auth'
 import { Check, CheckCircle2, Copy, Crown, LogIn, LogOut, RefreshCw, ShieldCheck } from 'lucide-react'
 import { auth, formatFirebaseAuthError, signInWithGoogle, signOutFirebase } from '@/lib/firebase/client'
@@ -26,6 +26,8 @@ export function AccountPanel({
   const [syncFailed, setSyncFailed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [copied, setCopied] = useState(false)
+  const onAuthSuccessRef = useRef(onAuthSuccess)
+  onAuthSuccessRef.current = onAuthSuccess
 
   const syncProfile = useCallback(
     async (targetUser: User, notifySuccess = false) => {
@@ -35,7 +37,7 @@ export function AccountPanel({
         setIdentity(resolved)
         setMessage('')
         if (notifySuccess) {
-          onAuthSuccess?.(targetUser, resolved)
+          onAuthSuccessRef.current?.(targetUser, resolved)
         }
         return resolved
       } catch (error) {
@@ -45,7 +47,7 @@ export function AccountPanel({
         return null
       }
     },
-    [onAuthSuccess],
+    [],
   )
 
   useEffect(() => {

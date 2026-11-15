@@ -16,7 +16,9 @@ export function InventoryPanel() {
   const selectedItem = selectedItemId ? ITEMS[selectedItemId] : null
   const selectedMeta = selectedItem ? {
     jobs: selectedItem.kind === 'weapon'
-      ? Object.values(JOBS).filter((job) => job.weaponTypes.includes(selectedItem.weaponType!)).map((job) => job.name).join(', ')
+      ? (selectedItem.weaponType
+          ? Object.values(JOBS).filter((job) => job.weaponTypes.includes(selectedItem.weaponType!)).map((job) => job.name).join(', ')
+          : 'ทุกอาชีพ')
       : 'ทุกอาชีพ',
     level: selectedItem.reqLevel ?? 1,
     slot: selectedItem.kind === 'weapon' ? 'อาวุธ' : selectedItem.kind === 'armor' ? 'เกราะ' : 'ไอเทมทั่วไป',
@@ -59,8 +61,12 @@ export function InventoryPanel() {
           if (!def) return null
           const equipable = def.kind === 'weapon' || def.kind === 'armor'
           return (
-            <div key={item.uid} role="button" tabIndex={0} onClick={() => setSelectedItemId(item.itemId)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setSelectedItemId(item.itemId) }} className="cursor-pointer rounded border border-border bg-card/80 p-2 transition hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-              <div className="mb-2 flex items-center gap-2">
+            <div key={item.uid} className={`flex flex-col justify-between rounded border bg-card/80 p-2 transition ${selectedItemId === item.itemId ? 'border-primary' : 'border-border hover:border-primary/70'}`}>
+              <button
+                type="button"
+                onClick={() => setSelectedItemId(item.itemId)}
+                className="mb-2 flex w-full items-center gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
                 <span className="grid size-9 shrink-0 place-items-center rounded border border-white/20" style={{ backgroundColor: `${def.color}33` }}>
                   <ItemIcon itemId={item.itemId} size={30} />
                 </span>
@@ -68,7 +74,7 @@ export function InventoryPanel() {
                   <p className="truncate text-xs text-foreground">{itemLabel(item)}</p>
                   <p className="text-[10px] text-muted-foreground">x{item.qty}</p>
                 </div>
-              </div>
+              </button>
               {equipable && <PxButton className="w-full" onClick={() => equip(item.uid)}>สวมใส่</PxButton>}
               {def.kind === 'consumable' && <PxButton className="w-full" onClick={() => consumeItem(item.uid)}>ใช้ 1 ชิ้น</PxButton>}
             </div>

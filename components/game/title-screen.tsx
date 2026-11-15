@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { onAuthStateChanged, type User } from 'firebase/auth'
-import { Plus, Shield, Trash2, UploadCloud, UserCheck } from 'lucide-react'
+import { Plus, Trash2, UploadCloud, UserCheck } from 'lucide-react'
 import { auth } from '@/lib/firebase/client'
 import {
   CHARACTER_SLOTS,
@@ -34,12 +34,14 @@ import {
 import { MAPS } from '@/lib/game/maps'
 import { AccountPanel } from './account-panel'
 import { formatNum, formatPlayTime } from './format'
+import { PWAInstallButton } from './pwa-controls'
+import { SpriteModelCanvas } from './sprite-model-canvas'
 
 export function TitleScreen() {
-  const [user, setUser] = useState<User | null>(() => auth.currentUser)
+  const [user, setUser] = useState<User | null>(null)
   const [accountIdentity, setAccountIdentity] = useState<UserAccountIdentity | null>(null)
   const [cloudChars, setCloudChars] = useState<CloudCharacterRecord[]>([])
-  const [guestSave, setGuestSave] = useState<SaveData | null>(() => readSave())
+  const [guestSave, setGuestSave] = useState<SaveData | null>(null)
   const [recoverableSaves, setRecoverableSaves] = useState<RecoverableLocalSave[]>([])
   const [mode, setMode] = useState<'list' | 'new'>('list')
   const [name, setName] = useState('')
@@ -131,6 +133,13 @@ export function TitleScreen() {
       unsubscribe()
     }
   }, [refreshCharacters])
+
+  const handleAuthSuccess = useCallback(
+    (signedInUser: User) => {
+      void refreshCharacters(signedInUser)
+    },
+    [refreshCharacters],
+  )
 
   const nextAvailableSlot = (): CharacterSlotId => {
     const used = new Set(cloudChars.map((c) => c.id))
@@ -259,7 +268,7 @@ export function TitleScreen() {
           </p>
         </div>
 
-        <AccountPanel onAuthSuccess={() => void refreshCharacters(auth.currentUser)} />
+        <AccountPanel onAuthSuccess={handleAuthSuccess} />
 
         <div className="pixel-panel w-full p-5">
           {isLoadingSave ? (
@@ -309,8 +318,17 @@ export function TitleScreen() {
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex min-w-0 items-center gap-2.5">
-                        <div className="grid size-9 shrink-0 place-items-center border-2 border-[#0e0f1a] bg-secondary text-primary">
-                          <Shield className="size-4" aria-hidden />
+                        <div className="grid size-11 shrink-0 place-items-center border-2 border-[#0e0f1a] bg-[#131726]">
+                          <SpriteModelCanvas
+                            mode="job"
+                            id={char.jobId}
+                            action="idle"
+                            dir="down"
+                            size={42}
+                            isGm={char.saveData?.gm}
+                            showAura={false}
+                            label={`ตัวละคร ${char.name}`}
+                          />
                         </div>
                         <div className="min-w-0">
                           <p className="truncate text-base font-bold text-primary">{char.name}</p>
@@ -372,17 +390,30 @@ export function TitleScreen() {
             </div>
           ) : !user && mode === 'list' && guestSave ? (
             <div className="flex flex-col gap-4">
-              <div className="border-2 border-border bg-muted p-3">
-                <p className="text-xs text-muted-foreground">ตัวละคร Guest ในเครื่องนี้</p>
-                <p className="mt-1 text-lg text-primary">{guestSave.name}</p>
-                <p className="text-sm text-foreground">
-                  Lv.{guestSave.level} {JOBS[guestSave.jobId]?.name ?? 'ผู้ฝึกหัด'} •{' '}
-                  {MAPS[guestSave.mapId]?.name ?? 'เมือง'}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  เวลาเล่น {formatPlayTime(guestSave.playTime)} • บันทึกล่าสุด{' '}
-                  {new Date(guestSave.savedAt).toLocaleString('th-TH')}
-                </p>
+              <div className="flex items-center gap-3 border-2 border-border bg-muted p-3">
+                <div className="grid size-14 shrink-0 place-items-center border-2 border-[#0e0f1a] bg-[#131726]">
+                  <SpriteModelCanvas
+                    mode="job"
+                    id={guestSave.jobId}
+                    action="auto"
+                    dir="down"
+                    size={52}
+                    isGm={guestSave.gm}
+                    label={`ตัวละคร ${guestSave.name}`}
+                  />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-muted-foreground">ตัวละคร Guest ในเครื่องนี้</p>
+                  <p className="mt-0.5 truncate text-lg text-primary">{guestSave.name}</p>
+                  <p className="text-sm text-foreground">
+                    Lv.{guestSave.level} {JOBS[guestSave.jobId]?.name ?? 'ผู้ฝึกหัด'} •{' '}
+                    {MAPS[guestSave.mapId]?.name ?? 'เมือง'}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    เวลาเล่น {formatPlayTime(guestSave.playTime)} • บันทึกล่าสุด{' '}
+                    {new Date(guestSave.savedAt).toLocaleString('th-TH')}
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
@@ -465,11 +496,18 @@ export function TitleScreen() {
             เลือกสายอาชีพ
           </Link>
           <Link
+            href="/models"
+            className="pixel-btn bg-secondary px-3 py-1.5 text-xs font-semibold text-gold hover:brightness-110"
+          >
+            คลังโมเดล 2D
+          </Link>
+          <Link
             href="/character-status"
             className="pixel-btn bg-secondary px-3 py-1.5 text-xs text-foreground hover:brightness-110"
           >
             ดูสถานะตัวละคร
           </Link>
+          <PWAInstallButton variant="title" />
         </div>
 
         <p className="text-center text-xs text-foreground/80 drop-shadow-[1px_1px_0_#1a1423]">

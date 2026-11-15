@@ -1,7 +1,8 @@
-import { ITEMS, JOBS, MONSTERS } from './data'
+import { ITEMS, JOBS, MONSTERS, type MonsterSprite } from './data'
 import { GEM_SHOP_ITEMS } from './gem-shop'
 import { currentMap, game } from './engine'
 import { TILE } from './maps'
+import { getMonsterModelSpec } from './models-2d'
 import {
   type Dir,
   humanSprite,
@@ -115,7 +116,8 @@ function drawWeaponAttackOverlay(
 }
 
 function monsterFacing(
-  sprite: string,
+  defId: string,
+  sprite: MonsterSprite,
   x: number,
   y: number,
   vx: number,
@@ -123,8 +125,8 @@ function monsterFacing(
   flip: boolean,
   provoked: boolean,
 ): Dir {
-  const isHumanoid = sprite === 'goblin' || sprite === 'skeleton' || sprite === 'demon'
-  if (!isHumanoid) {
+  const spec = getMonsterModelSpec(defId, sprite)
+  if (!spec.supports4Way) {
     return flip ? 'left' : 'right'
   }
   if (provoked) {
@@ -252,10 +254,11 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     ents.push({
       y: m.y,
       draw: () => {
+        const mSpec = getMonsterModelSpec(def.id, def.sprite, def.color)
         const walking = m.moving
         const attacking = m.lunge > 0
         const action: SpriteAction = attacking ? 'attack' : walking ? 'walk' : 'idle'
-        const dir = monsterFacing(def.sprite, m.x, m.y, m.vx, m.vy, m.flip, m.provoked)
+        const dir = monsterFacing(def.id, def.sprite, m.x, m.y, m.vx, m.vy, m.flip, m.provoked)
         const speedMul = m.provoked ? 1.3 : 1
         const attackProgress = attacking ? Math.max(0, Math.min(1, 1 - m.lunge / 0.3)) : 0
         const attackFrame = Math.min(3, Math.floor(attackProgress * 4))
@@ -268,8 +271,8 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         const w = img.width * scale
         const h = img.height * scale
 
-        const flying = def.sprite === 'bat' || def.sprite === 'ghost'
-        const hover = flying ? Math.round(Math.sin(m.animT * 4.2) * 2.4) - 4 : 0
+        const flying = mSpec.flying
+        const hover = flying ? Math.round(Math.sin(m.animT * 4.2) * 2.4) - (mSpec.archetype === 'abyss_dragon' ? 3 : 4) : 0
         const hoverX = flying ? Math.cos(m.animT * 2.4) * 1.4 : 0
         const faceDx = (game.p?.x ?? m.x) - m.x
         const faceDy = (game.p?.y ?? m.y) - m.y
@@ -279,14 +282,14 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         const attackReach = attacking ? Math.sin(attackProgress * Math.PI) * (def.boss ? 5 : 3.5) : 0
         const hitShake = m.hitFlash > 0 ? Math.sin(m.hitFlash * 95) * 2.2 : 0
 
-        shadow(ctx, m.x + hoverX, m.y, (5.5 - (flying ? Math.sin(m.animT * 4.2) * 0.4 : 0)) * (def.boss ? 1.5 : 1))
-        if (def.boss) {
+        shadow(ctx, m.x + hoverX, m.y, (5.5 - (flying ? Math.sin(m.animT * 4.2) * 0.4 : 0)) * (def.boss ? 1.55 : 1))
+        if (def.boss || mSpec.auraColor) {
           ctx.save()
-          ctx.strokeStyle = def.color
-          ctx.globalAlpha = 0.25 + Math.sin(t * 4) * 0.12
-          ctx.lineWidth = 1.2
+          ctx.strokeStyle = mSpec.auraColor ?? def.color
+          ctx.globalAlpha = (def.boss ? 0.28 : 0.16) + Math.sin(t * 4) * 0.1
+          ctx.lineWidth = def.boss ? 1.3 : 1
           ctx.beginPath()
-          ctx.ellipse(m.x, m.y, 13 * scale * 0.55, 5 * scale * 0.55, 0, 0, Math.PI * 2)
+          ctx.ellipse(m.x, m.y, (w * 0.32), (w * 0.12), 0, 0, Math.PI * 2)
           ctx.stroke()
           ctx.restore()
         }
@@ -309,7 +312,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         }
         if (attacking) {
           ctx.globalAlpha = Math.min(1, m.lunge / 0.12)
-          ctx.strokeStyle = def.boss ? '#ff6b6b' : '#fff1ad'
+          ctx.strokeStyle = def.boss ? (mSpec.accentColor || '#ff6b6b') : '#fff1ad'
           ctx.lineWidth = def.boss ? 2.2 : 1.6
           ctx.beginPath()
           ctx.arc(0, -h * 0.45, Math.max(w, h) * 0.55, Math.atan2(faceY, faceX) - 0.8, Math.atan2(faceY, faceX) + 0.8)
@@ -607,7 +610,8 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   }
 
   for (const n of map.npcs) {
-    const [x, y] = toS(n.x * TILE, n.y * TILE + 8 - 22)
+    const npcOffset = npcSprite(n.id) ? 33 : 26
+    const [x, y] = toS(n.x * TILE, n.y * TILE + 8 - npcOffset)
     text(`[${n.title}]`, x, y - 13 * dpr, '#f2c94c', 9)
     text(n.name, x, y, '#ffffff', 10)
     if (game.nearNpc?.id === n.id && !game.panel) {
@@ -620,7 +624,9 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     if (m.dead) continue
     const def = MONSTERS[m.defId]
     if (!def) continue
-    const h = (def.boss ? 28 : 16) + (def.sprite === 'bat' || def.sprite === 'ghost' ? 4 : 0)
+    const mSpec = getMonsterModelSpec(def.id, def.sprite, def.color)
+    const mScale = def.boss ? 1.65 : 1.05
+    const h = Math.round(mSpec.canvasSize.height * mScale * 0.78) + (mSpec.flying ? 5 : 0)
     const [x, y] = toS(m.x, m.y - h)
     const color = def.boss ? '#ff6b6b' : def.level > p.level + 5 ? '#ff8fa3' : def.level < p.level - 5 ? '#a0a0a0' : '#ffffff'
     text(`${def.boss ? '★ ' : ''}${def.name} Lv.${def.level}`, x, y - 8 * dpr, color, def.boss ? 10 : 8)
@@ -641,13 +647,13 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     const networkBlend = other.receivedAt ? Math.min(1, (Date.now() - other.receivedAt) / 100) : 1
     const remoteX = (other.previousX ?? other.x) + (other.x - (other.previousX ?? other.x)) * networkBlend
     const remoteY = (other.previousY ?? other.y) + (other.y - (other.previousY ?? other.y)) * networkBlend
-    const [x, y] = toS(remoteX, remoteY - 24)
+    const [x, y] = toS(remoteX, remoteY - 28)
     if (other.gm) text('[GM]', x, y - 12 * dpr, '#ffd60a', 8)
     text(`${other.displayName} [${String(other.uid).padStart(5, '0')}] Lv.${other.level}`, x, y, other.gm ? '#ffd60a' : '#8be9fd', 9)
   }
 
   {
-    const [x, y] = toS(p.x, p.y - 24)
+    const [x, y] = toS(p.x, p.y - 28)
     text(`${p.name} [${p.uid === undefined ? 'Guest' : String(p.uid).padStart(5, '0')}]`, x, y, p.gm ? '#ffd60a' : '#ffffff', 10)
     if (p.gm) text('[GM]', x, y - 12 * dpr, '#ffd60a', 8)
     if (game.bubble) {

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Kanit, Pixelify_Sans } from 'next/font/google'
+import { PwaRuntime } from '@/components/game/pwa-controls'
 import './globals.css'
 
 const pixel = Pixelify_Sans({ subsets: ['latin'], variable: '--font-pixel' })
@@ -8,7 +9,7 @@ const thai = Kanit({ subsets: ['thai', 'latin'], weight: ['400', '500', '700'], 
 export const metadata: Metadata = {
   title: 'Pixel Quest - เกม RPG พิกเซล',
   description: 'เกม Pixel RPG ผจญภัย ล่ามอนสเตอร์ เปลี่ยนอาชีพ ตีบวกอาวุธ พร้อมระบบบันทึกอัตโนมัติ',
-  generator: 'v0.app',
+  manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
@@ -16,11 +17,13 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: '/icon-light-32x32.png', media: '(prefers-color-scheme: light)' },
-      { url: '/icon-dark-32x32.png', media: '(prefers-color-scheme: dark)' },
+      { url: '/icon-light-32x32.png', sizes: '32x32', media: '(prefers-color-scheme: light)' },
+      { url: '/icon-dark-32x32.png', sizes: '32x32', media: '(prefers-color-scheme: dark)' },
+      { url: '/pwa-192x192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/pwa-512x512.png', sizes: '512x512', type: 'image/png' },
       { url: '/icon.svg', type: 'image/svg+xml' },
     ],
-    apple: '/apple-icon.png',
+    apple: [{ url: '/apple-icon.png', sizes: '180x180', type: 'image/png' }],
   },
 }
 
@@ -43,6 +46,7 @@ export default function RootLayout({
     <html lang="th" className={`${pixel.variable} ${thai.variable} h-full bg-background`}>
       <body className="font-sans antialiased h-full overflow-hidden select-none">
         {children}
+        <PwaRuntime />
       </body>
     </html>
   )

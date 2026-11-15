@@ -1,0 +1,272 @@
+'use client'
+
+import { useEffect, useRef } from 'react'
+import { JOBS, MONSTERS, type WeaponType } from '@/lib/game/data'
+import { getJobModelSpec, getMonsterModelSpec } from '@/lib/game/models-2d'
+import {
+  type Dir,
+  humanSprite,
+  jobHumanColors,
+  monsterSprite,
+  type SpriteAction,
+} from '@/lib/game/sprites'
+
+export type PreviewAction = SpriteAction | 'auto'
+
+export interface SpriteModelCanvasProps {
+  mode: 'job' | 'monster'
+  id: string
+  action?: PreviewAction
+  dir?: Dir
+  weaponOverride?: WeaponType | null
+  weaponColorOverride?: string
+  size?: number
+  scale?: number
+  isGm?: boolean
+  showShadow?: boolean
+  showAura?: boolean
+  className?: string
+  label?: string
+  onAutoPhaseChange?: (phase: SpriteAction) => void
+}
+
+export function SpriteModelCanvas({
+  mode,
+  id,
+  action = 'idle',
+  dir = 'down',
+  weaponOverride,
+  weaponColorOverride,
+  size = 88,
+  scale,
+  isGm,
+  showShadow = true,
+  showAura = true,
+  className = '',
+  label,
+  onAutoPhaseChange,
+}: SpriteModelCanvasProps) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const phaseCallbackRef = useRef(onAutoPhaseChange)
+  phaseCallbackRef.current = onAutoPhaseChange
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const reducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+    let rafId = 0
+    let isVisible = true
+    let lastDrawAt = 0
+    let lastSig = ''
+    let lastPhase: SpriteAction | null = null
+    const start = performance.now()
+
+    const observer =
+      typeof IntersectionObserver !== 'undefined'
+        ? new IntersectionObserver(
+            (entries) => {
+              const visible = entries[0]?.isIntersecting ?? true
+              isVisible = visible
+              if (visible && !reducedMotion && rafId === 0) {
+                lastDrawAt = 0
+                rafId = requestAnimationFrame(renderFrame)
+              }
+            },
+            { threshold: 0.05 },
+          )
+        : null
+    observer?.observe(canvas)
+
+    const renderFrame = (now: number) => {
+      rafId = 0
+      if (!isVisible) return
+
+      const elapsed = reducedMotion ? 0 : (now - start) / 1000
+      let effectiveAction: SpriteAction = action === 'auto' ? 'idle' : action
+      let attackProgress = 0
+
+      if (action === 'auto' && !reducedMotion) {
+        const cycle = elapsed % 3.8
+        if (cycle < 1.45) {
+          effectiveAction = 'idle'
+        } else if (cycle < 2.85) {
+          effectiveAction = 'walk'
+        } else {
+          effectiveAction = 'attack'
+          attackProgress = (cycle - 2.85) / 0.95
+        }
+      } else if (action === 'attack') {
+        attackProgress = reducedMotion ? 0.5 : (elapsed * 1.45) % 1
+      }
+
+      if (lastPhase !== effectiveAction) {
+        lastPhase = effectiveAction
+        phaseCallbackRef.current?.(effectiveAction)
+      }
+
+      const throttleMs = effectiveAction === 'idle' ? 120 : 80
+      if (!reducedMotion && lastDrawAt > 0 && now - lastDrawAt < throttleMs) {
+        rafId = requestAnimationFrame(renderFrame)
+        return
+      }
+      lastDrawAt = now
+
+      const isAttack = effectiveAction === 'attack'
+      const attackFrame = isAttack ? Math.min(3, Math.floor(attackProgress * 4)) : 0
+      const frame = isAttack
+        ? attackFrame
+        : effectiveAction === 'walk'
+          ? Math.floor(elapsed * 9.5) % 6
+          : mode === 'job' && !reducedMotion && Math.sin(elapsed * 1.4) > 0.96
+            ? -1
+            : Math.floor(elapsed * 2.6) % 4
+
+      let spriteImg: HTMLCanvasElement
+      let auraColor: string | undefined
+      let isFlying = false
+      let isGhost = false
+      let isBoss = false
+
+      if (mode === 'job') {
+        const jobDef = JOBS[id] ?? JOBS.novice
+        const spec = getJobModelSpec(id)
+        const colors = jobHumanColors(jobDef.id, jobDef.colors, isGm ?? jobDef.id === 'gm')
+        const weapon = weaponOverride !== undefined ? weaponOverride : (jobDef.weaponTypes[0] ?? 'stick')
+        const wColor = weaponColorOverride ?? jobDef.colors.accent
+        spriteImg = humanSprite(
+          colors,
+          dir,
+          frame,
+          weapon,
+          wColor,
+          isAttack,
+          effectiveAction,
+          attackFrame,
+        )
+        auraColor = spec.auraColor
+      } else {
+        const monDef = MONSTERS[id] ?? MONSTERS.slime
+        const spec = getMonsterModelSpec(monDef.id, monDef.sprite, monDef.color)
+        spriteImg = monsterSprite(
+          monDef.sprite,
+          monDef.color,
+          frame,
+          isAttack,
+          effectiveAction,
+          dir,
+          attackFrame,
+          monDef.id,
+        )
+        auraColor = spec.auraColor
+        isFlying = spec.flying
+        isGhost = monDef.sprite === 'ghost'
+        isBoss = Boolean(monDef.boss)
+      }
+
+      const hoverY = isFlying && !reducedMotion ? Math.round(Math.sin(elapsed * 4.2) * 3 - 4) : 0
+      const lungeOffset =
+        isAttack && !reducedMotion
+          ? Math.round(Math.sin(attackProgress * Math.PI) * (dir === 'left' ? -4 : dir === 'right' ? 4 : 0))
+          : 0
+      const slashBucket = isAttack && attackProgress > 0.2 && attackProgress < 0.85 ? Math.round(attackProgress * 6) : -1
+      const auraBucket = showAura && auraColor && !reducedMotion ? Math.round(Math.sin(elapsed * 4.2) * 3) : 0
+      const sig = `${effectiveAction}|${frame}|${hoverY}|${lungeOffset}|${slashBucket}|${auraBucket}`
+
+      if (sig !== lastSig) {
+        lastSig = sig
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        ctx.imageSmoothingEnabled = false
+
+        const padW = canvas.width * 0.84
+        const padH = canvas.height * 0.78
+        const computedScale =
+          scale ??
+          Math.max(1.25, Math.min(padW / spriteImg.width, padH / spriteImg.height))
+        const drawW = Math.round(spriteImg.width * computedScale)
+        const drawH = Math.round(spriteImg.height * computedScale)
+
+        const centerX = Math.round(canvas.width / 2)
+        const baseFloorY = Math.round(canvas.height * 0.84)
+
+        if (showShadow) {
+          ctx.save()
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.38)'
+          const shadowRx = Math.max(8, Math.round(drawW * 0.3))
+          const shadowRy = Math.max(3, Math.round(shadowRx * 0.34))
+          ctx.beginPath()
+          ctx.ellipse(centerX + lungeOffset, baseFloorY, shadowRx, shadowRy, 0, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.restore()
+        }
+
+        if (showAura && auraColor) {
+          ctx.save()
+          ctx.strokeStyle = auraColor
+          ctx.lineWidth = isBoss ? 2 : 1.5
+          ctx.globalAlpha = 0.34 + (reducedMotion ? 0 : Math.sin(elapsed * 4.2) * 0.14)
+          const auraRx = Math.max(11, Math.round(drawW * 0.38))
+          const auraRy = Math.max(4, Math.round(auraRx * 0.34))
+          ctx.beginPath()
+          ctx.ellipse(centerX + lungeOffset, baseFloorY - 1, auraRx, auraRy, 0, 0, Math.PI * 2)
+          ctx.stroke()
+          ctx.restore()
+        }
+
+        ctx.save()
+        if (isGhost) {
+          ctx.globalAlpha = 0.84 + (reducedMotion ? 0 : Math.sin(elapsed * 4) * 0.08)
+        }
+        ctx.drawImage(
+          spriteImg,
+          Math.round(centerX + lungeOffset - drawW / 2),
+          Math.round(baseFloorY + hoverY - drawH + Math.round(2 * computedScale)),
+          drawW,
+          drawH,
+        )
+
+        if (isAttack && attackProgress > 0.2 && attackProgress < 0.85) {
+          const slashAlpha = Math.max(0, 1 - Math.abs(attackProgress - 0.5) * 2.4)
+          ctx.globalAlpha = slashAlpha
+          ctx.strokeStyle = auraColor ?? '#ffd60a'
+          ctx.lineWidth = 2
+          const arcCenterX =
+            centerX + lungeOffset + (dir === 'left' ? -drawW * 0.14 : dir === 'right' ? drawW * 0.14 : 0)
+          const arcCenterY = baseFloorY + hoverY - drawH * 0.45
+          const arcRadius = Math.min(Math.round(canvas.width * 0.24), Math.max(9, Math.round(drawW * 0.28)))
+          const baseA = dir === 'left' ? Math.PI : dir === 'up' ? -Math.PI / 2 : dir === 'down' ? Math.PI / 2 : 0
+          ctx.beginPath()
+          ctx.arc(arcCenterX, arcCenterY, arcRadius, baseA - 0.85, baseA + 0.85)
+          ctx.stroke()
+        }
+        ctx.restore()
+      }
+
+      if (!reducedMotion && isVisible) {
+        rafId = requestAnimationFrame(renderFrame)
+      }
+    }
+
+    rafId = requestAnimationFrame(renderFrame)
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId)
+      observer?.disconnect()
+    }
+  }, [mode, id, action, dir, weaponOverride, weaponColorOverride, size, scale, isGm, showShadow, showAura])
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={size}
+      height={size}
+      aria-label={label ?? `โมเดล 2D ${id}`}
+      className={`pixelated block shrink-0 ${className}`}
+      style={{ width: size, height: size }}
+    />
+  )
+}

@@ -61,9 +61,15 @@ export function FriendsPanel({ game }: { game: typeof gameState }) {
       setSocial({ friends: [], incomingRequests: [], outgoingRequests: [] })
       return
     }
-    const unsub = subscribeFriendSocialState(user.uid, (next) => {
-      setSocial(next)
-    })
+    const unsub = subscribeFriendSocialState(
+      user.uid,
+      (next) => {
+        setSocial(next)
+      },
+      () => {
+        setFeedback({ type: 'error', text: 'โหลดรายการเพื่อนจากคลาวด์ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง' })
+      },
+    )
     return () => unsub()
   }, [user])
 
@@ -359,6 +365,11 @@ export function FriendsPanel({ game }: { game: typeof gameState }) {
                     className="flex min-w-0 flex-1 items-center gap-2 text-left"
                     onClick={() => {
                       game.socialTargetId = friend.userId
+                      game.socialTargetMeta = {
+                        userId: friend.userId,
+                        displayName: friend.name,
+                        gameUid: friend.gameUid,
+                      }
                       notify()
                     }}
                   >

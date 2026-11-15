@@ -234,6 +234,7 @@ export async function removeFriendshipOrRequest(requestId: string): Promise<{ ok
 export function subscribeFriendSocialState(
   userId: string,
   onChange: (snapshot: FriendSocialSnapshot) => void,
+  onError?: (error: unknown) => void,
 ): () => void {
   const currentUser = auth.currentUser
   if (!currentUser || currentUser.uid !== userId || !currentUser.emailVerified) {
@@ -309,7 +310,12 @@ export function subscribeFriendSocialState(
       emit()
     },
     (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'friendRequests')
+      if (!auth.currentUser || auth.currentUser.uid !== userId) {
+        onChange({ friends: [], incomingRequests: [], outgoingRequests: [] })
+        return
+      }
+      console.error('Friend incoming snapshot error:', error)
+      onError?.(error)
     },
   )
 
@@ -335,7 +341,12 @@ export function subscribeFriendSocialState(
       emit()
     },
     (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'friendRequests')
+      if (!auth.currentUser || auth.currentUser.uid !== userId) {
+        onChange({ friends: [], incomingRequests: [], outgoingRequests: [] })
+        return
+      }
+      console.error('Friend outgoing snapshot error:', error)
+      onError?.(error)
     },
   )
 

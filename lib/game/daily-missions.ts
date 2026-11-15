@@ -1,6 +1,6 @@
 'use client'
 
-import { useSyncExternalStore } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from '@/lib/firebase/client'
 import { isGmAccountUser } from '@/lib/game/permissions'
@@ -422,7 +422,9 @@ export function getDailyMissionSnapshot(): DailyMissionStoreState {
 }
 
 export function useDailyMissions(): DailyMissionStoreState {
-  initDailyMissionsStore()
+  useEffect(() => {
+    initDailyMissionsStore()
+  }, [])
   return useSyncExternalStore(
     (listener) => {
       listeners.add(listener)

@@ -28,9 +28,15 @@ export function ChatBox() {
   const g = useGame()
   const [text, setText] = useState('')
   const [isOpen, setIsOpen] = useState(true)
-  const [position, setPosition] = useState({ x: 8, y: 0 })
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(null)
   const dragRef = useRef({ active: false, moved: false, offsetX: 0, offsetY: 0 })
   const listRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setIsOpen(false)
+    }
+  }, [])
 
   useEffect(() => {
     const move = (event: PointerEvent) => {
@@ -52,7 +58,7 @@ export function ChatBox() {
     }
   }, [])
 
-  const startDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+  const startDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
     event.preventDefault()
     event.stopPropagation()
     const rect = event.currentTarget.parentElement?.getBoundingClientRect()
@@ -70,24 +76,28 @@ export function ChatBox() {
   return (
     <div
       onPointerDown={(event) => event.stopPropagation()}
-      className="pointer-events-auto pixel-panel absolute z-20 flex w-[min(16rem,calc(100vw-1rem))] touch-none flex-col bg-card/90 shadow-lg"
-      style={{ left: position.x, top: position.y || undefined, bottom: position.y ? undefined : '7rem' }}
+      className={cn(
+        'pointer-events-auto pixel-panel absolute z-20 flex w-[min(16rem,calc(100vw-1rem))] touch-none flex-col bg-card/90 shadow-lg',
+        !position && 'bottom-[10.75rem] left-2 md:bottom-3 md:left-[11rem]',
+      )}
+      style={position ? { left: position.x, top: position.y } : undefined}
     >
-      
-      {/* แถบหัวข้อแชท + ปุ่มกดพับ/ขยาย */}
-      <div
+      <button
+        type="button"
         onPointerDown={startDrag}
         onClick={() => {
           if (!dragRef.current.moved) setIsOpen((open) => !open)
           dragRef.current.moved = false
         }}
-        className="flex items-center justify-between px-2.5 py-1 bg-secondary/70 border-b border-border text-[11px] font-semibold cursor-pointer select-none text-foreground"
+        aria-expanded={isOpen}
+        aria-label={isOpen ? 'พับหน้าต่างแชท' : 'เปิดหน้าต่างแชท'}
+        className="flex w-full cursor-pointer select-none items-center justify-between border-b border-border bg-secondary/70 px-2.5 py-1 text-[11px] font-semibold text-foreground hover:opacity-90"
       >
         <span>💬 แชท ({g.chat.length})</span>
-        <button type="button" aria-label="พับหน้าต่างแชท" className="p-0.5 hover:opacity-80">
+        <span className="p-0.5 text-muted-foreground" aria-hidden>
           {isOpen ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
-        </button>
-      </div>
+        </span>
+      </button>
 
       {/* ส่วนเนื้อหาแชทและฟอร์มพิมพ์ จะแสดงก็ต่อเมื่อ isOpen เป็น true */}
       {isOpen && (

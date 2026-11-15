@@ -418,7 +418,7 @@ const VISUAL_CLASSIFICATION: Record<string, 'dagger' | 'staff' | 'sword' | 'bow'
   'pixellab-object-03b36157.png': 'staff',
 }
 
-const MAGE_NAMED_ITEMS = new Set(['ราชันผลึก', 'พิทักษ์เถ้า', 'เขี้ยวจันทรา', 'ผ่าอเวจี'])
+const MAGE_NAMED_ITEMS = new Set(['ราชันย์ผลึก', 'พิทักษ์เถ้า', 'เขี้ยวจันทรา', 'ผ่าอเวจี'])
 
 const catalogItems = Object.fromEntries(CATALOG_ASSETS.map((asset, index) => {
   const baseName = CATALOG_NAMES[index % CATALOG_NAMES.length]
@@ -442,7 +442,6 @@ const catalogItems = Object.fromEntries(CATALOG_ASSETS.map((asset, index) => {
     tier,
     reqLevel: tier * 10,
     icon: isEffect ? 'armor' : weaponType,
-    asset: `/images/items/catalog/${asset}`,
     effect: isEffect,
     color: isEffect ? '#c084fc' : weaponType === 'dagger' ? '#d00000' : weaponType === 'staff' ? '#8b5cf6' : weaponType === 'bow' ? '#16a34a' : '#f59e0b',
     description: `${isEffect ? 'อุปกรณ์อาคมจากบอส' : `อาวุธสำหรับ ${weaponLabel}`} | ไฟล์: ${asset} | ${isEffect ? `ป้องกัน +${20 + tier * 10}` : `โจมตี +${atk}`}`,

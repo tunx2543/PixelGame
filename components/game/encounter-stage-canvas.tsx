@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react'
 import { ITEMS, JOBS, type WeaponType } from '@/lib/game/data'
 import type { SaveData } from '@/lib/game/engine'
 import type { EncounterBiome, EncounterEnemy } from '@/lib/game/encounter'
+import { getMonsterModelSpec } from '@/lib/game/models-2d'
 import { humanSprite, jobHumanColors, monsterSprite, type SpriteAction } from '@/lib/game/sprites'
 import { getActivePetBonuses } from '@/lib/game/systems'
 
@@ -252,7 +253,7 @@ export function EncounterStageCanvas({
             heroAction,
             heroAttackFrame,
           )
-          const heroScale = 3.0
+          const heroScale = 2.75
           const hw = heroSprite.width * heroScale
           const hh = heroSprite.height * heroScale
 
@@ -321,8 +322,9 @@ export function EncounterStageCanvas({
             const isEnemyHurt = eHit > 0 && eHitAge >= 0 && eHitAge < 1
             const isDead = mon.hp <= 0 || ph === 'VICTORY'
 
-            const flying = mon.def.sprite === 'bat' || mon.def.sprite === 'ghost'
-            const mHover = flying ? Math.sin(t * 4.2) * 6 - 10 : 0
+            const mSpec = getMonsterModelSpec(mon.def.id, mon.def.sprite, mon.def.color)
+            const flying = mSpec.flying
+            const mHover = flying ? Math.sin(t * 4.2) * 5.5 - (mSpec.archetype === 'abyss_dragon' ? 8 : 10) : 0
             const mLunge = isEnemyAttacking ? -Math.sin(eAtkAge * Math.PI) * 36 : 0
             const mShake = isEnemyHurt ? Math.sin(eHitAge * 28) * 6 : 0
             const mStepIn = isEnemyAttacking && eAtkAge < 0.25
@@ -347,24 +349,25 @@ export function EncounterStageCanvas({
               mon.def.id,
             )
 
-            const baseMonsterScale = mon.rarity === 'boss' ? 3.4 : mon.rarity === 'elite' ? 3.0 : 2.75
+            const targetHeight = mon.rarity === 'boss' ? 94 : mon.rarity === 'elite' ? 82 : 74
+            const baseMonsterScale = Math.max(2.2, Math.min(3.1, targetHeight / Math.max(1, mImg.height)))
             const mw = mImg.width * baseMonsterScale
             const mh = mImg.height * baseMonsterScale
 
             // Shadow
             ctx.fillStyle = 'rgba(0,0,0,0.38)'
             ctx.beginPath()
-            ctx.ellipse(enemyX + mLunge, floorY + 2, mw * 0.38, 8, 0, 0, Math.PI * 2)
+            ctx.ellipse(enemyX + mLunge, floorY + 2, mw * 0.36, 8, 0, 0, Math.PI * 2)
             ctx.fill()
 
             // Rarity aura
             if (!isDead && mon.rarity !== 'normal') {
               ctx.save()
-              ctx.strokeStyle = mon.rarity === 'boss' ? '#e5484d' : '#c77dff'
+              ctx.strokeStyle = mon.rarity === 'boss' ? (mSpec.auraColor || '#e5484d') : '#c77dff'
               ctx.lineWidth = 2
               ctx.globalAlpha = 0.4 + Math.sin(t * 5) * 0.2
               ctx.beginPath()
-              ctx.ellipse(enemyX + mLunge, floorY + 1, mw * 0.5, 11, 0, 0, Math.PI * 2)
+              ctx.ellipse(enemyX + mLunge, floorY + 1, mw * 0.46, 11, 0, 0, Math.PI * 2)
               ctx.stroke()
               ctx.restore()
             }
@@ -402,7 +405,21 @@ export function EncounterStageCanvas({
               )
             }
             if (isEnemyAttacking) {
-              drawSlashEffect(ctx, heroX + 12, floorY - hh * 0.45, 'dagger', eAtkAge, '#ff6b6b')
+              const enemyFxType: WeaponType =
+                mSpec.archetype === 'abyss_dragon' || mSpec.archetype === 'demon_lord' || mSpec.archetype === 'demon'
+                  ? 'staff'
+                  : mSpec.archetype === 'abyss_knight'
+                    ? 'sword'
+                    : 'dagger'
+              const enemyFxColor =
+                mSpec.archetype === 'abyss_dragon'
+                  ? '#e0aaff'
+                  : mSpec.archetype === 'abyss_knight'
+                    ? '#c77dff'
+                    : mSpec.archetype === 'gale_sentinel'
+                      ? '#ffd60a'
+                      : '#ff6b6b'
+              drawSlashEffect(ctx, heroX + 12, floorY - hh * 0.45, enemyFxType, eAtkAge, enemyFxColor)
             }
           }
 

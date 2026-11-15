@@ -53,9 +53,16 @@ export function GameCanvas() {
         ctx.globalAlpha = 1
       }
       uiAcc += dt
-      if (uiAcc > 0.1) {
+      if (uiAcc > 0.12) {
         uiAcc = 0
-        notify()
+        let hasActiveSkillCd = false
+        for (const k in game.skillCd) {
+          if (game.skillCd[k] > 0) {
+            hasActiveSkillCd = true
+            break
+          }
+        }
+        if (hasActiveSkillCd) notify()
       }
       raf = requestAnimationFrame(loop)
     }

@@ -62,6 +62,7 @@ import {
 import { getActivePetBonuses } from '@/lib/game/systems'
 import { formatNum } from './format'
 import { EncounterStageCanvas, type StagePopup } from './encounter-stage-canvas'
+import { pickNewerSave } from '@/lib/game/save-sync'
 
 type ArenaPhase = 'LOADING' | 'READY' | 'FIGHTING' | 'VICTORY' | 'DEFEAT'
 
@@ -155,6 +156,8 @@ export function MonsterEncounterArena() {
   const userRef = useRef<User | null>(null)
   const slotRef = useRef<string>('slot_1')
   const mutedRef = useRef<boolean>(false)
+  const attackCdRef = useRef<number>(0)
+  const skillCdsRef = useRef<Record<string, number>>({})
   const logSeqRef = useRef(0)
   const popupSeqRef = useRef(0)
 
@@ -199,24 +202,31 @@ export function MonsterEncounterArena() {
 
       if (cloudUid) {
         setGameAccountIdentity(cloudUid)
+        let cloudSave: SaveData | null = null
         try {
           const chars = await listUserCharacters(cloudUid)
           const match = chars.find((c) => c.id === preferredSlot) ?? chars[0]
           if (match) {
             resolvedSlot = match.id
             setActiveCharacterSlot(match.id)
-            resolvedSave = match.saveData
+            cloudSave = match.saveData
           }
         } catch {
           // Fall back to local key below
         }
-        if (!resolvedSave && typeof window !== 'undefined') {
+        let localSave: SaveData | null = null
+        if (typeof window !== 'undefined') {
           try {
             const raw = localStorage.getItem(encounterSaveStorageKey(cloudUid, resolvedSlot))
-            if (raw) resolvedSave = JSON.parse(raw) as SaveData
+            if (raw) localSave = JSON.parse(raw) as SaveData
           } catch {
             // Ignore malformed JSON
           }
+        }
+        const resolved = pickNewerSave(cloudSave, localSave)
+        resolvedSave = resolved.save
+        if (resolved.localIsNewer && resolved.save) {
+          void persistEncounterSave(resolved.save, resolvedSlot, cloudUid).catch(() => undefined)
         }
       } else {
         setGameAccountIdentity(null)
@@ -273,6 +283,8 @@ export function MonsterEncounterArena() {
       setEnemy(nextEnemy)
       setVictoryResult(null)
       setLastBreakdown(null)
+      attackCdRef.current = 0
+      skillCdsRef.current = {}
       setAttackCd(0)
       setSkillCds({})
       setEnemyAttackProgress(0)
@@ -334,16 +346,17 @@ export function MonsterEncounterArena() {
       if (!currentSave || !currentEnemy || (currentPhase !== 'READY' && currentPhase !== 'FIGHTING')) return
 
       if (skill) {
-        if ((skillCds[skill.id] ?? 0) > 0) return
+        if ((skillCdsRef.current[skill.id] ?? 0) > 0) return
         if (currentSave.mp < skill.mp) {
           appendLog('MP ไม่เพียงพอสำหรับสกิลนี้', 'system')
           return
         }
-      } else if (attackCd > 0) {
+      } else if (attackCdRef.current > 0) {
         return
       }
 
       if (currentPhase === 'READY') {
+        phaseRef.current = 'FIGHTING'
         setPhase('FIGHTING')
       }
 
@@ -352,10 +365,15 @@ export function MonsterEncounterArena() {
 
       if (skill) {
         nextSave.mp -= skill.mp
-        setSkillCds((prev) => ({ ...prev, [skill.id]: skill.cooldown }))
-        setAttackCd(Math.max(attackCd, 0.2))
+        const nextSkills = { ...skillCdsRef.current, [skill.id]: skill.cooldown }
+        skillCdsRef.current = nextSkills
+        setSkillCds(nextSkills)
+        const nextAttackCd = Math.max(attackCdRef.current, 0.2)
+        attackCdRef.current = nextAttackCd
+        setAttackCd(nextAttackCd)
         recordDailyMissionProgress({ skillsUsed: 1 })
       } else {
+        attackCdRef.current = job.attackSpeed
         setAttackCd(job.attackSpeed)
       }
 
@@ -423,7 +441,7 @@ export function MonsterEncounterArena() {
         handleVictory(nextSave, updatedEnemy)
       }
     },
-    [appendLog, attackCd, handleVictory, pushPopup, skillCds],
+    [appendLog, handleVictory, pushPopup],
   )
 
   const handleUsePotion = useCallback(
@@ -466,6 +484,8 @@ export function MonsterEncounterArena() {
     setEnemy(freshEnemy)
     setVictoryResult(null)
     setEnemyAttackProgress(0)
+    attackCdRef.current = 0
+    skillCdsRef.current = {}
     setAttackCd(0)
     setSkillCds({})
     setPhase('READY')
@@ -516,18 +536,26 @@ export function MonsterEncounterArena() {
       const dt = Math.min(0.1, (now - last) / 1000)
       last = now
 
-      setAttackCd((cd) => Math.max(0, cd - dt))
-      setSkillCds((prev) => {
+      if (attackCdRef.current > 0) {
+        const nextCd = Math.max(0, attackCdRef.current - dt)
+        attackCdRef.current = nextCd
+        setAttackCd(nextCd)
+      }
+      if (Object.keys(skillCdsRef.current).length > 0) {
         let changed = false
-        const next: Record<string, number> = {}
-        for (const [k, v] of Object.entries(prev)) {
+        const nextSkills: Record<string, number> = {}
+        for (const [k, v] of Object.entries(skillCdsRef.current)) {
           if (v > 0) {
-            next[k] = Math.max(0, v - dt)
+            const rem = Math.max(0, v - dt)
+            if (rem > 0) nextSkills[k] = rem
             changed = true
           }
         }
-        return changed ? next : prev
-      })
+        if (changed) {
+          skillCdsRef.current = nextSkills
+          setSkillCds(nextSkills)
+        }
+      }
 
       if (phaseRef.current !== 'FIGHTING') return
 
@@ -685,7 +713,7 @@ export function MonsterEncounterArena() {
   return (
     <main className="h-dvh w-full overflow-y-auto bg-background text-foreground">
       {/* 3-Zone Top Bar */}
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between gap-8 border-b-2 border-border px-4 py-3 md:px-6">
+      <header className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 border-b-2 border-border px-4 py-3 md:flex-nowrap md:gap-8 md:px-6">
         <Link
           href="/"
           className="flex shrink-0 items-center gap-2 whitespace-nowrap text-base font-bold tracking-tight text-primary hover:brightness-110"
@@ -715,10 +743,10 @@ export function MonsterEncounterArena() {
             type="button"
             onClick={() => setMuted((m) => !m)}
             aria-label={muted ? 'เปิดเสียงเอฟเฟกต์' : 'ปิดเสียงเอฟเฟกต์'}
-            className="pixel-btn flex min-h-10 shrink-0 items-center gap-1.5 whitespace-nowrap bg-secondary px-3 py-2 text-xs text-foreground hover:brightness-110"
+            className="pixel-btn flex min-h-10 shrink-0 items-center gap-1.5 whitespace-nowrap bg-secondary px-2.5 py-2 text-xs text-foreground hover:brightness-110 sm:px-3"
           >
             {muted ? <VolumeX className="size-4" aria-hidden /> : <Volume2 className="size-4" aria-hidden />}
-            {muted ? 'ปิดเสียง' : 'เสียง 8-bit'}
+            <span className="hidden sm:inline">{muted ? 'ปิดเสียง' : 'เสียง 8-bit'}</span>
           </button>
         </div>
       </header>
@@ -829,7 +857,7 @@ export function MonsterEncounterArena() {
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.18 }}
-                    className="absolute inset-0 flex flex-col items-center justify-center bg-[#0e0f1a]/88 p-4 text-center backdrop-blur-[1px]"
+                    className="absolute inset-0 flex flex-col items-center justify-center bg-[#0e0f1a]/90 p-4 text-center"
                   >
                     <p className="text-xs font-semibold text-accent">
                       ชนะการต่อสู้ · บันทึกรางวัลเข้าเซฟตัวละครแล้ว

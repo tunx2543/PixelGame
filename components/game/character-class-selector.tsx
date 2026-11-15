@@ -1,11 +1,20 @@
 'use client'
 
 import { useState } from 'react'
-import { Droplets, Footprints, Heart, Shield, Sparkles, Swords, Target, Wand2, Zap } from 'lucide-react'
+import { Droplets, Footprints, Heart, RotateCw, Shield, Sparkles, Swords, Target, Wand2, Zap } from 'lucide-react'
 import { JOBS, type JobDef } from '@/lib/game/data'
+import { MODEL_DIRS, type ModelDir } from '@/lib/game/models-2d'
 import { formatNum } from './format'
+import { SpriteModelCanvas, type PreviewAction } from './sprite-model-canvas'
 
 export type SelectableClassId = 'swordsman' | 'mage' | 'archer'
+
+const DIR_LABELS: Record<ModelDir, string> = {
+  down: 'หน้า',
+  right: 'ขวา',
+  up: 'หลัง',
+  left: 'ซ้าย',
+}
 
 export interface ClassRoleOption {
   id: SelectableClassId
@@ -131,6 +140,8 @@ export function CharacterClassSelector({
 }) {
   const [internalClassId, setInternalClassId] = useState<SelectableClassId>(defaultClassId)
   const [previewLevel, setPreviewLevel] = useState<number>(level)
+  const [previewAction, setPreviewAction] = useState<PreviewAction>('auto')
+  const [previewDir, setPreviewDir] = useState<ModelDir>('down')
 
   const activeClassId = value ?? internalClassId
   const effectiveLevel = value !== undefined ? level : previewLevel
@@ -216,7 +227,7 @@ export function CharacterClassSelector({
                   <ClassIcon classId={role.id} className="size-4" />
                   {role.englishName}
                 </span>
-                <span className={`px-1.5 py-0.5 text-[10px] font-semibold ${role.badgeClass}`}>
+                <span className={`shrink-0 whitespace-nowrap px-1.5 py-0.5 text-[10px] font-semibold ${role.badgeClass}`}>
                   {role.thaiName}
                 </span>
               </div>
@@ -251,6 +262,61 @@ export function CharacterClassSelector({
               ระยะ {stats.range}px
             </span>
           </div>
+        </div>
+
+        {/* Live 2D Animated Class Model Stage */}
+        <div className="mb-3 flex flex-col items-center justify-between gap-3 border-2 border-[#0e0f1a] bg-[#131726] p-2.5 sm:flex-row">
+          <div className="flex items-center gap-3">
+            <div className="grid size-24 place-items-center border border-border/50 bg-[#0d101c]">
+              <SpriteModelCanvas
+                mode="job"
+                id={activeRole.id}
+                action={previewAction}
+                dir={previewDir}
+                size={92}
+                label={`โมเดล 2D ${activeRole.englishName}`}
+              />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-primary">โมเดล 2D: {activeRole.thaiName}</p>
+              <p className="text-[11px] text-muted-foreground">
+                อาวุธ: {activeRole.job.weaponTypes[0]} • Idle 4F / Walk 6F / Attack 4F
+              </p>
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {(
+                  [
+                    ['auto', 'วนลูป'],
+                    ['idle', 'Idle'],
+                    ['walk', 'Walk'],
+                    ['attack', 'Attack'],
+                  ] as Array<[PreviewAction, string]>
+                ).map(([act, lbl]) => (
+                  <button
+                    key={act}
+                    type="button"
+                    aria-pressed={previewAction === act}
+                    onClick={() => setPreviewAction(act)}
+                    className={`pixel-btn px-2 py-0.5 text-[10px] font-semibold ${
+                      previewAction === act
+                        ? 'bg-accent text-accent-foreground'
+                        : 'bg-secondary text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setPreviewDir(MODEL_DIRS[(MODEL_DIRS.indexOf(previewDir) + 1) % MODEL_DIRS.length])}
+            className="pixel-btn flex items-center gap-1 bg-secondary px-2.5 py-1.5 text-[11px] text-foreground hover:brightness-110"
+          >
+            <RotateCw className="size-3" aria-hidden />
+            หมุน ({DIR_LABELS[previewDir]})
+          </button>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">

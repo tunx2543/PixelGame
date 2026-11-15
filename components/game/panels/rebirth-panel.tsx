@@ -1,11 +1,13 @@
 'use client'
 
-import { rebirth, game } from '@/lib/game/engine'
+import { rebirth } from '@/lib/game/engine'
+import { useGame } from '@/lib/game/use-game'
 import { PanelFrame, PxButton } from './panels'
 
 export function RebirthPanel() {
-  const level = game.p?.level ?? 1
-  const count = game.p?.rebirthCount ?? 0
+  const { p } = useGame()
+  const level = p?.level ?? 1
+  const count = p?.rebirthCount ?? 0
   return (
     <PanelFrame title="การจุติ" subtitle="เทวทูตแห่งการจุติ">
       <div className="mx-auto max-w-lg rounded-xl border border-yellow-400/40 bg-yellow-400/5 p-4 text-center">

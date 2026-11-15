@@ -18,6 +18,7 @@ import { PERMANENT_GM_GAME_UID } from '@/lib/game/permissions'
 import { useGame } from '@/lib/game/use-game'
 import { formatNum, formatPlayTime } from '../format'
 import { ItemIcon, ItemSlot } from '../item-icon'
+import { SpriteModelCanvas } from '../sprite-model-canvas'
 import { PanelFrame, PxButton } from './panels'
 
 export function CharacterPanel() {
@@ -54,6 +55,22 @@ export function CharacterPanel() {
     <PanelFrame title="ตัวละคร & กระเป๋า" subtitle={`${p.name} • อาวุธที่ใช้ได้: ${job.weaponTypes.join(', ')}`}>
       <div className="grid gap-4 md:grid-cols-[14rem_1fr]">
         <div className="flex flex-col gap-3">
+          <div className="flex flex-col items-center gap-1 border-2 border-[#0e0f1a] bg-[#131726] p-2.5">
+            <SpriteModelCanvas
+              mode="job"
+              id={p.jobId}
+              action="auto"
+              dir="down"
+              weaponOverride={p.equipment.weapon ? ITEMS[p.equipment.weapon.itemId]?.weaponType : undefined}
+              weaponColorOverride={p.equipment.weapon ? ITEMS[p.equipment.weapon.itemId]?.color : undefined}
+              size={84}
+              isGm={p.gm}
+              label={`โมเดลตัวละคร ${p.name}`}
+            />
+            <p className="text-xs font-bold text-primary">
+              {job.name} <span className="text-muted-foreground">Lv.{p.level}</span>
+            </p>
+          </div>
           <dl className="grid grid-cols-2 gap-y-1 border-2 border-border bg-muted p-2.5 text-xs">
             {stats.map(([k, v]) => (
               <div key={k} className="contents">

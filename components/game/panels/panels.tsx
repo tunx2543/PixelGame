@@ -20,6 +20,7 @@ import { StoragePanel } from './storage-panel'
 import { TradePanel } from './trade-panel'
 import { PetsPanel } from './pets-panel'
 import { QuestsPanel } from './quests-panel'
+import { ModelGalleryView } from '../model-gallery-view'
 
 export function Panels() {
   const g = useGame()
@@ -54,6 +55,12 @@ export function Panels() {
       return <PetsPanel />
     case 'quests':
       return <QuestsPanel />
+    case 'models':
+      return (
+        <PanelFrame title="คลังโมเดล 2D & แอนิเมชั่น" subtitle="พรีวิวโมเดลครบ 12 อาชีพ และ 17 มอนสเตอร์ พร้อมแอนิเมชั่น Idle / Walk / Attack">
+          <ModelGalleryView compact />
+        </PanelFrame>
+      )
     default:
       return null
   }

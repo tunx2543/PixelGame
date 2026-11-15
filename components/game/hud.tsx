@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { Castle, ChevronDown, ChevronUp, Gem, LogOut, PawPrint, ScrollText, Terminal, UsersRound } from 'lucide-react'
+import { Castle, ChevronDown, ChevronUp, Gem, LogOut, PawPrint, ScrollText, Sparkles, Terminal, UsersRound } from 'lucide-react'
 import { useGame } from '@/lib/game/use-game'
 import {
   castGmSkill,
@@ -21,6 +21,7 @@ import { useDailyMissions } from '@/lib/game/daily-missions'
 import { PERMANENT_GM_GAME_UID } from '@/lib/game/permissions'
 import { countClaimableQuests } from '@/lib/game/systems'
 import { formatNum } from './format'
+import { PWAInstallButton } from './pwa-controls'
 
 function Bar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
   const percentage = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0
@@ -53,21 +54,24 @@ export function Hud({ onOpenCheckin }: { onOpenCheckin?: () => void }) {
 
   return (
     <div className="pointer-events-auto pixel-panel absolute left-2 top-2 z-20 w-[min(14rem,calc(100vw-1rem))] p-2 shadow-lg md:left-3 md:top-3">
-      <div
-        onClick={() => setIsOpenProfile(!isOpenProfile)}
-        className="flex cursor-pointer select-none items-center justify-between gap-1"
+      <button
+        type="button"
+        onClick={() => setIsOpenProfile((prev) => !prev)}
+        aria-expanded={isOpenProfile}
+        aria-label={isOpenProfile ? 'พับโปรไฟล์' : 'เปิดโปรไฟล์'}
+        className="flex w-full cursor-pointer select-none items-center justify-between gap-1 text-left hover:opacity-90"
       >
-        <div className="flex items-center gap-1.5 truncate">
+        <div className="flex min-w-0 items-center gap-1.5 truncate">
           <p className="truncate text-xs font-semibold text-foreground">
             {isGmDev && <span className="mr-1 text-gold">[GM]</span>}
             {p.name}
           </p>
           <p className="shrink-0 text-[10px] text-primary">Lv.{p.level} {job.name}</p>
         </div>
-        <button type="button" aria-label={isOpenProfile ? 'พับโปรไฟล์' : 'เปิดโปรไฟล์'} className="p-0.5 hover:opacity-80">
-          {isOpenProfile ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
-        </button>
-      </div>
+        <span className="p-0.5 text-muted-foreground">
+          {isOpenProfile ? <ChevronUp className="size-3.5" aria-hidden /> : <ChevronDown className="size-3.5" aria-hidden />}
+        </span>
+      </button>
 
       {isOpenProfile && (
         <div className="mt-1.5 border-t border-border/60 pt-1.5">
@@ -125,8 +129,16 @@ export function Hud({ onOpenCheckin }: { onOpenCheckin?: () => void }) {
             >
               <Castle className="size-3" aria-hidden /> หอคอยไต่ชั้น (ชั้น {(p.towerState?.highestFloor ?? 0) + 1})
             </Link>
+            <button
+              type="button"
+              onClick={() => openPanel('models')}
+              className="pixel-btn col-span-2 flex items-center justify-center gap-1.5 bg-secondary px-2 py-1 text-[10px] font-semibold text-foreground hover:brightness-110"
+            >
+              <Sparkles className="size-3 text-gold" aria-hidden /> คลังโมเดล 2D
+            </button>
             <button type="button" onClick={() => { game.socialMenuOpen = !game.socialMenuOpen; game.panel = null; notify() }} className="pixel-btn grid place-items-center bg-accent/20 p-1.5 text-accent hover:bg-accent/30" aria-label="เปิดรายชื่อเพื่อน" title="รายชื่อเพื่อน"><UsersRound className="size-3.5" aria-hidden /></button>
             <button type="button" onClick={() => quitToTitle()} className="pixel-btn flex items-center justify-center gap-1 bg-secondary px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground" title="กลับหน้าล็อคอินตัวละคร"><LogOut className="size-3" aria-hidden /> สลับตัว</button>
+            <PWAInstallButton variant="hud" />
           </div>
 
           {dailyMissions.board && (

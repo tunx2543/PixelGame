@@ -1,9 +1,11 @@
 'use client'
 
+import { useState } from 'react'
 import { JOBS, type JobDef } from '@/lib/game/data'
 import { availableJobs, changeJob, currentJob } from '@/lib/game/engine'
 import { useGame } from '@/lib/game/use-game'
 import { formatNum } from '../format'
+import { SpriteModelCanvas, type PreviewAction } from '../sprite-model-canvas'
 import { PanelFrame, PxButton } from './panels'
 
 const STAT_LABELS: [keyof JobDef, string][] = [
@@ -33,23 +35,37 @@ function StatBars({ job }: { job: JobDef }) {
   )
 }
 
-function JobTree() {
+function JobTree({ currentJobId }: { currentJobId: string }) {
   const roots = Object.values(JOBS).filter((j) => j.tier === 1)
   return (
     <div className="grid grid-cols-2 gap-1.5 text-[11px] md:grid-cols-4">
       {roots.map((j) => {
         const nextJobs = Object.values(JOBS).filter((nextJob) => nextJob.from === j.id)
+        const activeRoot = currentJobId === j.id
         return (
-          <div key={j.id} className="border-2 border-border bg-background p-1.5 text-center">
-            <p className="text-foreground">{j.name}</p>
+          <div key={j.id} className={`border-2 bg-background p-1.5 text-center ${activeRoot ? 'border-primary' : 'border-border'}`}>
+            <div className="mx-auto mb-1 grid size-10 place-items-center border border-[#0e0f1a] bg-[#131726]">
+              <SpriteModelCanvas mode="job" id={j.id} action="idle" dir="down" size={38} showAura={false} label={`โมเดล ${j.name}`} />
+            </div>
+            <p className="font-semibold text-foreground">{j.name}</p>
             <p className="text-muted-foreground">Lv.{j.reqLevel}</p>
-            {nextJobs.length > 0 && <p className="text-primary">↓</p>}
-            {nextJobs.map((nextJob) => (
-              <div key={nextJob.id}>
-                <p className="text-foreground">{nextJob.name}</p>
-                <p className="text-muted-foreground">Lv.{nextJob.reqLevel}</p>
-              </div>
-            ))}
+            {nextJobs.length > 0 && <p className="my-0.5 text-primary">↓</p>}
+            <div className="flex flex-col gap-1">
+              {nextJobs.map((nextJob) => (
+                <div
+                  key={nextJob.id}
+                  className={`flex items-center justify-center gap-1 border px-1 py-0.5 ${
+                    currentJobId === nextJob.id ? 'border-primary bg-primary/10' : 'border-border/60 bg-muted/40'
+                  }`}
+                >
+                  <SpriteModelCanvas mode="job" id={nextJob.id} action="idle" dir="down" size={28} showAura={false} showShadow={false} label={`โมเดล ${nextJob.name}`} />
+                  <div className="text-left leading-tight">
+                    <p className="text-foreground">{nextJob.name}</p>
+                    <p className="text-[10px] text-muted-foreground">Lv.{nextJob.reqLevel}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )
       })}
@@ -59,6 +75,7 @@ function JobTree() {
 
 export function JobPanel() {
   const g = useGame()
+  const [previewAction, setPreviewAction] = useState<PreviewAction>('auto')
   if (!g.p) return null
   const p = g.p
   const job = currentJob()
@@ -66,14 +83,48 @@ export function JobPanel() {
 
   return (
     <PanelFrame title="หอปรมาจารย์อาร์ค" subtitle="เปลี่ยนอาชีพเพื่อปลดล็อกสกิลและพลังใหม่">
-      <div className="mb-4 flex flex-col gap-2 border-2 border-border bg-muted p-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-xs text-muted-foreground">อาชีพปัจจุบัน</p>
-          <p className="text-lg text-primary">
-            {job.name} <span className="text-sm text-foreground">Lv.{p.level}</span>
-          </p>
+      <div className="mb-4 flex flex-col gap-3 border-2 border-border bg-muted p-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="grid size-20 shrink-0 place-items-center border-2 border-[#0e0f1a] bg-[#131726]">
+            <SpriteModelCanvas
+              mode="job"
+              id={job.id}
+              action={previewAction}
+              dir="down"
+              size={76}
+              isGm={p.gm}
+              label={`โมเดลอาชีพ ${job.name}`}
+            />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">อาชีพปัจจุบัน</p>
+            <p className="text-lg text-primary">
+              {job.name} <span className="text-sm text-foreground">Lv.{p.level}</span>
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">สกิล: {job.skills.map((s) => s.name).join(', ') || 'GM พิเศษ'}</p>
+          </div>
         </div>
-        <p className="text-xs text-muted-foreground">สกิล: {job.skills.map((s) => s.name).join(', ')}</p>
+        <div className="flex flex-wrap gap-1">
+          {(
+            [
+              ['auto', 'วนลูป'],
+              ['idle', 'ยืน'],
+              ['walk', 'เดิน'],
+              ['attack', 'โจมตี'],
+            ] as Array<[PreviewAction, string]>
+          ).map(([act, lbl]) => (
+            <button
+              key={act}
+              type="button"
+              onClick={() => setPreviewAction(act)}
+              className={`pixel-btn px-2 py-1 text-[10px] ${
+                previewAction === act ? 'bg-accent text-accent-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {lbl}
+            </button>
+          ))}
+        </div>
       </div>
 
       {options.length === 0 ? (
@@ -86,9 +137,21 @@ export function JobPanel() {
             return (
               <li key={j.id} className="flex flex-col gap-2.5 border-2 border-border bg-muted p-3">
                 <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-base text-foreground">{j.name}</p>
-                    <p className="text-[11px] text-muted-foreground">{j.description}</p>
+                  <div className="flex items-center gap-2.5">
+                    <div className="grid size-16 shrink-0 place-items-center border-2 border-[#0e0f1a] bg-[#131726]">
+                      <SpriteModelCanvas
+                        mode="job"
+                        id={j.id}
+                        action={previewAction}
+                        dir="down"
+                        size={62}
+                        label={`โมเดล ${j.name}`}
+                      />
+                    </div>
+                    <div>
+                      <p className="text-base text-foreground">{j.name}</p>
+                      <p className="text-[11px] text-muted-foreground">{j.description}</p>
+                    </div>
                   </div>
                   <span className="shrink-0 border-2 border-border px-1.5 text-[10px] text-accent">
                     {j.ranged ? 'ระยะไกล' : 'ระยะประชิด'}
@@ -120,7 +183,7 @@ export function JobPanel() {
 
       <div className="mt-4">
         <p className="mb-1.5 text-xs text-muted-foreground">เส้นทางอาชีพ (เริ่มจาก ผู้ฝึกหัด)</p>
-        <JobTree />
+        <JobTree currentJobId={p.jobId} />
       </div>
     </PanelFrame>
   )

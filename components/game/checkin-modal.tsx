@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { addItem, game, notify, saveGame } from '@/lib/game/engine'
 import { ITEMS } from '@/lib/game/data'
 
@@ -28,8 +28,16 @@ function todayIndex() {
 export function CheckinModal({ onClose }: { onClose: () => void }) {
   const today = todayIndex()
   const current = rewards[today]
-  const [claimed, setClaimed] = useState(() => typeof window !== 'undefined' && window.localStorage.getItem(CHECKIN_KEY) === localDateKey())
+  const [claimed, setClaimed] = useState(false)
   const [result, setResult] = useState('')
+
+  useEffect(() => {
+    try {
+      setClaimed(window.localStorage.getItem(CHECKIN_KEY) === localDateKey())
+    } catch {
+      // Ignore storage access errors.
+    }
+  }, [])
 
   const claim = () => {
     if (claimed || !game.p) return

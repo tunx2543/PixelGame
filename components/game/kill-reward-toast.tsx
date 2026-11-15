@@ -6,6 +6,7 @@ import { ITEMS } from '@/lib/game/data'
 import { dismissKillToast, game, type KillRewardToastItem } from '@/lib/game/engine'
 import { useGame } from '@/lib/game/use-game'
 import { formatNum } from './format'
+import { ItemIcon } from './item-icon'
 
 export function KillRewardToast({
   toasts,
@@ -126,18 +127,11 @@ export function KillRewardToast({
                         className="flex items-center justify-between gap-2 text-[11px]"
                       >
                         <div className="flex min-w-0 items-center gap-1.5">
-                          {item?.asset ? (
-                            <img
-                              src={item.asset}
-                              alt={item.name}
-                              width={18}
-                              height={18}
-                              className="pixelated size-4.5 shrink-0 object-contain"
-                            />
+                          {item ? (
+                            <ItemIcon itemId={entry.itemId} size={18} />
                           ) : (
                             <Package
-                              className="size-3.5 shrink-0"
-                              style={{ color: item?.color ?? '#f3ecd9' }}
+                              className="size-3.5 shrink-0 text-[#f3ecd9]"
                               aria-hidden
                             />
                           )}

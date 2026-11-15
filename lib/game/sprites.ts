@@ -1,5 +1,11 @@
 import type { MonsterSprite, WeaponType } from './data'
 import { T, TILE, type MapDef } from './maps'
+import {
+  getJobModelSpec,
+  getMonsterModelSpec,
+  type ArmorStyle,
+  type HatStyle as RegistryHatStyle,
+} from './models-2d'
 
 const OUTLINE = '#1a1423'
 
@@ -205,13 +211,14 @@ function cached(key: string, make: () => HTMLCanvasElement) {
   return c
 }
 
-/* ---------------- Articulated Humanoids ---------------- */
+/* ---------------- Articulated Humanoids (All 12 Jobs) ---------------- */
 
 export type Dir = 'down' | 'up' | 'left' | 'right'
 export type SpriteAction = 'idle' | 'walk' | 'attack'
-export type HatStyle = 'none' | 'wizard' | 'hood' | 'helm' | 'crown' | 'mitre' | 'bandana'
+export type HatStyle = RegistryHatStyle
 
 export interface HumanColors {
+  jobId?: string
   hair: string
   body: string
   legs: string
@@ -219,13 +226,23 @@ export interface HumanColors {
   skin?: string
   hat?: string
   hatStyle?: HatStyle
+  armorStyle?: ArmorStyle
   cape?: string
+  scarf?: string
   shieldColor?: string
+  shieldCrest?: string
   wings?: boolean
+  wingStyle?: 'angel' | 'seraph' | 'none'
+  halo?: boolean
+  quiver?: boolean
+  backpack?: boolean
+  shoulderPads?: boolean
+  dualDaggers?: boolean
   horns?: boolean
   goblinEars?: boolean
   skeleton?: boolean
   eye?: string
+  auraColor?: string
 }
 
 export function jobHumanColors(
@@ -233,38 +250,26 @@ export function jobHumanColors(
   base: { hair: string; body: string; legs: string; accent: string; skin?: string; hat?: string },
   isGm = false,
 ): HumanColors {
-  if (isGm || jobId === 'gm') {
-    return {
-      ...base,
-      hat: '#ffd60a',
-      hatStyle: 'crown',
-      cape: '#b5179e',
-      wings: true,
-    }
-  }
-  switch (jobId) {
-    case 'swordsman':
-      return { ...base, hatStyle: 'bandana', hat: '#4a6fa5', shieldColor: '#8d99ae' }
-    case 'knight':
-      return { ...base, hatStyle: 'helm', hat: '#9aa5b1', cape: '#e63946', shieldColor: '#adb5bd' }
-    case 'paladin':
-      return { ...base, hatStyle: 'helm', hat: '#e2e8f0', cape: '#3a86ff', shieldColor: '#f4d35e' }
-    case 'mage':
-      return { ...base, hatStyle: 'wizard', hat: '#5b3f8c', cape: '#3a2a5c' }
-    case 'wizard':
-      return { ...base, hatStyle: 'wizard', hat: '#1d3557', cape: '#457b9d' }
-    case 'cleric':
-      return { ...base, hatStyle: 'mitre', hat: '#f8f9fa', cape: '#f4d35e' }
-    case 'archer':
-      return { ...base, hatStyle: 'hood', hat: '#3f7d4e', cape: '#2d6a4f' }
-    case 'hunter':
-      return { ...base, hatStyle: 'hood', hat: '#2d6a4f', cape: '#588157' }
-    case 'thief':
-      return { ...base, hatStyle: 'bandana', hat: '#b23a48' }
-    case 'assassin':
-      return { ...base, hatStyle: 'hood', hat: '#1b1b2f', cape: '#7b2cbf' }
-    default:
-      return { ...base, hatStyle: 'none' }
+  const effectiveJobId = isGm ? 'gm' : jobId
+  const spec = getJobModelSpec(effectiveJobId)
+  return {
+    ...base,
+    jobId: effectiveJobId,
+    hat: spec.hatColor ?? base.hat,
+    hatStyle: spec.hatStyle,
+    armorStyle: spec.armorStyle,
+    cape: spec.capeColor,
+    scarf: spec.scarfColor,
+    shieldColor: spec.shieldColor,
+    shieldCrest: spec.shieldCrestColor,
+    wings: spec.wings,
+    wingStyle: spec.wingStyle,
+    halo: spec.halo,
+    quiver: spec.quiver,
+    backpack: spec.backpack,
+    shoulderPads: spec.shoulderPads,
+    dualDaggers: spec.dualDaggers,
+    auraColor: spec.auraColor,
   }
 }
 
@@ -282,97 +287,110 @@ function drawWeaponInHand(
   action: SpriteAction,
   atkF: number,
   drawHandPoint?: Pt,
+  jobId?: string,
 ) {
   if (!weapon) return
   const cos = Math.cos(angleRad)
   const sin = Math.sin(angleRad)
+  const perpX = -sin
+  const perpY = cos
   const hilt = '#7f5539'
-  const guard = '#e9c46a'
-  const bladeHi = shade(weaponColor, 0.35)
+  const guard = jobId === 'paladin' || jobId === 'gm' ? '#ffd60a' : '#e9c46a'
+  const bladeHi = shade(weaponColor, 0.38)
+  const bladeDark = shade(weaponColor, -0.25)
 
   if (weapon === 'sword') {
-    // Pommel & grip
+    const isHeavy = jobId === 'knight' || jobId === 'paladin'
+    const bladeLen = isHeavy ? 9 : 8
     s.px(hand.x - cos, hand.y - sin, hilt)
-    // Crossguard perpendicular
-    const px = -sin
-    const py = cos
-    s.px(hand.x + cos + px, hand.y + sin + py, guard)
+    s.px(hand.x + cos + perpX, hand.y + sin + perpY, guard)
     s.px(hand.x + cos, hand.y + sin, guard)
-    s.px(hand.x + cos - px, hand.y + sin - py, guard)
-    // Blade (6px)
-    const tipX = hand.x + cos * 7
-    const tipY = hand.y + sin * 7
-    s.line(hand.x + cos * 2, hand.y + sin * 2, tipX, tipY, weaponColor, 1)
-    s.px(tipX, tipY, bladeHi)
+    s.px(hand.x + cos - perpX, hand.y + sin - perpY, guard)
+    const tipX = hand.x + cos * bladeLen
+    const tipY = hand.y + sin * bladeLen
+    s.line(hand.x + cos * 2, hand.y + sin * 2, tipX, tipY, weaponColor, isHeavy ? 2 : 1)
+    if (isHeavy) {
+      s.line(hand.x + cos * 2, hand.y + sin * 2, hand.x + cos * (bladeLen - 1), hand.y + sin * (bladeLen - 1), bladeHi, 1)
+    }
+    s.px(tipX, tipY, '#ffffff')
     if (action === 'attack' && (atkF === 1 || atkF === 2)) {
       s.px(tipX + cos, tipY + sin, '#ffffff')
-      s.px(hand.x + cos * 5 + px, hand.y + sin * 5 + py, bladeHi)
+      s.px(hand.x + cos * (bladeLen - 2) + perpX, hand.y + sin * (bladeLen - 2) + perpY, bladeHi)
     }
     return
   }
 
   if (weapon === 'dagger') {
-    const px = -sin
-    const py = cos
     s.px(hand.x - cos, hand.y - sin, hilt)
-    s.px(hand.x + px, hand.y + py, guard)
-    s.px(hand.x - px, hand.y - py, guard)
-    const tipX = hand.x + cos * 4
-    const tipY = hand.y + sin * 4
+    s.px(hand.x + perpX, hand.y + perpY, guard)
+    s.px(hand.x - perpX, hand.y - perpY, guard)
+    const tipX = hand.x + cos * 5
+    const tipY = hand.y + sin * 5
     s.line(hand.x + cos, hand.y + sin, tipX, tipY, weaponColor, 1)
+    s.px(hand.x + cos * 3 + perpX * 0.5, hand.y + sin * 3 + perpY * 0.5, bladeDark)
     s.px(tipX, tipY, bladeHi)
-    if (action === 'attack' && atkF === 2) {
+    if (action === 'attack' && (atkF === 1 || atkF === 2)) {
       s.px(tipX + cos, tipY + sin, '#ffffff')
     }
     return
   }
 
   if (weapon === 'stick') {
-    const tipX = hand.x + cos * 6
-    const tipY = hand.y + sin * 6
+    const tipX = hand.x + cos * 7
+    const tipY = hand.y + sin * 7
     s.line(hand.x - cos * 2, hand.y - sin * 2, tipX, tipY, weaponColor, 1)
     s.px(tipX, tipY, shade(weaponColor, -0.25))
+    s.px(tipX + perpX, tipY + perpY, '#80ed99')
     return
   }
 
   if (weapon === 'staff') {
+    const len = jobId === 'wizard' || jobId === 'gm' || jobId === 'cleric' ? 8 : 7
     const shaftStart = { x: hand.x - cos * 3, y: hand.y - sin * 3 }
-    const orbCenter = { x: hand.x + cos * 6, y: hand.y + sin * 6 }
-    s.line(shaftStart.x, shaftStart.y, orbCenter.x - cos, orbCenter.y - sin, hilt, 1)
-    // Glowing orb
-    s.px(orbCenter.x, orbCenter.y, bladeHi)
-    s.px(orbCenter.x + cos, orbCenter.y + sin, weaponColor)
-    s.px(orbCenter.x - sin, orbCenter.y + cos, weaponColor)
-    s.px(orbCenter.x + sin, orbCenter.y - cos, weaponColor)
+    const orbCenter = { x: hand.x + cos * len, y: hand.y + sin * len }
+    s.line(shaftStart.x, shaftStart.y, orbCenter.x - cos, orbCenter.y - sin, jobId === 'cleric' || jobId === 'gm' ? '#e9c46a' : hilt, 1)
+    // Ornate staff head by job
+    if (jobId === 'cleric') {
+      s.line(orbCenter.x - perpX * 2, orbCenter.y - perpY * 2, orbCenter.x + perpX * 2, orbCenter.y + perpY * 2, '#ffd60a', 1)
+      s.line(orbCenter.x - cos, orbCenter.y - sin, orbCenter.x + cos * 2, orbCenter.y + sin * 2, '#ffd60a', 1)
+      s.px(orbCenter.x, orbCenter.y, '#80ed99')
+    } else {
+      s.px(orbCenter.x, orbCenter.y, '#ffffff')
+      s.px(orbCenter.x + cos, orbCenter.y + sin, weaponColor)
+      s.px(orbCenter.x + perpX, orbCenter.y + perpY, bladeHi)
+      s.px(orbCenter.x - perpX, orbCenter.y - perpY, weaponColor)
+    }
     if (action === 'attack' && (atkF === 1 || atkF === 2)) {
       s.px(orbCenter.x + cos * 2, orbCenter.y + sin * 2, '#fff3b0')
+      s.px(orbCenter.x + perpX * 2, orbCenter.y + perpY * 2, bladeHi)
     }
     return
   }
 
   if (weapon === 'bow') {
-    // Curved bow around hand facing angleRad
-    const perpX = -sin
-    const perpY = cos
-    const topTip = { x: hand.x - cos * 1 + perpX * 4, y: hand.y - sin * 1 + perpY * 4 }
-    const botTip = { x: hand.x - cos * 1 - perpX * 4, y: hand.y - sin * 1 - perpY * 4 }
-    const midOuter = { x: hand.x + cos * 1.5, y: hand.y + sin * 1.5 }
+    const limbSpan = jobId === 'hunter' ? 5 : 4
+    const topTip = { x: hand.x - cos * 1 + perpX * limbSpan, y: hand.y - sin * 1 + perpY * limbSpan }
+    const botTip = { x: hand.x - cos * 1 - perpX * limbSpan, y: hand.y - sin * 1 - perpY * limbSpan }
+    const midOuter = { x: hand.x + cos * 2, y: hand.y + sin * 2 }
     s.line(topTip.x, topTip.y, midOuter.x + perpX * 2, midOuter.y + perpY * 2, weaponColor, 1)
     s.line(midOuter.x + perpX * 2, midOuter.y + perpY * 2, midOuter.x - perpX * 2, midOuter.y - perpY * 2, weaponColor, 1)
     s.line(midOuter.x - perpX * 2, midOuter.y - perpY * 2, botTip.x, botTip.y, weaponColor, 1)
+    if (jobId === 'hunter') {
+      s.px(topTip.x, topTip.y, '#ffd60a')
+      s.px(botTip.x, botTip.y, '#ffd60a')
+    }
 
-    // Bowstring & arrow when drawing/releasing
     const pull = drawHandPoint ?? { x: hand.x - cos * 2, y: hand.y - sin * 2 }
     if (action === 'attack' && atkF === 1) {
       s.line(topTip.x, topTip.y, pull.x, pull.y, '#e2e8f0', 1)
       s.line(botTip.x, botTip.y, pull.x, pull.y, '#e2e8f0', 1)
-      s.line(pull.x, pull.y, hand.x + cos * 4, hand.y + sin * 4, '#f8fafc', 1)
-      s.px(hand.x + cos * 4, hand.y + sin * 4, '#ffd60a')
+      s.line(pull.x, pull.y, hand.x + cos * 5, hand.y + sin * 5, '#f8fafc', 1)
+      s.px(hand.x + cos * 5, hand.y + sin * 5, '#ffd60a')
     } else {
       s.line(topTip.x, topTip.y, botTip.x, botTip.y, '#e2e8f0', 1)
       if (action === 'attack' && atkF === 2) {
-        s.line(hand.x + cos * 2, hand.y + sin * 2, hand.x + cos * 7, hand.y + sin * 7, '#f8fafc', 1)
-        s.px(hand.x + cos * 7, hand.y + sin * 7, '#ffd60a')
+        s.line(hand.x + cos * 2, hand.y + sin * 2, hand.x + cos * 8, hand.y + sin * 8, '#f8fafc', 1)
+        s.px(hand.x + cos * 8, hand.y + sin * 8, '#ffd60a')
       }
     }
   }
@@ -389,10 +407,9 @@ function drawLeg(
 ) {
   s.line(hip.x, hip.y, knee.x, knee.y, legCol, 2)
   s.line(knee.x, knee.y, foot.x, foot.y, legCol, 2)
-  // Boot / foot
   s.px(foot.x, foot.y, bootCol)
   s.px(foot.x + footDirX, foot.y, bootCol)
-  s.px(foot.x, foot.y - 1, shade(bootCol, 0.18))
+  s.px(foot.x, foot.y - 1, shade(bootCol, 0.22))
 }
 
 function drawArm(
@@ -418,86 +435,127 @@ function drawHatOrHair(
 ) {
   const hairCol = colors.hair
   const hairDark = shade(hairCol, -0.25)
+  const hairHi = shade(hairCol, 0.2)
   const hatCol = colors.hat ?? colors.accent
-  const hatDark = shade(hatCol, -0.28)
+  const hatDark = shade(hatCol, -0.3)
+  const hatHi = shade(hatCol, 0.24)
   const style = colors.hatStyle ?? (colors.hat ? 'wizard' : 'none')
 
   if (style === 'none') {
     if (dir === 'side') {
       s.rect(cx - 3, headTopY - 1, 6, 2, hairCol)
+      s.px(cx, headTopY - 2, hairHi)
       s.rect(cx - 4, headTopY, 2, 4, hairDark)
       s.px(cx + 2, headTopY, hairCol)
     } else if (dir === 'down') {
-      s.rect(cx - 3, headTopY - 1, 6, 2, hairCol)
+      s.rect(cx - 3, headTopY - 1, 7, 2, hairCol)
+      s.px(cx, headTopY - 2, hairHi)
       s.px(cx - 4, headTopY + 1, hairDark)
-      s.px(cx + 3, headTopY + 1, hairDark)
+      s.px(cx + 4, headTopY + 1, hairDark)
     } else {
-      s.rect(cx - 3, headTopY - 1, 6, 5, hairCol)
-      s.rect(cx - 3, headTopY + 3, 6, 1, hairDark)
+      s.rect(cx - 3, headTopY - 1, 7, 5, hairCol)
+      s.rect(cx - 3, headTopY + 3, 7, 1, hairDark)
     }
     return
   }
 
-  if (style === 'wizard') {
-    // Pointed mage hat
-    s.rect(cx - 5, headTopY + 1, 10, 1, hatDark)
-    s.rect(cx - 3, headTopY - 1, 6, 2, hatCol)
-    s.rect(cx - 2, headTopY - 3, 4, 2, hatCol)
-    s.px(dir === 'side' ? cx - 2 : cx - 1, headTopY - 4, hatCol)
-    s.rect(cx - 3, headTopY, 6, 1, colors.accent)
+  if (style === 'wizard' || style === 'archmage') {
+    const brimW = style === 'archmage' ? 12 : 10
+    s.rect(cx - Math.floor(brimW / 2), headTopY + 1, brimW, 1, hatDark)
+    s.rect(cx - 3, headTopY - 1, 7, 2, hatCol)
+    s.rect(cx - 2, headTopY - 3, 5, 2, hatCol)
+    s.rect(cx - 1, headTopY - 5, 3, 2, hatHi)
+    s.px(dir === 'side' ? cx - 2 : cx, headTopY - 6, style === 'archmage' ? '#67e8f9' : hatCol)
+    s.rect(cx - 3, headTopY, 7, 1, colors.accent)
+    if (style === 'archmage') {
+      s.px(cx, headTopY - 2, '#fff3b0')
+    }
     return
   }
 
-  if (style === 'hood') {
-    s.rect(cx - 4, headTopY - 1, 8, 2, hatCol)
+  if (style === 'hood' || style === 'ranger_hood') {
+    s.rect(cx - 4, headTopY - 1, 9, 2, hatCol)
+    s.px(cx, headTopY - 2, hatHi)
     if (dir === 'side') {
       s.rect(cx - 4, headTopY, 3, 5, hatDark)
     } else if (dir === 'up') {
-      s.rect(cx - 4, headTopY, 8, 5, hatCol)
+      s.rect(cx - 4, headTopY, 9, 5, hatCol)
     } else {
       s.px(cx - 4, headTopY + 1, hatDark)
-      s.px(cx + 3, headTopY + 1, hatDark)
+      s.px(cx + 4, headTopY + 1, hatDark)
+    }
+    // Feather on archer/hunter hood
+    const featherCol = style === 'ranger_hood' ? '#ffb703' : '#e9f5db'
+    s.line(cx - 2, headTopY - 1, cx - 4, headTopY - 4, featherCol, 1)
+    if (style === 'ranger_hood') {
+      s.px(cx - 4, headTopY - 5, '#fb8500')
     }
     return
   }
 
-  if (style === 'helm') {
-    s.rect(cx - 4, headTopY - 1, 8, 3, hatCol)
-    s.rect(cx - 1, headTopY - 3, 2, 2, colors.accent) // plume
+  if (style === 'cowl') {
+    // Ninja Assassin cowl + headband crest
+    s.rect(cx - 3, headTopY - 1, 7, 2, hatCol)
+    s.rect(cx - 3, headTopY, 7, 1, colors.accent)
     if (dir === 'side') {
-      s.rect(cx - 4, headTopY + 1, 2, 3, hatDark)
+      s.rect(cx - 4, headTopY, 3, 5, hatDark)
+      s.rect(cx - 1, headTopY + 4, 4, 2, colors.scarf ?? '#e63946')
     } else if (dir === 'up') {
-      s.rect(cx - 4, headTopY + 1, 8, 4, hatDark)
+      s.rect(cx - 3, headTopY, 7, 6, hatCol)
+    } else {
+      s.rect(cx - 3, headTopY + 4, 7, 2, colors.scarf ?? '#e63946')
+    }
+    s.px(cx, headTopY, '#ffd60a')
+    return
+  }
+
+  if (style === 'helm' || style === 'paladin_helm') {
+    s.rect(cx - 4, headTopY - 1, 9, 3, hatCol)
+    s.rect(cx - 3, headTopY - 2, 7, 1, hatHi)
+    const plumeCol = style === 'paladin_helm' ? '#3a86ff' : colors.accent
+    s.rect(cx - 1, headTopY - 4, 3, 2, plumeCol)
+    s.px(dir === 'side' ? cx - 2 : cx, headTopY - 5, shade(plumeCol, 0.25))
+    if (dir === 'side') {
+      s.rect(cx - 4, headTopY + 1, 2, 4, hatDark)
+      if (style === 'paladin_helm') s.px(cx + 3, headTopY + 2, '#ffd60a')
+    } else if (dir === 'up') {
+      s.rect(cx - 4, headTopY + 1, 9, 4, hatDark)
     } else {
       s.px(cx - 3, headTopY + 2, hatDark)
-      s.px(cx + 2, headTopY + 2, hatDark)
+      s.px(cx + 3, headTopY + 2, hatDark)
+      if (style === 'paladin_helm') s.px(cx, headTopY + 1, '#ffd60a')
     }
     return
   }
 
   if (style === 'crown') {
-    if (dir === 'side') {
-      s.rect(cx - 3, headTopY, 6, 2, hairCol)
-    } else {
-      s.rect(cx - 3, headTopY, 6, dir === 'up' ? 5 : 2, hairCol)
-    }
-    s.rect(cx - 3, headTopY - 1, 6, 1, '#ffd60a')
+    s.rect(cx - 3, headTopY, 7, dir === 'up' ? 5 : 2, hairCol)
+    s.rect(cx - 3, headTopY - 1, 7, 1, '#ffd60a')
     s.px(cx - 3, headTopY - 2, '#ffd60a')
-    s.px(cx, headTopY - 2, '#fff3b0')
-    s.px(cx + 2, headTopY - 2, '#ffd60a')
+    s.px(cx - 1, headTopY - 2, '#fff3b0')
+    s.px(cx + 1, headTopY - 2, '#fff3b0')
+    s.px(cx + 3, headTopY - 2, '#ffd60a')
+    s.px(cx, headTopY - 3, '#ff4d6d')
     return
   }
 
   if (style === 'mitre') {
-    s.rect(cx - 3, headTopY - 1, 6, 2, hatCol)
-    s.rect(cx - 2, headTopY - 3, 4, 2, hatCol)
-    s.line(cx, headTopY - 2, cx, headTopY, colors.accent, 1)
+    s.rect(cx - 3, headTopY - 1, 7, 2, hatCol)
+    s.rect(cx - 2, headTopY - 4, 5, 3, hatCol)
+    s.line(cx, headTopY - 3, cx, headTopY, '#ffd60a', 1)
+    s.line(cx - 1, headTopY - 2, cx + 1, headTopY - 2, '#ffd60a', 1)
     return
   }
 
-  // bandana / default hat
-  s.rect(cx - 3, headTopY - 1, 6, 2, hatCol)
-  s.rect(cx - 4, headTopY, 8, 1, colors.accent)
+  // bandana (Swordsman / Thief)
+  s.rect(cx - 3, headTopY - 1, 7, 2, hairCol)
+  s.rect(cx - 4, headTopY, 9, 1, hatCol)
+  if (dir === 'side') {
+    s.line(cx - 4, headTopY, cx - 6, headTopY + 2, hatCol, 1)
+  } else if (dir === 'up') {
+    s.line(cx, headTopY + 1, cx - 2, headTopY + 3, hatCol, 1)
+    s.line(cx + 1, headTopY + 1, cx + 3, headTopY + 3, hatCol, 1)
+  }
 }
 
 export function humanSprite(
@@ -519,135 +577,115 @@ export function humanSprite(
         ? -1
         : Math.abs(frame) % 4
 
-  const key = `ha|${JSON.stringify(colors)}|${dir}|${action}|${f}|${weapon ?? 'none'}|${weaponColor}`
+  const key = `ha32|${JSON.stringify(colors)}|${dir}|${action}|${f}|${weapon ?? 'none'}|${weaponColor}`
   return cached(key, () => {
-    const W = 28
-    const H = 26
+    const W = 32
+    const H = 30
     const s = new PixelSurface(W, H)
 
     const skin = colors.skin ?? '#f1c27d'
     const skinDark = shade(skin, -0.22)
     const body = colors.body
     const bodyDark = shade(body, -0.26)
-    const bodyHi = shade(body, 0.16)
+    const bodyHi = shade(body, 0.2)
     const legCol = colors.legs
     const legDark = shade(legCol, -0.26)
-    const bootCol = '#3b281c'
-    const bootDark = '#241810'
+    const bootCol = colors.armorStyle === 'plate' || colors.armorStyle === 'paladin_plate' ? '#64748b' : '#3b281c'
+    const bootDark = shade(bootCol, -0.28)
     const eyeCol = colors.eye ?? '#1a1423'
     const blink = !attacking && f === -1
 
-    const cx = 13
-    const footY = 23
+    const cx = 15
+    const footY = 27
+    const hipY = 20
 
     if (dir === 'left' || dir === 'right') {
-      // Side rig authored facing right, mirrored automatically for left
       let bob = 0
       let lean = 0
-      let backHip: Pt = { x: cx - 1, y: 17 }
-      let backKnee: Pt = { x: cx - 1, y: 20 }
+      let backHip: Pt = { x: cx - 1, y: hipY }
+      let backKnee: Pt = { x: cx - 1, y: 23 }
       let backFoot: Pt = { x: cx - 1, y: footY }
-      let frontHip: Pt = { x: cx, y: 17 }
-      let frontKnee: Pt = { x: cx, y: 20 }
+      let frontHip: Pt = { x: cx, y: hipY }
+      let frontKnee: Pt = { x: cx, y: 23 }
       let frontFoot: Pt = { x: cx, y: footY }
 
-      let backElbow: Pt = { x: cx + 1, y: 14 }
-      let backHand: Pt = { x: cx + 2, y: 16 }
-      let frontElbow: Pt = { x: cx - 1, y: 14 }
-      let frontHand: Pt = { x: cx, y: 16 }
+      let backElbow: Pt = { x: cx + 1, y: 17 }
+      let backHand: Pt = { x: cx + 2, y: 19 }
+      let frontElbow: Pt = { x: cx - 1, y: 17 }
+      let frontHand: Pt = { x: cx, y: 19 }
       let weaponAngle = -0.35
 
       if (action === 'idle') {
-        const breath = f === 1 ? 1 : 0
+        const breath = f === 1 ? 1 : f === 3 ? 0 : 0
         bob = breath
-        backHip = { x: cx - 1, y: 17 + breath }
-        backKnee = { x: cx - 2, y: 20 }
+        backHip = { x: cx - 1, y: hipY + breath }
+        backKnee = { x: cx - 2, y: 23 }
         backFoot = { x: cx - 2, y: footY }
-        frontHip = { x: cx + 1, y: 17 + breath }
-        frontKnee = { x: cx + 1, y: 20 }
+        frontHip = { x: cx + 1, y: hipY + breath }
+        frontKnee = { x: cx + 1, y: 23 }
         frontFoot = { x: cx + 1, y: footY }
-        backElbow = { x: cx + 2, y: 13 + breath }
-        backHand = { x: cx + 3, y: 15 + breath }
-        frontElbow = { x: cx - 1, y: 14 + breath }
-        frontHand = { x: cx + 1, y: 16 + breath }
+        backElbow = { x: cx + 2, y: 16 + breath }
+        backHand = { x: cx + 3, y: 18 + breath }
+        frontElbow = { x: cx - 1, y: 17 + breath }
+        frontHand = { x: cx + 1, y: 19 + breath }
         weaponAngle = weapon === 'staff' ? -1.4 : weapon === 'bow' ? 0 : -0.6
       } else if (action === 'walk') {
-        // 6-frame full stride cycle
         const walkFrames: Array<{
           bob: number; lean: number
           bk: Pt; bf: Pt; fk: Pt; ff: Pt
           be: Pt; bh: Pt; fe: Pt; fh: Pt; wa: number
         }> = [
-          // 0: front leg forward planted, back leg behind; front arm back, back arm forward
-          { bob: 0, lean: 1, bk: { x: cx - 2, y: 20 }, bf: { x: cx - 4, y: footY }, fk: { x: cx + 2, y: 20 }, ff: { x: cx + 3, y: footY }, be: { x: cx + 2, y: 14 }, bh: { x: cx + 4, y: 15 }, fe: { x: cx - 2, y: 14 }, fh: { x: cx - 4, y: 16 }, wa: 0.35 },
-          // 1: push-off passing (back knee lifts up)
-          { bob: -1, lean: 1, bk: { x: cx, y: 18 }, bf: { x: cx - 2, y: footY - 2 }, fk: { x: cx, y: 20 }, ff: { x: cx, y: footY }, be: { x: cx + 1, y: 13 }, bh: { x: cx + 2, y: 15 }, fe: { x: cx - 1, y: 13 }, fh: { x: cx - 1, y: 15 }, wa: -0.1 },
-          // 2: back leg kicks forward high, front leg pushes back
-          { bob: 0, lean: 1, bk: { x: cx + 3, y: 19 }, bf: { x: cx + 2, y: footY - 1 }, fk: { x: cx - 1, y: 20 }, ff: { x: cx - 3, y: footY }, be: { x: cx - 2, y: 14 }, bh: { x: cx - 4, y: 16 }, fe: { x: cx + 2, y: 14 }, fh: { x: cx + 4, y: 15 }, wa: -0.6 },
-          // 3: back leg forward planted, front leg behind (opposite contact)
-          { bob: 0, lean: 1, bk: { x: cx + 2, y: 20 }, bf: { x: cx + 3, y: footY }, fk: { x: cx - 2, y: 20 }, ff: { x: cx - 4, y: footY }, be: { x: cx - 2, y: 14 }, bh: { x: cx - 4, y: 16 }, fe: { x: cx + 2, y: 14 }, fh: { x: cx + 4, y: 15 }, wa: -0.8 },
-          // 4: push-off passing (front knee lifts up)
-          { bob: -1, lean: 1, bk: { x: cx, y: 20 }, bf: { x: cx, y: footY }, fk: { x: cx, y: 18 }, ff: { x: cx - 2, y: footY - 2 }, be: { x: cx + 1, y: 13 }, bh: { x: cx + 1, y: 15 }, fe: { x: cx, y: 13 }, fh: { x: cx, y: 15 }, wa: -0.35 },
-          // 5: front leg kicks forward high, back leg pushes back
-          { bob: 0, lean: 1, bk: { x: cx - 1, y: 20 }, bf: { x: cx - 3, y: footY }, fk: { x: cx + 3, y: 19 }, ff: { x: cx + 2, y: footY - 1 }, be: { x: cx + 2, y: 14 }, bh: { x: cx + 4, y: 15 }, fe: { x: cx - 2, y: 14 }, fh: { x: cx - 4, y: 16 }, wa: 0.2 },
+          { bob: 0, lean: 1, bk: { x: cx - 2, y: 24 }, bf: { x: cx - 4, y: footY }, fk: { x: cx + 2, y: 24 }, ff: { x: cx + 3, y: footY }, be: { x: cx + 2, y: 17 }, bh: { x: cx + 4, y: 18 }, fe: { x: cx - 2, y: 17 }, fh: { x: cx - 4, y: 19 }, wa: 0.35 },
+          { bob: -1, lean: 1, bk: { x: cx, y: 22 }, bf: { x: cx - 2, y: footY - 2 }, fk: { x: cx, y: 24 }, ff: { x: cx, y: footY }, be: { x: cx + 1, y: 16 }, bh: { x: cx + 2, y: 18 }, fe: { x: cx - 1, y: 16 }, fh: { x: cx - 1, y: 18 }, wa: -0.1 },
+          { bob: 0, lean: 1, bk: { x: cx + 3, y: 23 }, bf: { x: cx + 2, y: footY - 1 }, fk: { x: cx - 1, y: 24 }, ff: { x: cx - 3, y: footY }, be: { x: cx - 2, y: 17 }, bh: { x: cx - 4, y: 19 }, fe: { x: cx + 2, y: 17 }, fh: { x: cx + 4, y: 18 }, wa: -0.6 },
+          { bob: 0, lean: 1, bk: { x: cx + 2, y: 24 }, bf: { x: cx + 3, y: footY }, fk: { x: cx - 2, y: 24 }, ff: { x: cx - 4, y: footY }, be: { x: cx - 2, y: 17 }, bh: { x: cx - 4, y: 19 }, fe: { x: cx + 2, y: 17 }, fh: { x: cx + 4, y: 18 }, wa: -0.8 },
+          { bob: -1, lean: 1, bk: { x: cx, y: 24 }, bf: { x: cx, y: footY }, fk: { x: cx, y: 22 }, ff: { x: cx - 2, y: footY - 2 }, be: { x: cx + 1, y: 16 }, bh: { x: cx + 1, y: 18 }, fe: { x: cx, y: 16 }, fh: { x: cx, y: 18 }, wa: -0.35 },
+          { bob: 0, lean: 1, bk: { x: cx - 1, y: 24 }, bf: { x: cx - 3, y: footY }, fk: { x: cx + 3, y: 23 }, ff: { x: cx + 2, y: footY - 1 }, be: { x: cx + 2, y: 17 }, bh: { x: cx + 4, y: 18 }, fe: { x: cx - 2, y: 17 }, fh: { x: cx - 4, y: 19 }, wa: 0.2 },
         ]
         const wf = walkFrames[f]
-        bob = wf.bob
-        lean = wf.lean
-        backHip = { x: cx - 1 + lean, y: 17 + bob }
-        backKnee = wf.bk
-        backFoot = wf.bf
-        frontHip = { x: cx + 1 + lean, y: 17 + bob }
-        frontKnee = wf.fk
-        frontFoot = wf.ff
-        backElbow = wf.be
-        backHand = wf.bh
-        frontElbow = wf.fe
-        frontHand = wf.fh
+        bob = wf.bob; lean = wf.lean
+        backHip = { x: cx - 1 + lean, y: hipY + bob }; backKnee = wf.bk; backFoot = wf.bf
+        frontHip = { x: cx + 1 + lean, y: hipY + bob }; frontKnee = wf.fk; frontFoot = wf.ff
+        backElbow = wf.be; backHand = wf.bh
+        frontElbow = wf.fe; frontHand = wf.fh
         weaponAngle = weapon === 'staff' ? wf.wa - 0.7 : weapon === 'bow' ? wf.wa * 0.25 : wf.wa
       } else {
-        // 4-frame Attack (Windup -> Strike -> Full Extend -> Recover)
         if (weapon === 'bow') {
           const bowAtk = [
-            { bob: 0, lean: 0, bk: { x: cx - 2, y: 20 }, bf: { x: cx - 3, y: footY }, fk: { x: cx + 2, y: 20 }, ff: { x: cx + 3, y: footY }, be: { x: cx + 3, y: 12 }, bh: { x: cx + 5, y: 12 }, fe: { x: cx + 1, y: 12 }, fh: { x: cx + 3, y: 12 }, wa: 0 },
-            { bob: 1, lean: -1, bk: { x: cx - 3, y: 20 }, bf: { x: cx - 4, y: footY }, fk: { x: cx + 2, y: 20 }, ff: { x: cx + 3, y: footY }, be: { x: cx + 3, y: 12 }, bh: { x: cx + 5, y: 12 }, fe: { x: cx - 2, y: 12 }, fh: { x: cx - 3, y: 12 }, wa: 0 },
-            { bob: 0, lean: 1, bk: { x: cx - 3, y: 20 }, bf: { x: cx - 4, y: footY }, fk: { x: cx + 3, y: 20 }, ff: { x: cx + 4, y: footY }, be: { x: cx + 3, y: 12 }, bh: { x: cx + 6, y: 12 }, fe: { x: cx - 3, y: 12 }, fh: { x: cx - 4, y: 12 }, wa: 0 },
-            { bob: 0, lean: 0, bk: { x: cx - 2, y: 20 }, bf: { x: cx - 3, y: footY }, fk: { x: cx + 2, y: 20 }, ff: { x: cx + 3, y: footY }, be: { x: cx + 2, y: 13 }, bh: { x: cx + 4, y: 14 }, fe: { x: cx - 1, y: 13 }, fh: { x: cx + 1, y: 14 }, wa: 0.1 },
+            { bob: 0, lean: 0, bk: { x: cx - 2, y: 24 }, bf: { x: cx - 3, y: footY }, fk: { x: cx + 2, y: 24 }, ff: { x: cx + 3, y: footY }, be: { x: cx + 3, y: 15 }, bh: { x: cx + 5, y: 15 }, fe: { x: cx + 1, y: 15 }, fh: { x: cx + 3, y: 15 }, wa: 0 },
+            { bob: 1, lean: -1, bk: { x: cx - 3, y: 24 }, bf: { x: cx - 4, y: footY }, fk: { x: cx + 2, y: 24 }, ff: { x: cx + 3, y: footY }, be: { x: cx + 3, y: 15 }, bh: { x: cx + 6, y: 15 }, fe: { x: cx - 2, y: 15 }, fh: { x: cx - 3, y: 15 }, wa: 0 },
+            { bob: 0, lean: 1, bk: { x: cx - 3, y: 24 }, bf: { x: cx - 4, y: footY }, fk: { x: cx + 3, y: 24 }, ff: { x: cx + 4, y: footY }, be: { x: cx + 3, y: 15 }, bh: { x: cx + 7, y: 15 }, fe: { x: cx - 3, y: 15 }, fh: { x: cx - 4, y: 15 }, wa: 0 },
+            { bob: 0, lean: 0, bk: { x: cx - 2, y: 24 }, bf: { x: cx - 3, y: footY }, fk: { x: cx + 2, y: 24 }, ff: { x: cx + 3, y: footY }, be: { x: cx + 2, y: 16 }, bh: { x: cx + 4, y: 17 }, fe: { x: cx - 1, y: 16 }, fh: { x: cx + 1, y: 17 }, wa: 0.1 },
           ][f]
           bob = bowAtk.bob; lean = bowAtk.lean
-          backHip = { x: cx - 1 + lean, y: 17 + bob }; backKnee = bowAtk.bk; backFoot = bowAtk.bf
-          frontHip = { x: cx + 1 + lean, y: 17 + bob }; frontKnee = bowAtk.fk; frontFoot = bowAtk.ff
+          backHip = { x: cx - 1 + lean, y: hipY + bob }; backKnee = bowAtk.bk; backFoot = bowAtk.bf
+          frontHip = { x: cx + 1 + lean, y: hipY + bob }; frontKnee = bowAtk.fk; frontFoot = bowAtk.ff
           backElbow = bowAtk.be; backHand = bowAtk.bh
           frontElbow = bowAtk.fe; frontHand = bowAtk.fh
           weaponAngle = bowAtk.wa
         } else if (weapon === 'staff') {
           const staffAtk = [
-            { bob: 1, lean: -1, bk: { x: cx - 2, y: 20 }, bf: { x: cx - 3, y: footY }, fk: { x: cx + 2, y: 20 }, ff: { x: cx + 3, y: footY }, be: { x: cx + 1, y: 10 }, bh: { x: cx + 1, y: 7 }, fe: { x: cx - 1, y: 10 }, fh: { x: cx, y: 8 }, wa: -1.6 },
-            { bob: 0, lean: 1, bk: { x: cx - 3, y: 20 }, bf: { x: cx - 4, y: footY }, fk: { x: cx + 3, y: 20 }, ff: { x: cx + 4, y: footY }, be: { x: cx + 3, y: 11 }, bh: { x: cx + 5, y: 10 }, fe: { x: cx + 2, y: 11 }, fh: { x: cx + 4, y: 11 }, wa: -0.7 },
-            { bob: 1, lean: 2, bk: { x: cx - 3, y: 20 }, bf: { x: cx - 5, y: footY }, fk: { x: cx + 4, y: 20 }, ff: { x: cx + 5, y: footY }, be: { x: cx + 4, y: 13 }, bh: { x: cx + 6, y: 12 }, fe: { x: cx + 4, y: 12 }, fh: { x: cx + 6, y: 12 }, wa: -0.1 },
-            { bob: 0, lean: 1, bk: { x: cx - 2, y: 20 }, bf: { x: cx - 4, y: footY }, fk: { x: cx + 3, y: 20 }, ff: { x: cx + 4, y: footY }, be: { x: cx + 3, y: 14 }, bh: { x: cx + 4, y: 15 }, fe: { x: cx + 2, y: 14 }, fh: { x: cx + 4, y: 15 }, wa: -0.9 },
+            { bob: 1, lean: -1, bk: { x: cx - 2, y: 24 }, bf: { x: cx - 3, y: footY }, fk: { x: cx + 2, y: 24 }, ff: { x: cx + 3, y: footY }, be: { x: cx + 1, y: 13 }, bh: { x: cx + 1, y: 10 }, fe: { x: cx - 1, y: 13 }, fh: { x: cx, y: 11 }, wa: -1.6 },
+            { bob: 0, lean: 1, bk: { x: cx - 3, y: 24 }, bf: { x: cx - 4, y: footY }, fk: { x: cx + 3, y: 24 }, ff: { x: cx + 4, y: footY }, be: { x: cx + 3, y: 14 }, bh: { x: cx + 5, y: 13 }, fe: { x: cx + 2, y: 14 }, fh: { x: cx + 4, y: 14 }, wa: -0.7 },
+            { bob: 1, lean: 2, bk: { x: cx - 3, y: 24 }, bf: { x: cx - 5, y: footY }, fk: { x: cx + 4, y: 24 }, ff: { x: cx + 5, y: footY }, be: { x: cx + 4, y: 16 }, bh: { x: cx + 7, y: 15 }, fe: { x: cx + 4, y: 15 }, fh: { x: cx + 7, y: 15 }, wa: -0.1 },
+            { bob: 0, lean: 1, bk: { x: cx - 2, y: 24 }, bf: { x: cx - 4, y: footY }, fk: { x: cx + 3, y: 24 }, ff: { x: cx + 4, y: footY }, be: { x: cx + 3, y: 17 }, bh: { x: cx + 4, y: 18 }, fe: { x: cx + 2, y: 17 }, fh: { x: cx + 4, y: 18 }, wa: -0.9 },
           ][f]
           bob = staffAtk.bob; lean = staffAtk.lean
-          backHip = { x: cx - 1 + lean, y: 17 + bob }; backKnee = staffAtk.bk; backFoot = staffAtk.bf
-          frontHip = { x: cx + 1 + lean, y: 17 + bob }; frontKnee = staffAtk.fk; frontFoot = staffAtk.ff
+          backHip = { x: cx - 1 + lean, y: hipY + bob }; backKnee = staffAtk.bk; backFoot = staffAtk.bf
+          frontHip = { x: cx + 1 + lean, y: hipY + bob }; frontKnee = staffAtk.fk; frontFoot = staffAtk.ff
           backElbow = staffAtk.be; backHand = staffAtk.bh
           frontElbow = staffAtk.fe; frontHand = staffAtk.fh
           weaponAngle = staffAtk.wa
         } else {
-          // Sword / Dagger / Stick slash + lunge
           const meleeAtk = [
-            // 0: Windup (raise weapon arm high behind shoulder)
-            { bob: 1, lean: -1, bk: { x: cx - 2, y: 20 }, bf: { x: cx - 3, y: footY }, fk: { x: cx + 2, y: 20 }, ff: { x: cx + 3, y: footY }, be: { x: cx + 3, y: 13 }, bh: { x: cx + 5, y: 14 }, fe: { x: cx - 2, y: 10 }, fh: { x: cx - 4, y: 7 }, wa: -2.2 },
-            // 1: Mid-swing overhead/forward
-            { bob: 0, lean: 1, bk: { x: cx - 3, y: 20 }, bf: { x: cx - 4, y: footY }, fk: { x: cx + 3, y: 20 }, ff: { x: cx + 5, y: footY }, be: { x: cx + 1, y: 14 }, bh: { x: cx - 1, y: 15 }, fe: { x: cx + 3, y: 10 }, fh: { x: cx + 5, y: 10 }, wa: -0.45 },
-            // 2: Full impact extension
-            { bob: 1, lean: 2, bk: { x: cx - 3, y: 20 }, bf: { x: cx - 5, y: footY }, fk: { x: cx + 4, y: 20 }, ff: { x: cx + 6, y: footY }, be: { x: cx + (weapon === 'dagger' ? 4 : -1), y: 14 }, bh: { x: cx + (weapon === 'dagger' ? 6 : -3), y: 14 }, fe: { x: cx + 4, y: 13 }, fh: { x: cx + 7, y: 13 }, wa: 0.25 },
-            // 3: Follow through
-            { bob: 0, lean: 1, bk: { x: cx - 2, y: 20 }, bf: { x: cx - 3, y: footY }, fk: { x: cx + 3, y: 20 }, ff: { x: cx + 4, y: footY }, be: { x: cx + 2, y: 14 }, bh: { x: cx + 3, y: 16 }, fe: { x: cx + 3, y: 14 }, fh: { x: cx + 5, y: 16 }, wa: 0.75 },
+            { bob: 1, lean: -1, bk: { x: cx - 2, y: 24 }, bf: { x: cx - 3, y: footY }, fk: { x: cx + 2, y: 24 }, ff: { x: cx + 3, y: footY }, be: { x: cx + 3, y: 16 }, bh: { x: cx + 5, y: 17 }, fe: { x: cx - 2, y: 13 }, fh: { x: cx - 4, y: 10 }, wa: -2.2 },
+            { bob: 0, lean: 1, bk: { x: cx - 3, y: 24 }, bf: { x: cx - 4, y: footY }, fk: { x: cx + 3, y: 24 }, ff: { x: cx + 5, y: footY }, be: { x: cx + 1, y: 17 }, bh: { x: cx - 1, y: 18 }, fe: { x: cx + 3, y: 13 }, fh: { x: cx + 6, y: 13 }, wa: -0.45 },
+            { bob: 1, lean: 2, bk: { x: cx - 3, y: 24 }, bf: { x: cx - 5, y: footY }, fk: { x: cx + 4, y: 24 }, ff: { x: cx + 6, y: footY }, be: { x: cx + (weapon === 'dagger' ? 5 : -1), y: 17 }, bh: { x: cx + (weapon === 'dagger' ? 7 : -3), y: 17 }, fe: { x: cx + 4, y: 16 }, fh: { x: cx + 8, y: 16 }, wa: 0.25 },
+            { bob: 0, lean: 1, bk: { x: cx - 2, y: 24 }, bf: { x: cx - 3, y: footY }, fk: { x: cx + 3, y: 24 }, ff: { x: cx + 4, y: footY }, be: { x: cx + 2, y: 17 }, bh: { x: cx + 3, y: 19 }, fe: { x: cx + 3, y: 17 }, fh: { x: cx + 5, y: 19 }, wa: 0.75 },
           ][f]
           bob = meleeAtk.bob; lean = meleeAtk.lean
-          backHip = { x: cx - 1 + lean, y: 17 + bob }; backKnee = meleeAtk.bk; backFoot = meleeAtk.bf
-          frontHip = { x: cx + 1 + lean, y: 17 + bob }; frontKnee = meleeAtk.fk; frontFoot = meleeAtk.ff
+          backHip = { x: cx - 1 + lean, y: hipY + bob }; backKnee = meleeAtk.bk; backFoot = meleeAtk.bf
+          frontHip = { x: cx + 1 + lean, y: hipY + bob }; frontKnee = meleeAtk.fk; frontFoot = meleeAtk.ff
           backElbow = meleeAtk.be; backHand = meleeAtk.bh
           frontElbow = meleeAtk.fe; frontHand = meleeAtk.fh
           weaponAngle = meleeAtk.wa
@@ -655,52 +693,74 @@ export function humanSprite(
       }
 
       const bx = cx + lean
-      const by = 11 + bob
+      const by = 14 + bob
 
-      // Optional Wings behind torso (Demon / Angel)
+      // Quiver on back for Archer/Hunter
+      if (colors.quiver) {
+        s.line(bx - 3, by - 1, bx - 5, by + 5, '#7f5539', 2)
+        s.px(bx - 4, by - 2, '#f8fafc')
+        s.px(bx - 2, by - 2, '#ffd60a')
+      }
+
+      // Backpack for Novice
+      if (colors.backpack) {
+        s.rect(bx - 5, by + 1, 3, 5, '#9c6644')
+        s.rect(bx - 5, by + 1, 3, 1, '#c9b27c')
+      }
+
+      // Wings behind torso (Demon / Cleric / GM)
       if (colors.wings) {
         const flap = action === 'walk' ? (f % 3) - 1 : action === 'attack' ? (f === 0 ? -2 : 1) : (f === 1 ? 1 : 0)
-        s.line(bx - 2, by + 2, bx - 7, by - 2 + flap, shade(body, -0.3), 2)
-        s.line(bx - 7, by - 2 + flap, bx - 9, by + 2 + flap, shade(colors.accent, -0.2), 1)
-        s.line(bx - 6, by + 1 + flap, bx - 8, by + 4 + flap, shade(body, -0.4), 1)
+        const wCol = colors.wingStyle === 'angel' || colors.wingStyle === 'seraph' ? '#f8fafc' : shade(body, -0.3)
+        const wTip = colors.wingStyle === 'seraph' ? '#ffd60a' : colors.wingStyle === 'angel' ? '#e2e8f0' : colors.accent
+        s.line(bx - 2, by + 2, bx - 8, by - 2 + flap, wCol, 2)
+        s.line(bx - 8, by - 2 + flap, bx - 10, by + 2 + flap, wTip, 1)
+        s.line(bx - 6, by + 2 + flap, bx - 9, by + 5 + flap, shade(wCol, -0.2), 1)
       }
 
-      // Optional Cape behind torso
+      // Cape / Scarf behind torso
       if (colors.cape) {
-        const sway = action === 'walk' ? (f % 2 === 0 ? -2 : -1) : action === 'attack' ? -2 : 0
-        s.line(bx - 2, by + 1, bx - 5 + sway, by + 7, colors.cape, 2)
-        s.line(bx - 3, by + 2, bx - 4 + sway, by + 8, shade(colors.cape, -0.25), 1)
+        const sway = action === 'walk' ? (f % 2 === 0 ? -2 : -1) : action === 'attack' ? -3 : 0
+        s.line(bx - 2, by + 1, bx - 6 + sway, by + 8, colors.cape, 2)
+        s.line(bx - 3, by + 2, bx - 5 + sway, by + 9, shade(colors.cape, -0.25), 1)
+      }
+      if (colors.scarf) {
+        const scarfSway = action === 'walk' ? (f % 2 === 0 ? -2 : -1) : action === 'attack' ? -2 : 0
+        s.line(bx - 2, by, bx - 5 + scarfSway, by + 3, colors.scarf, 1)
       }
 
-      // Back leg & back arm (behind torso)
       drawLeg(s, backHip, backKnee, backFoot, legDark, bootDark, 1)
       if (weapon === 'bow') {
-        drawWeaponInHand(s, backHand, 'bow', weaponColor, weaponAngle, action, f, frontHand)
+        drawWeaponInHand(s, backHand, 'bow', weaponColor, weaponAngle, action, f, frontHand, colors.jobId)
       }
       drawArm(s, { x: bx + 1, y: by + 1 }, backElbow, backHand, bodyDark, skinDark)
-      if (weapon === 'dagger' && action === 'attack' && f === 2) {
-        drawWeaponInHand(s, backHand, 'dagger', weaponColor, -0.1, action, f)
+      if ((weapon === 'dagger' || colors.dualDaggers) && (action === 'attack' || colors.jobId === 'assassin')) {
+        drawWeaponInHand(s, backHand, 'dagger', weaponColor, action === 'attack' && f === 2 ? -0.1 : 0.4, action, f, undefined, colors.jobId)
       }
 
-      // Optional Shield on off-hand
       if (colors.shieldColor) {
-        s.rect(backHand.x - 1, backHand.y - 2, 3, 4, colors.shieldColor)
-        s.px(backHand.x, backHand.y - 1, colors.accent)
+        s.rect(backHand.x - 1, backHand.y - 2, 4, 5, colors.shieldColor)
+        s.rect(backHand.x, backHand.y - 1, 2, 3, colors.shieldCrest ?? colors.accent)
       }
 
-      // Torso
-      s.rect(bx - 2, by, 5, 6, body)
-      s.rect(bx - 2, by + 4, 5, 1, colors.accent) // belt
+      // Torso (with class armor accents)
+      s.rect(bx - 2, by, 5, 7, body)
+      s.rect(bx - 2, by + 4, 5, 1, colors.accent)
       s.px(bx + 1, by + 1, bodyHi)
+      if (colors.armorStyle === 'plate' || colors.armorStyle === 'paladin_plate') {
+        s.rect(bx - 1, by + 1, 3, 2, bodyHi)
+      }
+      if (colors.armorStyle === 'robe' || colors.armorStyle === 'arch_robe' || colors.armorStyle === 'vestment') {
+        s.rect(bx - 2, by + 5, 5, 3, bodyDark)
+      }
       if (colors.skeleton) {
         s.px(bx, by + 1, bodyDark); s.px(bx, by + 3, bodyDark)
       }
 
-      // Front leg (in front of torso bottom)
       drawLeg(s, frontHip, frontKnee, frontFoot, legCol, bootCol, 1)
 
       // Head
-      const headY = 5 + bob
+      const headY = 8 + bob
       s.rect(bx - 3, headY, 6, 6, skin)
       if (colors.goblinEars) {
         s.line(bx - 3, headY + 2, bx - 6, headY + 1, skin, 1)
@@ -712,15 +772,24 @@ export function humanSprite(
       }
       s.px(bx + 2, headY + 5, skinDark)
       drawHatOrHair(s, bx, headY, 'side', colors)
+      if (colors.halo) {
+        s.rect(bx - 2, headY - 4, 5, 1, '#ffd60a')
+        s.px(bx, headY - 4, '#ffffff')
+      }
       if (colors.horns) {
         s.px(bx - 2, headY - 1, '#f1e9d2'); s.px(bx - 3, headY - 2, '#f1e9d2')
-        s.px(bx + 1, headY - 1, '#f1e9d2'); s.px(bx + 2, headY - 2, '#f1e9d2')
+        s.px(bx + 1, headY - 1, '#f1e9d2'); s.px(bx + 2, headTopOffset(headY), '#f1e9d2')
       }
 
-      // Front arm + weapon (drawn last so arm & blade overlap cleanly!)
+      // Shoulder pauldron
+      if (colors.shoulderPads) {
+        s.rect(bx - 1, by, 3, 2, bodyHi)
+        s.px(bx, by, colors.accent)
+      }
+
       drawArm(s, { x: bx, y: by + 1 }, frontElbow, frontHand, body, skin)
       if (weapon !== 'bow') {
-        drawWeaponInHand(s, frontHand, weapon, weaponColor, weaponAngle, action, f)
+        drawWeaponInHand(s, frontHand, weapon, weaponColor, weaponAngle, action, f, undefined, colors.jobId)
       }
 
       return s.toCanvas(true, dir === 'left')
@@ -729,114 +798,119 @@ export function humanSprite(
     // Front ('down') or Back ('up') orthographic rig
     const isUp = dir === 'up'
     let bob = 0
-    let leftHip: Pt = { x: cx - 2, y: 17 }
-    let leftKnee: Pt = { x: cx - 2, y: 20 }
+    let leftHip: Pt = { x: cx - 2, y: hipY }
+    let leftKnee: Pt = { x: cx - 2, y: 24 }
     let leftFoot: Pt = { x: cx - 2, y: footY }
-    let rightHip: Pt = { x: cx + 2, y: 17 }
-    let rightKnee: Pt = { x: cx + 2, y: 20 }
+    let rightHip: Pt = { x: cx + 2, y: hipY }
+    let rightKnee: Pt = { x: cx + 2, y: 24 }
     let rightFoot: Pt = { x: cx + 2, y: footY }
 
-    let leftElbow: Pt = { x: cx - 4, y: 14 }
-    let leftHand: Pt = { x: cx - 4, y: 16 }
-    let rightElbow: Pt = { x: cx + 4, y: 14 }
-    let rightHand: Pt = { x: cx + 4, y: 16 }
+    let leftElbow: Pt = { x: cx - 4, y: 17 }
+    let leftHand: Pt = { x: cx - 4, y: 19 }
+    let rightElbow: Pt = { x: cx + 4, y: 17 }
+    let rightHand: Pt = { x: cx + 4, y: 19 }
     let weaponAngle = isUp ? -1.4 : 0.7
 
     if (action === 'idle') {
       const br = f === 1 ? 1 : 0
       bob = br
-      leftHip = { x: cx - 2, y: 17 + br }
-      rightHip = { x: cx + 2, y: 17 + br }
-      leftElbow = { x: cx - 4, y: 14 + br }
-      leftHand = { x: cx - 4, y: 16 + br }
-      rightElbow = { x: cx + 4, y: 14 + br }
-      rightHand = { x: cx + 4, y: 16 + br }
+      leftHip = { x: cx - 2, y: hipY + br }
+      rightHip = { x: cx + 2, y: hipY + br }
+      leftElbow = { x: cx - 4, y: 17 + br }
+      leftHand = { x: cx - 4, y: 19 + br }
+      rightElbow = { x: cx + 4, y: 17 + br }
+      rightHand = { x: cx + 4, y: 19 + br }
       weaponAngle = weapon === 'staff' ? -1.5 : isUp ? -1.4 : -0.9
     } else if (action === 'walk') {
-      // 6 frames alternating left/right stride & opposite arm swing
       const fWalk = [
-        // 0: Left leg steps forward/down, Right leg back; Left arm swings back, Right arm swings forward
-        { bob: 0, lk: { x: cx - 2, y: 20 }, lf: { x: cx - 2, y: footY }, rk: { x: cx + 2, y: 19 }, rf: { x: cx + 2, y: footY - 1 }, le: { x: cx - 4, y: 13 }, lh: { x: cx - 5, y: 14 }, re: { x: cx + 4, y: 14 }, rh: { x: cx + 4, y: 17 }, wa: isUp ? -1.6 : 0.4 },
-        // 1: Right leg lifts high (passing), Left leg planted
-        { bob: -1, lk: { x: cx - 2, y: 20 }, lf: { x: cx - 2, y: footY }, rk: { x: cx + 2, y: 18 }, rf: { x: cx + 2, y: footY - 3 }, le: { x: cx - 4, y: 13 }, lh: { x: cx - 4, y: 16 }, re: { x: cx + 4, y: 13 }, rh: { x: cx + 4, y: 15 }, wa: isUp ? -1.4 : -0.4 },
-        // 2: Right leg extends forward, Left leg back; Left arm swings forward, Right arm swings back
-        { bob: 0, lk: { x: cx - 2, y: 19 }, lf: { x: cx - 2, y: footY - 1 }, rk: { x: cx + 2, y: 20 }, rf: { x: cx + 2, y: footY }, le: { x: cx - 4, y: 14 }, lh: { x: cx - 4, y: 17 }, re: { x: cx + 4, y: 13 }, rh: { x: cx + 5, y: 14 }, wa: isUp ? -1.2 : -1.1 },
-        // 3: Opposite contact
-        { bob: 0, lk: { x: cx - 2, y: 19 }, lf: { x: cx - 2, y: footY - 1 }, rk: { x: cx + 2, y: 20 }, rf: { x: cx + 2, y: footY }, le: { x: cx - 4, y: 14 }, lh: { x: cx - 4, y: 17 }, re: { x: cx + 4, y: 13 }, rh: { x: cx + 5, y: 14 }, wa: isUp ? -1.2 : -1.0 },
-        // 4: Left leg lifts high (passing), Right leg planted
-        { bob: -1, lk: { x: cx - 2, y: 18 }, lf: { x: cx - 2, y: footY - 3 }, rk: { x: cx + 2, y: 20 }, rf: { x: cx + 2, y: footY }, le: { x: cx - 4, y: 13 }, lh: { x: cx - 4, y: 15 }, re: { x: cx + 4, y: 13 }, rh: { x: cx + 4, y: 16 }, wa: isUp ? -1.4 : -0.3 },
-        // 5: Left leg steps forward again
-        { bob: 0, lk: { x: cx - 2, y: 20 }, lf: { x: cx - 2, y: footY }, rk: { x: cx + 2, y: 19 }, rf: { x: cx + 2, y: footY - 1 }, le: { x: cx - 4, y: 13 }, lh: { x: cx - 5, y: 14 }, re: { x: cx + 4, y: 14 }, rh: { x: cx + 4, y: 17 }, wa: isUp ? -1.6 : 0.4 },
+        { bob: 0, lk: { x: cx - 2, y: 24 }, lf: { x: cx - 2, y: footY }, rk: { x: cx + 2, y: 23 }, rf: { x: cx + 2, y: footY - 1 }, le: { x: cx - 4, y: 16 }, lh: { x: cx - 5, y: 17 }, re: { x: cx + 4, y: 17 }, rh: { x: cx + 4, y: 20 }, wa: isUp ? -1.6 : 0.4 },
+        { bob: -1, lk: { x: cx - 2, y: 24 }, lf: { x: cx - 2, y: footY }, rk: { x: cx + 2, y: 22 }, rf: { x: cx + 2, y: footY - 3 }, le: { x: cx - 4, y: 16 }, lh: { x: cx - 4, y: 19 }, re: { x: cx + 4, y: 16 }, rh: { x: cx + 4, y: 18 }, wa: isUp ? -1.4 : -0.4 },
+        { bob: 0, lk: { x: cx - 2, y: 23 }, lf: { x: cx - 2, y: footY - 1 }, rk: { x: cx + 2, y: 24 }, rf: { x: cx + 2, y: footY }, le: { x: cx - 4, y: 17 }, lh: { x: cx - 4, y: 20 }, re: { x: cx + 4, y: 16 }, rh: { x: cx + 5, y: 17 }, wa: isUp ? -1.2 : -1.1 },
+        { bob: 0, lk: { x: cx - 2, y: 23 }, lf: { x: cx - 2, y: footY - 1 }, rk: { x: cx + 2, y: 24 }, rf: { x: cx + 2, y: footY }, le: { x: cx - 4, y: 17 }, lh: { x: cx - 4, y: 20 }, re: { x: cx + 4, y: 16 }, rh: { x: cx + 5, y: 17 }, wa: isUp ? -1.2 : -1.0 },
+        { bob: -1, lk: { x: cx - 2, y: 22 }, lf: { x: cx - 2, y: footY - 3 }, rk: { x: cx + 2, y: 24 }, rf: { x: cx + 2, y: footY }, le: { x: cx - 4, y: 16 }, lh: { x: cx - 4, y: 18 }, re: { x: cx + 4, y: 16 }, rh: { x: cx + 4, y: 19 }, wa: isUp ? -1.4 : -0.3 },
+        { bob: 0, lk: { x: cx - 2, y: 24 }, lf: { x: cx - 2, y: footY }, rk: { x: cx + 2, y: 23 }, rf: { x: cx + 2, y: footY - 1 }, le: { x: cx - 4, y: 16 }, lh: { x: cx - 5, y: 17 }, re: { x: cx + 4, y: 17 }, rh: { x: cx + 4, y: 20 }, wa: isUp ? -1.6 : 0.4 },
       ][f]
       bob = fWalk.bob
-      leftHip = { x: cx - 2, y: 17 + bob }; leftKnee = fWalk.lk; leftFoot = fWalk.lf
-      rightHip = { x: cx + 2, y: 17 + bob }; rightKnee = fWalk.rk; rightFoot = fWalk.rf
+      leftHip = { x: cx - 2, y: hipY + bob }; leftKnee = fWalk.lk; leftFoot = fWalk.lf
+      rightHip = { x: cx + 2, y: hipY + bob }; rightKnee = fWalk.rk; rightFoot = fWalk.rf
       leftElbow = fWalk.le; leftHand = fWalk.lh
       rightElbow = fWalk.re; rightHand = fWalk.rh
       weaponAngle = weapon === 'staff' ? -1.5 : fWalk.wa
     } else {
-      // Attack 4 frames for front/back
       const fAtk = [
-        // 0: Windup (legs wide brace, right arm raised high!)
-        { bob: 1, lf: { x: cx - 3, y: footY }, rf: { x: cx + 3, y: footY }, le: { x: cx - 5, y: 13 }, lh: { x: cx - 5, y: 15 }, re: { x: cx + 4, y: 10 }, rh: { x: cx + 5, y: 8 }, wa: isUp ? -2.1 : -2.2 },
-        // 1: Strike sweep
-        { bob: 0, lf: { x: cx - 3, y: footY }, rf: { x: cx + 3, y: footY }, le: { x: cx - 4, y: 14 }, lh: { x: cx - 5, y: 16 }, re: { x: cx + 5, y: 12 }, rh: { x: cx + 6, y: isUp ? 9 : 13 }, wa: isUp ? -1.6 : 0.3 },
-        // 2: Full Impact reach!
-        { bob: 1, lf: { x: cx - 3, y: footY }, rf: { x: cx + 3, y: footY }, le: { x: cx - 5, y: 13 }, lh: { x: cx - 5, y: isUp ? 11 : 17 }, re: { x: cx + 3, y: isUp ? 9 : 15 }, rh: { x: cx + 2, y: isUp ? 6 : 19 }, wa: isUp ? -1.55 : 1.35 },
-        // 3: Follow through
-        { bob: 0, lf: { x: cx - 2, y: footY }, rf: { x: cx + 2, y: footY }, le: { x: cx - 4, y: 14 }, lh: { x: cx - 4, y: 16 }, re: { x: cx + 4, y: 14 }, rh: { x: cx + 4, y: 17 }, wa: isUp ? -1.4 : 0.8 },
+        { bob: 1, lf: { x: cx - 3, y: footY }, rf: { x: cx + 3, y: footY }, le: { x: cx - 5, y: 16 }, lh: { x: cx - 5, y: 18 }, re: { x: cx + 4, y: 13 }, rh: { x: cx + 5, y: 11 }, wa: isUp ? -2.1 : -2.2 },
+        { bob: 0, lf: { x: cx - 3, y: footY }, rf: { x: cx + 3, y: footY }, le: { x: cx - 4, y: 17 }, lh: { x: cx - 5, y: 19 }, re: { x: cx + 5, y: 15 }, rh: { x: cx + 6, y: isUp ? 12 : 16 }, wa: isUp ? -1.6 : 0.3 },
+        { bob: 1, lf: { x: cx - 3, y: footY }, rf: { x: cx + 3, y: footY }, le: { x: cx - 5, y: 16 }, lh: { x: cx - 5, y: isUp ? 14 : 20 }, re: { x: cx + 3, y: isUp ? 12 : 18 }, rh: { x: cx + 2, y: isUp ? 9 : 22 }, wa: isUp ? -1.55 : 1.35 },
+        { bob: 0, lf: { x: cx - 2, y: footY }, rf: { x: cx + 2, y: footY }, le: { x: cx - 4, y: 17 }, lh: { x: cx - 4, y: 19 }, re: { x: cx + 4, y: 17 }, rh: { x: cx + 4, y: 20 }, wa: isUp ? -1.4 : 0.8 },
       ][f]
       bob = fAtk.bob
-      leftHip = { x: cx - 2, y: 17 + bob }; leftKnee = { x: cx - 3, y: 20 }; leftFoot = fAtk.lf
-      rightHip = { x: cx + 2, y: 17 + bob }; rightKnee = { x: cx + 3, y: 20 }; rightFoot = fAtk.rf
+      leftHip = { x: cx - 2, y: hipY + bob }; leftKnee = { x: cx - 3, y: 24 }; leftFoot = fAtk.lf
+      rightHip = { x: cx + 2, y: hipY + bob }; rightKnee = { x: cx + 3, y: 24 }; rightFoot = fAtk.rf
       leftElbow = fAtk.le; leftHand = fAtk.lh
       rightElbow = fAtk.re; rightHand = fAtk.rh
       weaponAngle = weapon === 'bow' ? (isUp ? -1.57 : 1.57) : fAtk.wa
     }
 
-    const by = 11 + bob
+    const by = 14 + bob
 
     if (colors.wings) {
       const flap = action === 'walk' ? (f % 3) - 1 : action === 'attack' ? (f === 0 ? -2 : 1) : (f === 1 ? 1 : 0)
-      s.line(cx - 3, by + 2, cx - 8, by - 2 + flap, shade(body, -0.3), 2)
-      s.line(cx + 3, by + 2, cx + 8, by - 2 + flap, shade(body, -0.3), 2)
-      s.px(cx - 9, by + flap, colors.accent)
-      s.px(cx + 9, by + flap, colors.accent)
+      const wCol = colors.wingStyle === 'angel' || colors.wingStyle === 'seraph' ? '#f8fafc' : shade(body, -0.3)
+      const wTip = colors.wingStyle === 'seraph' ? '#ffd60a' : colors.wingStyle === 'angel' ? '#e2e8f0' : colors.accent
+      s.line(cx - 3, by + 2, cx - 9, by - 2 + flap, wCol, 2)
+      s.line(cx + 3, by + 2, cx + 9, by - 2 + flap, wCol, 2)
+      s.px(cx - 10, by + flap, wTip)
+      s.px(cx + 10, by + flap, wTip)
     }
 
     if (colors.cape && !isUp) {
       const sway = action === 'walk' && f % 2 === 1 ? 1 : 0
-      s.rect(cx - 4 - sway, by + 1, 1, 7, shade(colors.cape, -0.25))
-      s.rect(cx + 4 + sway, by + 1, 1, 7, shade(colors.cape, -0.25))
+      s.rect(cx - 4 - sway, by + 1, 1, 8, shade(colors.cape, -0.25))
+      s.rect(cx + 4 + sway, by + 1, 1, 8, shade(colors.cape, -0.25))
     }
 
-    // Back-ordered weapon when facing UP idle/walk
     if (isUp && weapon) {
-      drawWeaponInHand(s, rightHand, weapon, weaponColor, weaponAngle, action, f, leftHand)
+      drawWeaponInHand(s, rightHand, weapon, weaponColor, weaponAngle, action, f, leftHand, colors.jobId)
     }
 
-    // Legs (darken slightly whichever leg is tucked back)
     const leftBack = leftFoot.y < footY
     const rightBack = rightFoot.y < footY
     drawLeg(s, leftHip, leftKnee, leftFoot, leftBack ? legDark : legCol, leftBack ? bootDark : bootCol, -1)
     drawLeg(s, rightHip, rightKnee, rightFoot, rightBack ? legDark : legCol, rightBack ? bootDark : bootCol, 1)
 
     // Torso
-    s.rect(cx - 3, by, 7, 6, body)
+    s.rect(cx - 3, by, 7, 7, body)
     s.rect(cx - 3, by + 4, 7, 1, colors.accent)
     s.rect(cx - 1, by + 1, 3, 2, bodyHi)
+    if (colors.armorStyle === 'robe' || colors.armorStyle === 'arch_robe' || colors.armorStyle === 'vestment') {
+      s.rect(cx - 3, by + 5, 7, 3, bodyDark)
+      s.px(cx, by + 6, colors.accent)
+    }
+    if (colors.armorStyle === 'paladin_plate') {
+      s.line(cx, by + 1, cx, by + 3, '#ffd60a', 1)
+      s.line(cx - 1, by + 2, cx + 1, by + 2, '#ffd60a', 1)
+    }
     if (colors.skeleton) {
       s.px(cx - 1, by + 1, bodyDark); s.px(cx + 1, by + 1, bodyDark)
       s.px(cx - 1, by + 3, bodyDark); s.px(cx + 1, by + 3, bodyDark)
     }
+    if (colors.backpack && isUp) {
+      s.rect(cx - 2, by + 1, 5, 5, '#9c6644')
+      s.rect(cx - 2, by + 1, 5, 1, '#c9b27c')
+    }
+    if (colors.quiver && isUp) {
+      s.line(cx + 2, by - 1, cx - 1, by + 5, '#7f5539', 2)
+      s.px(cx + 2, by - 2, '#f8fafc')
+      s.px(cx + 3, by - 2, '#ffd60a')
+    }
     if (colors.cape && isUp) {
       const sway = action === 'walk' && f % 2 === 1 ? 1 : 0
-      s.rect(cx - 3, by + 1, 7, 6 + sway, colors.cape)
-      s.rect(cx - 2, by + 2, 5, 4 + sway, shade(colors.cape, -0.2))
+      s.rect(cx - 3, by + 1, 7, 7 + sway, colors.cape)
+      s.rect(cx - 2, by + 2, 5, 5 + sway, shade(colors.cape, -0.2))
     }
 
     // Head
-    const headY = 5 + bob
+    const headY = 8 + bob
     s.rect(cx - 3, headY, 7, 6, skin)
     if (colors.goblinEars) {
       s.line(cx - 3, headY + 2, cx - 6, headY + 1, skin, 1)
@@ -853,73 +927,85 @@ export function humanSprite(
       s.px(cx, headY + 5, skinDark)
     }
     drawHatOrHair(s, cx, headY, isUp ? 'up' : 'down', colors)
+    if (colors.halo) {
+      s.rect(cx - 2, headY - 4, 5, 1, '#ffd60a')
+      s.px(cx, headY - 4, '#ffffff')
+    }
     if (colors.horns) {
       s.px(cx - 3, headY - 1, '#f1e9d2'); s.px(cx - 4, headY - 2, '#f1e9d2')
       s.px(cx + 3, headY - 1, '#f1e9d2'); s.px(cx + 4, headY - 2, '#f1e9d2')
     }
 
-    // Arms
+    // Shoulder pauldrons
+    if (colors.shoulderPads) {
+      s.rect(cx - 5, by, 3, 2, bodyHi)
+      s.rect(cx + 3, by, 3, 2, bodyHi)
+      s.px(cx - 4, by, colors.accent)
+      s.px(cx + 4, by, colors.accent)
+    }
+
     drawArm(s, { x: cx - 3, y: by + 1 }, leftElbow, leftHand, bodyDark, skinDark)
     drawArm(s, { x: cx + 3, y: by + 1 }, rightElbow, rightHand, body, skin)
 
     if (colors.shieldColor) {
-      s.rect(leftHand.x - 1, leftHand.y - 2, 3, 4, colors.shieldColor)
-      s.px(leftHand.x, leftHand.y - 1, colors.accent)
+      s.rect(leftHand.x - 1, leftHand.y - 2, 4, 5, colors.shieldColor)
+      s.rect(leftHand.x, leftHand.y - 1, 2, 3, colors.shieldCrest ?? colors.accent)
     }
 
     if (!isUp && weapon) {
-      drawWeaponInHand(s, rightHand, weapon, weaponColor, weaponAngle, action, f, leftHand)
+      drawWeaponInHand(s, rightHand, weapon, weaponColor, weaponAngle, action, f, leftHand, colors.jobId)
     }
-    if (weapon === 'dagger' && action === 'attack' && f === 2) {
-      drawWeaponInHand(s, leftHand, 'dagger', weaponColor, isUp ? -1.7 : 1.7, action, f)
+    if ((weapon === 'dagger' || colors.dualDaggers) && ((action === 'attack' && f === 2) || colors.jobId === 'assassin')) {
+      drawWeaponInHand(s, leftHand, 'dagger', weaponColor, isUp ? -1.7 : 1.7, action, f, undefined, colors.jobId)
     }
 
     return s.toCanvas(true, false)
   })
 }
 
-/* ---------------- Articulated Monsters ---------------- */
+function headTopOffset(headY: number) {
+  return headY - 2
+}
 
-function renderSlime(color: string, dir: Dir, action: SpriteAction, f: number): HTMLCanvasElement {
-  const s = new PixelSurface(24, 22)
+/* ---------------- Articulated Monsters (All 17 Monsters) ---------------- */
+
+function renderSlime(color: string, dir: Dir, action: SpriteAction, f: number, isPinkVariant = false): HTMLCanvasElement {
+  const s = new PixelSurface(26, 24)
   const dark = shade(color, -0.3)
   const hi = shade(color, 0.45)
-  const cx = 12
-  const baseY = 19
+  const cx = 13
+  const baseY = 21
 
-  // Stretch & gel-arm motion
   let w = 12
   let h = 9
   let offX = 0
-  let leftArm: Pt = { x: cx - 7, y: 15 }
-  let rightArm: Pt = { x: cx + 7, y: 15 }
+  let leftArm: Pt = { x: cx - 7, y: 17 }
+  let rightArm: Pt = { x: cx + 7, y: 17 }
 
   if (action === 'idle') {
     const sq = f === 1 ? 1 : f === 3 ? -1 : 0
     w = 12 + sq * 2
     h = 9 - sq
-    leftArm = { x: cx - 7 - sq, y: 15 + sq }
-    rightArm = { x: cx + 7 + sq, y: 15 + sq }
+    leftArm = { x: cx - 7 - sq, y: 17 + sq }
+    rightArm = { x: cx + 7 + sq, y: 17 + sq }
   } else if (action === 'walk') {
-    // Ground-anchored rippling slither + swinging gel stub arms
     const seq = [
-      { w: 14, h: 8, ox: 0, lay: 16, ray: 14 },
-      { w: 11, h: 10, ox: 1, lay: 13, ray: 16 },
-      { w: 10, h: 11, ox: 2, lay: 12, ray: 15 },
-      { w: 13, h: 8, ox: 1, lay: 15, ray: 13 },
-      { w: 14, h: 8, ox: 0, lay: 16, ray: 14 },
-      { w: 11, h: 10, ox: -1, lay: 14, ray: 12 },
+      { w: 14, h: 8, ox: 0, lay: 18, ray: 16 },
+      { w: 11, h: 10, ox: 1, lay: 15, ray: 18 },
+      { w: 10, h: 11, ox: 2, lay: 14, ray: 17 },
+      { w: 13, h: 8, ox: 1, lay: 17, ray: 15 },
+      { w: 14, h: 8, ox: 0, lay: 18, ray: 16 },
+      { w: 11, h: 10, ox: -1, lay: 16, ray: 14 },
     ][f % 6]
     w = seq.w; h = seq.h; offX = seq.ox
     leftArm = { x: cx + offX - Math.floor(w / 2) - 2, y: seq.lay }
     rightArm = { x: cx + offX + Math.floor(w / 2) + 2, y: seq.ray }
   } else {
-    // Attack: coil back -> stretch pseudopods out -> slam!
     const atk = [
-      { w: 14, h: 7, ox: -2, lx: -6, ly: 16, rx: 6, ry: 16 },
-      { w: 11, h: 10, ox: 2, lx: -4, ly: 12, rx: 9, ry: 11 },
-      { w: 10, h: 9, ox: 4, lx: 2, ly: 12, rx: 10, ry: 12 },
-      { w: 13, h: 8, ox: 1, lx: -6, ly: 15, rx: 7, ry: 15 },
+      { w: 14, h: 7, ox: -2, lx: -6, ly: 18, rx: 6, ry: 18 },
+      { w: 11, h: 10, ox: 2, lx: -4, ly: 14, rx: 9, ry: 13 },
+      { w: 10, h: 9, ox: 4, lx: 2, ly: 14, rx: 10, ry: 14 },
+      { w: 13, h: 8, ox: 1, lx: -6, ly: 17, rx: 7, ry: 17 },
     ][f % 4]
     w = atk.w; h = atk.h; offX = atk.ox
     leftArm = { x: cx + offX + atk.lx, y: atk.ly }
@@ -929,28 +1015,39 @@ function renderSlime(color: string, dir: Dir, action: SpriteAction, f: number): 
   const x0 = Math.round(cx + offX - w / 2)
   const y0 = baseY - h
 
-  // Side gel arms/pseudopods
   s.line(cx + offX - 3, y0 + Math.floor(h * 0.55), leftArm.x, leftArm.y, dark, 2)
   s.px(leftArm.x, leftArm.y, color)
   s.line(cx + offX + 3, y0 + Math.floor(h * 0.55), rightArm.x, rightArm.y, color, 2)
   s.px(rightArm.x, rightArm.y, hi)
 
-  // Gel dome
   s.rect(x0 + 2, y0, w - 4, 2, color)
   s.rect(x0 + 1, y0 + 2, w - 2, h - 3, color)
   s.rect(x0, y0 + Math.floor(h * 0.5), w, Math.ceil(h * 0.5), color)
   s.rect(x0 + 1, baseY - 1, w - 2, 1, dark)
-  // Gel feet bumps that wiggle!
   const footShift = action === 'walk' ? (f % 2 === 0 ? 1 : -1) : 0
   s.rect(x0 + 1 + footShift, baseY, 3, 1, dark)
   s.rect(x0 + w - 4 - footShift, baseY, 3, 1, dark)
 
-  // Highlight & face
+  // Highlight & variant crest
   s.rect(x0 + 2, y0 + 1, 2, 2, hi)
+  if (isPinkVariant) {
+    // Pink slime crown & floating bubble sprout
+    s.px(cx + offX, y0 - 1, '#ffd60a')
+    s.px(cx + offX - 1, y0 - 2, '#fff3b0')
+    s.px(cx + offX + 1, y0 - 2, '#ffd60a')
+    s.px(cx + offX + 4, y0 - (f % 2) - 2, '#ffd6e0')
+  } else {
+    s.px(cx + offX, y0 - 1, hi)
+  }
+
   if (dir !== 'up') {
     const eyeOff = dir === 'right' ? 2 : dir === 'left' ? 2 : 0
     s.px(x0 + Math.floor(w * 0.3) + eyeOff, y0 + Math.floor(h * 0.48), '#1a1423')
     s.px(x0 + Math.floor(w * 0.65) + eyeOff, y0 + Math.floor(h * 0.48), '#1a1423')
+    if (isPinkVariant) {
+      s.px(x0 + Math.floor(w * 0.22) + eyeOff, y0 + Math.floor(h * 0.62), '#ff4d6d')
+      s.px(x0 + Math.floor(w * 0.72) + eyeOff, y0 + Math.floor(h * 0.62), '#ff4d6d')
+    }
     if (action === 'attack' && (f === 1 || f === 2)) {
       s.rect(x0 + Math.floor(w * 0.45) + eyeOff, y0 + Math.floor(h * 0.68), 3, 2, '#3d0c11')
     }
@@ -959,151 +1056,139 @@ function renderSlime(color: string, dir: Dir, action: SpriteAction, f: number): 
 }
 
 function renderMushroom(color: string, dir: Dir, action: SpriteAction, f: number): HTMLCanvasElement {
-  const s = new PixelSurface(24, 24)
+  const s = new PixelSurface(26, 26)
   const capDark = shade(color, -0.3)
   const stem = '#f1e3c8'
   const stemDark = '#d4c3a3'
   const footCol = '#5c3d2e'
-  const cx = 12
-  const footY = 21
+  const cx = 13
+  const footY = 23
 
   let bob = 0
   let tilt = 0
   let lFoot: Pt = { x: cx - 2, y: footY }
   let rFoot: Pt = { x: cx + 2, y: footY }
-  let lHand: Pt = { x: cx - 5, y: 16 }
-  let rHand: Pt = { x: cx + 5, y: 16 }
+  let lHand: Pt = { x: cx - 5, y: 18 }
+  let rHand: Pt = { x: cx + 5, y: 18 }
 
   if (action === 'idle') {
     bob = f === 1 ? 1 : 0
-    lHand = { x: cx - 5, y: 16 + bob }
-    rHand = { x: cx + 5, y: 16 + bob }
+    lHand = { x: cx - 5, y: 18 + bob }
+    rHand = { x: cx + 5, y: 18 + bob }
   } else if (action === 'walk') {
     const seq = [
-      { bob: 0, tilt: 0, lf: { x: cx - 3, y: footY }, rf: { x: cx + 2, y: footY - 1 }, lh: { x: cx - 5, y: 14 }, rh: { x: cx + 5, y: 17 } },
-      { bob: -1, tilt: 0, lf: { x: cx - 2, y: footY }, rf: { x: cx + 2, y: footY - 3 }, lh: { x: cx - 5, y: 15 }, rh: { x: cx + 5, y: 15 } },
-      { bob: 0, tilt: 1, lf: { x: cx - 2, y: footY - 1 }, rf: { x: cx + 3, y: footY }, lh: { x: cx - 5, y: 17 }, rh: { x: cx + 5, y: 14 } },
-      { bob: 0, tilt: 0, lf: { x: cx - 2, y: footY - 1 }, rf: { x: cx + 3, y: footY }, lh: { x: cx - 5, y: 17 }, rh: { x: cx + 5, y: 14 } },
-      { bob: -1, tilt: 0, lf: { x: cx - 2, y: footY - 3 }, rf: { x: cx + 2, y: footY }, lh: { x: cx - 5, y: 15 }, rh: { x: cx + 5, y: 15 } },
-      { bob: 0, tilt: -1, lf: { x: cx - 3, y: footY }, rf: { x: cx + 2, y: footY - 1 }, lh: { x: cx - 5, y: 14 }, rh: { x: cx + 5, y: 17 } },
+      { bob: 0, tilt: 0, lf: { x: cx - 3, y: footY }, rf: { x: cx + 2, y: footY - 1 }, lh: { x: cx - 5, y: 16 }, rh: { x: cx + 5, y: 19 } },
+      { bob: -1, tilt: 0, lf: { x: cx - 2, y: footY }, rf: { x: cx + 2, y: footY - 3 }, lh: { x: cx - 5, y: 17 }, rh: { x: cx + 5, y: 17 } },
+      { bob: 0, tilt: 1, lf: { x: cx - 2, y: footY - 1 }, rf: { x: cx + 3, y: footY }, lh: { x: cx - 5, y: 19 }, rh: { x: cx + 5, y: 16 } },
+      { bob: 0, tilt: 0, lf: { x: cx - 2, y: footY - 1 }, rf: { x: cx + 3, y: footY }, lh: { x: cx - 5, y: 19 }, rh: { x: cx + 5, y: 16 } },
+      { bob: -1, tilt: 0, lf: { x: cx - 2, y: footY - 3 }, rf: { x: cx + 2, y: footY }, lh: { x: cx - 5, y: 17 }, rh: { x: cx + 5, y: 17 } },
+      { bob: 0, tilt: -1, lf: { x: cx - 3, y: footY }, rf: { x: cx + 2, y: footY - 1 }, lh: { x: cx - 5, y: 16 }, rh: { x: cx + 5, y: 19 } },
     ][f % 6]
     bob = seq.bob; tilt = seq.tilt; lFoot = seq.lf; rFoot = seq.rf; lHand = seq.lh; rHand = seq.rh
   } else {
     const atk = [
-      { bob: 1, tilt: -1, lf: { x: cx - 3, y: footY }, rf: { x: cx + 3, y: footY }, lh: { x: cx - 6, y: 11 }, rh: { x: cx + 5, y: 11 } },
-      { bob: -1, tilt: 1, lf: { x: cx - 3, y: footY }, rf: { x: cx + 4, y: footY - 1 }, lh: { x: cx - 4, y: 13 }, rh: { x: cx + 7, y: 13 } },
-      { bob: 0, tilt: 2, lf: { x: cx - 4, y: footY }, rf: { x: cx + 4, y: footY }, lh: { x: cx + 2, y: 14 }, rh: { x: cx + 8, y: 14 } },
-      { bob: 0, tilt: 1, lf: { x: cx - 2, y: footY }, rf: { x: cx + 3, y: footY }, lh: { x: cx - 5, y: 16 }, rh: { x: cx + 5, y: 16 } },
+      { bob: 1, tilt: -1, lf: { x: cx - 3, y: footY }, rf: { x: cx + 3, y: footY }, lh: { x: cx - 6, y: 13 }, rh: { x: cx + 5, y: 13 } },
+      { bob: -1, tilt: 1, lf: { x: cx - 3, y: footY }, rf: { x: cx + 4, y: footY - 1 }, lh: { x: cx - 4, y: 15 }, rh: { x: cx + 7, y: 15 } },
+      { bob: 0, tilt: 2, lf: { x: cx - 4, y: footY }, rf: { x: cx + 4, y: footY }, lh: { x: cx + 2, y: 16 }, rh: { x: cx + 8, y: 16 } },
+      { bob: 0, tilt: 1, lf: { x: cx - 2, y: footY }, rf: { x: cx + 3, y: footY }, lh: { x: cx - 5, y: 18 }, rh: { x: cx + 5, y: 18 } },
     ][f % 4]
     bob = atk.bob; tilt = atk.tilt; lFoot = atk.lf; rFoot = atk.rf; lHand = atk.lh; rHand = atk.rh
   }
 
-  // Legs
-  s.line(cx - 2, 18 + bob, lFoot.x, lFoot.y, stemDark, 2)
+  s.line(cx - 2, 20 + bob, lFoot.x, lFoot.y, stemDark, 2)
   s.rect(lFoot.x - 1, lFoot.y, 2, 1, footCol)
-  s.line(cx + 2, 18 + bob, rFoot.x, rFoot.y, stem, 2)
+  s.line(cx + 2, 20 + bob, rFoot.x, rFoot.y, stem, 2)
   s.rect(rFoot.x, rFoot.y, 2, 1, footCol)
 
-  // Arms
-  s.line(cx - 3, 14 + bob, lHand.x, lHand.y, stemDark, 1)
+  s.line(cx - 3, 16 + bob, lHand.x, lHand.y, stemDark, 1)
   s.px(lHand.x, lHand.y, stem)
-  s.line(cx + 3, 14 + bob, rHand.x, rHand.y, stem, 1)
+  s.line(cx + 3, 16 + bob, rHand.x, rHand.y, stem, 1)
   s.px(rHand.x, rHand.y, '#ffffff')
 
-  // Stem body
-  s.rect(cx - 3 + Math.round(tilt * 0.5), 12 + bob, 7, 6, stem)
+  s.rect(cx - 3 + Math.round(tilt * 0.5), 14 + bob, 7, 6, stem)
   if (dir !== 'up') {
     const faceX = cx + (dir === 'right' ? 1 : 0) + Math.round(tilt * 0.5)
-    s.px(faceX - 2, 14 + bob, '#1a1423')
-    s.px(faceX + 2, 14 + bob, '#1a1423')
+    s.px(faceX - 2, 16 + bob, '#1a1423')
+    s.px(faceX + 2, 16 + bob, '#1a1423')
     if (action === 'attack' && (f === 1 || f === 2)) {
-      s.px(faceX - 2, 13 + bob, '#9d0208')
-      s.px(faceX + 2, 13 + bob, '#9d0208')
+      s.px(faceX - 2, 15 + bob, '#9d0208')
+      s.px(faceX + 2, 15 + bob, '#9d0208')
+      s.px(faceX + 6, 12 + bob, '#c77dff')
+      s.px(faceX - 6, 11 + bob, '#c77dff')
     }
   }
 
-  // Spotted cap
   const capX = cx + tilt
-  const capY = 5 + bob
+  const capY = 6 + bob
   s.rect(capX - 4, capY, 9, 2, color)
-  s.rect(capX - 6, capY + 2, 13, 4, color)
-  s.rect(capX - 6, capY + 6, 13, 1, capDark)
+  s.rect(capX - 6, capY + 2, 13, 5, color)
+  s.rect(capX - 6, capY + 7, 13, 1, capDark)
   s.rect(capX - 4, capY + 2, 2, 2, '#ffffff')
   s.rect(capX + 2, capY + 1, 2, 2, '#ffffff')
-  s.px(capX, capY + 4, '#ffffff')
+  s.px(capX, capY + 5, '#ffffff')
 
   return s.toCanvas(true, dir === 'left')
 }
 
 function renderRabbit(color: string, dir: Dir, action: SpriteAction, f: number): HTMLCanvasElement {
-  const s = new PixelSurface(26, 24)
+  const s = new PixelSurface(28, 26)
   const dark = shade(color, -0.25)
   const belly = '#ffffff'
   const pink = '#ff8fab'
-  const cx = 12
-  const footY = 21
+  const cx = 13
+  const footY = 23
 
   let bob = 0
   let lean = 0
   let earAngle = 0
   let hindFoot: Pt = { x: cx - 3, y: footY }
   let frontPaw: Pt = { x: cx + 3, y: footY }
-  let raisedPaw: Pt = { x: cx + 4, y: 16 }
+  let raisedPaw: Pt = { x: cx + 4, y: 18 }
 
   if (action === 'idle') {
     bob = f === 1 ? 1 : 0
     earAngle = f === 2 ? -1 : 0
     hindFoot = { x: cx - 3, y: footY }
     frontPaw = { x: cx + 3, y: footY }
-    raisedPaw = { x: cx + 5, y: 16 + bob }
+    raisedPaw = { x: cx + 5, y: 18 + bob }
   } else if (action === 'walk') {
     const seq = [
-      { bob: 1, lean: 0, ear: -1, hf: { x: cx - 3, y: footY }, fp: { x: cx + 3, y: footY }, rp: { x: cx + 4, y: 17 } },
-      { bob: -2, lean: 1, ear: -2, hf: { x: cx - 5, y: footY - 1 }, fp: { x: cx + 5, y: footY - 3 }, rp: { x: cx + 6, y: 14 } },
-      { bob: -3, lean: 1, ear: -2, hf: { x: cx - 4, y: footY - 3 }, fp: { x: cx + 5, y: footY - 1 }, rp: { x: cx + 6, y: 16 } },
-      { bob: -1, lean: 1, ear: -1, hf: { x: cx - 1, y: footY - 2 }, fp: { x: cx + 3, y: footY }, rp: { x: cx + 4, y: 17 } },
-      { bob: 0, lean: 0, ear: 0, hf: { x: cx - 2, y: footY }, fp: { x: cx + 2, y: footY }, rp: { x: cx + 3, y: 16 } },
-      { bob: 1, lean: 0, ear: 0, hf: { x: cx - 3, y: footY }, fp: { x: cx + 3, y: footY }, rp: { x: cx + 4, y: 17 } },
+      { bob: 1, lean: 0, ear: -1, hf: { x: cx - 3, y: footY }, fp: { x: cx + 3, y: footY }, rp: { x: cx + 4, y: 19 } },
+      { bob: -2, lean: 1, ear: -2, hf: { x: cx - 5, y: footY - 1 }, fp: { x: cx + 5, y: footY - 3 }, rp: { x: cx + 6, y: 16 } },
+      { bob: -3, lean: 1, ear: -2, hf: { x: cx - 4, y: footY - 3 }, fp: { x: cx + 5, y: footY - 1 }, rp: { x: cx + 6, y: 18 } },
+      { bob: -1, lean: 1, ear: -1, hf: { x: cx - 1, y: footY - 2 }, fp: { x: cx + 3, y: footY }, rp: { x: cx + 4, y: 19 } },
+      { bob: 0, lean: 0, ear: 0, hf: { x: cx - 2, y: footY }, fp: { x: cx + 2, y: footY }, rp: { x: cx + 3, y: 18 } },
+      { bob: 1, lean: 0, ear: 0, hf: { x: cx - 3, y: footY }, fp: { x: cx + 3, y: footY }, rp: { x: cx + 4, y: 19 } },
     ][f % 6]
     bob = seq.bob; lean = seq.lean; earAngle = seq.ear
     hindFoot = seq.hf; frontPaw = seq.fp; raisedPaw = seq.rp
   } else {
     const atk = [
-      { bob: 0, lean: -1, ear: -2, hf: { x: cx - 3, y: footY }, fp: { x: cx + 2, y: 15 }, rp: { x: cx + 4, y: 12 } },
-      { bob: -2, lean: 2, ear: -2, hf: { x: cx - 5, y: footY - 1 }, fp: { x: cx + 6, y: 16 }, rp: { x: cx + 8, y: 13 } },
-      { bob: -1, lean: 3, ear: -1, hf: { x: cx - 4, y: footY }, fp: { x: cx + 7, y: 17 }, rp: { x: cx + 9, y: 14 } },
-      { bob: 0, lean: 1, ear: 0, hf: { x: cx - 3, y: footY }, fp: { x: cx + 4, y: footY }, rp: { x: cx + 5, y: 16 } },
+      { bob: 0, lean: -1, ear: -2, hf: { x: cx - 3, y: footY }, fp: { x: cx + 2, y: 17 }, rp: { x: cx + 4, y: 14 } },
+      { bob: -2, lean: 2, ear: -2, hf: { x: cx - 5, y: footY - 1 }, fp: { x: cx + 6, y: 18 }, rp: { x: cx + 8, y: 15 } },
+      { bob: -1, lean: 3, ear: -1, hf: { x: cx - 4, y: footY }, fp: { x: cx + 7, y: 19 }, rp: { x: cx + 9, y: 16 } },
+      { bob: 0, lean: 1, ear: 0, hf: { x: cx - 3, y: footY }, fp: { x: cx + 4, y: footY }, rp: { x: cx + 5, y: 18 } },
     ][f % 4]
     bob = atk.bob; lean = atk.lean; earAngle = atk.ear
     hindFoot = atk.hf; frontPaw = atk.fp; raisedPaw = atk.rp
   }
 
   const bx = cx + lean
-  const by = 12 + bob
+  const by = 14 + bob
 
-  // Fluffy tail
   s.rect(bx - 5, by + 3, 2, 2, belly)
-
-  // Hind leg & thigh
   s.line(bx - 2, by + 5, hindFoot.x, hindFoot.y, dark, 2)
   s.rect(hindFoot.x, hindFoot.y, 3, 1, belly)
-
-  // Body
   s.rect(bx - 3, by + 1, 7, 6, color)
   s.rect(bx - 1, by + 3, 4, 4, belly)
-
-  // Head
   s.rect(bx - 1, by - 4, 6, 5, color)
-  // Ears
   s.line(bx, by - 5, bx - 1 + earAngle, by - 10, color, 2)
   s.line(bx + 2, by - 5, bx + 2 + earAngle, by - 10, color, 2)
   s.px(bx + 2 + earAngle, by - 8, pink)
   if (dir !== 'up') {
-    s.px(bx + 3, by - 2, '#1a1423')
-    s.px(bx + 5, by - 1, pink) // nose
+    s.px(bx + 3, by - 2, action === 'attack' ? '#e63946' : '#1a1423')
+    s.px(bx + 5, by - 1, pink)
   }
-
-  // Front paws (both swing & swipe on attack!)
   s.line(bx + 2, by + 4, frontPaw.x, frontPaw.y, color, 2)
   s.px(frontPaw.x, frontPaw.y, belly)
   s.line(bx + 3, by + 3, raisedPaw.x, raisedPaw.y, color, 1)
@@ -1113,81 +1198,71 @@ function renderRabbit(color: string, dir: Dir, action: SpriteAction, f: number):
 }
 
 function renderWolf(color: string, dir: Dir, action: SpriteAction, f: number): HTMLCanvasElement {
-  const s = new PixelSurface(28, 22)
+  const s = new PixelSurface(30, 24)
   const dark = shade(color, -0.28)
   const belly = '#e2e8f0'
   const pawCol = '#f8fafc'
-  const cx = 13
-  const footY = 19
+  const cx = 14
+  const footY = 21
 
   let bob = 0
   let lean = 0
-  let tailTip: Pt = { x: 4, y: 11 }
-  // 4 legs: back-far (bl), back-near (br), front-far (fl), front-near (fr)
-  let bl: Pt = { x: 7, y: footY }
-  let br: Pt = { x: 9, y: footY }
-  let fl: Pt = { x: 16, y: footY }
-  let fr: Pt = { x: 18, y: footY }
+  let tailTip: Pt = { x: 4, y: 12 }
+  let bl: Pt = { x: 8, y: footY }
+  let br: Pt = { x: 10, y: footY }
+  let fl: Pt = { x: 17, y: footY }
+  let fr: Pt = { x: 19, y: footY }
 
   if (action === 'idle') {
     bob = f === 1 ? 1 : 0
-    tailTip = { x: 4, y: 11 + (f % 2) }
+    tailTip = { x: 4, y: 12 + (f % 2) }
   } else if (action === 'walk') {
-    // True quadruped trot/gallop cycle (6 frames)
     const seq = [
-      { bob: 0, lean: 0, ty: 10, bl: { x: 5, y: footY }, br: { x: 10, y: footY - 1 }, fl: { x: 19, y: footY }, fr: { x: 15, y: footY - 1 } },
-      { bob: -1, lean: 1, ty: 9, bl: { x: 6, y: footY - 2 }, br: { x: 8, y: footY }, fl: { x: 17, y: footY }, fr: { x: 17, y: footY - 2 } },
-      { bob: 0, lean: 1, ty: 11, bl: { x: 10, y: footY - 1 }, br: { x: 5, y: footY }, fl: { x: 15, y: footY - 1 }, fr: { x: 20, y: footY } },
-      { bob: 0, lean: 0, ty: 10, bl: { x: 10, y: footY }, br: { x: 6, y: footY }, fl: { x: 15, y: footY }, fr: { x: 19, y: footY } },
-      { bob: -1, lean: 1, ty: 9, bl: { x: 8, y: footY }, br: { x: 7, y: footY - 2 }, fl: { x: 18, y: footY - 2 }, fr: { x: 17, y: footY } },
-      { bob: 0, lean: 1, ty: 11, bl: { x: 5, y: footY }, br: { x: 10, y: footY - 1 }, fl: { x: 19, y: footY }, fr: { x: 15, y: footY - 1 } },
+      { bob: 0, lean: 0, ty: 11, bl: { x: 6, y: footY }, br: { x: 11, y: footY - 1 }, fl: { x: 20, y: footY }, fr: { x: 16, y: footY - 1 } },
+      { bob: -1, lean: 1, ty: 10, bl: { x: 7, y: footY - 2 }, br: { x: 9, y: footY }, fl: { x: 18, y: footY }, fr: { x: 18, y: footY - 2 } },
+      { bob: 0, lean: 1, ty: 12, bl: { x: 11, y: footY - 1 }, br: { x: 6, y: footY }, fl: { x: 16, y: footY - 1 }, fr: { x: 21, y: footY } },
+      { bob: 0, lean: 0, ty: 11, bl: { x: 11, y: footY }, br: { x: 7, y: footY }, fl: { x: 16, y: footY }, fr: { x: 20, y: footY } },
+      { bob: -1, lean: 1, ty: 10, bl: { x: 9, y: footY }, br: { x: 8, y: footY - 2 }, fl: { x: 19, y: footY - 2 }, fr: { x: 18, y: footY } },
+      { bob: 0, lean: 1, ty: 12, bl: { x: 6, y: footY }, br: { x: 11, y: footY - 1 }, fl: { x: 20, y: footY }, fr: { x: 16, y: footY - 1 } },
     ][f % 6]
-    bob = seq.bob; lean = seq.lean; tailTip = { x: 3, y: seq.ty }
+    bob = seq.bob; lean = seq.lean; tailTip = { x: 4, y: seq.ty }
     bl = seq.bl; br = seq.br; fl = seq.fl; fr = seq.fr
   } else {
-    // Attack: crouch -> pounce forward with extended clawed forepaws & open jaw!
     const atk = [
-      { bob: 1, lean: -1, ty: 13, bl: { x: 5, y: footY }, br: { x: 7, y: footY }, fl: { x: 14, y: footY }, fr: { x: 16, y: footY - 2 } },
-      { bob: -2, lean: 2, ty: 9, bl: { x: 4, y: footY - 1 }, br: { x: 6, y: footY - 1 }, fl: { x: 21, y: 14 }, fr: { x: 22, y: 16 } },
-      { bob: -1, lean: 3, ty: 10, bl: { x: 6, y: footY }, br: { x: 8, y: footY }, fl: { x: 22, y: 15 }, fr: { x: 23, y: 17 } },
-      { bob: 0, lean: 1, ty: 11, bl: { x: 6, y: footY }, br: { x: 8, y: footY }, fl: { x: 17, y: footY }, fr: { x: 19, y: footY } },
+      { bob: 1, lean: -1, ty: 14, bl: { x: 6, y: footY }, br: { x: 8, y: footY }, fl: { x: 15, y: footY }, fr: { x: 17, y: footY - 2 } },
+      { bob: -2, lean: 2, ty: 10, bl: { x: 5, y: footY - 1 }, br: { x: 7, y: footY - 1 }, fl: { x: 22, y: 16 }, fr: { x: 23, y: 18 } },
+      { bob: -1, lean: 3, ty: 11, bl: { x: 7, y: footY }, br: { x: 9, y: footY }, fl: { x: 23, y: 17 }, fr: { x: 24, y: 19 } },
+      { bob: 0, lean: 1, ty: 12, bl: { x: 7, y: footY }, br: { x: 9, y: footY }, fl: { x: 18, y: footY }, fr: { x: 20, y: footY } },
     ][f % 4]
-    bob = atk.bob; lean = atk.lean; tailTip = { x: 3, y: atk.ty }
+    bob = atk.bob; lean = atk.lean; tailTip = { x: 4, y: atk.ty }
     bl = atk.bl; br = atk.br; fl = atk.fl; fr = atk.fr
   }
 
   const bx = cx + lean
-  const by = 11 + bob
+  const by = 13 + bob
 
-  // Bushy tail
   s.line(bx - 5, by + 2, tailTip.x, tailTip.y, dark, 2)
   s.px(tailTip.x, tailTip.y, belly)
-
-  // Far-side legs (darker)
   s.line(bx - 4, by + 4, bl.x, bl.y, dark, 2)
   s.px(bl.x, bl.y, dark)
   s.line(bx + 3, by + 4, fl.x, fl.y, dark, 2)
   s.px(fl.x, fl.y, pawCol)
 
-  // Body & chest ruff
   s.rect(bx - 5, by + 1, 10, 4, color)
   s.rect(bx + 2, by + 2, 4, 3, belly)
 
-  // Head & snout
   s.rect(bx + 3, by - 3, 5, 5, color)
-  s.rect(bx + 7, by - 1, 3, 2, color) // snout
-  s.px(bx + 9, by - 1, '#1a1423') // nose
-  s.px(bx + 4, by - 5, dark) // ear
-  s.px(bx + 6, by - 5, color) // ear
-  s.px(bx + 6, by - 2, '#ffd60a') // eye
+  s.rect(bx + 7, by - 1, 4, 2, color)
+  s.px(bx + 10, by - 1, '#1a1423')
+  s.px(bx + 4, by - 5, dark)
+  s.px(bx + 6, by - 5, color)
+  s.px(bx + 6, by - 2, '#ffd60a')
   if (action === 'attack' && (f === 1 || f === 2)) {
-    // Open fanged jaw!
-    s.rect(bx + 7, by + 1, 3, 1, '#9d0208')
-    s.px(bx + 9, by, '#ffffff')
-    s.px(bx + 8, by + 2, '#ffffff')
+    s.rect(bx + 7, by + 1, 4, 1, '#9d0208')
+    s.px(bx + 10, by, '#ffffff')
+    s.px(bx + 9, by + 2, '#ffffff')
   }
 
-  // Near-side legs
   s.line(bx - 3, by + 4, br.x, br.y, color, 2)
   s.px(br.x, br.y, pawCol)
   s.line(bx + 4, by + 4, fr.x, fr.y, color, 2)
@@ -1197,43 +1272,41 @@ function renderWolf(color: string, dir: Dir, action: SpriteAction, f: number): H
 }
 
 function renderBat(color: string, dir: Dir, action: SpriteAction, f: number): HTMLCanvasElement {
-  const s = new PixelSurface(26, 22)
+  const s = new PixelSurface(28, 24)
   const dark = shade(color, -0.3)
   const wingMem = shade(color, -0.15)
-  const cx = 13
-  const cy = 11
+  const cx = 14
+  const cy = 12
 
   let bob = 0
   let wingY = 0
-  let wingSpan = 9
+  let wingSpan = 10
   let bite = false
 
   if (action === 'idle') {
-    const seq = [-2, 0, 2, 0]
-    wingY = seq[f % 4]
+    wingY = [-2, 0, 2, 0][f % 4]
     bob = f === 2 ? 1 : 0
   } else if (action === 'walk') {
     const seq = [
-      { bob: -1, wy: -5, span: 8 },
-      { bob: 0, wy: -2, span: 10 },
-      { bob: 1, wy: 2, span: 10 },
-      { bob: 1, wy: 5, span: 8 },
-      { bob: 0, wy: 2, span: 9 },
-      { bob: -1, wy: -2, span: 9 },
+      { bob: -1, wy: -5, span: 9 },
+      { bob: 0, wy: -2, span: 11 },
+      { bob: 1, wy: 2, span: 11 },
+      { bob: 1, wy: 5, span: 9 },
+      { bob: 0, wy: 2, span: 10 },
+      { bob: -1, wy: -2, span: 10 },
     ][f % 6]
     bob = seq.bob; wingY = seq.wy; wingSpan = seq.span
   } else {
     const atk = [
-      { bob: -2, wy: -6, span: 9, bite: true },
-      { bob: 1, wy: 3, span: 11, bite: true },
-      { bob: 2, wy: 5, span: 10, bite: true },
-      { bob: 0, wy: -1, span: 9, bite: false },
+      { bob: -2, wy: -6, span: 10, bite: true },
+      { bob: 1, wy: 3, span: 12, bite: true },
+      { bob: 2, wy: 5, span: 11, bite: true },
+      { bob: 0, wy: -1, span: 10, bite: false },
     ][f % 4]
     bob = atk.bob; wingY = atk.wy; wingSpan = atk.span; bite = atk.bite
   }
 
   const by = cy + bob
-  // Left & Right articulated wings
   s.line(cx - 2, by, cx - Math.round(wingSpan * 0.6), by + Math.round(wingY * 0.6) - 1, dark, 2)
   s.line(cx - Math.round(wingSpan * 0.6), by + Math.round(wingY * 0.6) - 1, cx - wingSpan, by + wingY, dark, 1)
   s.line(cx - 2, by + 2, cx - Math.round(wingSpan * 0.75), by + wingY + 2, wingMem, 1)
@@ -1242,16 +1315,13 @@ function renderBat(color: string, dir: Dir, action: SpriteAction, f: number): HT
   s.line(cx + Math.round(wingSpan * 0.6), by + Math.round(wingY * 0.6) - 1, cx + wingSpan, by + wingY, dark, 1)
   s.line(cx + 2, by + 2, cx + Math.round(wingSpan * 0.75), by + wingY + 2, wingMem, 1)
 
-  // Wing claws
   s.px(cx - Math.round(wingSpan * 0.6), by + Math.round(wingY * 0.6) - 2, '#f8fafc')
   s.px(cx + Math.round(wingSpan * 0.6), by + Math.round(wingY * 0.6) - 2, '#f8fafc')
 
-  // Body & ears
   s.rect(cx - 2, by - 2, 5, 6, color)
   s.px(cx - 2, by - 4, dark); s.px(cx - 2, by - 3, color)
   s.px(cx + 2, by - 4, dark); s.px(cx + 2, by - 3, color)
 
-  // Little kicking bat feet
   const kick = action === 'walk' && f % 2 === 0 ? 1 : 0
   s.px(cx - 1, by + 4 + kick, '#f8fafc')
   s.px(cx + 1, by + 4 + (1 - kick), '#f8fafc')
@@ -1268,57 +1338,53 @@ function renderBat(color: string, dir: Dir, action: SpriteAction, f: number): HT
 }
 
 function renderGhost(color: string, dir: Dir, action: SpriteAction, f: number): HTMLCanvasElement {
-  const s = new PixelSurface(24, 24)
+  const s = new PixelSurface(26, 26)
   const dark = shade(color, -0.25)
   const glow = shade(color, 0.35)
-  const cx = 12
+  const cx = 13
   let bob = 0
-  let lArm: Pt = { x: cx - 6, y: 13 }
-  let rArm: Pt = { x: cx + 6, y: 13 }
+  let lArm: Pt = { x: cx - 6, y: 14 }
+  let rArm: Pt = { x: cx + 6, y: 14 }
   let tailShift = 0
 
   if (action === 'idle') {
     bob = f === 1 ? -1 : f === 3 ? 1 : 0
     tailShift = f % 2 === 0 ? 1 : -1
-    lArm = { x: cx - 6, y: 13 + bob }
-    rArm = { x: cx + 6, y: 13 + bob }
+    lArm = { x: cx - 6, y: 14 + bob }
+    rArm = { x: cx + 6, y: 14 + bob }
   } else if (action === 'walk') {
     const seq = [
-      { bob: -1, ts: -1, lx: -6, ly: 11, rx: 6, ry: 15 },
-      { bob: -2, ts: 0, lx: -7, ly: 13, rx: 7, ry: 13 },
-      { bob: -1, ts: 1, lx: -6, ly: 15, rx: 6, ry: 11 },
-      { bob: 0, ts: 1, lx: -6, ly: 14, rx: 7, ry: 12 },
-      { bob: -1, ts: 0, lx: -7, ly: 12, rx: 6, ry: 14 },
-      { bob: 0, ts: -1, lx: -6, ly: 11, rx: 6, ry: 15 },
+      { bob: -1, ts: -1, lx: -6, ly: 12, rx: 6, ry: 16 },
+      { bob: -2, ts: 0, lx: -7, ly: 14, rx: 7, ry: 14 },
+      { bob: -1, ts: 1, lx: -6, ly: 16, rx: 6, ry: 12 },
+      { bob: 0, ts: 1, lx: -6, ly: 15, rx: 7, ry: 13 },
+      { bob: -1, ts: 0, lx: -7, ly: 13, rx: 6, ry: 15 },
+      { bob: 0, ts: -1, lx: -6, ly: 12, rx: 6, ry: 16 },
     ][f % 6]
     bob = seq.bob; tailShift = seq.ts
     lArm = { x: cx + seq.lx, y: seq.ly }
     rArm = { x: cx + seq.rx, y: seq.ry }
   } else {
-    // Spectral arms pull back then reach way forward with glowing claws!
     const atk = [
-      { bob: 1, ts: -1, lx: -7, ly: 10, rx: 3, ry: 10 },
-      { bob: -1, ts: 1, lx: 2, ly: 12, rx: 9, ry: 11 },
-      { bob: 0, ts: 2, lx: 5, ly: 12, rx: 10, ry: 13 },
-      { bob: 0, ts: 0, lx: -5, ly: 13, rx: 6, ry: 13 },
+      { bob: 1, ts: -1, lx: -7, ly: 11, rx: 3, ry: 11 },
+      { bob: -1, ts: 1, lx: 2, ly: 13, rx: 9, ry: 12 },
+      { bob: 0, ts: 2, lx: 5, ly: 13, rx: 10, ry: 14 },
+      { bob: 0, ts: 0, lx: -5, ly: 14, rx: 6, ry: 14 },
     ][f % 4]
     bob = atk.bob; tailShift = atk.ts
     lArm = { x: cx + atk.lx, y: atk.ly }
     rArm = { x: cx + atk.rx, y: atk.ry }
   }
 
-  const by = 5 + bob
-  // Head & shroud
+  const by = 6 + bob
   s.rect(cx - 3, by, 6, 2, glow)
   s.rect(cx - 4, by + 2, 8, 8, color)
   s.rect(cx - 3, by + 10, 6, 3, dark)
 
-  // Waving wispy tendrils at bottom
   s.line(cx - 3, by + 12, cx - 4 + tailShift, by + 16, dark, 1)
   s.line(cx, by + 12, cx + tailShift, by + 17, color, 1)
   s.line(cx + 3, by + 12, cx + 4 - tailShift, by + 16, dark, 1)
 
-  // Articulated ghostly arms & claws
   s.line(cx - 3, by + 6, lArm.x, lArm.y, dark, 2)
   s.px(lArm.x, lArm.y, glow)
   s.line(cx + 3, by + 6, rArm.x, rArm.y, glow, 2)
@@ -1339,106 +1405,433 @@ function renderGolem(
   dir: Dir,
   action: SpriteAction,
   f: number,
-  isEarthBoss = false,
+  variant: 'fire_golem' | 'earth_golem',
 ): HTMLCanvasElement {
-  const W = isEarthBoss ? 30 : 26
-  const H = isEarthBoss ? 28 : 26
+  const isEarthBoss = variant === 'earth_golem'
+  const W = isEarthBoss ? 34 : 32
+  const H = isEarthBoss ? 32 : 30
   const s = new PixelSurface(W, H)
-  const dark = shade(color, -0.32)
-  const hi = shade(color, 0.25)
-  const rune = isEarthBoss ? '#a3e635' : '#ffb703'
-  const core = isEarthBoss ? '#ffd60a' : '#fff3b0'
+  const baseBody = isEarthBoss ? color : '#342e37'
+  const dark = shade(baseBody, -0.35)
+  const hi = shade(baseBody, 0.25)
+  const rune = isEarthBoss ? '#a3e635' : '#ff6b35'
+  const core = isEarthBoss ? '#ffd60a' : '#ffb703'
   const cx = Math.floor(W / 2)
   const footY = H - 3
 
   let bob = 0
   let lFoot: Pt = { x: cx - 3, y: footY }
   let rFoot: Pt = { x: cx + 3, y: footY }
-  let lHand: Pt = { x: cx - 8, y: footY - 6 }
-  let rHand: Pt = { x: cx + 8, y: footY - 6 }
+  let lHand: Pt = { x: cx - 9, y: footY - 6 }
+  let rHand: Pt = { x: cx + 9, y: footY - 6 }
 
   if (action === 'idle') {
     bob = f === 1 ? 1 : 0
-    lHand = { x: cx - 8, y: footY - 6 + bob }
-    rHand = { x: cx + 8, y: footY - 6 + bob }
+    lHand = { x: cx - 9, y: footY - 6 + bob }
+    rHand = { x: cx + 9, y: footY - 6 + bob }
   } else if (action === 'walk') {
-    // Heavy stomping walk: legs lift & slam, giant fists swing opposite!
     const seq = [
-      { bob: 0, lf: { x: cx - 4, y: footY }, rf: { x: cx + 3, y: footY - 1 }, lh: { x: cx - 8, y: footY - 8 }, rh: { x: cx + 8, y: footY - 4 } },
-      { bob: -1, lf: { x: cx - 3, y: footY }, rf: { x: cx + 4, y: footY - 3 }, lh: { x: cx - 8, y: footY - 6 }, rh: { x: cx + 8, y: footY - 6 } },
-      { bob: 0, lf: { x: cx - 3, y: footY - 1 }, rf: { x: cx + 4, y: footY }, lh: { x: cx - 8, y: footY - 4 }, rh: { x: cx + 8, y: footY - 8 } },
-      { bob: 0, lf: { x: cx - 3, y: footY - 1 }, rf: { x: cx + 3, y: footY }, lh: { x: cx - 8, y: footY - 4 }, rh: { x: cx + 8, y: footY - 8 } },
-      { bob: -1, lf: { x: cx - 4, y: footY - 3 }, rf: { x: cx + 3, y: footY }, lh: { x: cx - 8, y: footY - 6 }, rh: { x: cx + 8, y: footY - 6 } },
-      { bob: 0, lf: { x: cx - 4, y: footY }, rf: { x: cx + 3, y: footY - 1 }, lh: { x: cx - 8, y: footY - 8 }, rh: { x: cx + 8, y: footY - 4 } },
+      { bob: 0, lf: { x: cx - 4, y: footY }, rf: { x: cx + 3, y: footY - 1 }, lh: { x: cx - 9, y: footY - 8 }, rh: { x: cx + 9, y: footY - 4 } },
+      { bob: -1, lf: { x: cx - 3, y: footY }, rf: { x: cx + 4, y: footY - 3 }, lh: { x: cx - 9, y: footY - 6 }, rh: { x: cx + 9, y: footY - 6 } },
+      { bob: 0, lf: { x: cx - 3, y: footY - 1 }, rf: { x: cx + 4, y: footY }, lh: { x: cx - 9, y: footY - 4 }, rh: { x: cx + 9, y: footY - 8 } },
+      { bob: 0, lf: { x: cx - 3, y: footY - 1 }, rf: { x: cx + 3, y: footY }, lh: { x: cx - 9, y: footY - 4 }, rh: { x: cx + 9, y: footY - 8 } },
+      { bob: -1, lf: { x: cx - 4, y: footY - 3 }, rf: { x: cx + 3, y: footY }, lh: { x: cx - 9, y: footY - 6 }, rh: { x: cx + 9, y: footY - 6 } },
+      { bob: 0, lf: { x: cx - 4, y: footY }, rf: { x: cx + 3, y: footY - 1 }, lh: { x: cx - 9, y: footY - 8 }, rh: { x: cx + 9, y: footY - 4 } },
     ][f % 6]
     bob = seq.bob; lFoot = seq.lf; rFoot = seq.rf; lHand = seq.lh; rHand = seq.rh
   } else {
-    // Overhead boulder slam!
     const atk = [
-      { bob: -1, lf: { x: cx - 4, y: footY }, rf: { x: cx + 4, y: footY }, lh: { x: cx - 6, y: 4 }, rh: { x: cx + 6, y: 4 } },
-      { bob: 0, lf: { x: cx - 4, y: footY }, rf: { x: cx + 5, y: footY }, lh: { x: cx - 4, y: 8 }, rh: { x: cx + 9, y: 9 } },
-      { bob: 1, lf: { x: cx - 4, y: footY }, rf: { x: cx + 5, y: footY }, lh: { x: cx + 2, y: footY - 2 }, rh: { x: cx + 10, y: footY - 1 } },
-      { bob: 0, lf: { x: cx - 3, y: footY }, rf: { x: cx + 4, y: footY }, lh: { x: cx - 7, y: footY - 6 }, rh: { x: cx + 8, y: footY - 5 } },
+      { bob: -1, lf: { x: cx - 4, y: footY }, rf: { x: cx + 4, y: footY }, lh: { x: cx - 7, y: 5 }, rh: { x: cx + 7, y: 5 } },
+      { bob: 0, lf: { x: cx - 4, y: footY }, rf: { x: cx + 5, y: footY }, lh: { x: cx - 5, y: 10 }, rh: { x: cx + 10, y: 11 } },
+      { bob: 1, lf: { x: cx - 4, y: footY }, rf: { x: cx + 5, y: footY }, lh: { x: cx + 2, y: footY - 2 }, rh: { x: cx + 11, y: footY - 1 } },
+      { bob: 0, lf: { x: cx - 3, y: footY }, rf: { x: cx + 4, y: footY }, lh: { x: cx - 8, y: footY - 6 }, rh: { x: cx + 9, y: footY - 5 } },
     ][f % 4]
     bob = atk.bob; lFoot = atk.lf; rFoot = atk.rf; lHand = atk.lh; rHand = atk.rh
   }
 
-  const by = (isEarthBoss ? 7 : 6) + bob
+  const by = (isEarthBoss ? 9 : 8) + bob
 
-  // Thick stone legs
-  s.line(cx - 3, by + 9, lFoot.x, lFoot.y, dark, 2)
+  s.line(cx - 3, by + 10, lFoot.x, lFoot.y, dark, 3)
   s.rect(lFoot.x - 1, lFoot.y - 1, 3, 2, dark)
-  s.line(cx + 3, by + 9, rFoot.x, rFoot.y, color, 2)
-  s.rect(rFoot.x - 1, rFoot.y - 1, 3, 2, color)
+  s.line(cx + 3, by + 10, rFoot.x, rFoot.y, baseBody, 3)
+  s.rect(rFoot.x - 1, rFoot.y - 1, 3, 2, baseBody)
 
-  // Massive boulder torso & shoulders
-  s.rect(cx - 6, by + 2, 12, 8, color)
-  s.rect(cx - 7, by + 2, 14, 4, hi)
-  s.rect(cx - 2, by + 5, 4, 3, rune)
+  s.rect(cx - 7, by + 2, 14, 9, baseBody)
+  s.rect(cx - 8, by + 2, 16, 4, hi)
+  s.rect(cx - 2, by + 5, 4, 4, rune)
   s.px(cx, by + 6, core)
   if (isEarthBoss) {
-    // Moss & stone crown
-    s.rect(cx - 5, by + 1, 10, 2, '#4f772d')
-    s.px(cx - 4, by, '#90a955')
-    s.px(cx + 3, by, '#90a955')
+    s.rect(cx - 6, by + 1, 12, 2, '#4f772d')
+    s.line(cx - 6, by + 1, cx - 8, by - 2, '#a3e635', 2)
+    s.line(cx + 6, by + 1, cx + 8, by - 2, '#a3e635', 2)
+  } else {
+    // Volcanic vents & magma fissures
+    s.line(cx - 5, by + 3, cx - 7, by, '#ff6b35', 2)
+    s.line(cx + 5, by + 3, cx + 7, by, '#ff6b35', 2)
+    s.px(cx - 7, by - 1, '#ffd60a')
+    s.px(cx + 7, by - 1, '#ffd60a')
+    s.px(cx - 4, by + 6, '#e85d04')
+    s.px(cx + 4, by + 7, '#e85d04')
   }
 
-  // Head
-  s.rect(cx - 4, by - 2, 8, 5, color)
-  s.rect(cx - 3, by - 3, 6, 1, dark)
+  s.rect(cx - 4, by - 3, 8, 5, baseBody)
+  s.rect(cx - 3, by - 4, 6, 1, dark)
   if (dir !== 'up') {
     const faceOff = dir === 'right' ? 1 : 0
-    s.rect(cx - 2 + faceOff, by, 2, 2, rune)
-    s.rect(cx + 1 + faceOff, by, 2, 2, rune)
+    s.rect(cx - 2 + faceOff, by - 1, 2, 2, core)
+    s.rect(cx + 1 + faceOff, by - 1, 2, 2, core)
   }
 
-  // Giant rocky arms & boulder fists
-  s.line(cx - 6, by + 3, lHand.x, lHand.y, dark, 2)
-  s.rect(lHand.x - 1, lHand.y - 1, 4, 4, dark)
+  s.line(cx - 7, by + 3, lHand.x, lHand.y, dark, 2)
+  s.rect(lHand.x - 2, lHand.y - 1, 4, 4, dark)
   s.px(lHand.x, lHand.y, rune)
 
-  s.line(cx + 6, by + 3, rHand.x, rHand.y, hi, 2)
-  s.rect(rHand.x - 2, rHand.y - 1, 4, 4, color)
+  s.line(cx + 7, by + 3, rHand.x, rHand.y, hi, 2)
+  s.rect(rHand.x - 2, rHand.y - 1, 4, 4, baseBody)
   s.px(rHand.x, rHand.y, core)
 
   return s.toCanvas(true, dir === 'left')
 }
 
+function renderGoblinChief(color: string, dir: Dir, action: SpriteAction, f: number): HTMLCanvasElement {
+  const s = new PixelSurface(34, 32)
+  const skin = color
+  const skinDark = shade(color, -0.3)
+  const armor = '#582f0e'
+  const armorHi = '#7f4f24'
+  const gold = '#ffd60a'
+  const cx = 17
+  const footY = 29
+
+  let bob = 0
+  let lean = 0
+  let lFoot: Pt = { x: cx - 4, y: footY }
+  let rFoot: Pt = { x: cx + 4, y: footY }
+  let clubAngle = -0.7
+  let rHand: Pt = { x: cx + 7, y: 20 }
+
+  if (action === 'idle') {
+    bob = f === 1 ? 1 : 0
+    rHand = { x: cx + 7, y: 20 + bob }
+  } else if (action === 'walk') {
+    const step = f % 2 === 0 ? 1 : -1
+    bob = f % 3 === 1 ? -1 : 0
+    lFoot = { x: cx - 4 + step, y: footY - (step > 0 ? 2 : 0) }
+    rFoot = { x: cx + 4 - step, y: footY - (step < 0 ? 2 : 0) }
+    rHand = { x: cx + 7, y: 19 + step }
+    clubAngle = -0.6 + step * 0.25
+  } else {
+    const atk = [
+      { bob: -1, lean: -1, rHand: { x: cx + 5, y: 12 }, ca: -2.2 },
+      { bob: 0, lean: 1, rHand: { x: cx + 9, y: 15 }, ca: -0.4 },
+      { bob: 1, lean: 2, rHand: { x: cx + 10, y: 20 }, ca: 0.35 },
+      { bob: 0, lean: 1, rHand: { x: cx + 7, y: 20 }, ca: -0.3 },
+    ][f % 4]
+    bob = atk.bob; lean = atk.lean; rHand = atk.rHand; clubAngle = atk.ca
+  }
+
+  const bx = cx + lean
+  const by = 13 + bob
+
+  // War cape
+  s.rect(bx - 6, by + 2, 12, 10, '#7f1d1d')
+
+  // Thick legs
+  s.line(bx - 3, by + 9, lFoot.x, lFoot.y, skinDark, 3)
+  s.line(bx + 3, by + 9, rFoot.x, rFoot.y, skin, 3)
+  s.rect(lFoot.x - 1, lFoot.y, 3, 1, '#3b281c')
+  s.rect(rFoot.x - 1, rFoot.y, 3, 1, '#3b281c')
+
+  // Broad armored chest
+  s.rect(bx - 5, by + 1, 11, 9, armor)
+  s.rect(bx - 6, by + 1, 13, 3, armorHi)
+  s.rect(bx - 5, by + 6, 11, 2, gold)
+
+  // Head + pointed ears + skull crown + tusks
+  s.rect(bx - 4, by - 5, 9, 6, skin)
+  s.line(bx - 4, by - 3, bx - 8, by - 5, skin, 2)
+  s.line(bx + 4, by - 3, bx + 8, by - 5, skin, 2)
+  // Horned skull crown
+  s.rect(bx - 4, by - 7, 9, 2, '#f1e9d2')
+  s.line(bx - 4, by - 7, bx - 6, by - 10, '#e9e3d5', 2)
+  s.line(bx + 4, by - 7, bx + 6, by - 10, '#e9e3d5', 2)
+  s.px(bx, by - 8, gold)
+
+  if (dir !== 'up') {
+    s.px(bx - 2, by - 3, '#ffd60a')
+    s.px(bx + 2, by - 3, '#ffd60a')
+    s.px(bx - 2, by - 1, '#ffffff') // tusks
+    s.px(bx + 2, by - 1, '#ffffff')
+  }
+
+  // Arms & spiked war club
+  s.line(bx - 5, by + 3, bx - 7, by + 8, skinDark, 2)
+  s.line(bx + 5, by + 3, rHand.x, rHand.y, skin, 2)
+  const cos = Math.cos(clubAngle)
+  const sin = Math.sin(clubAngle)
+  s.line(rHand.x, rHand.y, rHand.x + cos * 9, rHand.y + sin * 9, '#7f5539', 2)
+  s.rect(rHand.x + cos * 7 - 1, rHand.y + sin * 7 - 1, 3, 3, '#94a3b8')
+  s.px(rHand.x + cos * 10, rHand.y + sin * 10, '#ffffff')
+
+  return s.toCanvas(true, dir === 'left')
+}
+
+function renderAbyssKnight(color: string, dir: Dir, action: SpriteAction, f: number): HTMLCanvasElement {
+  const s = new PixelSurface(32, 30)
+  const plate = '#231942'
+  const plateHi = color
+  const trim = '#c77dff'
+  const capeCol = '#3c096c'
+  const cx = 16
+  const footY = 27
+
+  let bob = 0
+  let lean = 0
+  let lFoot: Pt = { x: cx - 3, y: footY }
+  let rFoot: Pt = { x: cx + 3, y: footY }
+  let rHand: Pt = { x: cx + 5, y: 18 }
+  let swordAngle = -0.8
+
+  if (action === 'idle') {
+    bob = f === 1 ? 1 : 0
+    rHand = { x: cx + 5, y: 18 + bob }
+  } else if (action === 'walk') {
+    const step = f % 2 === 0 ? 1 : -1
+    bob = f % 3 === 1 ? -1 : 0
+    lFoot = { x: cx - 3 + step, y: footY - (step > 0 ? 2 : 0) }
+    rFoot = { x: cx + 3 - step, y: footY - (step < 0 ? 2 : 0) }
+    rHand = { x: cx + 5, y: 17 + step }
+    swordAngle = -0.6 + step * 0.25
+  } else {
+    const atk = [
+      { bob: -1, lean: -1, rHand: { x: cx + 4, y: 11 }, sa: -2.2 },
+      { bob: 0, lean: 1, rHand: { x: cx + 7, y: 14 }, sa: -0.4 },
+      { bob: 1, lean: 2, rHand: { x: cx + 8, y: 18 }, sa: 0.3 },
+      { bob: 0, lean: 1, rHand: { x: cx + 5, y: 18 }, sa: -0.3 },
+    ][f % 4]
+    bob = atk.bob; lean = atk.lean; rHand = atk.rHand; swordAngle = atk.sa
+  }
+
+  const bx = cx + lean
+  const by = 12 + bob
+
+  // Tattered abyssal cape
+  const capeSway = action === 'walk' && f % 2 === 1 ? 1 : 0
+  s.rect(bx - 5, by + 2, 10, 9 + capeSway, capeCol)
+
+  // Armored greaves
+  s.line(bx - 2, by + 8, lFoot.x, lFoot.y, plate, 2)
+  s.line(bx + 2, by + 8, rFoot.x, rFoot.y, plateHi, 2)
+  s.rect(lFoot.x - 1, lFoot.y, 2, 1, trim)
+  s.rect(rFoot.x - 1, rFoot.y, 2, 1, trim)
+
+  // Spiked obsidian chest & pauldrons
+  s.rect(bx - 4, by + 1, 9, 8, plate)
+  s.rect(bx - 2, by + 2, 5, 3, plateHi)
+  s.rect(bx - 4, by + 5, 9, 1, trim)
+  s.rect(bx - 6, by, 3, 3, plateHi)
+  s.rect(bx + 4, by, 3, 3, plateHi)
+  s.px(bx - 6, by - 1, trim)
+  s.px(bx + 6, by - 1, trim)
+
+  // Horned dark greathelm
+  s.rect(bx - 4, by - 6, 8, 6, plate)
+  s.rect(bx - 3, by - 7, 6, 1, plateHi)
+  s.line(bx - 4, by - 5, bx - 6, by - 9, trim, 1)
+  s.line(bx + 3, by - 5, bx + 5, by - 9, trim, 1)
+  if (dir !== 'up') {
+    s.rect(bx - 2, by - 3, 5, 1, '#e0aaff')
+  }
+
+  // Arms & Void Greatsword
+  s.line(bx - 5, by + 2, bx - 6, by + 7, plate, 2)
+  s.line(bx + 5, by + 2, rHand.x, rHand.y, plateHi, 2)
+  drawWeaponInHand(s, rHand, 'sword', '#9d4edd', swordAngle, action, f, undefined, 'knight')
+
+  return s.toCanvas(true, dir === 'left')
+}
+
+function renderDemon(color: string, dir: Dir, action: SpriteAction, f: number, isLord = false): HTMLCanvasElement {
+  const W = isLord ? 34 : 28
+  const H = isLord ? 32 : 28
+  const s = new PixelSurface(W, H)
+  const dark = shade(color, -0.35)
+  const hi = shade(color, 0.25)
+  const trim = isLord ? '#ffd60a' : '#ff9f1c'
+  const cx = Math.floor(W / 2)
+  const footY = H - 3
+
+  let bob = 0
+  let wingFlap = 0
+  let rHand: Pt = { x: cx + 6, y: isLord ? 19 : 17 }
+  let weaponAngle = -0.6
+
+  if (action === 'idle') {
+    bob = f === 1 ? 1 : 0
+    wingFlap = f === 1 ? -1 : f === 3 ? 1 : 0
+    rHand = { x: cx + 6, y: (isLord ? 19 : 17) + bob }
+  } else if (action === 'walk') {
+    bob = f % 3 === 1 ? -1 : 0
+    wingFlap = [-2, -1, 1, 2, 1, -1][f % 6]
+    rHand = { x: cx + 6, y: (isLord ? 18 : 16) + (f % 2) }
+    weaponAngle = f % 2 === 0 ? -0.4 : -0.9
+  } else {
+    const atk = [
+      { bob: -1, wf: -3, rh: { x: cx + 4, y: 11 }, wa: -2.0 },
+      { bob: 0, wf: 1, rh: { x: cx + 8, y: 14 }, wa: -0.4 },
+      { bob: 1, wf: 2, rh: { x: cx + 9, y: 18 }, wa: 0.25 },
+      { bob: 0, wf: 0, rh: { x: cx + 6, y: 18 }, wa: -0.5 },
+    ][f % 4]
+    bob = atk.bob; wingFlap = atk.wf; rHand = atk.rh; weaponAngle = atk.wa
+  }
+
+  const by = (isLord ? 12 : 11) + bob
+
+  // Bat demon wings
+  const span = isLord ? 12 : 9
+  s.line(cx - 3, by + 2, cx - Math.round(span * 0.65), by - 3 + wingFlap, dark, 2)
+  s.line(cx - Math.round(span * 0.65), by - 3 + wingFlap, cx - span, by + 3 + wingFlap, color, 2)
+  s.line(cx + 3, by + 2, cx + Math.round(span * 0.65), by - 3 + wingFlap, dark, 2)
+  s.line(cx + Math.round(span * 0.65), by - 3 + wingFlap, cx + span, by + 3 + wingFlap, color, 2)
+
+  // Whip tail
+  s.line(cx - 2, by + 8, cx - 7, by + 11 + (f % 2), dark, 1)
+  s.px(cx - 8, by + 10 + (f % 2), trim)
+
+  // Legs
+  const step = action === 'walk' ? (f % 2 === 0 ? 1 : -1) : 0
+  s.line(cx - 2, by + 8, cx - 3 + step, footY, dark, 2)
+  s.line(cx + 2, by + 8, cx + 3 - step, footY, color, 2)
+
+  // Torso
+  s.rect(cx - (isLord ? 5 : 4), by + 1, isLord ? 10 : 8, 7, color)
+  s.rect(cx - (isLord ? 4 : 3), by + 2, isLord ? 8 : 6, 2, hi)
+  s.rect(cx - (isLord ? 5 : 4), by + 6, isLord ? 10 : 8, 1, trim)
+
+  // Horned demon skull + crown for Demon Lord
+  s.rect(cx - 3, by - 5, 7, 6, hi)
+  s.line(cx - 3, by - 5, cx - 6, by - 9, '#f1e9d2', 2)
+  s.line(cx + 3, by - 5, cx + 6, by - 9, '#f1e9d2', 2)
+  if (isLord) {
+    s.rect(cx - 3, by - 7, 7, 2, trim)
+    s.px(cx, by - 8, '#ff4d6d')
+  }
+  if (dir !== 'up') {
+    s.px(cx - 2, by - 3, '#ffd60a')
+    s.px(cx + 2, by - 3, '#ffd60a')
+  }
+
+  // Arms & weapon
+  s.line(cx - 4, by + 2, cx - 6, by + 7, dark, 2)
+  s.line(cx + 4, by + 2, rHand.x, rHand.y, color, 2)
+  drawWeaponInHand(s, rHand, isLord ? 'sword' : 'staff', isLord ? '#ff6b35' : '#ff9f1c', weaponAngle, action, f, undefined, isLord ? 'knight' : 'mage')
+
+  return s.toCanvas(true, dir === 'left')
+}
+
+function renderAbyssDragon(color: string, dir: Dir, action: SpriteAction, f: number): HTMLCanvasElement {
+  const s = new PixelSurface(42, 34)
+  const scaleMain = color
+  const dark = shade(color, -0.35)
+  const hi = shade(color, 0.3)
+  const belly = '#7209b7'
+  const crest = '#c77dff'
+  const glow = '#f72585'
+  const cx = 20
+  const baseY = 27
+
+  let bob = 0
+  let wingY = 0
+  let jawOpen = false
+  let tailCurl = 0
+
+  if (action === 'idle') {
+    bob = f === 1 ? -1 : f === 3 ? 1 : 0
+    wingY = [-2, 0, 2, 0][f % 4]
+    tailCurl = f % 2 === 0 ? 0 : -1
+  } else if (action === 'walk') {
+    bob = [-1, -2, -1, 0, -1, 0][f % 6]
+    wingY = [-6, -2, 3, 6, 2, -3][f % 6]
+    tailCurl = f % 2 === 0 ? -1 : 1
+  } else {
+    const atk = [
+      { bob: -2, wy: -6, jaw: false, tc: -2 },
+      { bob: 0, wy: 2, jaw: true, tc: 1 },
+      { bob: 1, wy: 5, jaw: true, tc: 2 },
+      { bob: 0, wy: -1, jaw: false, tc: 0 },
+    ][f % 4]
+    bob = atk.bob; wingY = atk.wy; jawOpen = atk.jaw; tailCurl = atk.tc
+  }
+
+  const by = 17 + bob
+
+  // Huge sweeping barbed tail (left)
+  s.line(cx - 5, by + 4, cx - 12, by + 5 + tailCurl, dark, 2)
+  s.line(cx - 12, by + 5 + tailCurl, cx - 17, by + 1 + tailCurl, scaleMain, 2)
+  s.px(cx - 18, by + tailCurl, crest)
+  s.px(cx - 16, by - 1 + tailCurl, crest)
+
+  // Far & near dragon wings arching behind torso
+  s.line(cx - 2, by, cx - 11, by - 8 + wingY, dark, 2)
+  s.line(cx - 11, by - 8 + wingY, cx - 17, by - 2 + wingY, scaleMain, 2)
+  s.line(cx - 11, by - 7 + wingY, cx - 10, by + 1 + wingY, belly, 1)
+
+  s.line(cx + 1, by, cx - 6, by - 10 + wingY, crest, 2)
+  s.line(cx - 6, by - 10 + wingY, cx - 14, by - 5 + wingY, belly, 2)
+  s.line(cx - 6, by - 9 + wingY, cx - 4, by - 1 + wingY, hi, 1)
+
+  // Hind & fore clawed legs
+  const stride = action === 'walk' ? (f % 2 === 0 ? 1 : -1) : 0
+  s.line(cx - 4, by + 5, cx - 6 + stride, baseY + 2, dark, 2)
+  s.rect(cx - 7 + stride, baseY + 2, 3, 1, '#e2e8f0')
+  s.line(cx + 4, by + 5, cx + 6 - stride, baseY + 2, scaleMain, 2)
+  s.rect(cx + 5 - stride, baseY + 2, 3, 1, '#e2e8f0')
+
+  // Armored Dragon Torso & Neck
+  s.rect(cx - 6, by, 12, 7, scaleMain)
+  s.rect(cx - 4, by + 4, 8, 3, belly)
+  s.line(cx + 4, by + 2, cx + 9, by - 4, scaleMain, 3)
+  s.px(cx + 1, by - 1, crest)
+  s.px(cx + 4, by - 3, crest)
+
+  // Elongated Horned Dragon Head & Snout (facing right)
+  const hx = cx + 9
+  const hy = by - 7
+  s.rect(hx - 2, hy, 7, 5, scaleMain)
+  s.rect(hx + 3, hy + 1, 6, 3, hi) // snout
+  // Swept horns
+  s.line(hx, hy, hx - 5, hy - 4, '#e9e3d5', 2)
+  s.line(hx + 2, hy, hx - 2, hy - 5, '#e9e3d5', 1)
+  // Glowing abyssal eye
+  s.px(hx + 3, hy + 1, '#ffd60a')
+  s.px(hx + 2, hy + 1, glow)
+
+  // Void fire breath & fangs on attack!
+  if (jawOpen) {
+    s.rect(hx + 3, hy + 4, 5, 2, glow)
+    s.px(hx + 7, hy + 3, '#ffffff')
+    s.line(hx + 9, hy + 3, hx + 14, hy + 2, '#e0aaff', 2)
+    s.px(hx + 15, hy + 3, glow)
+  }
+
+  return s.toCanvas(true, dir === 'left')
+}
+
 function renderGaleSentinel(color: string, dir: Dir, action: SpriteAction, f: number): HTMLCanvasElement {
-  const s = new PixelSurface(28, 26)
+  const s = new PixelSurface(32, 30)
   const armor = color
   const dark = shade(color, -0.3)
   const hi = '#ffffff'
   const gold = '#ffd60a'
-  const cx = 13
-  const footY = 23
+  const cx = 16
+  const footY = 27
 
   let bob = 0
   let wingFlap = 0
   let lFoot: Pt = { x: cx - 2, y: footY }
   let rFoot: Pt = { x: cx + 2, y: footY }
-  let lHand: Pt = { x: cx - 5, y: 15 }
-  let rHand: Pt = { x: cx + 5, y: 15 }
+  let lHand: Pt = { x: cx - 5, y: 18 }
+  let rHand: Pt = { x: cx + 5, y: 18 }
   let spearAngle = -0.7
 
   if (action === 'idle') {
@@ -1446,50 +1839,46 @@ function renderGaleSentinel(color: string, dir: Dir, action: SpriteAction, f: nu
     wingFlap = f === 1 ? -2 : 0
   } else if (action === 'walk') {
     const seq = [
-      { bob: 0, wf: -2, lf: { x: cx - 3, y: footY }, rf: { x: cx + 3, y: footY - 1 }, lh: { x: cx - 5, y: 13 }, rh: { x: cx + 5, y: 16 }, sa: -0.4 },
-      { bob: -1, wf: 0, lf: { x: cx - 2, y: footY }, rf: { x: cx + 2, y: footY - 3 }, lh: { x: cx - 5, y: 15 }, rh: { x: cx + 5, y: 15 }, sa: -0.7 },
-      { bob: 0, wf: 2, lf: { x: cx - 2, y: footY - 1 }, rf: { x: cx + 3, y: footY }, lh: { x: cx - 5, y: 17 }, rh: { x: cx + 5, y: 13 }, sa: -1.0 },
-      { bob: 0, wf: 1, lf: { x: cx - 2, y: footY - 1 }, rf: { x: cx + 3, y: footY }, lh: { x: cx - 5, y: 17 }, rh: { x: cx + 5, y: 13 }, sa: -1.0 },
-      { bob: -1, wf: 0, lf: { x: cx - 2, y: footY - 3 }, rf: { x: cx + 2, y: footY }, lh: { x: cx - 5, y: 15 }, rh: { x: cx + 5, y: 15 }, sa: -0.7 },
-      { bob: 0, wf: -1, lf: { x: cx - 3, y: footY }, rf: { x: cx + 2, y: footY - 1 }, lh: { x: cx - 5, y: 13 }, rh: { x: cx + 5, y: 16 }, sa: -0.4 },
+      { bob: 0, wf: -2, lf: { x: cx - 3, y: footY }, rf: { x: cx + 3, y: footY - 1 }, lh: { x: cx - 5, y: 16 }, rh: { x: cx + 5, y: 19 }, sa: -0.4 },
+      { bob: -1, wf: 0, lf: { x: cx - 2, y: footY }, rf: { x: cx + 2, y: footY - 3 }, lh: { x: cx - 5, y: 18 }, rh: { x: cx + 5, y: 18 }, sa: -0.7 },
+      { bob: 0, wf: 2, lf: { x: cx - 2, y: footY - 1 }, rf: { x: cx + 3, y: footY }, lh: { x: cx - 5, y: 20 }, rh: { x: cx + 5, y: 16 }, sa: -1.0 },
+      { bob: 0, wf: 1, lf: { x: cx - 2, y: footY - 1 }, rf: { x: cx + 3, y: footY }, lh: { x: cx - 5, y: 20 }, rh: { x: cx + 5, y: 16 }, sa: -1.0 },
+      { bob: -1, wf: 0, lf: { x: cx - 2, y: footY - 3 }, rf: { x: cx + 2, y: footY }, lh: { x: cx - 5, y: 18 }, rh: { x: cx + 5, y: 18 }, sa: -0.7 },
+      { bob: 0, wf: -1, lf: { x: cx - 3, y: footY }, rf: { x: cx + 2, y: footY - 1 }, lh: { x: cx - 5, y: 16 }, rh: { x: cx + 5, y: 19 }, sa: -0.4 },
     ][f % 6]
     bob = seq.bob; wingFlap = seq.wf; lFoot = seq.lf; rFoot = seq.rf; lHand = seq.lh; rHand = seq.rh; spearAngle = seq.sa
   } else {
     const atk = [
-      { bob: 0, wf: -3, lf: { x: cx - 3, y: footY }, rf: { x: cx + 3, y: footY }, lh: { x: cx - 6, y: 13 }, rh: { x: cx + 2, y: 8 }, sa: -2.0 },
-      { bob: -1, wf: 1, lf: { x: cx - 4, y: footY }, rf: { x: cx + 4, y: footY }, lh: { x: cx - 5, y: 15 }, rh: { x: cx + 6, y: 10 }, sa: -0.4 },
-      { bob: 0, wf: 2, lf: { x: cx - 4, y: footY }, rf: { x: cx + 5, y: footY }, lh: { x: cx - 4, y: 15 }, rh: { x: cx + 8, y: 13 }, sa: 0.2 },
-      { bob: 0, wf: 0, lf: { x: cx - 2, y: footY }, rf: { x: cx + 3, y: footY }, lh: { x: cx - 5, y: 15 }, rh: { x: cx + 5, y: 15 }, sa: -0.5 },
+      { bob: 0, wf: -3, lf: { x: cx - 3, y: footY }, rf: { x: cx + 3, y: footY }, lh: { x: cx - 6, y: 16 }, rh: { x: cx + 2, y: 11 }, sa: -2.0 },
+      { bob: -1, wf: 1, lf: { x: cx - 4, y: footY }, rf: { x: cx + 4, y: footY }, lh: { x: cx - 5, y: 18 }, rh: { x: cx + 6, y: 13 }, sa: -0.4 },
+      { bob: 0, wf: 2, lf: { x: cx - 4, y: footY }, rf: { x: cx + 5, y: footY }, lh: { x: cx - 4, y: 18 }, rh: { x: cx + 8, y: 16 }, sa: 0.2 },
+      { bob: 0, wf: 0, lf: { x: cx - 2, y: footY }, rf: { x: cx + 3, y: footY }, lh: { x: cx - 5, y: 18 }, rh: { x: cx + 5, y: 18 }, sa: -0.5 },
     ][f % 4]
     bob = atk.bob; wingFlap = atk.wf; lFoot = atk.lf; rFoot = atk.rf; lHand = atk.lh; rHand = atk.rh; spearAngle = atk.sa
   }
 
-  const by = 10 + bob
-  // Wind wings
-  s.line(cx - 3, by + 2, cx - 10, by - 3 + wingFlap, hi, 2)
-  s.line(cx - 9, by - 1 + wingFlap, cx - 11, by + 4 + wingFlap, armor, 1)
-  s.line(cx + 3, by + 2, cx + 10, by - 3 + wingFlap, hi, 2)
-  s.line(cx + 9, by - 1 + wingFlap, cx + 11, by + 4 + wingFlap, armor, 1)
+  const by = 12 + bob
+  s.line(cx - 3, by + 2, cx - 11, by - 3 + wingFlap, hi, 2)
+  s.line(cx - 10, by - 1 + wingFlap, cx - 12, by + 5 + wingFlap, armor, 1)
+  s.line(cx + 3, by + 2, cx + 11, by - 3 + wingFlap, hi, 2)
+  s.line(cx + 10, by - 1 + wingFlap, cx + 12, by + 5 + wingFlap, armor, 1)
 
-  // Legs
-  s.line(cx - 2, by + 7, lFoot.x, lFoot.y, dark, 2)
+  s.line(cx - 2, by + 8, lFoot.x, lFoot.y, dark, 2)
   s.px(lFoot.x, lFoot.y, gold)
-  s.line(cx + 2, by + 7, rFoot.x, rFoot.y, armor, 2)
+  s.line(cx + 2, by + 8, rFoot.x, rFoot.y, armor, 2)
   s.px(rFoot.x, rFoot.y, gold)
 
-  // Armored chest & helm
-  s.rect(cx - 3, by, 7, 7, armor)
-  s.rect(cx - 3, by + 4, 7, 1, gold)
-  s.rect(cx - 3, by - 5, 7, 5, dark)
-  s.px(cx, by - 7, gold); s.px(cx, by - 6, hi)
+  s.rect(cx - 3, by, 7, 8, armor)
+  s.rect(cx - 3, by + 5, 7, 1, gold)
+  s.rect(cx - 3, by - 6, 7, 6, dark)
+  s.px(cx, by - 8, gold); s.px(cx, by - 7, hi)
   if (dir !== 'up') {
-    s.rect(cx - 2, by - 3, 5, 1, '#fff3b0') // glowing visor
+    s.rect(cx - 2, by - 3, 5, 1, '#fff3b0')
   }
 
-  // Arms & gale blade
-  drawArm(s, { x: cx - 3, y: by + 1 }, { x: cx - 4, y: by + 3 }, lHand, dark, armor)
-  drawArm(s, { x: cx + 3, y: by + 1 }, { x: cx + 5, y: by + 3 }, rHand, armor, hi)
-  drawWeaponInHand(s, rHand, 'sword', '#caf0f8', spearAngle, action, f)
+  drawArm(s, { x: cx - 3, y: by + 1 }, { x: cx - 4, y: by + 4 }, lHand, dark, armor)
+  drawArm(s, { x: cx + 3, y: by + 1 }, { x: cx + 5, y: by + 4 }, rHand, armor, hi)
+  drawWeaponInHand(s, rHand, 'sword', '#caf0f8', spearAngle, action, f, undefined, 'knight')
 
   return s.toCanvas(true, dir === 'left')
 }
@@ -1511,30 +1900,31 @@ export function monsterSprite(
       ? Math.abs(frame) % 6
       : Math.abs(frame) % 4
 
-  if (sprite === 'goblin') {
-    const isBoss = defId === 'goblin_chief'
+  const spec = getMonsterModelSpec(defId, sprite, color)
+
+  if (spec.archetype === 'goblin') {
     return humanSprite(
       {
         hair: shade(color, -0.35),
-        body: isBoss ? '#582f0e' : '#7f5539',
+        body: '#7f5539',
         legs: '#5c3d2e',
-        accent: isBoss ? '#ffd60a' : '#e9c46a',
+        accent: '#e9c46a',
         skin: color,
         eye: '#ffd60a',
         goblinEars: true,
-        hatStyle: isBoss ? 'crown' : 'none',
+        hatStyle: 'none',
       },
       dir,
       f,
-      isBoss ? 'sword' : 'stick',
-      isBoss ? '#adb5bd' : '#7f5539',
+      'stick',
+      '#7f5539',
       attacking,
       action,
       attackFrameOverride,
     )
   }
 
-  if (sprite === 'skeleton') {
+  if (spec.archetype === 'skeleton') {
     return humanSprite(
       {
         hair: color,
@@ -1544,6 +1934,7 @@ export function monsterSprite(
         skin: color,
         eye: '#e63946',
         skeleton: true,
+        cape: '#343a40',
       },
       dir,
       f,
@@ -1555,53 +1946,41 @@ export function monsterSprite(
     )
   }
 
-  if (sprite === 'demon') {
-    const isBoss = defId === 'demon_lord' || defId === 'abyss_dragon'
-    return humanSprite(
-      {
-        hair: '#14080e',
-        body: color,
-        legs: shade(color, -0.35),
-        accent: isBoss ? '#ffd60a' : '#ffb703',
-        skin: shade(color, 0.12),
-        horns: true,
-        wings: true,
-        cape: isBoss ? '#590d22' : undefined,
-        hatStyle: isBoss ? 'crown' : 'none',
-        eye: '#ffd60a',
-      },
-      dir,
-      f,
-      isBoss ? 'sword' : 'staff',
-      isBoss ? '#ff6b35' : '#ff9f1c',
-      attacking,
-      action,
-      attackFrameOverride,
-    )
-  }
-
-  const key = `ma|${sprite}|${defId ?? ''}|${color}|${dir}|${action}|${f}`
+  const key = `ma32|${spec.archetype}|${defId ?? ''}|${color}|${dir}|${action}|${f}`
   return cached(key, () => {
-    switch (sprite) {
+    switch (spec.archetype) {
       case 'slime':
-        return renderSlime(color, dir, action, f)
+        return renderSlime(color, dir, action, f, false)
+      case 'pink_slime':
+        return renderSlime(color, dir, action, f, true)
       case 'mushroom':
         return renderMushroom(color, dir, action, f)
       case 'rabbit':
         return renderRabbit(color, dir, action, f)
       case 'wolf':
         return renderWolf(color, dir, action, f)
+      case 'goblin_chief':
+        return renderGoblinChief(color, dir, action, f)
       case 'bat':
         return renderBat(color, dir, action, f)
       case 'ghost':
         return renderGhost(color, dir, action, f)
+      case 'fire_golem':
+        return renderGolem(color, dir, action, f, 'fire_golem')
       case 'earth_golem':
-        return renderGolem(color, dir, action, f, true)
+        return renderGolem(color, dir, action, f, 'earth_golem')
+      case 'abyss_knight':
+        return renderAbyssKnight(color, dir, action, f)
       case 'gale_sentinel':
         return renderGaleSentinel(color, dir, action, f)
-      case 'golem':
+      case 'demon':
+        return renderDemon(color, dir, action, f, false)
+      case 'demon_lord':
+        return renderDemon(color, dir, action, f, true)
+      case 'abyss_dragon':
+        return renderAbyssDragon(color, dir, action, f)
       default:
-        return renderGolem(color, dir, action, f, false)
+        return renderSlime(color, dir, action, f, false)
     }
   })
 }
