@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import { getOptionalClient } from '@/lib/supabase/client'
 import { ITEMS } from '@/lib/game/data'
-import { addItem, closePanel, notify, player, saveGame } from '@/lib/game/engine'
+import { addItem, closePanel, game, notify, saveGame } from '@/lib/game/engine'
+import { useGame } from '@/lib/game/use-game'
 import { PanelFrame, PxButton } from './panels'
 
 const RATES = [
@@ -19,13 +20,22 @@ const RATES = [
 const COST = 500
 
 export function GachaPanel() {
+  const g = useGame()
   const [result, setResult] = useState<string | null>(null)
   const [rolling, setRolling] = useState(false)
+  if (!g.p) return null
+  const p = g.p
 
   const draw = () => {
-    if (rolling || player().gold < COST) return
+    const activePlayer = game.p
+    if (rolling || !activePlayer || activePlayer.gold < COST) return
     setRolling(true)
     window.setTimeout(() => {
+      const current = game.p
+      if (!current) {
+        setRolling(false)
+        return
+      }
       const roll = Math.random() * 100
       let cursor = 0
       const picked = RATES.find((entry) => {
@@ -37,7 +47,7 @@ export function GachaPanel() {
         setRolling(false)
         return
       }
-      player().gold -= COST
+      current.gold -= COST
       saveGame()
       notify()
       void (async () => {
@@ -63,7 +73,7 @@ export function GachaPanel() {
           // Local save already persisted the rolled item.
         }
       })()
-      setResult(`${ITEMS[picked.itemId].name} (${picked.rarity})`)
+      setResult(`${ITEMS[picked.itemId]?.name ?? picked.itemId} (${picked.rarity})`)
       setRolling(false)
     }, 420)
   }
@@ -74,6 +84,7 @@ export function GachaPanel() {
         <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
           {RATES.map((entry) => {
             const item = ITEMS[entry.itemId]
+            if (!item) return null
             return (
               <div key={entry.itemId} className="border-2 border-border bg-muted/60 p-2 text-center">
                 <div className="mx-auto mb-2 grid size-12 place-items-center overflow-hidden rounded-lg border-2 border-white/20 bg-card text-2xl" style={{ color: item.color }}>
@@ -90,7 +101,7 @@ export function GachaPanel() {
             <p className="text-sm text-primary">สุ่ม 1 ครั้ง</p>
             <p className="text-xs text-muted-foreground">ใช้ {COST.toLocaleString()} G</p>
           </div>
-          <PxButton onClick={draw} disabled={rolling || player().gold < COST}>
+          <PxButton onClick={draw} disabled={rolling || p.gold < COST}>
             {rolling ? 'กำลังสุ่ม...' : 'เปิดตู้'}
           </PxButton>
         </div>

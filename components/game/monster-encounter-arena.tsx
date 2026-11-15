@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { auth } from '@/lib/firebase/client'
 import { listUserCharacters } from '@/lib/firebase/characters'
+import { AccountPanel } from './account-panel'
 import { ITEMS, JOBS, MAX_LEVEL, MAX_PLUS, enhanceCost, enhanceRate, expToNext, type SkillDef } from '@/lib/game/data'
 import {
   SAVE_KEY,
@@ -176,9 +177,10 @@ export function MonsterEncounterArena() {
   }, [])
 
   const syncSaveToStorageAndCloud = useCallback(async (nextSave: SaveData, activeUser: User | null, activeSlot: string) => {
+    const cloudUid = activeUser && activeUser.emailVerified ? activeUser.uid : null
     try {
-      await persistEncounterSave(nextSave, activeSlot, activeUser?.uid ?? null)
-      setSyncNotice(activeUser ? `ซิงค์เซฟตัวละคร (${activeSlot}) กับคลาวด์แล้ว` : 'บันทึกความคืบหน้าลงเครื่องแล้ว')
+      await persistEncounterSave(nextSave, activeSlot, cloudUid)
+      setSyncNotice(cloudUid ? `ซิงค์เซฟตัวละคร (${activeSlot}) กับคลาวด์แล้ว` : 'บันทึกความคืบหน้าลงเครื่องแล้ว')
     } catch {
       setSyncNotice('บันทึกในเครื่องแล้ว (รอซิงค์คลาวด์)')
     }
@@ -189,15 +191,16 @@ export function MonsterEncounterArena() {
     let active = true
     const unsubscribe = onAuthStateChanged(auth, async (nextUser) => {
       if (!active) return
+      const cloudUid = nextUser && nextUser.emailVerified ? nextUser.uid : null
       setUser(nextUser)
       const preferredSlot = getActiveCharacterSlot() || 'slot_1'
       let resolvedSave: SaveData | null = null
       let resolvedSlot = preferredSlot
 
-      if (nextUser) {
-        setGameAccountIdentity(nextUser.uid)
+      if (cloudUid) {
+        setGameAccountIdentity(cloudUid)
         try {
-          const chars = await listUserCharacters(nextUser.uid)
+          const chars = await listUserCharacters(cloudUid)
           const match = chars.find((c) => c.id === preferredSlot) ?? chars[0]
           if (match) {
             resolvedSlot = match.id
@@ -209,7 +212,7 @@ export function MonsterEncounterArena() {
         }
         if (!resolvedSave && typeof window !== 'undefined') {
           try {
-            const raw = localStorage.getItem(encounterSaveStorageKey(nextUser.uid, resolvedSlot))
+            const raw = localStorage.getItem(encounterSaveStorageKey(cloudUid, resolvedSlot))
             if (raw) resolvedSave = JSON.parse(raw) as SaveData
           } catch {
             // Ignore malformed JSON
@@ -229,7 +232,11 @@ export function MonsterEncounterArena() {
 
       if (!resolvedSave || resolvedSave.version !== 1) {
         resolvedSave = createDefaultEncounterSave(nextUser?.displayName || 'นักผจญภัย')
-        await persistEncounterSave(resolvedSave, resolvedSlot, nextUser?.uid ?? null)
+        try {
+          await persistEncounterSave(resolvedSave, resolvedSlot, cloudUid)
+        } catch {
+          // Keep initialized default save in local memory even if cloud sync fails.
+        }
       }
 
       const stats = getStats(resolvedSave)
@@ -475,7 +482,8 @@ export function MonsterEncounterArena() {
         return
       }
       setSave(res.nextSave)
-      setEnhanceNotice(`สวมใส่ ${ITEMS[res.nextSave.equipment.weapon!.itemId]?.name ?? 'อาวุธ'} แล้ว`)
+      const equippedWeaponId = res.nextSave.equipment.weapon?.itemId
+      setEnhanceNotice(`สวมใส่ ${equippedWeaponId ? (ITEMS[equippedWeaponId]?.name ?? 'อาวุธ') : 'อาวุธ'} แล้ว`)
       void syncSaveToStorageAndCloud(res.nextSave, userRef.current, slotRef.current)
     },
     [syncSaveToStorageAndCloud],
@@ -702,6 +710,7 @@ export function MonsterEncounterArena() {
         </nav>
 
         <div className="flex shrink-0 items-center gap-2">
+          <AccountPanel compact />
           <button
             type="button"
             onClick={() => setMuted((m) => !m)}

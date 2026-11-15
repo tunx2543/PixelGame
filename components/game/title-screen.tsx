@@ -3,21 +3,32 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { onAuthStateChanged, type User } from 'firebase/auth'
-import { Plus, Shield, Trash2, UserCheck } from 'lucide-react'
+import { Plus, Shield, Trash2, UploadCloud, UserCheck } from 'lucide-react'
 import { auth } from '@/lib/firebase/client'
-import { CHARACTER_SLOTS, ensureUserProfile, type CloudCharacterRecord } from '@/lib/firebase/characters'
+import {
+  CHARACTER_SLOTS,
+  ensureUserProfile,
+  importGuestSaveToSlot,
+  type CharacterSlotId,
+  type CloudCharacterRecord,
+  type UserAccountIdentity,
+} from '@/lib/firebase/characters'
 import { PERMANENT_GM_UID } from '@/lib/game/permissions'
 import { JOBS } from '@/lib/game/data'
 import {
+  SAVE_KEY,
   deleteAccountCharacter,
   deleteSave,
+  flushCloudSave,
   listAccountCharacters,
+  listRecoverableLocalSaves,
   loadCloudGame,
   loadGame,
   newGame,
   readSave,
   setActiveCharacterSlot,
   setGameAccountIdentity,
+  type RecoverableLocalSave,
   type SaveData,
 } from '@/lib/game/engine'
 import { MAPS } from '@/lib/game/maps'
@@ -26,23 +37,43 @@ import { formatNum, formatPlayTime } from './format'
 
 export function TitleScreen() {
   const [user, setUser] = useState<User | null>(() => auth.currentUser)
+  const [accountIdentity, setAccountIdentity] = useState<UserAccountIdentity | null>(null)
   const [cloudChars, setCloudChars] = useState<CloudCharacterRecord[]>([])
   const [guestSave, setGuestSave] = useState<SaveData | null>(() => readSave())
+  const [recoverableSaves, setRecoverableSaves] = useState<RecoverableLocalSave[]>([])
   const [mode, setMode] = useState<'list' | 'new'>('list')
   const [name, setName] = useState('')
-  const [selectedSlotForNew, setSelectedSlotForNew] = useState<string>('slot_1')
+  const [selectedSlotForNew, setSelectedSlotForNew] = useState<CharacterSlotId>('slot_1')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [isLoadingSave, setIsLoadingSave] = useState(true)
+  const [importingKey, setImportingKey] = useState<string | null>(null)
   const [cloudError, setCloudError] = useState('')
+
+  const computeRecoverables = (currentUserId: string, cloudList: CloudCharacterRecord[]) => {
+    const cloudSignatures = new Set(
+      cloudList.map((c) => `${c.name}:${c.level}:${Math.floor(c.playTime)}`),
+    )
+    return listRecoverableLocalSaves(currentUserId).filter((entry) => {
+      const sig = `${entry.saveData.name}:${entry.saveData.level}:${Math.floor(entry.saveData.playTime || 0)}`
+      return !cloudSignatures.has(sig)
+    })
+  }
 
   const refreshCharacters = useCallback(async (currentUser: User | null) => {
     setIsLoadingSave(true)
     setConfirmDeleteId(null)
     setCloudError('')
     try {
+      await flushCloudSave()
       if (currentUser) {
         const identity = await ensureUserProfile(currentUser)
-        const numericUid = identity.isGm ? PERMANENT_GM_UID : Number(identity.gameUid)
+        setAccountIdentity(identity)
+        const parsedUid = Number(identity.gameUid)
+        const numericUid = identity.isGm
+          ? PERMANENT_GM_UID
+          : Number.isSafeInteger(parsedUid)
+            ? parsedUid
+            : undefined
         setGameAccountIdentity(currentUser.uid, numericUid, identity.gameUid, identity.isGm)
         const list = await listAccountCharacters()
         if (list.length === 0) {
@@ -51,20 +82,25 @@ export function TitleScreen() {
           if (migrated) {
             const updatedList = await listAccountCharacters()
             setCloudChars(updatedList)
+            setRecoverableSaves(computeRecoverables(currentUser.uid, updatedList))
             setMode(updatedList.length > 0 ? 'list' : 'new')
           } else {
             setCloudChars([])
+            setRecoverableSaves(computeRecoverables(currentUser.uid, []))
             setSelectedSlotForNew('slot_1')
             setMode('new')
           }
         } else {
           setCloudChars(list)
+          setRecoverableSaves(computeRecoverables(currentUser.uid, list))
           setMode('list')
         }
       } else {
+        setAccountIdentity(null)
         setGameAccountIdentity(null)
         setActiveCharacterSlot('slot_1')
         setCloudChars([])
+        setRecoverableSaves([])
         const local = await loadCloudGame()
         setGuestSave(local)
         setMode(local ? 'list' : 'new')
@@ -72,7 +108,8 @@ export function TitleScreen() {
     } catch (error) {
       console.error('Failed to load cloud characters:', error)
       if (currentUser) {
-        setCloudError('ไม่สามารถโหลดข้อมูลตัวละครจากคลาวด์ได้ กรุณาลองใหม่อีกครั้ง')
+        const reason = error instanceof Error && !error.message.startsWith('{') ? error.message : ''
+        setCloudError(reason || 'ไม่สามารถโหลดข้อมูลตัวละครจากคลาวด์ได้ กรุณาลองใหม่อีกครั้ง')
       }
       const fallback = readSave()
       setGuestSave(fallback)
@@ -95,15 +132,29 @@ export function TitleScreen() {
     }
   }, [refreshCharacters])
 
-  const nextAvailableSlot = () => {
+  const nextAvailableSlot = (): CharacterSlotId => {
     const used = new Set(cloudChars.map((c) => c.id))
     return CHARACTER_SLOTS.find((slot) => !used.has(slot)) ?? 'slot_1'
+  }
+
+  const applyAccountIdentityToEngine = (targetUser: User) => {
+    if (accountIdentity && accountIdentity.uid === targetUser.uid) {
+      const parsedUid = Number(accountIdentity.gameUid)
+      const numericUid = accountIdentity.isGm
+        ? PERMANENT_GM_UID
+        : Number.isSafeInteger(parsedUid)
+          ? parsedUid
+          : undefined
+      setGameAccountIdentity(targetUser.uid, numericUid, accountIdentity.gameUid, accountIdentity.isGm)
+    } else {
+      setGameAccountIdentity(targetUser.uid)
+    }
   }
 
   const startNewCharacter = () => {
     if (isLoadingSave) return
     if (user) {
-      setGameAccountIdentity(user.uid)
+      applyAccountIdentityToEngine(user)
       setActiveCharacterSlot(selectedSlotForNew)
     } else {
       setGameAccountIdentity(null)
@@ -116,17 +167,40 @@ export function TitleScreen() {
 
   const loginWithCloudCharacter = (char: CloudCharacterRecord) => {
     if (!user || isLoadingSave) return
-    setGameAccountIdentity(user.uid)
+    applyAccountIdentityToEngine(user)
     setActiveCharacterSlot(char.id)
     loadGame(char.saveData)
+  }
+
+  const handleImportRecoverableSave = async (entry: RecoverableLocalSave) => {
+    if (!user || importingKey || cloudChars.length >= CHARACTER_SLOTS.length) return
+    const targetSlot = nextAvailableSlot()
+    setImportingKey(entry.storageKey)
+    setCloudError('')
+    try {
+      await importGuestSaveToSlot(user.uid, targetSlot, entry.saveData)
+      if (entry.storageKey === SAVE_KEY) {
+        localStorage.setItem(`${SAVE_KEY}:legacy-claimed-by`, user.uid)
+      }
+      await refreshCharacters(user)
+    } catch (error) {
+      console.error('Failed to import local character:', error)
+      setCloudError('นำเข้าตัวละครไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+    } finally {
+      setImportingKey(null)
+    }
   }
 
   const handleDeleteCloudCharacter = async (slotId: string) => {
     if (!user) return
     setIsLoadingSave(true)
+    setCloudError('')
     try {
       await deleteAccountCharacter(slotId)
       await refreshCharacters(user)
+    } catch (error) {
+      console.error('Failed to delete cloud character:', error)
+      setCloudError('ไม่สามารถลบตัวละครบนคลาวด์ได้ กรุณาลองใหม่อีกครั้ง')
     } finally {
       setConfirmDeleteId(null)
       setIsLoadingSave(false)
@@ -134,6 +208,37 @@ export function TitleScreen() {
   }
 
   const canCreateMoreSlots = user ? cloudChars.length < CHARACTER_SLOTS.length : true
+  const visibleRecoverables =
+    user && cloudChars.length < CHARACTER_SLOTS.length ? recoverableSaves.slice(0, 2) : []
+
+  const recoveryBanner = visibleRecoverables.length > 0 && (
+    <div className="flex flex-col gap-2">
+      {visibleRecoverables.map((entry) => (
+        <div
+          key={entry.storageKey}
+          className="flex items-center justify-between gap-2 border border-accent/40 bg-accent/10 p-2.5 text-[11px]"
+        >
+          <div className="min-w-0">
+            <p className="truncate font-semibold text-accent">
+              พบ{entry.sourceLabel}: {entry.saveData.name} (Lv.{entry.saveData.level})
+            </p>
+            <p className="text-[10px] text-muted-foreground">
+              {JOBS[entry.saveData.jobId]?.name ?? 'ผู้ฝึกหัด'} • กดนำเข้าเพื่อบันทึกขึ้นคลาวด์ในบัญชีนี้
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={importingKey !== null}
+            onClick={() => void handleImportRecoverableSave(entry)}
+            className="pixel-btn flex shrink-0 items-center gap-1 bg-accent px-2.5 py-1.5 text-[11px] font-semibold text-accent-foreground hover:brightness-110 disabled:opacity-50"
+          >
+            <UploadCloud className="size-3.5" aria-hidden />
+            {importingKey === entry.storageKey ? 'กำลังนำเข้า...' : 'นำเข้า'}
+          </button>
+        </div>
+      ))}
+    </div>
+  )
 
   return (
     <div className="relative flex h-full w-full items-center justify-center overflow-y-auto p-4">
@@ -154,7 +259,7 @@ export function TitleScreen() {
           </p>
         </div>
 
-        <AccountPanel />
+        <AccountPanel onAuthSuccess={() => void refreshCharacters(auth.currentUser)} />
 
         <div className="pixel-panel w-full p-5">
           {isLoadingSave ? (
@@ -193,6 +298,8 @@ export function TitleScreen() {
                   </button>
                 )}
               </div>
+
+              {recoveryBanner}
 
               <div className="flex flex-col gap-2.5">
                 {cloudChars.map((char) => (
@@ -282,7 +389,7 @@ export function TitleScreen() {
                 onClick={() => loadGame(guestSave)}
                 className="pixel-btn bg-primary px-4 py-3 text-lg text-primary-foreground hover:brightness-110"
               >
-                เล่นต่อ
+                เล่นต่อ (Guest)
               </button>
               <button
                 type="button"
@@ -300,6 +407,8 @@ export function TitleScreen() {
                 startNewCharacter()
               }}
             >
+              {recoveryBanner}
+
               <label htmlFor="hero-name" className="text-sm text-muted-foreground">
                 {user ? 'สร้างตัวละครใหม่บนบัญชีของคุณ' : 'ตั้งชื่อตัวละครของคุณ (โหมด Guest)'}
               </label>

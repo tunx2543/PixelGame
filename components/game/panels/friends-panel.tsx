@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { onAuthStateChanged, type User } from 'firebase/auth'
-import { Check, Copy, Crown, Search, Trash2, UserPlus, UserRound, X } from 'lucide-react'
-import { auth } from '@/lib/firebase/client'
+import { Check, Copy, Crown, LogIn, Search, Trash2, UserPlus, UserRound, X } from 'lucide-react'
+import { auth, formatFirebaseAuthError, signInWithGoogle } from '@/lib/firebase/client'
 import {
   ensureUserProfile,
   getCachedAccountIdentity,
@@ -20,8 +20,8 @@ import {
   type PlayerUidProfile,
 } from '@/lib/firebase/friends'
 import { JOBS } from '@/lib/game/data'
-import { closePanel, game as gameState, notify } from '@/lib/game/engine'
-import { isGmAccountUser, PERMANENT_GM_GAME_UID } from '@/lib/game/permissions'
+import { closePanel, game as gameState, notify, saveGame, setGameAccountIdentity } from '@/lib/game/engine'
+import { isGmAccountUser, PERMANENT_GM_GAME_UID, PERMANENT_GM_UID } from '@/lib/game/permissions'
 
 export function FriendsPanel({ game }: { game: typeof gameState }) {
   const [user, setUser] = useState<User | null>(() => auth.currentUser)
@@ -144,17 +144,57 @@ export function FriendsPanel({ game }: { game: typeof gameState }) {
     }
   }
 
+  const handleSignInFromFriends = async () => {
+    setBusy(true)
+    setFeedback(null)
+    try {
+      const cred = await signInWithGoogle()
+      if (cred.user) {
+        const resolved = await ensureUserProfile(cred.user)
+        setIdentity(resolved)
+        const numericUid = resolved.isGm ? PERMANENT_GM_UID : Number(resolved.gameUid)
+        setGameAccountIdentity(cred.user.uid, numericUid, resolved.gameUid, resolved.isGm)
+        if (game.p) {
+          game.p.gameUid = resolved.gameUid
+          game.p.uid = numericUid
+          game.p.gm = resolved.isGm
+          saveGame()
+          notify()
+        }
+        setFeedback({ type: 'ok', text: `เข้าสู่ระบบสำเร็จ! UID ของคุณคือ ${resolved.gameUid}` })
+      }
+    } catch (error) {
+      setFeedback({ type: 'error', text: formatFirebaseAuthError(error) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const isGm = identity?.isGm ?? isGmAccountUser(user)
   const myGameUid = identity?.gameUid ?? game.p?.gameUid ?? (isGm ? PERMANENT_GM_GAME_UID : '----')
 
   return (
     <section className="game-panel friends-panel space-y-3 p-2 text-xs" aria-label="Friends">
       {!user ? (
-        <div className="rounded-lg border border-border bg-secondary/40 p-3 text-center">
+        <div className="space-y-2.5 rounded-lg border border-border bg-secondary/40 p-3 text-center">
           <p className="font-semibold text-primary">ระบบแอดเพื่อนด้วย UID</p>
-          <p className="mt-1 text-[11px] text-muted-foreground">
+          <p className="text-[11px] text-muted-foreground">
             กรุณาเข้าสู่ระบบด้วย Google เพื่อรับ UID ประจำตัวและเพิ่มเพื่อน
           </p>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void handleSignInFromFriends()}
+            className="pixel-btn mx-auto inline-flex items-center gap-1.5 bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:brightness-110 disabled:opacity-50"
+          >
+            <LogIn className="size-3.5" aria-hidden />
+            {busy ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ Google'}
+          </button>
+          {feedback && (
+            <p className={`text-[11px] ${feedback.type === 'ok' ? 'text-accent' : 'text-destructive'}`}>
+              {feedback.text}
+            </p>
+          )}
         </div>
       ) : (
         <>

@@ -2,7 +2,15 @@ import { ITEMS, JOBS, MONSTERS } from './data'
 import { GEM_SHOP_ITEMS } from './gem-shop'
 import { currentMap, game } from './engine'
 import { TILE } from './maps'
-import { gmOutfitSprite, humanSprite, mapCanvas, monsterSprite, npcSprite } from './sprites'
+import {
+  type Dir,
+  humanSprite,
+  jobHumanColors,
+  mapCanvas,
+  monsterSprite,
+  npcSprite,
+  type SpriteAction,
+} from './sprites'
 import { getActivePetBonuses } from './systems'
 
 const THEME_BG: Record<string, string> = {
@@ -12,16 +20,6 @@ const THEME_BG: Record<string, string> = {
   cave: '#0b0b16',
   volcano: '#140808',
 }
-
-const MONSTER_ART: Record<string, string> = {
-  poring: '/images/monsters/sheets/poring-sheet.png',
-  undead: '/images/monsters/sheets/undead-knight-sheet.png',
-  demon: '/images/monsters/sheets/abyss-demon-sheet.png',
-  demon_lord: '/images/monsters/sheets/abyss-demon-sheet.png',
-  gale_sentinel: '/images/monsters/gale-sentinel/south.gif',
-}
-const artCache = new Map<string, HTMLImageElement>()
-const transparentArtCache = new Map<string, HTMLCanvasElement>()
 
 function drawGemItemPixels(
   ctx: CanvasRenderingContext2D,
@@ -40,146 +38,6 @@ function drawGemItemPixels(
     })
   })
   ctx.restore()
-}
-const ASSASSIN_ART: Record<string, string> = {
-  down: '/images/characters/assassin/south.png',
-  up: '/images/characters/assassin/north.png',
-  left: '/images/characters/assassin/west.png',
-  right: '/images/characters/assassin/east.png',
-}
-const ASSASSIN_WALK_ART: Record<string, string> = {
-  down: '/images/characters/assassin/walk-south.png',
-  up: '/images/characters/assassin/walk-north.png',
-  left: '/images/characters/assassin/walk-west.png',
-  right: '/images/characters/assassin/walk-east.png',
-}
-const ASSASSIN_ATTACK_ART: Record<string, string> = {
-  down: '/images/characters/assassin/attack-south.png',
-  'down-right': '/images/characters/assassin/attack-south-east.png',
-  right: '/images/characters/assassin/attack-east.png',
-  'up-right': '/images/characters/assassin/attack-north-east.png',
-  up: '/images/characters/assassin/attack-north.png',
-  'up-left': '/images/characters/assassin/attack-north-west.png',
-  left: '/images/characters/assassin/attack-west.png',
-  'down-left': '/images/characters/assassin/attack-south-west.png',
-}
-
-function assassinArt(dir: string, walking = false, attacking = false) {
-  const source = attacking ? ASSASSIN_ATTACK_ART : walking ? ASSASSIN_WALK_ART : ASSASSIN_ART
-  const fallback = dir.includes('down') ? 'down' : dir.includes('up') ? 'up' : dir.includes('left') ? 'left' : 'right'
-  const src = source[dir] ?? source[fallback]
-  const cached = artCache.get(src)
-  if (cached) return cached.complete ? cached : null
-  const image = new Image()
-  image.crossOrigin = 'anonymous'
-  image.src = src
-  artCache.set(src, image)
-  return null
-}
-
-const ARCHER_ART: Record<string, string> = {
-  down: '/images/characters/archer/idle/south.png',
-  'down-right': '/images/characters/archer/idle/south-east.png',
-  right: '/images/characters/archer/idle/east.png',
-  'up-right': '/images/characters/archer/idle/north-east.png',
-  up: '/images/characters/archer/idle/north.png',
-  'up-left': '/images/characters/archer/idle/north-west.png',
-  left: '/images/characters/archer/idle/west.png',
-  'down-left': '/images/characters/archer/idle/south-west.png',
-}
-const ARCHER_WALK_ART = Object.fromEntries(
-  Object.entries(ARCHER_ART).map(([direction, src]) => [direction, src.replace('/idle/', '/walk/')]),
-)
-const ARCHER_ATTACK_ART = Object.fromEntries(
-  Object.entries(ARCHER_ART).map(([direction, src]) => [direction, src.replace('/idle/', '/attack/')]),
-)
-
-function archerArt(dir: string, walking = false, attacking = false) {
-  const source = attacking ? ARCHER_ATTACK_ART : walking ? ARCHER_WALK_ART : ARCHER_ART
-  const fallback = dir.includes('down') ? 'down' : dir.includes('up') ? 'up' : dir.includes('left') ? 'left' : 'right'
-  const src = source[dir] ?? source[fallback]
-  const cached = artCache.get(src)
-  if (cached) return cached.complete ? cached : null
-  const image = new Image()
-  image.crossOrigin = 'anonymous'
-  image.src = src
-  artCache.set(src, image)
-  return null
-}
-
-const MAGE_ART = Object.fromEntries(
-  Object.entries(ARCHER_ART).map(([direction, src]) => [direction, src.replace('/characters/archer/idle/', '/characters/mage/idle/')]),
-)
-const MAGE_WALK_ART = Object.fromEntries(
-  Object.entries(MAGE_ART).map(([direction, src]) => [direction, src.replace('/idle/', '/walk/')]),
-)
-const MAGE_ATTACK_ART = Object.fromEntries(
-  Object.entries(MAGE_ART).map(([direction, src]) => [direction, src.replace('/idle/', '/attack/')]),
-)
-const SWORD_ART = Object.fromEntries(
-  Object.entries(ARCHER_ART).map(([direction, src]) => [direction, src.replace('/characters/archer/idle/', '/characters/sword/idle/')]),
-)
-const SWORD_WALK_ART = Object.fromEntries(
-  Object.entries(SWORD_ART).map(([direction, src]) => [direction, src.replace('/idle/', '/walk/')]),
-)
-const SWORD_ATTACK_ART = Object.fromEntries(
-  Object.entries(SWORD_ART).map(([direction, src]) => [direction, src.replace('/idle/', '/attack/')]),
-)
-
-const CLASS_DIRECTIONS: Record<string, string> = {
-  down: 'south',
-  'down-right': 'south-east',
-  right: 'east',
-  'up-right': 'north-east',
-  up: 'north',
-  'up-left': 'north-west',
-  left: 'west',
-  'down-left': 'south-west',
-}
-
-function cachedArt(src: string) {
-  const cached = artCache.get(src)
-  if (cached) return cached.complete && cached.naturalWidth > 0 ? cached : null
-  const image = new Image()
-  image.crossOrigin = 'anonymous'
-  image.src = src
-  artCache.set(src, image)
-  return null
-}
-
-function classProfessionArt(dir: string, jobId: 'paladin' | 'cleric', walking: boolean, attacking: boolean, frame: number) {
-  const direction = CLASS_DIRECTIONS[dir] ?? 'south'
-  const cardinal = dir.includes('down') ? 'south' : dir.includes('up') ? 'north' : dir.includes('left') ? 'west' : 'east'
-  const src = jobId === 'paladin'
-    ? attacking
-      ? `/images/characters/paladin/attack/${cardinal}.gif`
-      : walking
-        ? `/images/characters/paladin/walk/${cardinal}.gif`
-        : `/images/characters/paladin/idle/${direction}.png`
-    : walking && !attacking
-      ? `/images/characters/cleric/walk/${cardinal}/${String(frame % 15).padStart(3, '0')}.png`
-      : `/images/characters/cleric/idle/${direction}.png`
-  return cachedArt(src)
-}
-
-function professionArt(
-  dir: string,
-  jobId: string,
-  walking = false,
-  attacking = false,
-  frame = 0,
-) {
-  if (jobId === 'paladin' || jobId === 'cleric') return classProfessionArt(dir, jobId, walking, attacking, frame)
-  if (jobId === 'archer' || jobId === 'hunter') return archerArt(dir, walking, attacking)
-  if (jobId === 'thief' || jobId === 'assassin') return assassinArt(dir, walking, attacking)
-  if (jobId !== 'mage' && jobId !== 'wizard' && jobId !== 'swordsman' && jobId !== 'knight') return null
-  const maps = jobId === 'mage' || jobId === 'wizard'
-    ? [MAGE_ART, MAGE_WALK_ART, MAGE_ATTACK_ART]
-    : [SWORD_ART, SWORD_WALK_ART, SWORD_ATTACK_ART]
-  const source = attacking ? maps[2] : walking ? maps[1] : maps[0]
-  const fallback = dir.includes('down') ? 'down' : dir.includes('up') ? 'up' : dir.includes('left') ? 'left' : 'right'
-  const src = source[dir] ?? source[fallback]
-  return cachedArt(src)
 }
 
 function drawWeaponAttackOverlay(
@@ -200,18 +58,18 @@ function drawWeaponAttackOverlay(
   ctx.save()
   ctx.globalAlpha *= fade
   if (weaponType === 'staff') {
-    const r = 8 + progress * 8
+    const r = 7 + progress * 8
     ctx.strokeStyle = color
-    ctx.lineWidth = 1.6
+    ctx.lineWidth = 1.5
     ctx.beginPath()
-    ctx.arc(Math.cos(baseAngle) * 7, -12 + Math.sin(baseAngle) * 5, r * 0.55, 0, Math.PI * 2)
+    ctx.arc(Math.cos(baseAngle) * 8, -12 + Math.sin(baseAngle) * 6, r * 0.55, 0, Math.PI * 2)
     ctx.stroke()
     ctx.fillStyle = '#fff3b0'
     for (let i = 0; i < 4; i++) {
       const a = baseAngle + progress * 4 + (i * Math.PI) / 2
       ctx.fillRect(
-        Math.round(Math.cos(baseAngle) * 7 + Math.cos(a) * r * 0.6),
-        Math.round(-12 + Math.sin(baseAngle) * 5 + Math.sin(a) * r * 0.6),
+        Math.round(Math.cos(baseAngle) * 8 + Math.cos(a) * r * 0.6),
+        Math.round(-12 + Math.sin(baseAngle) * 6 + Math.sin(a) * r * 0.6),
         1.5,
         1.5,
       )
@@ -221,16 +79,12 @@ function drawWeaponAttackOverlay(
     ctx.strokeStyle = color
     ctx.lineWidth = 1.5
     ctx.beginPath()
-    ctx.moveTo(Math.cos(baseAngle) * (dist - 4), -10 + Math.sin(baseAngle) * (dist - 4))
-    ctx.lineTo(Math.cos(baseAngle) * (dist + 5), -10 + Math.sin(baseAngle) * (dist + 5))
-    ctx.stroke()
-    ctx.strokeStyle = 'rgba(255,255,255,0.65)'
-    ctx.beginPath()
-    ctx.arc(Math.cos(baseAngle) * 7, -10 + Math.sin(baseAngle) * 7, 3 + progress * 4, baseAngle - 0.7, baseAngle + 0.7)
+    ctx.moveTo(Math.cos(baseAngle) * (dist - 4), -11 + Math.sin(baseAngle) * (dist - 4))
+    ctx.lineTo(Math.cos(baseAngle) * (dist + 5), -11 + Math.sin(baseAngle) * (dist + 5))
     ctx.stroke()
   } else if (weaponType === 'dagger') {
-    const cx = Math.cos(baseAngle) * 9
-    const cy = -9 + Math.sin(baseAngle) * 7
+    const cx = Math.cos(baseAngle) * 10
+    const cy = -10 + Math.sin(baseAngle) * 7
     ctx.strokeStyle = color
     ctx.lineWidth = 1.6
     const sweep = (progress - 0.5) * 1.4
@@ -242,12 +96,12 @@ function drawWeaponAttackOverlay(
     ctx.arc(cx, cy, 6, baseAngle - 0.3 - sweep, baseAngle + 0.9 - sweep)
     ctx.stroke()
   } else {
-    const cx = Math.cos(baseAngle) * 6
-    const cy = -9 + Math.sin(baseAngle) * 5
+    const cx = Math.cos(baseAngle) * 7
+    const cy = -10 + Math.sin(baseAngle) * 5
     const sweepStart = baseAngle - 1.05 + progress * 0.5
     const sweepEnd = baseAngle + 0.95 + progress * 0.4
     ctx.strokeStyle = color
-    ctx.lineWidth = 2.4
+    ctx.lineWidth = 2.2
     ctx.beginPath()
     ctx.arc(cx, cy, 12, sweepStart, sweepEnd)
     ctx.stroke()
@@ -260,189 +114,30 @@ function drawWeaponAttackOverlay(
   ctx.restore()
 }
 
-function removeLightBackground(key: string, image: HTMLImageElement | HTMLCanvasElement) {
-  const cached = transparentArtCache.get(key)
-  if (cached) return cached
-  const canvas = document.createElement('canvas')
-  canvas.width = image.width
-  canvas.height = image.height
-  const offscreen = canvas.getContext('2d')
-  if (!offscreen) return image
-  offscreen.drawImage(image, 0, 0)
-
-  const pixels = offscreen.getImageData(0, 0, canvas.width, canvas.height)
-  const { data, width, height } = pixels
-  const isSheet = !key.startsWith('monster:')
-  const columns = isSheet ? 4 : 1
-  const rows = isSheet ? 4 : 1
-  const cellWidth = width / columns
-  const cellHeight = height / rows
-
-  for (let row = 0; row < rows; row++) {
-    for (let column = 0; column < columns; column++) {
-      const left = Math.floor(column * cellWidth)
-      const top = Math.floor(row * cellHeight)
-      const right = Math.min(width - 1, Math.ceil((column + 1) * cellWidth) - 1)
-      const bottom = Math.min(height - 1, Math.ceil((row + 1) * cellHeight) - 1)
-      const histogram = new Map<string, { color: [number, number, number]; count: number }>()
-      const sample = (x: number, y: number) => {
-        const pixel = (y * width + x) * 4
-        if (data[pixel + 3] === 0) return
-        const color: [number, number, number] = [data[pixel], data[pixel + 1], data[pixel + 2]]
-        const bucket = color.map((channel) => Math.round(channel / 8) * 8).join(',')
-        const entry = histogram.get(bucket)
-        if (entry) entry.count += 1
-        else histogram.set(bucket, { color, count: 1 })
-      }
-      for (let x = left; x <= right; x += 2) {
-        sample(x, top)
-        sample(x, bottom)
-      }
-      for (let y = top + 1; y < bottom; y += 2) {
-        sample(left, y)
-        sample(right, y)
-      }
-      const backgroundColors = [...histogram.values()]
-        .sort((a, b) => b.count - a.count)
-        .slice(0, isSheet ? 4 : 2)
-        .map(({ color }) => color)
-      const matchesBackground = (pixel: number) =>
-        backgroundColors.some((color) =>
-          Math.max(
-            Math.abs(data[pixel] - color[0]),
-            Math.abs(data[pixel + 1] - color[1]),
-            Math.abs(data[pixel + 2] - color[2]),
-          ) <= 18,
-        )
-      const cellW = right - left + 1
-      const cellH = bottom - top + 1
-      const visited = new Uint8Array(cellW * cellH)
-      const queue: Array<[number, number]> = []
-      const enqueue = (x: number, y: number) => {
-        if (x < left || x > right || y < top || y > bottom) return
-        const index = (y - top) * cellW + (x - left)
-        if (visited[index]) return
-        const pixel = (y * width + x) * 4
-        if (data[pixel + 3] === 0 || !matchesBackground(pixel)) return
-        visited[index] = 1
-        queue.push([x, y])
-      }
-      for (let x = left; x <= right; x++) {
-        enqueue(x, top)
-        enqueue(x, bottom)
-      }
-      for (let y = top + 1; y < bottom; y++) {
-        enqueue(left, y)
-        enqueue(right, y)
-      }
-      for (let cursor = 0; cursor < queue.length; cursor++) {
-        const [x, y] = queue[cursor]
-        data[(y * width + x) * 4 + 3] = 0
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            if (dx !== 0 || dy !== 0) enqueue(x + dx, y + dy)
-          }
-        }
-      }
-      for (let x = left; x <= right; x++) {
-        data[(top * width + x) * 4 + 3] = 0
-        data[(bottom * width + x) * 4 + 3] = 0
-      }
-      for (let y = top; y <= bottom; y++) {
-        data[(y * width + left) * 4 + 3] = 0
-        data[(y * width + right) * 4 + 3] = 0
-      }
-    }
+function monsterFacing(
+  sprite: string,
+  x: number,
+  y: number,
+  vx: number,
+  vy: number,
+  flip: boolean,
+  provoked: boolean,
+): Dir {
+  const isHumanoid = sprite === 'goblin' || sprite === 'skeleton' || sprite === 'demon'
+  if (!isHumanoid) {
+    return flip ? 'left' : 'right'
   }
-
-  offscreen.putImageData(pixels, 0, 0)
-  transparentArtCache.set(key, canvas)
-  return canvas
-}
-
-const EARTH_BOSS_ART: Record<string, { idle: string; walk: string }> = {
-  south: { idle: '/images/monsters/earth-guardian/idle/south.gif', walk: '/images/monsters/earth-guardian/walk/south.gif' },
-  'south-east': { idle: '/images/monsters/earth-guardian/rotations/south-east.png', walk: '/images/monsters/earth-guardian/rotations/south-east.png' },
-  east: { idle: '/images/monsters/earth-guardian/idle/east.gif', walk: '/images/monsters/earth-guardian/walk/east.gif' },
-  'north-east': { idle: '/images/monsters/earth-guardian/rotations/north-east.png', walk: '/images/monsters/earth-guardian/rotations/north-east.png' },
-  north: { idle: '/images/monsters/earth-guardian/idle/north.gif', walk: '/images/monsters/earth-guardian/walk/north.gif' },
-  'north-west': { idle: '/images/monsters/earth-guardian/rotations/north-west.png', walk: '/images/monsters/earth-guardian/rotations/north-west.png' },
-  west: { idle: '/images/monsters/earth-guardian/idle/west.gif', walk: '/images/monsters/earth-guardian/walk/west.gif' },
-  'south-west': { idle: '/images/monsters/earth-guardian/rotations/south-west.png', walk: '/images/monsters/earth-guardian/rotations/south-west.png' },
-}
-
-const GOBLIN_ART: Record<string, { idle: string; walk: string }> = {
-  north: {
-    idle: 'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Idle_custom-_north-rxTA4nA3rmCNaNemmaXghaD8hjyw5i.gif',
-    walk: 'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Idle_custom-Walking_north-wKHSHvNf65fznlV6skQ4EO1ToLKADZ.gif',
-  },
-  east: {
-    idle: 'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Idle_custom-_east-98rRREOS8NhMq1NbumnC0jQVDvFMYt.gif',
-    walk: 'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Idle_custom-Walking_east%20%281%29-lzxGGeCq0Qn0S5tGqufytVczP7L1lx.gif',
-  },
-  south: {
-    idle: 'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Idle_custom-_south-Fsb22sgwMaGCGMC9OyhOWo0JIkm1SV.gif',
-    walk: 'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Idle_custom-Walking_south%20%281%29-JH5UiKage1fvxqojlQuuyejIz1mm49.gif',
-  },
-  west: {
-    idle: 'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Idle_custom-_west-AYBnqEMiMctgcmWAKw9yTSRWqmGSwS.gif',
-    walk: 'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Idle_custom-Walking_west-swzzMe7JK5fnXf4BK0dAavWjm5Ejul.gif',
-  },
-}
-
-const LAVA_BOSS_ART: Record<string, string> = {
-  south: '/images/monsters/lava-boss/south.png',
-  'south-east': '/images/monsters/lava-boss/south-east.png',
-  east: '/images/monsters/lava-boss/east.png',
-  'north-east': '/images/monsters/lava-boss/north-east.png',
-  north: '/images/monsters/lava-boss/north.png',
-  'north-west': '/images/monsters/lava-boss/north-west.png',
-  west: '/images/monsters/lava-boss/west.png',
-  'south-west': '/images/monsters/lava-boss/south-west.png',
-}
-
-function loadArt(src: string) {
-  const cached = artCache.get(src)
-  if (cached) return cached.complete ? cached : null
-  const image = new Image()
-  image.crossOrigin = 'anonymous'
-  image.src = src
-  artCache.set(src, image)
-  return null
-}
-
-function lavaBossArt(dir: string, walking: boolean) {
-  const fallback = dir.includes('down') ? 'south' : dir.includes('up') ? 'north' : dir.includes('left') ? 'west' : 'east'
-  const base = LAVA_BOSS_ART[dir] ?? LAVA_BOSS_ART[fallback]
-  const src = walking ? base.replace('/lava-boss/', '/lava-boss/walk-') : base
-  return loadArt(src)
-}
-
-function directionTowardPlayer(x: number, y: number) {
-  const dx = (game.p?.x ?? x) - x
-  const dy = (game.p?.y ?? y) - y
-  if (Math.abs(dx) > Math.abs(dy)) return dx < 0 ? 'west' : 'east'
-  return dy < 0 ? 'north' : 'south'
-}
-
-function customMonsterArt(defId: string, direction: string, walking: boolean) {
-  if (defId === 'earth_golem') {
-    const art = EARTH_BOSS_ART[direction] ?? EARTH_BOSS_ART.south
-    return loadArt(walking ? art.walk : art.idle)
+  if (provoked) {
+    const dx = (game.p?.x ?? x) - x
+    const dy = (game.p?.y ?? y) - y
+    if (Math.abs(dx) >= Math.abs(dy)) return dx < 0 ? 'left' : 'right'
+    return dy < 0 ? 'up' : 'down'
   }
-  if (defId === 'goblin' || defId === 'goblin_chief') {
-    const art = GOBLIN_ART[direction] ?? GOBLIN_ART.south
-    return loadArt(walking ? art.walk : art.idle)
+  if (Math.abs(vx) > 0.05 || Math.abs(vy) > 0.05) {
+    if (Math.abs(vx) >= Math.abs(vy)) return vx < 0 ? 'left' : 'right'
+    return vy < 0 ? 'up' : 'down'
   }
-  return null
-}
-
-function monsterArt(defId: string, flip = false) {
-  const src = defId === 'gale_sentinel'
-    ? `/images/monsters/gale-sentinel/${flip ? 'west' : 'east'}.gif`
-    : MONSTER_ART[defId]
-  if (!src) return null
-  return loadArt(src)
+  return flip ? 'left' : 'down'
 }
 
 export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dpr: number, font: string) {
@@ -453,7 +148,6 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   ctx.imageSmoothingEnabled = false
 
   const cssW = cw / dpr
-  // Pull the camera back slightly so mobile players can see more of the map and nearby enemies.
   const zoom = cssW < 700 ? 1.6 : 2.4
   const s = zoom * dpr
   const viewW = cw / s
@@ -528,16 +222,16 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       draw: () => {
         const phase = t * 2.6 + fx * 0.15
         const breath = Math.sin(phase)
-        const scaleX = 1 - breath * 0.028
-        const scaleY = 1 + breath * 0.032
-        const blink = Math.sin(t * 1.1 + fx) > 0.96 ? -1 : 0
+        const scaleX = 1 - breath * 0.02
+        const scaleY = 1 + breath * 0.024
+        const idleF = Math.sin(t * 1.1 + fx) > 0.96 ? -1 : Math.floor(t * 2 + fx) % 4
         const rawNpc = npcSprite(n.id)
-        const img = rawNpc ?? humanSprite(n.colors, 'down', blink)
+        const img = rawNpc ?? humanSprite(n.colors, 'down', idleF, null, '#ced4da', false, 'idle')
         const baseScale = rawNpc ? 1.15 : 1
         const drawW = img.width * baseScale
         const drawH = img.height * baseScale
         const nearHop = near ? -Math.abs(Math.sin(t * 5)) * 1.6 : 0
-        shadow(ctx, fx, fy, 6 - breath * 0.35)
+        shadow(ctx, fx, fy, 6 - breath * 0.3)
         ctx.save()
         ctx.translate(fx, fy + nearHop)
         ctx.scale(scaleX, scaleY)
@@ -554,40 +248,38 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   for (const m of game.monsters) {
     if (m.dead) continue
     const def = MONSTERS[m.defId]
+    if (!def) continue
     ents.push({
       y: m.y,
       draw: () => {
         const walking = m.moving
         const attacking = m.lunge > 0
-        const direction = directionTowardPlayer(m.x, m.y)
-        const customArt = customMonsterArt(m.defId, direction, walking)
-        const lavaBoss = def.id === 'demon_lord' ? lavaBossArt(direction, walking) : null
-        const asset = customArt ?? lavaBoss ?? monsterArt(m.defId, m.flip)
-        const isDirectionalAsset = customArt !== null || lavaBoss !== null || m.defId === 'gale_sentinel'
-        const sheetFrame = walking ? Math.floor(m.animT * 8) % 4 : Math.floor(m.animT * 3) % 4
-        const procFrame = walking ? 2 + (Math.floor(m.animT * 8) % 2) : Math.floor(m.animT * 2.5) % 2
-        const rawImage = asset ?? monsterSprite(def.sprite, def.color, procFrame, attacking)
-        const img = customArt && m.defId !== 'earth_golem'
-          ? removeLightBackground(`monster:${m.defId}:${direction}`, rawImage)
-          : asset && !isDirectionalAsset
-            ? removeLightBackground(`monsterSheet:${m.defId}`, rawImage)
-            : rawImage
-        const sourceWidth = asset && !isDirectionalAsset ? img.width / 4 : img.width
-        const sourceHeight = asset && !isDirectionalAsset ? img.height / 4 : img.height
-        const targetSize = def.boss ? 56 : 30
-        const assetScale = asset ? Math.min(1, targetSize / Math.max(sourceWidth, sourceHeight)) : 1
-        const scale = (def.boss ? 1.85 : 1.15) * assetScale
-        const w = sourceWidth * scale
-        const h = sourceHeight * scale
+        const action: SpriteAction = attacking ? 'attack' : walking ? 'walk' : 'idle'
+        const dir = monsterFacing(def.sprite, m.x, m.y, m.vx, m.vy, m.flip, m.provoked)
+        const speedMul = m.provoked ? 1.3 : 1
+        const attackProgress = attacking ? Math.max(0, Math.min(1, 1 - m.lunge / 0.3)) : 0
+        const attackFrame = Math.min(3, Math.floor(attackProgress * 4))
+        const walkFrame = Math.floor(m.animT * 10 * speedMul) % 6
+        const idleFrame = Math.floor(m.animT * 2.8) % 4
+        const frame = attacking ? attackFrame : walking ? walkFrame : idleFrame
+
+        const img = monsterSprite(def.sprite, def.color, frame, attacking, action, dir, attackFrame, def.id)
+        const scale = def.boss ? 1.65 : 1.05
+        const w = img.width * scale
+        const h = img.height * scale
+
         const flying = def.sprite === 'bat' || def.sprite === 'ghost'
-        const speedMul = m.provoked ? 1.35 : 1
-        const stride = walking ? Math.sin(m.animT * 13 * speedMul) : Math.sin(m.animT * 2.8 * speedMul)
         const hover = flying ? Math.round(Math.sin(m.animT * 4.2) * 2.4) - 4 : 0
         const hoverX = flying ? Math.cos(m.animT * 2.4) * 1.4 : 0
-        const walkBob = flying
-          ? 0
-          : Math.round(stride * (walking ? (def.boss ? 2.4 : 1.8) : 0.45))
-        shadow(ctx, m.x + hoverX, m.y, (5 - (flying ? Math.sin(m.animT * 4.2) * 0.4 : 0)) * scale)
+        const faceDx = (game.p?.x ?? m.x) - m.x
+        const faceDy = (game.p?.y ?? m.y) - m.y
+        const faceLen = Math.hypot(faceDx, faceDy) || 1
+        const faceX = faceDx / faceLen
+        const faceY = faceDy / faceLen
+        const attackReach = attacking ? Math.sin(attackProgress * Math.PI) * (def.boss ? 5 : 3.5) : 0
+        const hitShake = m.hitFlash > 0 ? Math.sin(m.hitFlash * 95) * 2.2 : 0
+
+        shadow(ctx, m.x + hoverX, m.y, (5.5 - (flying ? Math.sin(m.animT * 4.2) * 0.4 : 0)) * (def.boss ? 1.5 : 1))
         if (def.boss) {
           ctx.save()
           ctx.strokeStyle = def.color
@@ -598,41 +290,29 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           ctx.stroke()
           ctx.restore()
         }
-        const faceX = direction === 'west' ? -1 : direction === 'east' ? 1 : 0
-        const faceY = direction === 'north' ? -1 : direction === 'south' ? 1 : 0
-        const attackProgress = attacking ? 1 - m.lunge / 0.15 : 0
-        const attackReach = attacking ? Math.sin(Math.min(1, attackProgress) * Math.PI) * (def.boss ? 6 : 4) : 0
-        const hitShake = m.hitFlash > 0 ? Math.sin(m.hitFlash * 95) * 2.2 : 0
-        const squash = 1 + stride * (walking ? (def.boss ? 0.065 : 0.1) : 0.028) + (attacking ? 0.08 : 0)
-        const stretch = 1 - stride * (walking ? (def.boss ? 0.065 : 0.1) : 0.028) - (attacking ? 0.05 : 0)
-        const attackTilt = attacking ? (faceX * 0.2 + faceY * 0.09) : stride * (walking ? 0.045 : 0.018)
+
         ctx.save()
         if (m.hitFlash > 0) ctx.globalAlpha = 0.65
-        if (def.sprite === 'ghost') ctx.globalAlpha *= 0.78 + Math.sin(m.animT * 4) * 0.08
+        if (def.sprite === 'ghost') ctx.globalAlpha *= 0.8 + Math.sin(m.animT * 4) * 0.08
         ctx.translate(
-          m.x + hoverX + hitShake + faceX * attackReach,
-          m.y + faceY * attackReach - h / 2 + hover + walkBob,
+          Math.round(m.x + hoverX + hitShake + faceX * attackReach),
+          Math.round(m.y + faceY * attackReach + hover),
         )
-        ctx.rotate(attackTilt)
-        ctx.scale(isDirectionalAsset ? squash : (m.flip ? -squash : squash), stretch)
-        if (asset && !isDirectionalAsset) {
-          ctx.drawImage(img, sheetFrame * sourceWidth, 0, sourceWidth, sourceHeight, -w / 2, -h / 2, w, h)
-        } else {
-          ctx.drawImage(img, -w / 2, -h / 2, w, h)
-        }
+        ctx.drawImage(img, Math.round(-w / 2), Math.round(-h + 2 * scale), w, h)
+
         if (m.hitFlash > 0) {
-          ctx.globalAlpha = Math.min(0.6, m.hitFlash * 4)
+          ctx.globalAlpha = Math.min(0.55, m.hitFlash * 4)
           ctx.fillStyle = '#ffffff'
           ctx.beginPath()
-          ctx.ellipse(0, 0, w * 0.36, h * 0.36, 0, 0, Math.PI * 2)
+          ctx.ellipse(0, -h / 2, w * 0.32, h * 0.32, 0, 0, Math.PI * 2)
           ctx.fill()
         }
         if (attacking) {
-          ctx.globalAlpha = Math.min(1, m.lunge / 0.08)
+          ctx.globalAlpha = Math.min(1, m.lunge / 0.12)
           ctx.strokeStyle = def.boss ? '#ff6b6b' : '#fff1ad'
-          ctx.lineWidth = def.boss ? 2.4 : 1.8
+          ctx.lineWidth = def.boss ? 2.2 : 1.6
           ctx.beginPath()
-          ctx.arc(0, 0, Math.max(w, h) * 0.72, Math.atan2(faceY, faceX) - 0.85, Math.atan2(faceY, faceX) + 0.85)
+          ctx.arc(0, -h * 0.45, Math.max(w, h) * 0.55, Math.atan2(faceY, faceX) - 0.8, Math.atan2(faceY, faceX) + 0.8)
           ctx.stroke()
         }
         ctx.restore()
@@ -647,30 +327,34 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     const remoteY = (other.previousY ?? other.y) + (other.y - (other.previousY ?? other.y)) * networkBlend
     const remoteJob = JOBS[other.jobId] ?? JOBS.novice
     const remoteAttacking = other.attackAnim > 0
-    const remoteFrame = other.moving ? Math.floor(t * 8) % 4 : (Math.sin(t * 1.3 + remoteX) > 0.96 ? -1 : 0)
-    const remoteAnimation = remoteAttacking ? 'attack' : other.moving ? 'walk' : 'idle'
+    const remoteAction: SpriteAction = remoteAttacking ? 'attack' : other.moving ? 'walk' : 'idle'
+    const atkProgress = remoteAttacking ? Math.max(0, Math.min(1, 1 - other.attackAnim / 0.3)) : 0
+    const remoteAtkFrame = Math.min(3, Math.floor(atkProgress * 4))
+    const remoteFrame = remoteAttacking
+      ? remoteAtkFrame
+      : other.moving
+        ? Math.floor(t * 11) % 6
+        : (Math.sin(t * 1.3 + remoteX) > 0.96 ? -1 : Math.floor(t * 2.4) % 4)
     const remoteWeapon = remoteJob.weaponTypes[0] ?? 'stick'
-    const remoteImg = (other.gm ? gmOutfitSprite(other.facing, remoteAnimation) : null)
-      ?? professionArt(other.facing, other.jobId, other.moving, remoteAttacking, Math.floor(t * 10))
-      ?? humanSprite(remoteJob.colors, other.facing, remoteFrame, remoteWeapon, remoteJob.colors.accent, remoteAttacking)
-    const remoteTarget = remoteImg.width > 36 ? 32 : remoteImg.width
-    const remoteW = remoteImg.width > 36 ? remoteTarget : remoteImg.width
-    const remoteH = remoteImg.height > 36 ? remoteTarget : remoteImg.height
+    const styledColors = jobHumanColors(other.jobId, remoteJob.colors, other.gm)
+    const remoteImg = humanSprite(
+      styledColors,
+      other.facing,
+      remoteFrame,
+      remoteWeapon,
+      remoteJob.colors.accent,
+      remoteAttacking,
+      remoteAction,
+      remoteAtkFrame,
+    )
+    const remoteW = remoteImg.width
+    const remoteH = remoteImg.height
     ents.push({
       y: remoteY,
       draw: () => {
-        const breath = other.moving ? 0 : Math.sin(t * 3.2 + remoteX)
-        const stride = other.moving ? Math.sin(t * 14) : 0
-        const walkBob = other.moving ? -Math.abs(stride) * 1.6 : 0
-        const scaleX = (1 - breath * 0.025) * (other.moving ? 1 + Math.abs(stride) * 0.04 : 1)
-        const scaleY = (1 + breath * 0.03) * (other.moving ? 1 - Math.abs(stride) * 0.04 : 1)
-        const atkProgress = remoteAttacking ? Math.max(0, 1 - other.attackAnim / 0.2) : 0
-        const lungeDist = remoteAttacking ? Math.sin(Math.min(1, atkProgress) * Math.PI) * 3.5 : 0
+        const lungeDist = remoteAttacking ? Math.sin(atkProgress * Math.PI) * 3 : 0
         const ox = other.facing === 'left' ? -lungeDist : other.facing === 'right' ? lungeDist : 0
         const oy = other.facing === 'up' ? -lungeDist : other.facing === 'down' ? lungeDist : 0
-        const tilt = remoteAttacking
-          ? (other.facing === 'left' ? -0.14 : other.facing === 'right' ? 0.14 : 0.06)
-          : stride * 0.045
         shadow(ctx, remoteX, remoteY, 6)
         if (other.gm) {
           ctx.fillStyle = `rgba(255, 214, 10, ${0.18 + Math.sin(t * 5) * 0.08})`
@@ -679,10 +363,8 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           ctx.fill()
         }
         ctx.save()
-        ctx.translate(remoteX + ox, remoteY + oy + walkBob)
-        ctx.rotate(tilt)
-        ctx.scale(scaleX, scaleY)
-        ctx.drawImage(remoteImg, Math.round(-remoteW / 2), Math.round(-remoteH), remoteW, remoteH)
+        ctx.translate(Math.round(remoteX + ox), Math.round(remoteY + oy))
+        ctx.drawImage(remoteImg, Math.round(-remoteW / 2), Math.round(-remoteH + 2), remoteW, remoteH)
         if (remoteAttacking) {
           drawWeaponAttackOverlay(ctx, other.facing, remoteWeapon, atkProgress, remoteJob.colors.accent)
         }
@@ -691,7 +373,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     })
   }
 
-  const job = JOBS[p.jobId]
+  const job = JOBS[p.jobId] ?? JOBS.novice
   const weapon = p.equipment.weapon ? ITEMS[p.equipment.weapon.itemId] : null
   const gemFashion = GEM_SHOP_ITEMS.find((item) => item.id === p.equippedGemFashion)
   const activePet = getActivePetBonuses(p.petState, p.equippedGemCompanion, p.ownedGemItems)
@@ -699,22 +381,30 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     y: p.y,
     draw: () => {
       const attacking = game.attackAnim > 0
-      const frame = game.moving ? Math.floor(game.walkT * 8) % 4 : (Math.sin(t * 1.4) > 0.96 ? -1 : 0)
-      const animation = attacking ? 'attack' : game.moving ? 'walk' : 'idle'
-      const customArt = p.gm
-        ? gmOutfitSprite(game.facing, animation)
-        : professionArt(game.facing, p.jobId, game.moving, attacking, Math.floor(game.walkT * 10))
+      const action: SpriteAction = attacking ? 'attack' : game.moving ? 'walk' : 'idle'
+      const atkProgress = attacking ? Math.max(0, Math.min(1, 1 - game.attackAnim / 0.3)) : 0
+      const atkFrame = Math.min(3, Math.floor(atkProgress * 4))
+      const frame = attacking
+        ? atkFrame
+        : game.moving
+          ? Math.floor(game.walkT * 11) % 6
+          : (Math.sin(t * 1.4) > 0.96 ? -1 : Math.floor(t * 2.4) % 4)
       const weaponType = weapon?.weaponType ?? job.weaponTypes[0] ?? 'stick'
-      const img = customArt ?? humanSprite(job.colors, game.facing, frame, weapon?.weaponType ?? null, weapon?.color, attacking)
-      const drawW = img.width > 36 ? 32 : img.width
-      const drawH = img.height > 36 ? 32 : img.height
-      const breath = game.moving || attacking ? 0 : Math.sin(t * 3.4)
-      const stride = game.moving ? Math.sin(game.walkT * 14) : 0
-      const walkBob = game.moving ? -Math.abs(stride) * 1.7 : 0
-      const scaleX = (1 - breath * 0.025) * (game.moving ? 1 + Math.abs(stride) * 0.045 : 1) * (attacking ? 1.06 : 1)
-      const scaleY = (1 + breath * 0.032) * (game.moving ? 1 - Math.abs(stride) * 0.045 : 1) * (attacking ? 0.96 : 1)
-      const atkProgress = attacking ? Math.max(0, 1 - game.attackAnim / 0.22) : 0
-      const lungeDist = attacking ? Math.sin(Math.min(1, atkProgress) * Math.PI) * 4.2 : 0
+      const styledColors = jobHumanColors(p.jobId, job.colors, p.gm)
+      const img = humanSprite(
+        styledColors,
+        game.facing,
+        frame,
+        weaponType,
+        weapon?.color ?? job.colors.accent,
+        attacking,
+        action,
+        atkFrame,
+      )
+      const drawW = img.width
+      const drawH = img.height
+      const stride = game.moving ? Math.sin(game.walkT * 11 * Math.PI / 3) : 0
+      const lungeDist = attacking ? Math.sin(atkProgress * Math.PI) * 3.5 : 0
       let ox = 0
       let oy = 0
       if (attacking) {
@@ -723,10 +413,8 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         else if (game.facing === 'up') oy = -lungeDist
         else oy = lungeDist
       }
-      const tilt = attacking
-        ? (game.facing === 'left' ? -0.16 : game.facing === 'right' ? 0.16 : 0.07)
-        : stride * 0.05
-      shadow(ctx, p.x, p.y, 6 - breath * 0.3)
+
+      shadow(ctx, p.x, p.y, 6)
       if (game.moving && !p.invisible) {
         ctx.save()
         ctx.fillStyle = 'rgba(255,255,255,0.28)'
@@ -774,20 +462,18 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         ctx.save()
         ctx.globalAlpha = p.invisible ? 0.14 : 0.86
         const wingBob = Math.sin(t * 5) * 0.7
-        drawGemItemPixels(ctx, gemFashion, p.x - 8, p.y - drawH + 2 + walkBob + wingBob, 2)
+        drawGemItemPixels(ctx, gemFashion, p.x - 8, p.y - drawH + 4 + wingBob, 2)
         ctx.restore()
       }
       ctx.save()
-      ctx.translate(p.x + ox, p.y + oy + walkBob)
-      ctx.rotate(tilt)
-      ctx.scale(scaleX, scaleY)
-      ctx.drawImage(img, Math.round(-drawW / 2), Math.round(-drawH), drawW, drawH)
+      ctx.translate(Math.round(p.x + ox), Math.round(p.y + oy))
+      ctx.drawImage(img, Math.round(-drawW / 2), Math.round(-drawH + 2), drawW, drawH)
       if (attacking) {
         drawWeaponAttackOverlay(ctx, game.facing, weaponType, atkProgress, weapon?.color ?? job.colors.accent)
       }
       ctx.restore()
       if (gemFashion?.id === 'aurora_cat_hood') {
-        drawGemItemPixels(ctx, gemFashion, p.x - 5, p.y - drawH - 4 + walkBob, 1.25)
+        drawGemItemPixels(ctx, gemFashion, p.x - 5, p.y - drawH - 2, 1.25)
       }
       if (gemFashion?.id === 'sunfire_aura') {
         ctx.save()
@@ -933,6 +619,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   for (const m of game.monsters) {
     if (m.dead) continue
     const def = MONSTERS[m.defId]
+    if (!def) continue
     const h = (def.boss ? 28 : 16) + (def.sprite === 'bat' || def.sprite === 'ghost' ? 4 : 0)
     const [x, y] = toS(m.x, m.y - h)
     const color = def.boss ? '#ff6b6b' : def.level > p.level + 5 ? '#ff8fa3' : def.level < p.level - 5 ? '#a0a0a0' : '#ffffff'

@@ -9,8 +9,9 @@ import { PanelFrame, PxButton } from './panels'
 
 export function StoragePanel() {
   const g = useGame()
-  const p = g.p!
   const [amount, setAmount] = useState('')
+  if (!g.p) return null
+  const p = g.p
 
   return (
     <PanelFrame title="คลังเก็บของพี่มณี" subtitle="คลิกไอเทมเพื่อย้ายระหว่างกระเป๋าและคลัง (ของในคลังถูกบันทึกถาวร)">

@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { onAuthStateChanged, type User } from 'firebase/auth'
-import { Check, CheckCircle2, Copy, Crown, LogIn, LogOut, ShieldCheck } from 'lucide-react'
-import { auth, signInWithGoogle, signOutFirebase } from '@/lib/firebase/client'
+import { Check, CheckCircle2, Copy, Crown, LogIn, LogOut, RefreshCw, ShieldCheck } from 'lucide-react'
+import { auth, formatFirebaseAuthError, signInWithGoogle, signOutFirebase } from '@/lib/firebase/client'
 import {
   ensureUserProfile,
   getCachedAccountIdentity,
@@ -12,12 +12,41 @@ import {
 } from '@/lib/firebase/characters'
 import { isGmAccountUser, PERMANENT_GM_GAME_UID } from '@/lib/game/permissions'
 
-export function AccountPanel() {
+export function AccountPanel({
+  compact = false,
+  onAuthSuccess,
+}: {
+  compact?: boolean
+  onAuthSuccess?: (user: User, identity: UserAccountIdentity) => void
+}) {
   const [user, setUser] = useState<User | null>(() => auth.currentUser)
+  const [authReady, setAuthReady] = useState<boolean>(() => Boolean(auth.currentUser))
   const [identity, setIdentity] = useState<UserAccountIdentity | null>(() => getCachedAccountIdentity())
   const [message, setMessage] = useState('')
+  const [syncFailed, setSyncFailed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [copied, setCopied] = useState(false)
+
+  const syncProfile = useCallback(
+    async (targetUser: User, notifySuccess = false) => {
+      setSyncFailed(false)
+      try {
+        const resolved = await ensureUserProfile(targetUser)
+        setIdentity(resolved)
+        setMessage('')
+        if (notifySuccess) {
+          onAuthSuccess?.(targetUser, resolved)
+        }
+        return resolved
+      } catch (error) {
+        console.error('Failed to sync user profile:', error)
+        setSyncFailed(true)
+        setMessage('เข้าสู่ระบบแล้ว แต่ซิงค์โปรไฟล์กับคลาวด์ไม่สำเร็จ กรุณากดซิงค์อีกครั้ง')
+        return null
+      }
+    },
+    [onAuthSuccess],
+  )
 
   useEffect(() => {
     const unsubIdentity = subscribeAccountIdentity((next) => {
@@ -25,57 +54,32 @@ export function AccountPanel() {
     })
     const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
       setUser(nextUser)
+      setAuthReady(true)
       if (nextUser) {
         setMessage('')
-        void ensureUserProfile(nextUser)
-          .then((resolved) => {
-            setIdentity(resolved)
-          })
-          .catch((error) => {
-            console.error('Failed to sync user profile:', error)
-          })
+        void syncProfile(nextUser)
       } else {
         setIdentity(null)
+        setSyncFailed(false)
       }
     })
     return () => {
       unsubIdentity()
       unsubscribe()
     }
-  }, [])
+  }, [syncProfile])
 
   const handleGoogleSignIn = async () => {
     setBusy(true)
     setMessage('')
+    setSyncFailed(false)
     try {
       const cred = await signInWithGoogle()
       if (cred.user) {
-        try {
-          const resolved = await ensureUserProfile(cred.user)
-          setIdentity(resolved)
-        } catch (profileError) {
-          console.error('Profile sync error after sign-in:', profileError)
-          setMessage('เข้าสู่ระบบสำเร็จ แต่ซิงค์โปรไฟล์กับ Firestore ไม่สำเร็จ กรุณาลองรีเฟรชหน้า')
-        }
+        await syncProfile(cred.user, true)
       }
     } catch (error) {
-      const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : ''
-      if (code === 'auth/popup-closed-by-user') {
-        setMessage('ยกเลิกการเข้าสู่ระบบ')
-      } else if (code === 'auth/cancelled-popup-request') {
-        setMessage('มีหน้าต่างเข้าสู่ระบบเปิดอยู่แล้ว กรุณารอสักครู่แล้วลองใหม่')
-      } else if (code === 'auth/popup-blocked') {
-        setMessage('เบราว์เซอร์บล็อกหน้าต่างเข้าสู่ระบบ กรุณาอนุญาต Pop-up แล้วลองใหม่')
-      } else if (code === 'auth/unauthorized-domain') {
-        const host = typeof window !== 'undefined' ? window.location.hostname : ''
-        setMessage(`โดเมน ${host} ยังไม่ได้รับอนุญาตใน Firebase Auth Authorized Domains`)
-      } else if (code === 'auth/operation-not-allowed') {
-        setMessage('ยังไม่ได้เปิดใช้งาน Google Sign-In ใน Firebase Authentication')
-      } else if (code === 'auth/network-request-failed') {
-        setMessage('เชื่อมต่อเครือข่ายไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่')
-      } else {
-        setMessage(code ? `เข้าสู่ระบบไม่สำเร็จ (${code})` : 'เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
-      }
+      setMessage(formatFirebaseAuthError(error))
     } finally {
       setBusy(false)
     }
@@ -101,6 +105,65 @@ export function AccountPanel() {
     } catch {
       // Ignore clipboard permission errors.
     }
+  }
+
+  if (compact) {
+    if (!authReady) {
+      return (
+        <span className="inline-flex min-h-10 items-center border border-border bg-secondary/70 px-3 py-1.5 text-[11px] text-muted-foreground">
+          กำลังตรวจบัญชี...
+        </span>
+      )
+    }
+
+    if (user) {
+      const isGm = identity?.isGm ?? isGmAccountUser(user)
+      const displayGameUid = identity?.gameUid ?? (isGm ? PERMANENT_GM_GAME_UID : '----')
+      return (
+        <div className="flex items-center gap-1.5">
+          <div className="hidden items-center gap-1.5 border border-border bg-card/90 px-2.5 py-1.5 text-[11px] sm:flex">
+            {isGm ? <Crown className="size-3.5 text-amber-300" aria-hidden /> : <ShieldCheck className="size-3.5 text-accent" aria-hidden />}
+            <span className="max-w-28 truncate font-medium text-foreground">{user.displayName || 'นักผจญภัย'}</span>
+            <span className={`font-mono text-[10px] font-bold ${isGm ? 'text-amber-300' : 'text-accent'}`}>
+              #{displayGameUid}
+            </span>
+          </div>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void handleSignOut()}
+            title="ออกจากระบบ Google"
+            className="pixel-btn flex min-h-10 items-center gap-1 bg-secondary px-2.5 py-2 text-xs text-foreground hover:brightness-110 disabled:opacity-50"
+          >
+            <LogOut className="size-3.5" aria-hidden />
+            <span className="hidden sm:inline">ออกระบบ</span>
+          </button>
+        </div>
+      )
+    }
+
+    return (
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void handleGoogleSignIn()}
+        title={message || 'เข้าสู่ระบบด้วย Google เพื่อซิงค์เซฟข้ามอุปกรณ์'}
+        className="pixel-btn flex min-h-10 items-center gap-1.5 whitespace-nowrap bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:brightness-110 disabled:opacity-50"
+      >
+        <LogIn className="size-3.5" aria-hidden />
+        {busy ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ Google'}
+      </button>
+    )
+  }
+
+  if (!authReady) {
+    return (
+      <div className="pixel-panel w-full bg-card/90 p-3">
+        <p role="status" className="text-center text-xs text-muted-foreground">
+          กำลังตรวจสอบสถานะการเข้าสู่ระบบ...
+        </p>
+      </div>
+    )
   }
 
   if (user) {
@@ -149,15 +212,27 @@ export function AccountPanel() {
               {displayGameUid}
             </span>
           </div>
-          {displayGameUid !== '----' && (
+          {syncFailed ? (
             <button
               type="button"
-              onClick={() => void copyUid(displayGameUid)}
-              className="flex items-center gap-1 border border-border bg-secondary/70 px-2 py-0.5 text-[10px] text-foreground hover:border-primary"
+              disabled={busy}
+              onClick={() => void syncProfile(user, true)}
+              className="flex items-center gap-1 border border-primary/60 bg-primary/15 px-2 py-0.5 text-[10px] text-primary hover:brightness-110 disabled:opacity-50"
             >
-              {copied ? <Check className="size-3 text-accent" aria-hidden /> : <Copy className="size-3" aria-hidden />}
-              {copied ? 'คัดลอกแล้ว' : 'คัดลอก UID'}
+              <RefreshCw className="size-3" aria-hidden />
+              ซิงค์อีกครั้ง
             </button>
+          ) : (
+            displayGameUid !== '----' && (
+              <button
+                type="button"
+                onClick={() => void copyUid(displayGameUid)}
+                className="flex items-center gap-1 border border-border bg-secondary/70 px-2 py-0.5 text-[10px] text-foreground hover:border-primary"
+              >
+                {copied ? <Check className="size-3 text-accent" aria-hidden /> : <Copy className="size-3" aria-hidden />}
+                {copied ? 'คัดลอกแล้ว' : 'คัดลอก UID'}
+              </button>
+            )
           )}
         </div>
 

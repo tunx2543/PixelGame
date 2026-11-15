@@ -59,7 +59,8 @@ function JobTree() {
 
 export function JobPanel() {
   const g = useGame()
-  const p = g.p!
+  if (!g.p) return null
+  const p = g.p
   const job = currentJob()
   const options = availableJobs()
 

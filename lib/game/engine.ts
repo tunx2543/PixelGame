@@ -74,6 +74,7 @@ let activeAccountIsGm = false
 let activeCharacterSlot =
   typeof window !== 'undefined' ? (localStorage.getItem(ACTIVE_SLOT_STORAGE_KEY) || 'slot_1') : 'slot_1'
 let pendingGameUid: { userId: string; promise: Promise<number | undefined> } | null = null
+let pendingCloudSavePromise: Promise<void> | null = null
 
 export function isCurrentAccountGm(): boolean {
   const fbUser = firebaseAuth.currentUser
@@ -464,6 +465,7 @@ export function currentJob(): JobDef {
 export function itemPower(it: InvItem | null) {
   if (!it) return 0
   const def = ITEMS[it.itemId]
+  if (!def) return 0
   const base = def.atk ?? def.def ?? 0
   return Math.floor(base * (1 + it.plus * 0.12) + it.plus * 2)
 }
@@ -571,10 +573,11 @@ function clampVitals() {
 
 export function canEquip(it: InvItem): string | null {
   const def = ITEMS[it.itemId]
+  if (!def) return 'ไม่พบข้อมูลไอเทม'
   const p = player()
   if (def.kind !== 'weapon' && def.kind !== 'armor') return 'ไอเทมนี้สวมใส่ไม่ได้'
   if ((def.reqLevel ?? 1) > p.level) return `ต้องการเลเวล ${def.reqLevel}`
-  if (def.kind === 'weapon' && !currentJob().weaponTypes.includes(def.weaponType!)) return `อาชีพ ${currentJob().name} ใช้อาวุธนี้ไม่ได้`
+  if (def.kind === 'weapon' && (!def.weaponType || !currentJob().weaponTypes.includes(def.weaponType))) return `อาชีพ ${currentJob().name} ใช้อาวุธนี้ไม่ได้`
   if (def.allowedJobs?.length && !def.allowedJobs.includes(currentJob().id)) return `อาชีพ ${currentJob().name} สวมใส่ไอเทมนี้ไม่ได้`
   return null
 }
@@ -583,13 +586,15 @@ export function equip(id: string) {
   const p = player()
   const it = p.inventory.find((i) => i.uid === id)
   if (!it) return
+  const def = ITEMS[it.itemId]
+  if (!def) return
   const err = canEquip(it)
   if (err) {
     say('error', err)
     notify()
     return
   }
-  const slot: EquipmentSlot = ITEMS[it.itemId].slot ?? (ITEMS[it.itemId].kind === 'weapon' ? 'weapon' : 'armor')
+  const slot: EquipmentSlot = def.slot ?? (def.kind === 'weapon' ? 'weapon' : 'armor')
   p.inventory = p.inventory.filter((i) => i.uid !== id)
   const prev = p.equipment[slot]
   if (prev) p.inventory.push(prev)
@@ -624,6 +629,7 @@ export function consumeItem(id: string) {
   const it = p.inventory.find((i) => i.uid === id)
   if (!it) return
   const def = ITEMS[it.itemId]
+  if (!def) return
   if (def.kind === 'weapon' || def.kind === 'armor') return equip(id)
   if (def.kind !== 'consumable') return
 
@@ -672,10 +678,13 @@ export function drinkPotion(kind: 'hp' | 'mp') {
   const s = getStats()
   const missing = kind === 'hp' ? s.maxHp - p.hp : s.maxMp - p.mp
   const potions = p.inventory
-    .filter((i) => (kind === 'hp' ? ITEMS[i.itemId].heal : ITEMS[i.itemId].mana))
+    .filter((i) => {
+      const def = ITEMS[i.itemId]
+      return Boolean(def && (kind === 'hp' ? def.heal : def.mana))
+    })
     .sort((a, b) => {
-      const va = kind === 'hp' ? ITEMS[a.itemId].heal! : ITEMS[a.itemId].mana!
-      const vb = kind === 'hp' ? ITEMS[b.itemId].heal! : ITEMS[b.itemId].mana!
+      const va = (kind === 'hp' ? ITEMS[a.itemId]?.heal : ITEMS[a.itemId]?.mana) ?? 0
+      const vb = (kind === 'hp' ? ITEMS[b.itemId]?.heal : ITEMS[b.itemId]?.mana) ?? 0
       return va - vb
     })
   if (!potions.length) {
@@ -684,14 +693,17 @@ export function drinkPotion(kind: 'hp' | 'mp') {
   }
   if (missing <= 0) return
   const pick =
-    potions.find((i) => (kind === 'hp' ? ITEMS[i.itemId].heal! : ITEMS[i.itemId].mana!) >= missing) ??
+    potions.find((i) => ((kind === 'hp' ? ITEMS[i.itemId]?.heal : ITEMS[i.itemId]?.mana) ?? 0) >= missing) ??
     potions[potions.length - 1]
   consumeItem(pick.uid)
 }
 
 export function potionCount(kind: 'hp' | 'mp') {
   return player()
-    .inventory.filter((i) => (kind === 'hp' ? ITEMS[i.itemId].heal : ITEMS[i.itemId].mana))
+    .inventory.filter((i) => {
+      const def = ITEMS[i.itemId]
+      return Boolean(def && (kind === 'hp' ? def.heal : def.mana))
+    })
     .reduce((s, i) => s + i.qty, 0)
 }
 
@@ -718,10 +730,11 @@ function randomSpawnPoint(map: MapDef) {
 }
 
 function makeMonster(defId: string, x: number, y: number): Monster {
-  const def = MONSTERS[defId]
+  const resolvedDefId = MONSTERS[defId] ? defId : 'slime'
+  const def = MONSTERS[resolvedDefId]
   return {
     uid: uid(),
-    defId,
+    defId: resolvedDefId,
     x,
     y,
     homeX: x,
@@ -861,7 +874,7 @@ function collectGroundDrops() {
       items: [{ itemId: drop.itemId, qty: drop.qty }],
       duration: 2.8,
     })
-    say('loot', `เก็บ ${ITEMS[drop.itemId].name} x${drop.qty}`)
+    say('loot', `เก็บ ${ITEMS[drop.itemId]?.name ?? drop.itemId} x${drop.qty}`)
     recordDailyMissionProgress({ itemsLooted: drop.qty })
   }
 }
@@ -869,6 +882,11 @@ function collectGroundDrops() {
 function killMonster(m: Monster) {
   const p = player()
   const def = MONSTERS[m.defId]
+  if (!def) {
+    m.dead = true
+    m.hp = 0
+    return
+  }
   m.dead = true
   m.hp = 0
   m.respawnAt = game.time + (def.boss ? 90 : 10)
@@ -915,7 +933,7 @@ function killMonster(m: Monster) {
     if (Math.random() < d.chance) {
       dropItem(d.itemId, 1, m.x, m.y)
       droppedItems.push({ itemId: d.itemId, qty: 1 })
-      say('loot', `${ITEMS[d.itemId].name} ตกพื้น`)
+      say('loot', `${ITEMS[d.itemId]?.name ?? d.itemId} ตกพื้น`)
     }
   }
   pushKillToast({
@@ -932,9 +950,12 @@ function killMonster(m: Monster) {
 
 export function gainExp(n: number) {
   const p = player()
+  if (!Number.isFinite(n) || n <= 0) return
   if (p.level >= MAX_LEVEL) return
-  p.exp += n
-  addFloat(p.x, p.y - 34, `+${n} EXP`, '#c77dff', 9)
+  const add = Math.floor(n)
+  if (add <= 0) return
+  p.exp += add
+  addFloat(p.x, p.y - 34, `+${add} EXP`, '#c77dff', 9)
   const beforeStats = getStats()
   let leveled = false
   while (p.level < MAX_LEVEL && p.exp >= expToNext(p.level)) {
@@ -954,7 +975,8 @@ function onLevelUp(beforeStats: ReturnType<typeof getStats>) {
   p.statPoints = (p.statPoints ?? 0) + 3
   p.skillPoints = (p.skillPoints ?? 0) + 1
   p.skillLevels ??= {}
-  const autoSkill = currentJob().skills[(p.level - 1) % currentJob().skills.length]
+  const jobSkills = currentJob().skills
+  const autoSkill = jobSkills.length > 0 ? jobSkills[(p.level - 1) % jobSkills.length] : undefined
   if (autoSkill) {
     p.skillLevels[autoSkill.id] = (p.skillLevels[autoSkill.id] ?? 1) + 1
     say('system', `${autoSkill.name} อัปเป็น Lv.${p.skillLevels[autoSkill.id]} อัตโนมัติ`)
@@ -984,7 +1006,7 @@ export function basicAttack() {
   const job = currentJob()
   const t = nearestMonster(job.range + 6)
   game.attackCd = job.attackSpeed
-  game.attackAnim = 0.18
+  game.attackAnim = 0.28
   if (!t) return
   faceToward(t.x, t.y)
   if (job.ranged) shoot(t, [1], projectileColor(job), 2)
@@ -1021,7 +1043,7 @@ export function castSkill(index: number) {
     p.hp += recovered
     p.mp -= skill.mp
     game.skillCd[skill.id] = skill.cooldown
-    game.attackAnim = 0.22
+    game.attackAnim = 0.32
     addEffect({ type: 'ring', x: p.x, y: p.y - 6, r: 38, color: skill.color, max: 0.55 })
     addFloat(p.x, p.y - 30, `+${recovered} HP`, skill.color)
     say('system', `${skill.name} ฟื้นฟู HP ${recovered}`)
@@ -1063,7 +1085,7 @@ export function castSkill(index: number) {
   }
   p.mp -= skill.mp
   game.skillCd[skill.id] = skill.cooldown
-  game.attackAnim = 0.22
+  game.attackAnim = 0.32
   addFloat(p.x, p.y - 30, skill.name, skill.color, 9)
   recordDailyMissionProgress({ skillsUsed: 1 })
 }
@@ -1181,6 +1203,7 @@ export function summonGmItem(itemId: string) {
 export function devSetLevel(level: number) {
   const p = player()
   if (!p.gm || !isCurrentAccountGm()) return
+  if (!Number.isFinite(level)) return
   const lv = Math.max(1, Math.min(MAX_LEVEL, Math.floor(level)))
   const before = getStats()
   p.level = lv
@@ -1216,8 +1239,10 @@ export function devAddDiamonds(amount: number) {
 export function devAddPoints(statDelta: number, skillDelta: number) {
   const p = player()
   if (!p.gm || !isCurrentAccountGm()) return
-  p.statPoints = Math.max(0, (p.statPoints ?? 0) + Math.floor(statDelta))
-  p.skillPoints = Math.max(0, (p.skillPoints ?? 0) + Math.floor(skillDelta))
+  const sAdd = Number.isFinite(statDelta) ? Math.floor(statDelta) : 0
+  const kAdd = Number.isFinite(skillDelta) ? Math.floor(skillDelta) : 0
+  p.statPoints = Math.max(0, (p.statPoints ?? 0) + sAdd)
+  p.skillPoints = Math.max(0, (p.skillPoints ?? 0) + kAdd)
   say('gm', `[DEV] แต้มสเตตัส ${p.statPoints} · แต้มสกิล ${p.skillPoints}`)
   saveGame()
   notify()
@@ -1314,6 +1339,7 @@ export function devGiveItem(itemId: string, qty = 1, plus = 0) {
 export function devSetTowerFloor(highestFloor: number) {
   const p = player()
   if (!p.gm || !isCurrentAccountGm()) return
+  if (!Number.isFinite(highestFloor)) return
   const safeFloor = Math.max(0, Math.min(200, Math.floor(highestFloor)))
   p.towerState = {
     ...(p.towerState ?? createDefaultTowerState()),
@@ -1368,22 +1394,24 @@ export function closePanel() {
 export function buyItem(itemId: string, qty: number) {
   const p = player()
   const def = ITEMS[itemId]
-  const cost = def.price * qty
+  if (!def || !Number.isFinite(qty) || qty <= 0) return
+  const safeQty = Math.floor(qty)
+  const cost = def.price * safeQty
   if (p.gold < cost) {
     say('error', 'เงินไม่พอ')
     return notify()
   }
   const free = getInventoryCapacity(p) - p.inventory.length
-  if (!stackable(def) && free < qty) {
+  if (!stackable(def) && free < safeQty) {
     say('error', 'กระเป๋าเต็ม')
     return notify()
   }
-  if (!addItem(itemId, qty)) {
+  if (!addItem(itemId, safeQty)) {
     say('error', 'กระเป๋าเต็ม')
     return notify()
   }
   p.gold -= cost
-  say('loot', `ซื้อ ${def.name} x${qty} (-${cost.toLocaleString()}G)`)
+  say('loot', `ซื้อ ${def.name} x${safeQty} (-${cost.toLocaleString()}G)`)
   notify()
 }
 
@@ -1444,7 +1472,9 @@ export function equipGemShopItem(itemId: string) {
 }
 
 export function sellPrice(it: InvItem) {
-  return Math.floor(ITEMS[it.itemId].price * 0.4 * (1 + it.plus * 0.3))
+  const def = ITEMS[it.itemId]
+  if (!def) return 0
+  return Math.floor(def.price * 0.4 * (1 + it.plus * 0.3))
 }
 
 export function sellItem(id: string, qty: number) {
@@ -1464,6 +1494,9 @@ export function findEquipment(id: string): InvItem | null {
   const p = player()
   if (p.equipment.weapon?.uid === id) return p.equipment.weapon
   if (p.equipment.armor?.uid === id) return p.equipment.armor
+  if (p.equipment.shoes?.uid === id) return p.equipment.shoes
+  if (p.equipment.cloak?.uid === id) return p.equipment.cloak
+  if (p.equipment.accessory?.uid === id) return p.equipment.accessory
   return p.inventory.find((i) => i.uid === id) ?? null
 }
 
@@ -1474,6 +1507,7 @@ export function enhance(id: string): EnhanceResult {
   const it = findEquipment(id)
   if (!it) return { result: 'error', message: 'ไม่พบไอเทม' }
   const def = ITEMS[it.itemId]
+  if (!def) return { result: 'error', message: 'ไม่พบข้อมูลไอเทม' }
   if (def.kind !== 'weapon' && def.kind !== 'armor') return { result: 'error', message: 'ตีบวกได้เฉพาะอาวุธและชุดเกราะ' }
   if (it.plus >= MAX_PLUS) return { result: 'error', message: `ตีบวกสูงสุดแล้ว (+${MAX_PLUS})` }
   const cost = enhanceCost(it.plus, def.tier ?? 1)
@@ -1648,7 +1682,8 @@ function applyJob(jobId: string) {
   const p = player()
   p.jobId = jobId
   const w = p.equipment.weapon
-  if (w && !currentJob().weaponTypes.includes(ITEMS[w.itemId].weaponType!)) {
+  const wDef = w ? ITEMS[w.itemId] : null
+  if (w && (!wDef || !wDef.weaponType || !currentJob().weaponTypes.includes(wDef.weaponType))) {
     p.inventory.push(w)
     p.equipment.weapon = null
     say('system', `ถอด ${itemLabel(w)} เพราะอาชีพใหม่ใช้ไม่ได้`)
@@ -1665,10 +1700,11 @@ export function deposit(id: string) {
   const it = p.inventory.find((i) => i.uid === id)
   if (!it) return
   const def = ITEMS[it.itemId]
-  const canStack = stackable(def) && p.storage.some((s) => s.itemId === it.itemId)
-  if (!canStack && p.storage.length >= STORAGE_SIZE) return say('error', 'คลังเต็ม'), notify()
+  if (!def) return
+  const existingStack = stackable(def) ? p.storage.find((s) => s.itemId === it.itemId) : undefined
+  if (!existingStack && p.storage.length >= STORAGE_SIZE) return say('error', 'คลังเต็ม'), notify()
   p.inventory = p.inventory.filter((i) => i.uid !== id)
-  if (canStack) p.storage.find((s) => s.itemId === it.itemId)!.qty += it.qty
+  if (existingStack) existingStack.qty += it.qty
   else p.storage.push(it)
   notify()
 }
@@ -1678,18 +1714,20 @@ export function withdraw(id: string) {
   const it = p.storage.find((i) => i.uid === id)
   if (!it) return
   const def = ITEMS[it.itemId]
-  const canStack = stackable(def) && p.inventory.some((s) => s.itemId === it.itemId)
-  if (!canStack && p.inventory.length >= getInventoryCapacity(p)) return say('error', 'กระเป๋าเต็ม'), notify()
+  if (!def) return
+  const existingStack = stackable(def) ? p.inventory.find((s) => s.itemId === it.itemId) : undefined
+  if (!existingStack && p.inventory.length >= getInventoryCapacity(p)) return say('error', 'กระเป๋าเต็ม'), notify()
   p.storage = p.storage.filter((i) => i.uid !== id)
-  if (canStack) p.inventory.find((s) => s.itemId === it.itemId)!.qty += it.qty
+  if (existingStack) existingStack.qty += it.qty
   else p.inventory.push(it)
   notify()
 }
 
 export function moveGold(amount: number, toStorage: boolean) {
   const p = player()
+  if (!Number.isFinite(amount)) return
   const n = Math.floor(amount)
-  if (!Number.isFinite(n) || n <= 0) return
+  if (n <= 0) return
   if (toStorage) {
     const take = Math.min(n, p.gold)
     p.gold -= take
@@ -1965,11 +2003,69 @@ export function saveGame() {
   try {
     localStorage.setItem(localSaveKey(), JSON.stringify(p))
     game.lastSavedAt = Date.now()
-    void saveCloudGame(p)
+    const syncPromise = saveCloudGame(p).finally(() => {
+      if (pendingCloudSavePromise === syncPromise) {
+        pendingCloudSavePromise = null
+      }
+    })
+    pendingCloudSavePromise = syncPromise
   } catch {
     say('error', 'บันทึกเกมไม่สำเร็จ')
   }
   game.saveT = 0
+}
+
+export async function flushCloudSave(): Promise<void> {
+  if (pendingCloudSavePromise) {
+    try {
+      await pendingCloudSavePromise
+    } catch {
+      // Ignore transient cloud sync errors.
+    }
+  }
+}
+
+export interface RecoverableLocalSave {
+  storageKey: string
+  sourceLabel: string
+  saveData: SaveData
+}
+
+export function listRecoverableLocalSaves(currentUserId?: string): RecoverableLocalSave[] {
+  if (typeof window === 'undefined') return []
+  const results: RecoverableLocalSave[] = []
+  const seen = new Set<string>()
+  const currentPrefix = currentUserId ? `${SAVE_KEY}:user:${currentUserId}` : null
+
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (!key) continue
+      const isGuest = key === SAVE_KEY
+      const isUserSave = key.startsWith(`${SAVE_KEY}:user:`)
+      if (!isGuest && !isUserSave) continue
+      if (currentPrefix && (key === currentPrefix || key.startsWith(`${currentPrefix}:`))) continue
+
+      const raw = localStorage.getItem(key)
+      if (!raw) continue
+      const parsed = JSON.parse(raw) as SaveData
+      if (!parsed || parsed.version !== 1 || typeof parsed.name !== 'string') continue
+
+      const sig = `${parsed.name}:${parsed.level}:${parsed.playTime}:${parsed.savedAt}`
+      if (seen.has(sig)) continue
+      seen.add(sig)
+
+      results.push({
+        storageKey: key,
+        sourceLabel: isGuest ? 'เซฟ Guest ในเครื่อง' : 'เซฟบัญชีเดิมในเครื่อง',
+        saveData: parsed,
+      })
+    }
+  } catch {
+    // Ignore storage read errors.
+  }
+
+  return results.sort((a, b) => (b.saveData.savedAt ?? 0) - (a.saveData.savedAt ?? 0))
 }
 
 async function saveCloudGame(p: SaveData) {
@@ -2187,28 +2283,42 @@ export function loadGame(d: SaveData) {
   const gmAllowed = isCurrentAccountGm()
   const resolvedGameUid = gmAllowed ? PERMANENT_GM_GAME_UID : activeAccountGameUid
   const resolvedNumericUid = gmAllowed ? PERMANENT_GM_UID : activeAccountUid
+  const finiteInt = (val: unknown, min: number, max: number, fallback: number) => {
+    const n = typeof val === 'number' ? val : Number(val)
+    return Number.isFinite(n) ? Math.max(min, Math.min(max, Math.floor(n))) : fallback
+  }
+  const sanitizeSkillLevels = (raw: unknown): Record<string, number> => {
+    if (!raw || typeof raw !== 'object') return {}
+    const out: Record<string, number> = {}
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+      if (typeof k === 'string' && k.length > 0 && k.length <= 64 && typeof v === 'number' && Number.isFinite(v)) {
+        out[k] = Math.max(1, Math.min(99, Math.floor(v)))
+      }
+    }
+    return out
+  }
   const p: SaveData = {
     version: 1,
-    name: d.name.slice(0, 16) || 'นักผจญภัย',
-    jobId: JOBS[d.jobId] && (d.jobId !== 'gm' || gmAllowed) ? d.jobId : 'novice',
-    level: Math.max(1, Math.min(MAX_LEVEL, Math.floor(d.level || 1))),
-    exp: Math.max(0, d.exp || 0),
-    hp: d.hp || 1,
-    mp: d.mp || 0,
-    gold: Math.max(0, Math.floor(d.gold || 0)),
-    diamonds: Math.max(0, Math.floor(d.diamonds || 0)),
+    name: (typeof d.name === 'string' ? d.name.trim().slice(0, 16) : '') || 'นักผจญภัย',
+    jobId: typeof d.jobId === 'string' && JOBS[d.jobId] && (d.jobId !== 'gm' || gmAllowed) ? d.jobId : 'novice',
+    level: finiteInt(d.level, 1, MAX_LEVEL, 1),
+    exp: finiteInt(d.exp, 0, Number.MAX_SAFE_INTEGER, 0),
+    hp: finiteInt(d.hp, 0, Number.MAX_SAFE_INTEGER, 1),
+    mp: finiteInt(d.mp, 0, Number.MAX_SAFE_INTEGER, 0),
+    gold: finiteInt(d.gold, 0, Number.MAX_SAFE_INTEGER, 0),
+    diamonds: finiteInt(d.diamonds, 0, Number.MAX_SAFE_INTEGER, 0),
     ownedGemItems: Array.isArray(d.ownedGemItems)
       ? [...new Set(d.ownedGemItems.filter((id): id is string => typeof id === 'string' && GEM_SHOP_ITEMS.some((item) => item.id === id && item.category !== 'utility')))]
       : [],
     equippedGemFashion: GEM_SHOP_ITEMS.some((item) => item.id === d.equippedGemFashion && item.category === 'fashion' && d.ownedGemItems?.includes(item.id)) ? d.equippedGemFashion : null,
     equippedGemCompanion: GEM_SHOP_ITEMS.some((item) => item.id === d.equippedGemCompanion && item.category === 'companions' && d.ownedGemItems?.includes(item.id)) ? d.equippedGemCompanion : null,
     lootMagnetUntil: Number.isFinite(d.lootMagnetUntil) ? Math.max(0, d.lootMagnetUntil) : 0,
-    inventoryCapacityBonus: Math.max(0, Math.min(60, Math.floor((d.inventoryCapacityBonus || 0) / 20) * 20)),
+    inventoryCapacityBonus: Math.floor(finiteInt(d.inventoryCapacityBonus, 0, 60, 0) / 20) * 20,
     inventory,
     storage: sanitizeList(d.storage),
-    storageGold: Math.max(0, Math.floor(d.storageGold || 0)),
+    storageGold: finiteInt(d.storageGold, 0, Number.MAX_SAFE_INTEGER, 0),
     equipment: { weapon, armor, shoes, cloak, accessory },
-    mapId: MAPS[d.mapId] ? d.mapId : 'town',
+    mapId: typeof d.mapId === 'string' && MAPS[d.mapId] ? d.mapId : 'town',
     x: Number.isFinite(d.x) ? d.x : (MAPS.town.spawn.x + 0.5) * TILE,
     y: Number.isFinite(d.y) ? d.y : (MAPS.town.spawn.y + 0.5) * TILE,
     uid: resolvedNumericUid,
@@ -2217,18 +2327,21 @@ export function loadGame(d: SaveData) {
     god: false,
     invisible: false,
     speed: 1,
-    playTime: d.playTime || 0,
-    kills: d.kills || 0,
-    savedAt: d.savedAt || Date.now(),
-    rebirthCount: Math.max(0, Math.floor(d.rebirthCount || 0)),
+    playTime: typeof d.playTime === 'number' && Number.isFinite(d.playTime) ? Math.max(0, d.playTime) : 0,
+    kills: finiteInt(d.kills, 0, Number.MAX_SAFE_INTEGER, 0),
+    savedAt: typeof d.savedAt === 'number' && Number.isFinite(d.savedAt) ? d.savedAt : Date.now(),
+    statPoints: finiteInt(d.statPoints, 0, 100000, 0),
+    skillPoints: finiteInt(d.skillPoints, 0, 100000, 0),
+    skillLevels: sanitizeSkillLevels(d.skillLevels),
+    rebirthCount: finiteInt(d.rebirthCount, 0, 6, 0),
     rebirthBonus: {
-      maxHp: Math.max(0, Math.floor(d.rebirthBonus?.maxHp || 0)),
-      maxMp: Math.max(0, Math.floor(d.rebirthBonus?.maxMp || 0)),
-      atk: Math.max(0, Math.floor(d.rebirthBonus?.atk || 0)),
-      def: Math.max(0, Math.floor(d.rebirthBonus?.def || 0)),
+      maxHp: finiteInt(d.rebirthBonus?.maxHp, 0, Number.MAX_SAFE_INTEGER, 0),
+      maxMp: finiteInt(d.rebirthBonus?.maxMp, 0, Number.MAX_SAFE_INTEGER, 0),
+      atk: finiteInt(d.rebirthBonus?.atk, 0, Number.MAX_SAFE_INTEGER, 0),
+      def: finiteInt(d.rebirthBonus?.def, 0, Number.MAX_SAFE_INTEGER, 0),
     },
     petState: sanitizePetState(d.petState, d.ownedGemItems ?? [], d.equippedGemCompanion ?? null),
-    questState: sanitizeQuestState(d.questState, d.kills || 0),
+    questState: sanitizeQuestState(d.questState, finiteInt(d.kills, 0, Number.MAX_SAFE_INTEGER, 0)),
     towerState: sanitizeTowerState(d.towerState),
   }
   if (p.hp <= 0) p.hp = getStats(p).maxHp
@@ -2457,6 +2570,7 @@ function updateMonsters(dt: number, map: MapDef) {
     const previousX = m.x
     const previousY = m.y
     const def = MONSTERS[m.defId]
+    if (!def) continue
     const dx = p.x - m.x
     const dy = p.y - m.y
     const d = Math.hypot(dx, dy)
@@ -2467,7 +2581,7 @@ function updateMonsters(dt: number, map: MapDef) {
       if (d > 14) moveEntity(map, m, (dx / d) * def.speed * dt, (dy / d) * def.speed * dt, 5, 4)
       else if (m.attackCd <= 0) {
         m.attackCd = def.boss ? 2 : 1.4
-        m.lunge = 0.15
+        m.lunge = 0.3
         hurtPlayer(def.atk)
         if (def.boss && Math.random() < 0.45) {
           addEffect({ type: 'ring', x: p.x, y: p.y - 6, r: 34, color: def.color, max: 0.55 })
@@ -2522,13 +2636,15 @@ function updateProjectiles(dt: number) {
     if (d <= step + 4) {
       if (typeof pr.flatDmg === 'number') {
         const def = MONSTERS[t.defId]
-        const raw = (pr.flatDmg * pr.flatDmg) / Math.max(1, pr.flatDmg + def.def * 0.55)
-        const dmg = Math.max(2, Math.round(raw * rand(0.92, 1.08)))
-        t.hp -= dmg
-        t.provoked = true
-        t.hitFlash = 0.12
-        addFloat(t.x, t.y - 24, `${dmg}`, pr.color, 13)
-        if (t.hp <= 0) killMonster(t)
+        if (def) {
+          const raw = (pr.flatDmg * pr.flatDmg) / Math.max(1, pr.flatDmg + def.def * 0.55)
+          const dmg = Math.max(2, Math.round(raw * rand(0.92, 1.08)))
+          t.hp -= dmg
+          t.provoked = true
+          t.hitFlash = 0.12
+          addFloat(t.x, t.y - 24, `${dmg}`, pr.color, 13)
+          if (t.hp <= 0) killMonster(t)
+        }
       } else {
         for (const mult of pr.mults) damageMonster(t, mult)
       }

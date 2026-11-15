@@ -230,7 +230,7 @@ service cloud.firestore {
         data.playTime is number &&
         data.playTime >= 0 &&
         data.saveData is map &&
-        data.saveData.keys().size() <= 40 &&
+        data.saveData.keys().size() <= 60 &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
     }
@@ -313,7 +313,7 @@ service cloud.firestore {
         data.dateKey == dateKey &&
         data.dateKey.size() == 10 &&
         data.dateKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
-        isValidId(data.ownerId) &&
+        data.ownerId is string &&
         data.ownerId == request.auth.uid &&
         data.missions is list &&
         data.missions.size() == 3 &&
@@ -487,11 +487,9 @@ service cloud.firestore {
         allow get: if isSignedIn() &&
           isEmailVerified() &&
           isValidId(userId) &&
-          isValidId(dateKey) &&
-          dateKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
           userId == request.auth.uid &&
-          isUserAccountOwner(userId) &&
-          (resource == null || existing().ownerId == request.auth.uid);
+          dateKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
+          (resource == null || !('ownerId' in existing()) || existing().ownerId == request.auth.uid);
 
         allow list: if isSignedIn() &&
           isEmailVerified() &&
@@ -501,33 +499,43 @@ service cloud.firestore {
         allow create: if isSignedIn() &&
           isEmailVerified() &&
           isValidId(userId) &&
-          isValidId(dateKey) &&
           userId == request.auth.uid &&
+          dateKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
           isValidDailyMissionBoard(incoming(), dateKey) &&
           incoming().createdAt == request.time &&
-          incoming().updatedAt == request.time &&
-          isUserAccountOwner(userId);
+          incoming().updatedAt == request.time;
 
         allow update: if isSignedIn() &&
           isEmailVerified() &&
           isValidId(userId) &&
-          isValidId(dateKey) &&
           userId == request.auth.uid &&
+          dateKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
           isValidDailyMissionBoard(incoming(), dateKey) &&
-          incoming().dateKey == existing().dateKey &&
-          incoming().ownerId == existing().ownerId &&
-          incoming().createdAt == existing().createdAt &&
-          incoming().updatedAt == request.time &&
-          incoming().diff(existing()).affectedKeys().hasOnly(['missions', 'updatedAt']) &&
-          isValidMissionTransition(existing().missions[0], incoming().missions[0]) &&
-          isValidMissionTransition(existing().missions[1], incoming().missions[1]) &&
-          isValidMissionTransition(existing().missions[2], incoming().missions[2]) &&
-          isUserAccountOwner(userId);
+          (
+            (
+              isValidDailyMissionBoard(existing(), dateKey) &&
+              incoming().dateKey == existing().dateKey &&
+              incoming().ownerId == existing().ownerId &&
+              incoming().createdAt == existing().createdAt &&
+              incoming().updatedAt == request.time &&
+              incoming().diff(existing()).affectedKeys().hasOnly(['missions', 'updatedAt']) &&
+              isValidMissionTransition(existing().missions[0], incoming().missions[0]) &&
+              isValidMissionTransition(existing().missions[1], incoming().missions[1]) &&
+              isValidMissionTransition(existing().missions[2], incoming().missions[2])
+            ) ||
+            (
+              !isValidDailyMissionBoard(existing(), dateKey) &&
+              (!('ownerId' in existing()) || existing().ownerId == request.auth.uid) &&
+              incoming().createdAt == request.time &&
+              incoming().updatedAt == request.time &&
+              incoming().diff(existing()).affectedKeys().hasOnly(['dateKey', 'ownerId', 'missions', 'createdAt', 'updatedAt'])
+            )
+          );
 
         allow delete: if isGmAccount() &&
           isValidId(userId) &&
-          isValidId(dateKey) &&
           userId == request.auth.uid &&
+          dateKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
           existing().ownerId == request.auth.uid;
       }
     }

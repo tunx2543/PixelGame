@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react'
 import { ITEMS, JOBS, type WeaponType } from '@/lib/game/data'
 import type { SaveData } from '@/lib/game/engine'
 import type { EncounterBiome, EncounterEnemy } from '@/lib/game/encounter'
-import { humanSprite, monsterSprite } from '@/lib/game/sprites'
+import { humanSprite, jobHumanColors, monsterSprite, type SpriteAction } from '@/lib/game/sprites'
 import { getActivePetBonuses } from '@/lib/game/systems'
 
 export interface StagePopup {
@@ -223,17 +223,36 @@ export function EncounterStageCanvas({
           const weaponType: WeaponType = equippedWeapon?.weaponType ?? job.weaponTypes[0] ?? 'stick'
           const weaponColor = equippedWeapon?.color ?? job.colors.accent
 
-          const pAtkAge = (now - pAtk) / 240
+          const pAtkAge = (now - pAtk) / 360
           const isPlayerAttacking = pAtk > 0 && pAtkAge >= 0 && pAtkAge < 1
           const pHitAge = (now - pHit) / 220
           const isPlayerHurt = pHit > 0 && pHitAge >= 0 && pHitAge < 1
 
-          const heroBreath = Math.sin(t * 3.4)
-          const heroLunge = isPlayerAttacking ? Math.sin(pAtkAge * Math.PI) * 28 : 0
+          const heroStepIn = isPlayerAttacking && pAtkAge < 0.25
+          const heroStrike = isPlayerAttacking && pAtkAge >= 0.25
+          const heroLunge = isPlayerAttacking ? Math.sin(pAtkAge * Math.PI) * 34 : 0
           const heroShake = isPlayerHurt ? Math.sin(pHitAge * 26) * 5 : 0
-          const heroFrame = isPlayerAttacking ? 1 : Math.sin(t * 1.4) > 0.96 ? -1 : 0
-          const heroSprite = humanSprite(job.colors, 'right', heroFrame, weaponType, weaponColor, isPlayerAttacking)
-          const heroScale = 3.6
+          const heroAction: SpriteAction = heroStrike ? 'attack' : heroStepIn ? 'walk' : 'idle'
+          const heroAttackFrame = heroStrike ? Math.min(3, Math.floor(((pAtkAge - 0.25) / 0.75) * 4)) : 0
+          const heroFrame = heroStrike
+            ? heroAttackFrame
+            : heroStepIn
+              ? Math.floor(pAtkAge * 24) % 6
+              : Math.sin(t * 1.4) > 0.96
+                ? -1
+                : Math.floor(t * (ph === 'FIGHTING' ? 3.2 : 2.2)) % 4
+          const styledJobColors = jobHumanColors(s.jobId, job.colors, s.gm)
+          const heroSprite = humanSprite(
+            styledJobColors,
+            'right',
+            heroFrame,
+            weaponType,
+            weaponColor,
+            heroStrike,
+            heroAction,
+            heroAttackFrame,
+          )
+          const heroScale = 3.0
           const hw = heroSprite.width * heroScale
           const hh = heroSprite.height * heroScale
 
@@ -247,9 +266,7 @@ export function EncounterStageCanvas({
           if (ph === 'DEFEAT') ctx.globalAlpha = 0.45
           else if (isPlayerHurt) ctx.globalAlpha = 0.65
           ctx.translate(heroX + heroLunge + heroShake, floorY)
-          ctx.scale(1 - heroBreath * 0.025, 1 + heroBreath * 0.03)
-          if (isPlayerAttacking) ctx.rotate(0.12)
-          ctx.drawImage(heroSprite, Math.round(-hw / 2), Math.round(-hh), hw, hh)
+          ctx.drawImage(heroSprite, Math.round(-hw / 2), Math.round(-hh + 2 * heroScale), hw, hh)
           ctx.restore()
 
           // --- Active Combat Pet Sprite ---
@@ -298,28 +315,46 @@ export function EncounterStageCanvas({
 
           // --- Monster Sprite ---
           if (mon) {
-            const eAtkAge = (now - eAtk) / 240
+            const eAtkAge = (now - eAtk) / 360
             const isEnemyAttacking = eAtk > 0 && eAtkAge >= 0 && eAtkAge < 1
             const eHitAge = (now - eHit) / 220
             const isEnemyHurt = eHit > 0 && eHitAge >= 0 && eHitAge < 1
             const isDead = mon.hp <= 0 || ph === 'VICTORY'
 
             const flying = mon.def.sprite === 'bat' || mon.def.sprite === 'ghost'
-            const mBreath = Math.sin(t * 3.1)
             const mHover = flying ? Math.sin(t * 4.2) * 6 - 10 : 0
-            const mLunge = isEnemyAttacking ? -Math.sin(eAtkAge * Math.PI) * 32 : 0
+            const mLunge = isEnemyAttacking ? -Math.sin(eAtkAge * Math.PI) * 36 : 0
             const mShake = isEnemyHurt ? Math.sin(eHitAge * 28) * 6 : 0
-            const mFrame = isEnemyAttacking ? 2 : Math.floor(t * 2.5) % 4
-            const mImg = monsterSprite(mon.def.sprite, mon.def.color, mFrame, isEnemyAttacking)
+            const mStepIn = isEnemyAttacking && eAtkAge < 0.25
+            const mStrike = isEnemyAttacking && eAtkAge >= 0.25
+            const mAction: SpriteAction = mStrike ? 'attack' : mStepIn ? 'walk' : ph === 'FIGHTING' && flying ? 'walk' : 'idle'
+            const mAtkFrame = mStrike ? Math.min(3, Math.floor(((eAtkAge - 0.25) / 0.75) * 4)) : 0
+            const mFrame = mStrike
+              ? mAtkFrame
+              : mStepIn
+                ? Math.floor(eAtkAge * 24) % 6
+                : flying
+                  ? Math.floor(t * 8) % 6
+                  : Math.floor(t * 2.8) % 4
+            const mImg = monsterSprite(
+              mon.def.sprite,
+              mon.def.color,
+              mFrame,
+              mStrike,
+              mAction,
+              'left',
+              mAtkFrame,
+              mon.def.id,
+            )
 
-            const baseMonsterScale = mon.rarity === 'boss' ? 4.4 : mon.rarity === 'elite' ? 3.8 : 3.4
+            const baseMonsterScale = mon.rarity === 'boss' ? 3.4 : mon.rarity === 'elite' ? 3.0 : 2.75
             const mw = mImg.width * baseMonsterScale
             const mh = mImg.height * baseMonsterScale
 
             // Shadow
             ctx.fillStyle = 'rgba(0,0,0,0.38)'
             ctx.beginPath()
-            ctx.ellipse(enemyX + mLunge, floorY + 2, mw * 0.42, 8, 0, 0, Math.PI * 2)
+            ctx.ellipse(enemyX + mLunge, floorY + 2, mw * 0.38, 8, 0, 0, Math.PI * 2)
             ctx.fill()
 
             // Rarity aura
@@ -329,7 +364,7 @@ export function EncounterStageCanvas({
               ctx.lineWidth = 2
               ctx.globalAlpha = 0.4 + Math.sin(t * 5) * 0.2
               ctx.beginPath()
-              ctx.ellipse(enemyX + mLunge, floorY + 1, mw * 0.56, 11, 0, 0, Math.PI * 2)
+              ctx.ellipse(enemyX + mLunge, floorY + 1, mw * 0.5, 11, 0, 0, Math.PI * 2)
               ctx.stroke()
               ctx.restore()
             }
@@ -344,17 +379,14 @@ export function EncounterStageCanvas({
             if (isDead) {
               ctx.rotate(0.45)
               ctx.scale(1.15, 0.45)
-            } else {
-              ctx.scale(-(1 - mBreath * 0.03), 1 + mBreath * 0.035)
-              if (isEnemyAttacking) ctx.rotate(-0.14)
             }
-            ctx.drawImage(mImg, Math.round(-mw / 2), Math.round(-mh), mw, mh)
+            ctx.drawImage(mImg, Math.round(-mw / 2), Math.round(-mh + 2 * baseMonsterScale), mw, mh)
 
             if (isEnemyHurt && !isDead) {
               ctx.globalAlpha = 0.55
               ctx.fillStyle = '#ffffff'
               ctx.beginPath()
-              ctx.ellipse(0, -mh / 2, mw * 0.36, mh * 0.36, 0, 0, Math.PI * 2)
+              ctx.ellipse(0, -mh / 2, mw * 0.34, mh * 0.34, 0, 0, Math.PI * 2)
               ctx.fill()
             }
             ctx.restore()

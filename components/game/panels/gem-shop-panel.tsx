@@ -45,8 +45,9 @@ export function GemShopPanel() {
   const { p } = useGame()
   const [category, setCategory] = useState<CategoryFilter>('all')
   const [selectedId, setSelectedId] = useState(GEM_SHOP_ITEMS[0].id)
+  if (!p) return null
   const items = GEM_SHOP_ITEMS.filter((item) => category === 'all' || item.category === category)
-  const selected = items.find((item) => item.id === selectedId) ?? items[0]
+  const selected = items.find((item) => item.id === selectedId) ?? items[0] ?? GEM_SHOP_ITEMS[0]
   const owned = selected.category !== 'utility' && !!p?.ownedGemItems.includes(selected.id)
   const selectedCount = selected.inventoryItemId
     ? p?.inventory.filter((entry) => entry.itemId === selected.inventoryItemId).reduce((total, entry) => total + entry.qty, 0) ?? 0

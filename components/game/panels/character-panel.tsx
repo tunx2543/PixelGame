@@ -22,10 +22,11 @@ import { PanelFrame, PxButton } from './panels'
 
 export function CharacterPanel() {
   const g = useGame()
-  const p = g.p!
+  const [selected, setSelected] = useState<string | null>(null)
+  if (!g.p) return null
+  const p = g.p
   const s = getStats()
   const job = currentJob()
-  const [selected, setSelected] = useState<string | null>(null)
   const item = p.inventory.find((i) => i.uid === selected) ?? null
   const def = item ? ITEMS[item.itemId] : null
   const equipErr = item && def && (def.kind === 'weapon' || def.kind === 'armor') ? canEquip(item) : null

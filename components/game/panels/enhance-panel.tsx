@@ -11,14 +11,23 @@ import { PanelFrame, PxButton } from './panels'
 
 export function EnhancePanel() {
   const g = useGame()
-  const p = g.p!
-  const gear: { it: InvItem; equipped: boolean }[] = [
-    ...(['weapon', 'armor', 'shoes', 'cloak', 'accessory'] as const).flatMap((slot) => p.equipment[slot] ? [{ it: p.equipment[slot]!, equipped: true }] : []),
-    ...p.inventory.filter((i) => ['weapon', 'armor'].includes(ITEMS[i.itemId].kind)).map((it) => ({ it, equipped: false })),
-  ]
-  const [selected, setSelected] = useState<string | null>(gear[0]?.it.uid ?? null)
+  const [selected, setSelected] = useState<string | null>(null)
   const [result, setResult] = useState<EnhanceResult | null>(null)
-  const item = selected ? findEquipment(selected) : null
+  if (!g.p) return null
+  const p = g.p
+  const gear: { it: InvItem; equipped: boolean }[] = [
+    ...(['weapon', 'armor', 'shoes', 'cloak', 'accessory'] as const).flatMap((slot) =>
+      p.equipment[slot] ? [{ it: p.equipment[slot]!, equipped: true }] : [],
+    ),
+    ...p.inventory
+      .filter((i) => {
+        const itemDef = ITEMS[i.itemId]
+        return Boolean(itemDef && (itemDef.kind === 'weapon' || itemDef.kind === 'armor'))
+      })
+      .map((it) => ({ it, equipped: false })),
+  ]
+  const activeSelected = gear.some((entry) => entry.it.uid === selected) ? selected : (gear[0]?.it.uid ?? null)
+  const item = activeSelected ? findEquipment(activeSelected) : null
   const def = item ? ITEMS[item.itemId] : null
   const stones = countItem('enhance_stone')
   const cost = item && def ? enhanceCost(item.plus, def.tier ?? 1) : null
@@ -38,7 +47,7 @@ export function EnhancePanel() {
                 <div key={it.uid} className="relative">
                   <ItemSlot
                     item={it}
-                    selected={selected === it.uid}
+                    selected={activeSelected === it.uid}
                     onClick={() => {
                       setSelected(it.uid)
                       setResult(null)

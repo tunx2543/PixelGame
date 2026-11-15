@@ -104,7 +104,8 @@ function applyDeltaToBoard(board: DailyMissionBoard, delta: DailyMissionProgress
   const newlyCompleted: DailyMissionEntry[] = []
 
   const missions = board.missions.map((mission) => {
-    const add = Math.max(0, Math.floor(delta[mission.type] ?? 0))
+    const rawDelta = delta[mission.type]
+    const add = typeof rawDelta === 'number' && Number.isFinite(rawDelta) ? Math.max(0, Math.floor(rawDelta)) : 0
     if (add <= 0 || mission.progress >= mission.target) return mission
     const nextProgress = Math.min(mission.target, mission.progress + add)
     if (nextProgress === mission.progress) return mission
@@ -130,14 +131,40 @@ async function flushCloudSave() {
   }
   const board = state.board
   const userId = activeUserId
-  if (!board || !userId || !auth.currentUser || auth.currentUser.uid !== userId) return
+  if (
+    !board ||
+    state.loading ||
+    !userId ||
+    board.ownerId !== userId ||
+    !auth.currentUser ||
+    auth.currentUser.uid !== userId ||
+    !auth.currentUser.emailVerified
+  ) {
+    return
+  }
 
   state = { ...state, syncing: true, error: null }
   emit()
 
   try {
-    await saveDailyMissionsDoc(userId, board.dateKey, board.missions)
-    state = { ...state, syncing: false, isCloud: true, error: null }
+    const savedMissions = await saveDailyMissionsDoc(userId, board.dateKey, board.missions)
+    if (savedMissions && activeUserId === userId && state.board?.dateKey === board.dateKey && state.board?.ownerId === userId) {
+      const reconciledBoard: DailyMissionBoard = {
+        ...board,
+        missions: savedMissions,
+      }
+      writeLocalBoard(userId, reconciledBoard)
+      state = {
+        ...state,
+        board: reconciledBoard,
+        claimableCount: countClaimable(reconciledBoard),
+        syncing: false,
+        isCloud: true,
+        error: null,
+      }
+    } else {
+      state = { ...state, syncing: false, isCloud: true, error: null }
+    }
   } catch (err) {
     console.error('Failed to save daily mission progress to Firestore:', err)
     state = {
@@ -150,7 +177,7 @@ async function flushCloudSave() {
 }
 
 function scheduleCloudSave(immediate = false) {
-  if (!activeUserId) return
+  if (!activeUserId || state.loading) return
   if (immediate) {
     void flushCloudSave()
     return
@@ -192,7 +219,13 @@ async function loadBoardForUser(userId: string | null) {
     return
   }
 
-  state = { ...state, loading: true, error: null, isCloud: true }
+  state = {
+    ...state,
+    board: state.board && state.board.ownerId === userId && state.board.dateKey === dateKey ? state.board : null,
+    loading: true,
+    error: null,
+    isCloud: true,
+  }
   emit()
 
   try {
@@ -203,8 +236,8 @@ async function loadBoardForUser(userId: string | null) {
     const cached = readLocalBoard(userId, dateKey)
     let needsCloudSync = false
     if (cached) {
-      const mergedMissions = board.missions.map((srv, idx) => {
-        const local = cached.missions.find((m) => m.id === srv.id) ?? cached.missions[idx]
+      const mergedMissions = board.missions.map((srv) => {
+        const local = cached.missions.find((m) => m.id === srv.id)
         if (!local) return srv
         const progress = Math.min(srv.target, Math.max(srv.progress, local.progress))
         const claimed = srv.claimed || (local.claimed && progress >= srv.target)
@@ -263,7 +296,7 @@ export function initDailyMissionsStore() {
 
   queueMicrotask(() => {
     onAuthStateChanged(auth, (user) => {
-      void loadBoardForUser(user?.uid ?? null)
+      void loadBoardForUser(user && user.emailVerified ? user.uid : null)
     })
   })
 
@@ -279,7 +312,8 @@ export function initDailyMissionsStore() {
 
 export function refreshDailyMissions(): Promise<void> {
   initDailyMissionsStore()
-  return loadBoardForUser(auth.currentUser?.uid ?? null)
+  const u = auth.currentUser
+  return loadBoardForUser(u && u.emailVerified ? u.uid : null)
 }
 
 export function onDailyMissionCompleted(cb: (mission: DailyMissionEntry) => void): () => void {
@@ -296,17 +330,20 @@ export function recordDailyMissionProgress(event: DailyMissionProgressEvent) {
   // Roll over cleanly if local midnight passed while playing.
   if (state.board && state.board.dateKey !== today) {
     for (const [k, v] of Object.entries(event)) {
+      if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) continue
       const key = k as DailyMissionType
-      pendingDelta[key] = (pendingDelta[key] ?? 0) + (v ?? 0)
+      pendingDelta[key] = (pendingDelta[key] ?? 0) + Math.floor(v)
     }
-    void loadBoardForUser(auth.currentUser?.uid ?? null)
+    const u = auth.currentUser
+    void loadBoardForUser(u && u.emailVerified ? u.uid : null)
     return
   }
 
   if (!state.board || state.loading) {
     for (const [k, v] of Object.entries(event)) {
+      if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) continue
       const key = k as DailyMissionType
-      pendingDelta[key] = (pendingDelta[key] ?? 0) + (v ?? 0)
+      pendingDelta[key] = (pendingDelta[key] ?? 0) + Math.floor(v)
     }
     return
   }

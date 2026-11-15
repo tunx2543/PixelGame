@@ -3,10 +3,8 @@
 import {
   deleteDoc,
   doc,
-  getDoc,
+  runTransaction,
   serverTimestamp,
-  setDoc,
-  updateDoc,
 } from 'firebase/firestore'
 import { isGmAccountUser } from '@/lib/game/permissions'
 import { OperationType, auth, db, handleFirestoreError } from './client'
@@ -264,8 +262,86 @@ export function rollRandomDailyMissions(): DailyMissionEntry[] {
   })
 }
 
+function isValidRemoteMissionEntry(raw: unknown): raw is DailyMissionEntry {
+  if (!raw || typeof raw !== 'object') return false
+  const m = raw as Record<string, unknown>
+  const keys = Object.keys(m)
+  if (keys.length !== 11) return false
+  return (
+    typeof m.id === 'string' &&
+    m.id.length >= 1 &&
+    m.id.length <= 64 &&
+    /^[a-zA-Z0-9_-]+$/.test(m.id) &&
+    typeof m.type === 'string' &&
+    VALID_TYPES.has(m.type as DailyMissionType) &&
+    typeof m.title === 'string' &&
+    m.title.length >= 1 &&
+    m.title.length <= 80 &&
+    typeof m.description === 'string' &&
+    m.description.length >= 1 &&
+    m.description.length <= 200 &&
+    typeof m.target === 'number' &&
+    Number.isInteger(m.target) &&
+    m.target >= 1 &&
+    m.target <= 100000 &&
+    typeof m.progress === 'number' &&
+    Number.isInteger(m.progress) &&
+    m.progress >= 0 &&
+    m.progress <= 100000 &&
+    typeof m.claimed === 'boolean' &&
+    typeof m.rewardGold === 'number' &&
+    Number.isInteger(m.rewardGold) &&
+    m.rewardGold >= 0 &&
+    m.rewardGold <= 100000 &&
+    typeof m.rewardDiamonds === 'number' &&
+    Number.isInteger(m.rewardDiamonds) &&
+    m.rewardDiamonds >= 0 &&
+    m.rewardDiamonds <= 10000 &&
+    typeof m.rewardExp === 'number' &&
+    Number.isInteger(m.rewardExp) &&
+    m.rewardExp >= 0 &&
+    m.rewardExp <= 100000 &&
+    typeof m.rewardStones === 'number' &&
+    Number.isInteger(m.rewardStones) &&
+    m.rewardStones >= 0 &&
+    m.rewardStones <= 1000
+  )
+}
+
+function isValidRemoteBoard(data: unknown, dateKey: string, userId: string): boolean {
+  if (!data || typeof data !== 'object') return false
+  const d = data as Record<string, unknown>
+  if (Object.keys(d).length !== 5) return false
+  if (d.dateKey !== dateKey || d.ownerId !== userId) return false
+  if (!d.createdAt || !d.updatedAt) return false
+  if (!Array.isArray(d.missions) || d.missions.length !== 3) return false
+  return (
+    isValidRemoteMissionEntry(d.missions[0]) &&
+    isValidRemoteMissionEntry(d.missions[1]) &&
+    isValidRemoteMissionEntry(d.missions[2])
+  )
+}
+
+function buildCleanMission(entry: DailyMissionEntry): DailyMissionEntry {
+  const safeTarget = Math.max(1, Math.min(100000, Math.floor(entry.target)))
+  const safeProgress = Math.max(0, Math.min(100000, Math.floor(entry.progress)))
+  return {
+    id: entry.id,
+    type: entry.type,
+    title: entry.title,
+    description: entry.description,
+    target: safeTarget,
+    progress: safeProgress,
+    claimed: Boolean(entry.claimed) && safeProgress >= safeTarget,
+    rewardGold: Math.max(0, Math.min(100000, Math.floor(entry.rewardGold))),
+    rewardDiamonds: Math.max(0, Math.min(10000, Math.floor(entry.rewardDiamonds))),
+    rewardExp: Math.max(0, Math.min(100000, Math.floor(entry.rewardExp))),
+    rewardStones: Math.max(0, Math.min(1000, Math.floor(entry.rewardStones))),
+  }
+}
+
 const inFlightMissionLoad = new Map<string, Promise<DailyMissionBoard>>()
-const inFlightMissionSave = new Map<string, Promise<void>>()
+const inFlightMissionSave = new Map<string, Promise<DailyMissionEntry[] | null>>()
 
 export async function loadOrCreateDailyMissionsDoc(
   userId: string,
@@ -278,7 +354,7 @@ export async function loadOrCreateDailyMissionsDoc(
 
   const task = (async (): Promise<DailyMissionBoard> => {
     const currentUser = auth.currentUser
-    if (!currentUser || currentUser.uid !== userId) {
+    if (!currentUser || currentUser.uid !== userId || !currentUser.emailVerified) {
       return {
         dateKey: safeDateKey,
         ownerId: userId,
@@ -290,47 +366,62 @@ export async function loadOrCreateDailyMissionsDoc(
 
     const docPath = `users/${userId}/dailyMissions/${safeDateKey}`
     const docRef = doc(db, 'users', userId, 'dailyMissions', safeDateKey)
+    const rolledMissions = rollRandomDailyMissions()
 
-    let snap
+    let activeOp = OperationType.GET
     try {
-      snap = await getDoc(docRef)
-    } catch (error) {
-      handleFirestoreError(error, OperationType.GET, docPath)
-    }
+      const missions = await runTransaction(db, async (tx) => {
+        activeOp = OperationType.GET
+        const snap = await tx.get(docRef)
+        if (snap.exists()) {
+          const data = snap.data()
+          if (isValidRemoteBoard(data, safeDateKey, userId)) {
+            const rawMissions = data.missions as DailyMissionEntry[]
+            return [
+              buildCleanMission(rawMissions[0]),
+              buildCleanMission(rawMissions[1]),
+              buildCleanMission(rawMissions[2]),
+            ]
+          }
+          // Existing legacy or corrupted board: sanitize and repair atomically
+          const rawList = Array.isArray(data?.missions) ? data.missions : []
+          const repaired: DailyMissionEntry[] =
+            rawList.length === 3
+              ? [
+                  sanitizeMissionEntry(rawList[0], 0),
+                  sanitizeMissionEntry(rawList[1], 1),
+                  sanitizeMissionEntry(rawList[2], 2),
+                ]
+              : rolledMissions
+          activeOp = OperationType.UPDATE
+          tx.set(docRef, {
+            dateKey: safeDateKey,
+            ownerId: userId,
+            missions: repaired,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          })
+          return repaired
+        }
 
-    if (snap.exists()) {
-      const data = snap.data()
-      const rawMissions = Array.isArray(data?.missions) ? data.missions : []
-      if (rawMissions.length === 3) {
-        return {
+        activeOp = OperationType.CREATE
+        tx.set(docRef, {
           dateKey: safeDateKey,
           ownerId: userId,
-          missions: [
-            sanitizeMissionEntry(rawMissions[0], 0),
-            sanitizeMissionEntry(rawMissions[1], 1),
-            sanitizeMissionEntry(rawMissions[2], 2),
-          ],
-        }
-      }
-    }
+          missions: rolledMissions,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        })
+        return rolledMissions
+      })
 
-    const missions = rollRandomDailyMissions()
-    try {
-      await setDoc(docRef, {
+      return {
         dateKey: safeDateKey,
         ownerId: userId,
         missions,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      })
+      }
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, docPath)
-    }
-
-    return {
-      dateKey: safeDateKey,
-      ownerId: userId,
-      missions,
+      handleFirestoreError(error, activeOp, docPath)
     }
   })()
 
@@ -348,7 +439,7 @@ export async function saveDailyMissionsDoc(
   userId: string,
   dateKey: string,
   missions: DailyMissionEntry[],
-): Promise<void> {
+): Promise<DailyMissionEntry[] | null> {
   const safeDateKey = isValidDateKey(dateKey) ? dateKey : getTodayDateKey()
   const key = `${userId}:${safeDateKey}`
   const normalized: DailyMissionEntry[] = [
@@ -357,68 +448,122 @@ export async function saveDailyMissionsDoc(
     sanitizeMissionEntry(missions[2], 2),
   ]
 
-  const previous = inFlightMissionSave.get(key) ?? Promise.resolve()
+  const previous = inFlightMissionSave.get(key) ?? Promise.resolve(null)
   const next = previous
-    .catch(() => undefined)
-    .then(async () => {
+    .catch(() => null)
+    .then(async (): Promise<DailyMissionEntry[] | null> => {
+      const pendingLoad = inFlightMissionLoad.get(key)
+      if (pendingLoad) {
+        await pendingLoad.catch(() => undefined)
+      }
+
       const currentUser = auth.currentUser
-      if (!currentUser || currentUser.uid !== userId) return
+      if (!currentUser || currentUser.uid !== userId || !currentUser.emailVerified) return null
 
       await ensureUserProfile(currentUser)
       const docPath = `users/${userId}/dailyMissions/${safeDateKey}`
       const docRef = doc(db, 'users', userId, 'dailyMissions', safeDateKey)
 
-      let existingSnap
+      let activeOp = OperationType.GET
       try {
-        existingSnap = await getDoc(docRef)
-      } catch (error) {
-        handleFirestoreError(error, OperationType.GET, docPath)
-      }
+        return await runTransaction(db, async (tx) => {
+          activeOp = OperationType.GET
+          const existingSnap = await tx.get(docRef)
 
-      if (!existingSnap.exists()) {
-        try {
-          await setDoc(docRef, {
-            dateKey: safeDateKey,
-            ownerId: userId,
-            missions: normalized,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          })
-        } catch (error) {
-          handleFirestoreError(error, OperationType.CREATE, docPath)
-        }
-        return
-      }
-
-      const existingData = existingSnap.data()
-      const existingList = Array.isArray(existingData?.missions) ? existingData.missions : []
-      if (existingList.length === 3) {
-        // Preserve server mission definitions and guarantee monotonic progress/claim transitions.
-        const merged: DailyMissionEntry[] = [0, 1, 2].map((idx) => {
-          const prevEntry = sanitizeMissionEntry(existingList[idx], idx)
-          const cand = normalized.find((m) => m.id === prevEntry.id) ?? normalized[idx]
-          const nextProgress = Math.min(prevEntry.target, Math.max(prevEntry.progress, cand?.progress ?? 0))
-          const nextClaimed = prevEntry.claimed || (Boolean(cand?.claimed) && nextProgress >= prevEntry.target)
-          return {
-            ...prevEntry,
-            progress: nextProgress,
-            claimed: nextClaimed,
+          if (!existingSnap.exists()) {
+            activeOp = OperationType.CREATE
+            tx.set(docRef, {
+              dateKey: safeDateKey,
+              ownerId: userId,
+              missions: normalized,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            })
+            return normalized
           }
-        })
-        try {
-          await updateDoc(docRef, {
-            missions: merged,
-            updatedAt: serverTimestamp(),
+
+          const existingData = existingSnap.data()
+          if (!isValidRemoteBoard(existingData, safeDateKey, userId)) {
+            const rawList = Array.isArray(existingData?.missions) ? existingData.missions : []
+            const repairedBase: DailyMissionEntry[] =
+              rawList.length === 3
+                ? [
+                    sanitizeMissionEntry(rawList[0], 0),
+                    sanitizeMissionEntry(rawList[1], 1),
+                    sanitizeMissionEntry(rawList[2], 2),
+                  ]
+                : normalized
+            const repaired = repairedBase.map((base) => {
+              const cand = normalized.find((m) => m.id === base.id)
+              const nextProgress = cand
+                ? Math.max(base.progress, Math.min(base.target, Math.floor(cand.progress)))
+                : base.progress
+              const nextClaimed = base.claimed || (Boolean(cand?.claimed) && nextProgress >= base.target)
+              return buildCleanMission({
+                ...base,
+                progress: nextProgress,
+                claimed: nextClaimed,
+              })
+            })
+            activeOp = OperationType.UPDATE
+            tx.set(docRef, {
+              dateKey: safeDateKey,
+              ownerId: userId,
+              missions: repaired,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            })
+            return repaired
+          }
+
+          const existingList = existingData.missions as DailyMissionEntry[]
+          let hasChanges = false
+          const merged = [0, 1, 2].map((idx) => {
+            const prev = buildCleanMission(existingList[idx])
+            const cand = normalized.find((m) => m.id === prev.id)
+            const candProgress = cand && Number.isFinite(cand.progress)
+              ? Math.max(0, Math.min(prev.target, Math.floor(cand.progress)))
+              : 0
+            const nextProgress = Math.max(prev.progress, Math.min(prev.target, candProgress))
+            const nextClaimed = prev.claimed || (Boolean(cand?.claimed) && nextProgress >= prev.target)
+
+            if (nextProgress !== prev.progress || nextClaimed !== prev.claimed) {
+              hasChanges = true
+            }
+
+            return {
+              id: prev.id,
+              type: prev.type,
+              title: prev.title,
+              description: prev.description,
+              target: prev.target,
+              progress: nextProgress,
+              claimed: nextClaimed,
+              rewardGold: prev.rewardGold,
+              rewardDiamonds: prev.rewardDiamonds,
+              rewardExp: prev.rewardExp,
+              rewardStones: prev.rewardStones,
+            }
           })
-        } catch (error) {
-          handleFirestoreError(error, OperationType.UPDATE, docPath)
-        }
+
+          if (hasChanges) {
+            activeOp = OperationType.UPDATE
+            tx.update(docRef, {
+              missions: merged,
+              updatedAt: serverTimestamp(),
+            })
+          }
+
+          return merged
+        })
+      } catch (error) {
+        handleFirestoreError(error, activeOp, docPath)
       }
     })
 
   inFlightMissionSave.set(key, next)
   try {
-    await next
+    return await next
   } finally {
     if (inFlightMissionSave.get(key) === next) {
       inFlightMissionSave.delete(key)

@@ -145,18 +145,29 @@ async function allocateAvailableGameUid(userId: string): Promise<string> {
   return String(100000 + (seed % 899999))
 }
 
+function toSafeInt(val: unknown, min: number, max: number, fallback: number): number {
+  const num = typeof val === 'number' ? val : Number(val)
+  if (!Number.isFinite(num)) return fallback
+  return Math.max(min, Math.min(max, Math.floor(num)))
+}
+
 function sanitizeCharacterPayload(userId: string, characterId: string, save: SaveData) {
   const safeId = sanitizeSafeId(characterId, 'slot_1', 64)
-  const safeName = (save.name || 'นักผจญภัย').trim().slice(0, 24) || 'นักผจญภัย'
-  const safeJobId = sanitizeSafeId(save.jobId || 'novice', 'novice', 32)
-  const safeMapId = sanitizeSafeId(save.mapId || 'town', 'town', 32)
-  const safeLevel = Math.max(1, Math.min(999, Math.floor(save.level || 1)))
-  const safeExp = Math.max(0, Math.floor(save.exp || 0))
-  const safeHp = Math.max(0, Math.floor(save.hp || 0))
-  const safeMp = Math.max(0, Math.floor(save.mp || 0))
-  const safeGold = Math.max(0, Math.floor(save.gold || 0))
-  const safeDiamonds = Math.max(0, Math.floor(save.diamonds || 0))
-  const safePlayTime = Number.isFinite(save.playTime) ? Math.max(0, save.playTime) : 0
+  const rawName = typeof save.name === 'string' ? save.name : 'นักผจญภัย'
+  const safeName = rawName.trim().slice(0, 24) || 'นักผจญภัย'
+  const safeJobId = sanitizeSafeId(typeof save.jobId === 'string' ? save.jobId : 'novice', 'novice', 32)
+  const safeMapId = sanitizeSafeId(typeof save.mapId === 'string' ? save.mapId : 'town', 'town', 32)
+  const safeLevel = toSafeInt(save.level, 1, 999, 1)
+  const safeExp = toSafeInt(save.exp, 0, Number.MAX_SAFE_INTEGER, 0)
+  const safeHp = toSafeInt(save.hp, 0, Number.MAX_SAFE_INTEGER, 1)
+  const safeMp = toSafeInt(save.mp, 0, Number.MAX_SAFE_INTEGER, 0)
+  const safeGold = toSafeInt(save.gold, 0, Number.MAX_SAFE_INTEGER, 0)
+  const safeDiamonds = toSafeInt(save.diamonds, 0, Number.MAX_SAFE_INTEGER, 0)
+  const safePlayTime = typeof save.playTime === 'number' && Number.isFinite(save.playTime) ? Math.max(0, save.playTime) : 0
+  const safeStorageGold = toSafeInt(save.storageGold, 0, Number.MAX_SAFE_INTEGER, 0)
+  const safeKills = toSafeInt(save.kills, 0, Number.MAX_SAFE_INTEGER, 0)
+  const safeStatPoints = toSafeInt(save.statPoints, 0, 100000, 0)
+  const safeSkillPoints = toSafeInt(save.skillPoints, 0, 100000, 0)
 
   const cleanSaveData = stripUndefinedDeep<SaveData>({
     ...save,
@@ -169,6 +180,10 @@ function sanitizeCharacterPayload(userId: string, characterId: string, save: Sav
     mp: safeMp,
     gold: safeGold,
     diamonds: safeDiamonds,
+    storageGold: safeStorageGold,
+    kills: safeKills,
+    statPoints: safeStatPoints,
+    skillPoints: safeSkillPoints,
     playTime: safePlayTime,
   })
 
@@ -198,6 +213,10 @@ export async function ensureUserProfile(user: User): Promise<UserAccountIdentity
   }
 
   const syncPromise = (async (): Promise<UserAccountIdentity> => {
+    if (!user.emailVerified) {
+      throw new Error('กรุณาใช้อีเมลที่ยืนยันตัวตนแล้วในการเข้าสู่ระบบ')
+    }
+
     const userPath = `users/${user.uid}`
     const userRef = doc(db, 'users', user.uid)
     const email = (user.email || 'player@example.com').slice(0, 320)
@@ -334,13 +353,12 @@ export async function syncPlayerDirectorySummary(
   summary: { characterName: string; level: number; jobId: string },
 ): Promise<void> {
   const currentUser = auth.currentUser
-  if (!currentUser || currentUser.uid !== userId) return
+  if (!currentUser || currentUser.uid !== userId || !currentUser.emailVerified) return
   const identity = await ensureUserProfile(currentUser)
-  const uidPath = `playerUids/${identity.gameUid}`
   const uidRef = doc(db, 'playerUids', identity.gameUid)
-  const safeCharName = summary.characterName.trim().slice(0, 24) || 'นักผจญภัย'
-  const safeLevel = Math.max(1, Math.min(999, Math.floor(summary.level || 1)))
-  const safeJobId = sanitizeSafeId(summary.jobId || 'novice', 'novice', 32)
+  const safeCharName = (typeof summary.characterName === 'string' ? summary.characterName : 'นักผจญภัย').trim().slice(0, 24) || 'นักผจญภัย'
+  const safeLevel = toSafeInt(summary.level, 1, 999, 1)
+  const safeJobId = sanitizeSafeId(typeof summary.jobId === 'string' ? summary.jobId : 'novice', 'novice', 32)
 
   try {
     const snap = await getDoc(uidRef)
@@ -362,6 +380,8 @@ export async function syncPlayerDirectorySummary(
 }
 
 export async function listUserCharacters(userId: string): Promise<CloudCharacterRecord[]> {
+  const currentUser = auth.currentUser
+  if (!currentUser || currentUser.uid !== userId || !currentUser.emailVerified) return []
   const colPath = `users/${userId}/characters`
   try {
     const q = query(collection(db, 'users', userId, 'characters'), where('ownerId', '==', userId))
@@ -375,14 +395,16 @@ export async function listUserCharacters(userId: string): Promise<CloudCharacter
           ownerId: String(d.ownerId ?? userId),
           name: String(d.name ?? d.saveData.name ?? 'นักผจญภัย'),
           jobId: String(d.jobId ?? d.saveData.jobId ?? 'novice'),
-          level: Number(d.level ?? d.saveData.level ?? 1),
-          exp: Number(d.exp ?? d.saveData.exp ?? 0),
-          hp: Number(d.hp ?? d.saveData.hp ?? 1),
-          mp: Number(d.mp ?? d.saveData.mp ?? 0),
-          gold: Number(d.gold ?? d.saveData.gold ?? 0),
-          diamonds: Number(d.diamonds ?? d.saveData.diamonds ?? 0),
+          level: toSafeInt(d.level ?? d.saveData.level, 1, 999, 1),
+          exp: toSafeInt(d.exp ?? d.saveData.exp, 0, Number.MAX_SAFE_INTEGER, 0),
+          hp: toSafeInt(d.hp ?? d.saveData.hp, 0, Number.MAX_SAFE_INTEGER, 1),
+          mp: toSafeInt(d.mp ?? d.saveData.mp, 0, Number.MAX_SAFE_INTEGER, 0),
+          gold: toSafeInt(d.gold ?? d.saveData.gold, 0, Number.MAX_SAFE_INTEGER, 0),
+          diamonds: toSafeInt(d.diamonds ?? d.saveData.diamonds, 0, Number.MAX_SAFE_INTEGER, 0),
           mapId: String(d.mapId ?? d.saveData.mapId ?? 'town'),
-          playTime: Number(d.playTime ?? d.saveData.playTime ?? 0),
+          playTime: typeof (d.playTime ?? d.saveData.playTime) === 'number' && Number.isFinite(d.playTime ?? d.saveData.playTime)
+            ? Math.max(0, Number(d.playTime ?? d.saveData.playTime))
+            : 0,
           saveData: d.saveData as SaveData,
         })
       }
@@ -397,7 +419,7 @@ const inFlightCharacterSave = new Map<string, Promise<void>>()
 
 async function performSaveUserCharacter(userId: string, characterId: string, save: SaveData): Promise<void> {
   const currentUser = auth.currentUser
-  if (!currentUser || currentUser.uid !== userId) return
+  if (!currentUser || currentUser.uid !== userId || !currentUser.emailVerified) return
 
   const identity = await ensureUserProfile(currentUser)
 
@@ -478,4 +500,15 @@ export async function deleteUserCharacter(userId: string, characterId: string): 
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, charPath)
   }
+}
+
+export async function importGuestSaveToSlot(
+  userId: string,
+  slotId: CharacterSlotId,
+  guestSave: SaveData,
+): Promise<void> {
+  await saveUserCharacter(userId, slotId, {
+    ...guestSave,
+    savedAt: Date.now(),
+  })
 }

@@ -13,8 +13,9 @@ const TYPE_NAME: Record<string, string> = { stick: 'กระบอง', sword: 
 
 export function ShopPanel() {
   const g = useGame()
-  const p = g.p!
   const [tab, setTab] = useState<'buy' | 'sell'>('buy')
+  if (!g.p) return null
+  const p = g.p
 
   return (
     <PanelFrame title="ร้านค้าลุงสมปอง" subtitle="ซื้อยา อุปกรณ์ และหินตีบวก หรือขายของที่หามาได้">
@@ -37,6 +38,7 @@ export function ShopPanel() {
         <ul className="grid gap-2 md:grid-cols-2">
           {SHOP_STOCK.map((id) => {
             const def = ITEMS[id]
+            if (!def) return null
             const stack = def.kind === 'consumable' || def.kind === 'material'
             return (
               <li key={id} className="flex items-center gap-3 border-2 border-border bg-muted p-2">
