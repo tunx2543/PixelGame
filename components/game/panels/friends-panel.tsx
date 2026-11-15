@@ -20,10 +20,14 @@ import {
   type PlayerUidProfile,
 } from '@/lib/firebase/friends'
 import { JOBS } from '@/lib/game/data'
+import { MAPS, TILE } from '@/lib/game/maps'
+import { formatPresenceStatusLabel } from '@/lib/firebase/presence-helpers'
 import { closePanel, game as gameState, notify, saveGame, setGameAccountIdentity } from '@/lib/game/engine'
+import { useGame } from '@/lib/game/use-game'
 import { isGmAccountUser, PERMANENT_GM_GAME_UID, PERMANENT_GM_UID } from '@/lib/game/permissions'
 
 export function FriendsPanel({ game }: { game: typeof gameState }) {
+  useGame()
   const [user, setUser] = useState<User | null>(() => auth.currentUser)
   const [identity, setIdentity] = useState<UserAccountIdentity | null>(() => getCachedAccountIdentity())
   const [social, setSocial] = useState<FriendSocialSnapshot>({
@@ -355,37 +359,54 @@ export function FriendsPanel({ game }: { game: typeof gameState }) {
               <span className="text-[10px] text-primary">คำขอรอ {social.incomingRequests.length}</span>
             </div>
             <div className="mt-2 space-y-1.5">
-              {social.friends.map((friend) => (
-                <div
-                  key={friend.requestId}
-                  className="flex items-center justify-between gap-2 rounded border border-border bg-background/70 px-2 py-1.5"
-                >
-                  <button
-                    type="button"
-                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                    onClick={() => {
-                      game.socialTargetId = friend.userId
-                      game.socialTargetMeta = {
-                        userId: friend.userId,
-                        displayName: friend.name,
-                        gameUid: friend.gameUid,
-                      }
-                      notify()
-                    }}
+              {social.friends.map((friend) => {
+                const live = game.onlinePlayers.find((online) => online.userId === friend.userId && !online.invisible)
+                const liveMapName = live ? (MAPS[live.mapId]?.name ?? live.mapId) : null
+                const liveStatus = live ? formatPresenceStatusLabel(live.status, live.mapId) : null
+                const liveCoords = live ? `(${Math.floor(live.x / TILE)}, ${Math.floor(live.y / TILE)})` : null
+
+                return (
+                  <div
+                    key={friend.requestId}
+                    className="flex items-center justify-between gap-2 rounded border border-border bg-background/70 px-2 py-1.5"
                   >
-                    <span className={`grid size-7 shrink-0 place-items-center rounded-full ${friend.isGm ? 'bg-amber-400/20 text-amber-300' : 'bg-primary/20 text-primary'}`}>
-                      {friend.isGm ? <Crown className="size-3.5" aria-hidden /> : <UserRound className="size-3.5" aria-hidden />}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-[11px] font-semibold text-foreground">
-                        {friend.isGm && <span className="mr-1 text-amber-300">[GM]</span>}
-                        {friend.name}
+                    <button
+                      type="button"
+                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                      onClick={() => {
+                        game.socialTargetId = friend.userId
+                        game.socialTargetMeta = {
+                          userId: friend.userId,
+                          displayName: friend.name,
+                          gameUid: friend.gameUid,
+                        }
+                        notify()
+                      }}
+                    >
+                      <span className={`relative grid size-7 shrink-0 place-items-center rounded-full ${friend.isGm ? 'bg-amber-400/20 text-amber-300' : 'bg-primary/20 text-primary'}`}>
+                        {friend.isGm ? <Crown className="size-3.5" aria-hidden /> : <UserRound className="size-3.5" aria-hidden />}
+                        <span
+                          className={`absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border border-background ${live ? 'bg-emerald-400' : 'bg-muted-foreground/50'}`}
+                          aria-hidden
+                        />
                       </span>
-                      <span className="block font-mono text-[10px] text-muted-foreground">
-                        UID {friend.gameUid}
+                      <span className="min-w-0">
+                        <span className="block truncate text-[11px] font-semibold text-foreground">
+                          {friend.isGm && <span className="mr-1 text-amber-300">[GM]</span>}
+                          {friend.name}
+                        </span>
+                        <span className="block truncate font-mono text-[10px] text-muted-foreground">
+                          UID {friend.gameUid} •{' '}
+                          {live ? (
+                            <span className="font-sans text-emerald-300">
+                              ออนไลน์: {liveMapName} {liveCoords} ({liveStatus})
+                            </span>
+                          ) : (
+                            <span className="font-sans text-muted-foreground/80">ออฟไลน์</span>
+                          )}
+                        </span>
                       </span>
-                    </span>
-                  </button>
+                    </button>
                   <div className="flex shrink-0 items-center gap-1">
                     <button
                       type="button"
@@ -406,7 +427,8 @@ export function FriendsPanel({ game }: { game: typeof gameState }) {
                     </button>
                   </div>
                 </div>
-              ))}
+                )
+              })}
               {!social.friends.length && (
                 <p className="py-1 text-[11px] text-muted-foreground">
                   ยังไม่มีเพื่อน — ใส่ UID ด้านบนเพื่อส่งคำขอเพิ่มเพื่อนได้เลย

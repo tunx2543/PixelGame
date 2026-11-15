@@ -12,6 +12,7 @@ import { PresenceSync } from './presence-sync'
 import { WorldBanner } from './world-banner'
 import { TouchControls } from './touch-controls'
 import { PlayerActionMenu } from './player-action-menu'
+import { PartyPopover } from './party-popover'
 import { SocialNotifications } from './social-notifications'
 import { SocialPopover } from './social-popover'
 import { ITEMS } from '@/lib/game/data'
@@ -45,6 +46,7 @@ export function Game() {
         <PlayerActionMenu />
         <SocialNotifications />
         <SocialPopover />
+        <PartyPopover />
         <LootToast />
         <KillRewardToast />
         <ChatBox />

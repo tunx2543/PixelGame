@@ -413,6 +413,11 @@
           "type": "boolean",
           "description": "Whether the character is currently walking."
         },
+        "status": {
+          "type": "string",
+          "description": "Live activity status displayed in world presence list.",
+          "enum": ["town", "idle", "moving", "combat"]
+        },
         "attackAnim": {
           "type": "number",
           "description": "Remaining attack swing timer in seconds."
@@ -444,9 +449,165 @@
         "gm",
         "facing",
         "moving",
+        "status",
         "attackAnim",
         "invisible",
         "heartbeatMs",
+        "updatedAt"
+      ]
+    },
+    "Party": {
+      "title": "Party",
+      "description": "Cooperative multiplayer RPG party (up to 4 players) with live member stats and leader control.",
+      "type": "object",
+      "properties": {
+        "partyId": {
+          "type": "string",
+          "description": "Unique party document ID.",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of the party.",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "leaderId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the party leader.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "memberIds": {
+          "type": "array",
+          "description": "Bounded list (1 to 4) of member Firebase Auth UIDs."
+        },
+        "members": {
+          "type": "object",
+          "description": "Map keyed by member Firebase Auth UID storing live RPG character snapshot (zero PII)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the party was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when party state or member snapshot was last updated."
+        }
+      },
+      "required": [
+        "partyId",
+        "name",
+        "leaderId",
+        "memberIds",
+        "members",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PartyInvite": {
+      "title": "PartyInvite",
+      "description": "Invitation sent by a party leader to another verified player identified by Game UID.",
+      "type": "object",
+      "properties": {
+        "inviteId": {
+          "type": "string",
+          "description": "Deterministic ID formatted as {partyId}__{toUid}.",
+          "minLength": 6,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "partyId": {
+          "type": "string",
+          "description": "Target party ID.",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "partyName": {
+          "type": "string",
+          "description": "Target party display name.",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "fromUid": {
+          "type": "string",
+          "description": "Inviter (party leader) Firebase Auth UID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "toUid": {
+          "type": "string",
+          "description": "Invited player Firebase Auth UID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "fromGameUid": {
+          "type": "string",
+          "description": "Inviter Game UID.",
+          "minLength": 4,
+          "maxLength": 8,
+          "pattern": "^[0-9]{4,8}$"
+        },
+        "toGameUid": {
+          "type": "string",
+          "description": "Invited player Game UID.",
+          "minLength": 4,
+          "maxLength": 8,
+          "pattern": "^[0-9]{4,8}$"
+        },
+        "fromName": {
+          "type": "string",
+          "description": "Inviter character name.",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "toName": {
+          "type": "string",
+          "description": "Invited player character name.",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "fromIsGm": {
+          "type": "boolean",
+          "description": "Whether the inviter is the sole verified GM."
+        },
+        "status": {
+          "type": "string",
+          "description": "Invitation status.",
+          "enum": ["pending", "accepted", "declined"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when invitation was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when invitation status was updated."
+        }
+      },
+      "required": [
+        "inviteId",
+        "partyId",
+        "partyName",
+        "fromUid",
+        "toUid",
+        "fromGameUid",
+        "toGameUid",
+        "fromName",
+        "toName",
+        "fromIsGm",
+        "status",
+        "createdAt",
         "updatedAt"
       ]
     }
@@ -475,6 +636,14 @@
     "/worldPresence/{userId}": {
       "schema": { "$ref": "#/entities/WorldPresence" },
       "description": "Non-PII live map presence documents for rendering nearby players in real time."
+    },
+    "/parties/{partyId}": {
+      "schema": { "$ref": "#/entities/Party" },
+      "description": "Active multiplayer RPG parties keyed by partyId with memberIds array membership gate."
+    },
+    "/partyInvites/{inviteId}": {
+      "schema": { "$ref": "#/entities/PartyInvite" },
+      "description": "Pending and resolved party invitations keyed as {partyId}__{toUid}."
     }
   }
 }

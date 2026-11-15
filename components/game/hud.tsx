@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { Castle, ChevronDown, ChevronUp, Gem, LogOut, PawPrint, ScrollText, Sparkles, Terminal, UsersRound } from 'lucide-react'
+import { Castle, ChevronDown, ChevronUp, Gem, LogOut, PawPrint, ScrollText, Sparkles, Terminal, Users, UsersRound } from 'lucide-react'
 import { useGame } from '@/lib/game/use-game'
 import {
   castGmSkill,
@@ -91,6 +91,34 @@ export function Hud({ onOpenCheckin }: { onOpenCheckin?: () => void }) {
               </span>
             )}
           </div>
+          {game.party && (
+            <button
+              type="button"
+              onClick={() => {
+                game.partyPanelOpen = !game.partyPanelOpen
+                if (game.partyPanelOpen) {
+                  game.socialMenuOpen = false
+                  game.onlinePanelOpen = false
+                }
+                game.panel = null
+                notify()
+              }}
+              className={`mt-1 flex w-full items-center justify-between gap-1 border px-1.5 py-0.5 text-[9px] font-semibold transition-colors ${
+                game.partySameMapCount > 0
+                  ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25'
+                  : 'border-purple-400/40 bg-purple-500/15 text-purple-200 hover:bg-purple-500/25'
+              }`}
+            >
+              <span className="truncate">
+                ปาร์ตี้ {game.party.memberIds.length}/4
+              </span>
+              <span className="shrink-0 font-mono">
+                {game.partySameMapCount > 0
+                  ? `EXP+${Math.round((game.partyExpMul - 1) * 100)}% G+${Math.round((game.partyGoldMul - 1) * 100)}%`
+                  : 'ต่างแมพ'}
+              </span>
+            </button>
+          )}
           {isGmDev && (
             <div className="mt-2 border-t border-gold/40 pt-2">
               <p className="mb-1 text-[10px] font-semibold text-gold">GM · DEV TOOLS (UID 0000)</p>
@@ -136,8 +164,54 @@ export function Hud({ onOpenCheckin }: { onOpenCheckin?: () => void }) {
             >
               <Sparkles className="size-3 text-gold" aria-hidden /> คลังโมเดล 2D
             </button>
-            <button type="button" onClick={() => { game.socialMenuOpen = !game.socialMenuOpen; game.panel = null; notify() }} className="pixel-btn grid place-items-center bg-accent/20 p-1.5 text-accent hover:bg-accent/30" aria-label="เปิดรายชื่อเพื่อน" title="รายชื่อเพื่อน"><UsersRound className="size-3.5" aria-hidden /></button>
-            <button type="button" onClick={() => quitToTitle()} className="pixel-btn flex items-center justify-center gap-1 bg-secondary px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground" title="กลับหน้าล็อคอินตัวละคร"><LogOut className="size-3" aria-hidden /> สลับตัว</button>
+            <button
+              type="button"
+              onClick={() => {
+                game.socialMenuOpen = !game.socialMenuOpen
+                if (game.socialMenuOpen) {
+                  game.onlinePanelOpen = false
+                  game.partyPanelOpen = false
+                }
+                game.panel = null
+                notify()
+              }}
+              className="pixel-btn flex items-center justify-center gap-1 bg-accent/20 px-1.5 py-1 text-[10px] font-semibold text-accent hover:bg-accent/30"
+              aria-label="เปิดรายชื่อเพื่อน"
+              title="รายชื่อเพื่อน"
+            >
+              <UsersRound className="size-3" aria-hidden /> เพื่อน
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                game.partyPanelOpen = !game.partyPanelOpen
+                if (game.partyPanelOpen) {
+                  game.socialMenuOpen = false
+                  game.onlinePanelOpen = false
+                }
+                game.panel = null
+                notify()
+              }}
+              aria-expanded={game.partyPanelOpen}
+              aria-label="เปิดระบบปาร์ตี้"
+              title="ระบบปาร์ตี้"
+              className={`pixel-btn flex items-center justify-center gap-1 px-1.5 py-1 text-[10px] font-semibold ${
+                game.partyPanelOpen || game.partyInvites.length > 0
+                  ? 'bg-purple-500/35 text-purple-100'
+                  : 'bg-purple-500/20 text-purple-200 hover:bg-purple-500/30'
+              }`}
+            >
+              <Users className="size-3" aria-hidden />
+              ปาร์ตี้{game.party ? ` (${game.party.memberIds.length}/4)` : game.partyInvites.length > 0 ? ` (${game.partyInvites.length})` : ''}
+            </button>
+            <button
+              type="button"
+              onClick={() => quitToTitle()}
+              className="pixel-btn col-span-2 flex items-center justify-center gap-1 bg-secondary px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground"
+              title="กลับหน้าล็อคอินตัวละคร"
+            >
+              <LogOut className="size-3" aria-hidden /> สลับตัว
+            </button>
             <PWAInstallButton variant="hud" />
           </div>
 

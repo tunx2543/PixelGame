@@ -2,9 +2,12 @@
 
 import { useState } from 'react'
 import { auth as firebaseAuth } from '@/lib/firebase/client'
+import { invitePlayerToPartyAutoCreate } from '@/lib/firebase/parties'
+import { formatPresenceStatusLabel } from '@/lib/firebase/presence-helpers'
+import { MAPS, TILE } from '@/lib/game/maps'
 import { formatGameUid } from '@/lib/game/permissions'
 import { createTrade, sendFriendRequest, sendWhisper } from '@/lib/game/social'
-import { game, notify, openPanel } from '@/lib/game/engine'
+import { game, getStats, notify, openPanel } from '@/lib/game/engine'
 
 export function PlayerActionMenu() {
   const [copied, setCopied] = useState(false)
@@ -13,6 +16,9 @@ export function PlayerActionMenu() {
   const target = game.remotePlayers.find((player) => player.userId === game.socialTargetId)
   const fallback =
     !target && game.socialTargetMeta?.userId === game.socialTargetId ? game.socialTargetMeta : null
+  const liveRemoteAnywhere = !target
+    ? game.onlinePlayers.find((player) => player.userId === game.socialTargetId && !player.invisible)
+    : null
   if (!target && !fallback) return null
 
   const closeMenu = () => {
@@ -31,6 +37,29 @@ export function PlayerActionMenu() {
         game.chat.push({ id: Date.now(), type: 'error', text: 'ดำเนินการไม่สำเร็จ กรุณาลองใหม่' })
         closeMenu()
       })
+  }
+
+  const invitePartyByGameUid = (targetUid: string) => {
+    const p = game.p
+    if (!p) return
+    const s = getStats(p)
+    run(
+      invitePlayerToPartyAutoCreate({
+        currentParty: game.party,
+        targetGameUid: targetUid,
+        senderName: p.name,
+        memberInput: {
+          gameUid: p.gameUid,
+          uid: p.uid,
+          name: p.name,
+          jobId: p.jobId,
+          level: p.level,
+          hp: Math.max(0, Math.min(s.maxHp, Math.floor(p.hp))),
+          maxHp: Math.max(1, Math.floor(s.maxHp)),
+          mapId: p.mapId,
+        },
+      }),
+    )
   }
 
   if (!target && fallback) {
@@ -69,9 +98,20 @@ export function PlayerActionMenu() {
           </button>
         </div>
         <p className="mb-2.5 text-[11px] text-muted-foreground">
-          กระซิบและแลกเปลี่ยนแบบเรียลไทม์ใช้งานได้เมื่อผู้เล่นออนไลน์อยู่ในห้องเดียวกัน
+          {liveRemoteAnywhere
+            ? `กำลังออนไลน์อยู่ที่ ${MAPS[liveRemoteAnywhere.mapId]?.name ?? liveRemoteAnywhere.mapId} (${Math.floor(liveRemoteAnywhere.x / TILE)}, ${Math.floor(liveRemoteAnywhere.y / TILE)}) • ${formatPresenceStatusLabel(liveRemoteAnywhere.status, liveRemoteAnywhere.mapId)}`
+            : 'กระซิบและแลกเปลี่ยนแบบเรียลไทม์ใช้งานได้เมื่อผู้เล่นออนไลน์อยู่ในห้องเดียวกัน'}
         </p>
-        <div className="flex gap-1.5">
+        <div className="flex flex-wrap gap-1.5">
+          {fallback.gameUid && firebaseAuth.currentUser?.emailVerified && (
+            <button
+              type="button"
+              className="pixel-button primary flex-1 px-2 py-1.5 text-[10px]"
+              onClick={() => invitePartyByGameUid(fallback.gameUid!)}
+            >
+              ชวนปาร์ตี้
+            </button>
+          )}
           {fallback.gameUid && (
             <button
               type="button"
@@ -107,7 +147,9 @@ export function PlayerActionMenu() {
       <div className="mb-2 flex items-center justify-between border-b border-border pb-2">
         <div className="min-w-0">
           <p className="truncate text-xs font-bold text-foreground">{target.displayName}</p>
-          <p className="text-[10px] text-primary">UID {targetGameUid} • Lv.{target.level}</p>
+          <p className="text-[10px] text-primary">
+            UID {targetGameUid} • Lv.{target.level} • {formatPresenceStatusLabel(target.status, target.mapId)}
+          </p>
         </div>
         <button
           type="button"
@@ -118,7 +160,14 @@ export function PlayerActionMenu() {
           ×
         </button>
       </div>
-      <div className="grid grid-cols-3 gap-1.5">
+      <div className="grid grid-cols-2 gap-1.5">
+        <button
+          type="button"
+          className="pixel-button primary px-1 py-2 text-[10px]"
+          onClick={() => invitePartyByGameUid(targetGameUid)}
+        >
+          ชวนปาร์ตี้
+        </button>
         <button
           type="button"
           className="pixel-button secondary px-1 py-2 text-[10px]"

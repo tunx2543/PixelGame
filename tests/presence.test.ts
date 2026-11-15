@@ -4,11 +4,27 @@ import {
   PRESENCE_STALE_MS,
   type RemotePlayerSnapshot,
   buildWorldPresencePayload,
+  filterPlayersForMap,
+  formatPresenceStatusLabel,
   parseWorldPresenceToRemotePlayer,
   pruneStaleRemotePlayers,
+  resolvePresenceStatus,
 } from '../lib/firebase/presence-helpers'
 
-test('buildWorldPresencePayload builds valid GM payload with UID 0 and 0000', () => {
+test('resolvePresenceStatus and formatPresenceStatusLabel compute accurate player states', () => {
+  assert.equal(resolvePresenceStatus({ mapId: 'town', moving: false, attackAnim: 0 }), 'town')
+  assert.equal(resolvePresenceStatus({ mapId: 'meadow', moving: false, attackAnim: 0 }), 'idle')
+  assert.equal(resolvePresenceStatus({ mapId: 'meadow', moving: true, attackAnim: 0 }), 'moving')
+  assert.equal(resolvePresenceStatus({ mapId: 'meadow', moving: true, attackAnim: 0.2 }), 'combat')
+  assert.equal(resolvePresenceStatus({ mapId: 'meadow', moving: false, attackAnim: 0, inCombat: true }), 'combat')
+
+  assert.equal(formatPresenceStatusLabel('town', 'town'), 'อยู่ในเมือง')
+  assert.equal(formatPresenceStatusLabel('moving', 'meadow'), 'กำลังเดิน')
+  assert.equal(formatPresenceStatusLabel('combat', 'meadow'), 'กำลังต่อสู้')
+  assert.equal(formatPresenceStatusLabel('idle', 'forest'), 'สำรวจพื้นที่')
+})
+
+test('buildWorldPresencePayload builds valid GM payload with UID 0, 0000, and status', () => {
   const payload = buildWorldPresencePayload({
     userId: 'gm_firebase_uid_123',
     isGm: true,
@@ -32,12 +48,13 @@ test('buildWorldPresencePayload builds valid GM payload with UID 0 and 0000', ()
   assert.equal(payload.uid, 0)
   assert.equal(payload.gameUid, '0000')
   assert.equal(payload.displayName, 'GMTUNX')
+  assert.equal(payload.status, 'town')
   assert.equal(payload.x, 416.2)
   assert.equal(payload.y, 448.7)
   assert.equal(payload.invisible, false)
 })
 
-test('buildWorldPresencePayload blocks non-GM spoofing and strips gm jobId', () => {
+test('buildWorldPresencePayload blocks non-GM spoofing, sanitizes gm jobId, and sets combat status', () => {
   const payload = buildWorldPresencePayload({
     userId: 'player_uid_abc',
     isGm: false,
@@ -45,7 +62,7 @@ test('buildWorldPresencePayload blocks non-GM spoofing and strips gm jobId', () 
     uid: 3042,
     name: 'Test001',
     jobId: 'gm',
-    mapId: 'town',
+    mapId: 'meadow',
     x: 420,
     y: 450,
     level: 1,
@@ -61,6 +78,7 @@ test('buildWorldPresencePayload blocks non-GM spoofing and strips gm jobId', () 
   assert.equal(payload.uid, 3042)
   assert.equal(payload.gameUid, '03042')
   assert.equal(payload.jobId, 'novice')
+  assert.equal(payload.status, 'combat')
 })
 
 test('buildWorldPresencePayload returns null when invisible, invalid UID, or non-GM lacks UID', () => {
@@ -122,7 +140,7 @@ test('buildWorldPresencePayload returns null when invisible, invalid UID, or non
   )
 })
 
-test('parseWorldPresenceToRemotePlayer filters self, different maps, invisible, and stale records', () => {
+test('parseWorldPresenceToRemotePlayer supports global world parsing and map filtering', () => {
   const now = 1_700_000_100_000
   const baseDoc = {
     userId: 'other_user',
@@ -137,6 +155,7 @@ test('parseWorldPresenceToRemotePlayer filters self, different maps, invisible, 
     gm: false,
     facing: 'down',
     moving: false,
+    status: 'town',
     attackAnim: 0,
     invisible: false,
     updatedAt: { toMillis: () => now - 2_000 },
@@ -146,12 +165,25 @@ test('parseWorldPresenceToRemotePlayer filters self, different maps, invisible, 
   assert.equal(
     parseWorldPresenceToRemotePlayer(
       { ...baseDoc, userId: 'self_user' },
-      { selfUserId: 'self_user', activeMapId: 'town', nowMs: now },
+      { selfUserId: 'self_user', nowMs: now },
     ),
     null,
   )
 
-  // Wrong map filtered out
+  // Global world subscription keeps player on other maps so location & status show in online list
+  const meadowPlayer = parseWorldPresenceToRemotePlayer(
+    { ...baseDoc, mapId: 'meadow', status: 'combat', moving: true },
+    { selfUserId: 'self_user', nowMs: now },
+  )
+  assert.ok(meadowPlayer)
+  assert.equal(meadowPlayer.mapId, 'meadow')
+  assert.equal(meadowPlayer.status, 'combat')
+
+  // filterPlayersForMap isolates players rendered on the local canvas
+  assert.equal(filterPlayersForMap([meadowPlayer], 'town').length, 0)
+  assert.equal(filterPlayersForMap([meadowPlayer], 'meadow').length, 1)
+
+  // Explicit activeMapId filter excludes wrong map
   assert.equal(
     parseWorldPresenceToRemotePlayer(
       { ...baseDoc, mapId: 'meadow' },
@@ -164,7 +196,7 @@ test('parseWorldPresenceToRemotePlayer filters self, different maps, invisible, 
   assert.equal(
     parseWorldPresenceToRemotePlayer(
       { ...baseDoc, invisible: true },
-      { selfUserId: 'self_user', activeMapId: 'town', nowMs: now },
+      { selfUserId: 'self_user', nowMs: now },
     ),
     null,
   )
@@ -173,7 +205,7 @@ test('parseWorldPresenceToRemotePlayer filters self, different maps, invisible, 
   assert.equal(
     parseWorldPresenceToRemotePlayer(
       { ...baseDoc, updatedAt: { toMillis: () => now - PRESENCE_STALE_MS - 1_000 } },
-      { selfUserId: 'self_user', activeMapId: 'town', nowMs: now },
+      { selfUserId: 'self_user', nowMs: now },
     ),
     null,
   )
@@ -188,19 +220,20 @@ test('parseWorldPresenceToRemotePlayer filters self, different maps, invisible, 
   assert.equal(first.displayName, 'Test001')
   assert.equal(first.gameUid, '03042')
   assert.equal(first.uid, 3042)
+  assert.equal(first.status, 'town')
   assert.equal(first.previousX, 432)
 
   const second = parseWorldPresenceToRemotePlayer(
-    { ...baseDoc, x: 448, y: 464 },
+    { ...baseDoc, x: 448, y: 464, status: 'moving', moving: true },
     { selfUserId: 'self_user', activeMapId: 'town', nowMs: now + 200, existing: first },
   )
   assert.ok(second)
   assert.equal(second.previousX, 432)
   assert.equal(second.x, 448)
+  assert.equal(second.status, 'moving')
 })
 
 test('parseWorldPresenceToRemotePlayer handles skewed device clocks using calibrated server offset', () => {
-  // Simulate device clock lagging 5 minutes (300,000 ms) behind Google server time
   const deviceNow = 1_700_000_000_000
   const serverNow = deviceNow + 300_000
   const clockOffsetMs = serverNow - deviceNow
@@ -218,6 +251,7 @@ test('parseWorldPresenceToRemotePlayer handles skewed device clocks using calibr
     gm: true,
     facing: 'down',
     moving: false,
+    status: 'town',
     attackAnim: 0,
     invisible: false,
     updatedAt: { toMillis: () => serverNow - 1_500 },
@@ -225,15 +259,14 @@ test('parseWorldPresenceToRemotePlayer handles skewed device clocks using calibr
 
   const parsed = parseWorldPresenceToRemotePlayer(freshOnServerDoc, {
     selfUserId: 'self_user',
-    activeMapId: 'town',
     nowMs: deviceNow,
     clockOffsetMs,
   })
   assert.ok(parsed)
   assert.equal(parsed.gm, true)
   assert.equal(parsed.uid, 0)
+  assert.equal(parsed.status, 'town')
 
-  // And pruning uses the converted localLastSeen accurately
   const map = new Map<string, RemotePlayerSnapshot>([[parsed.userId, parsed]])
   assert.equal(pruneStaleRemotePlayers(map, deviceNow + 10_000).length, 1)
   assert.equal(pruneStaleRemotePlayers(map, deviceNow + PRESENCE_STALE_MS + 1_000).length, 0)

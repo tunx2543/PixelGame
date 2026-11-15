@@ -6,10 +6,10 @@ import {
   doc,
   limit,
   onSnapshot,
+  orderBy,
   query,
   serverTimestamp,
   setDoc,
-  where,
 } from 'firebase/firestore'
 import { OperationType, auth, db, handleFirestoreError } from './client'
 import {
@@ -55,15 +55,13 @@ export async function removeWorldPresence(userId: string): Promise<void> {
   try {
     await deleteDoc(doc(db, 'worldPresence', userId))
   } catch (error) {
-    // Ignore permission/offline errors during teardown after sign-out.
     if (!auth.currentUser) return
     handleFirestoreError(error, OperationType.DELETE, path)
   }
 }
 
-export function subscribeMapPresence(
+export function subscribeWorldPresence(
   selfUserId: string,
-  mapId: string,
   currentPlayers: Map<string, RemotePlayerSnapshot>,
   onPlayersChange: (players: RemotePlayerSnapshot[]) => void,
   onError?: (error: unknown) => void,
@@ -79,7 +77,7 @@ export function subscribeMapPresence(
 
   const presenceQuery = query(
     collection(db, 'worldPresence'),
-    where('mapId', '==', mapId),
+    orderBy('heartbeatMs', 'desc'),
     limit(PRESENCE_QUERY_LIMIT),
   )
 
@@ -89,7 +87,7 @@ export function subscribeMapPresence(
       const nowMs = Date.now()
       const seenUserIds = new Set<string>()
 
-      // Calibrate Google Firestore server clock offset using our own committed doc first.
+      // Calibrate Firestore server clock offset using our own committed presence doc.
       for (const docSnap of snapshot.docs) {
         if (docSnap.id === selfUserId && !docSnap.metadata.hasPendingWrites) {
           const serverMs = extractDocTimestampMs(docSnap.data().updatedAt)
@@ -104,7 +102,6 @@ export function subscribeMapPresence(
         if (docSnap.id === selfUserId) continue
         const parsed = parseWorldPresenceToRemotePlayer(docSnap.data(), {
           selfUserId,
-          activeMapId: mapId,
           nowMs,
           clockOffsetMs,
           existing: currentPlayers.get(docSnap.id) ?? null,
@@ -116,7 +113,6 @@ export function subscribeMapPresence(
         }
       }
 
-      // Remove players who left this map, turned invisible, or deleted their presence doc.
       for (const id of [...currentPlayers.keys()]) {
         if (!seenUserIds.has(id)) {
           currentPlayers.delete(id)

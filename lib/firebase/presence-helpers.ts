@@ -6,6 +6,7 @@ export const PRESENCE_STALE_MS = 25_000
 export const PRESENCE_QUERY_LIMIT = 60
 
 export type PresenceFacing = 'up' | 'down' | 'left' | 'right'
+export type PresenceStatus = 'town' | 'idle' | 'moving' | 'combat'
 
 export interface WorldPresencePayload {
   userId: string
@@ -20,6 +21,7 @@ export interface WorldPresencePayload {
   gm: boolean
   facing: PresenceFacing
   moving: boolean
+  status: PresenceStatus
   attackAnim: number
   invisible: false
   heartbeatMs: number
@@ -39,6 +41,7 @@ export interface BuildPresenceInput {
   facing: string
   moving: boolean
   attackAnim: number
+  inCombat?: boolean
   invisible?: boolean
   nowMs?: number
 }
@@ -57,6 +60,7 @@ export interface RemotePlayerSnapshot {
   gm: boolean
   facing: PresenceFacing
   moving: boolean
+  status: PresenceStatus
   attackAnim: number
   invisible: boolean
   lastSeen: number
@@ -66,6 +70,7 @@ export interface RemotePlayerSnapshot {
 }
 
 const VALID_FACING = new Set<PresenceFacing>(['up', 'down', 'left', 'right'])
+const VALID_STATUS = new Set<PresenceStatus>(['town', 'idle', 'moving', 'combat'])
 
 export function sanitizeSafePresenceId(value: unknown, fallback: string, maxLen: number): string {
   const raw = typeof value === 'string' ? value : ''
@@ -85,6 +90,41 @@ function clampInt(value: unknown, min: number, max: number, fallback: number): n
   const num = typeof value === 'number' ? value : Number(value)
   if (!Number.isFinite(num)) return fallback
   return Math.max(min, Math.min(max, Math.floor(num)))
+}
+
+export function resolvePresenceStatus(input: {
+  mapId: string
+  moving: boolean
+  attackAnim: number
+  inCombat?: boolean
+}): PresenceStatus {
+  if (input.attackAnim > 0 || input.inCombat) return 'combat'
+  if (input.moving) return 'moving'
+  if (input.mapId === 'town') return 'town'
+  return 'idle'
+}
+
+export function formatPresenceStatusLabel(status: PresenceStatus | undefined, mapId?: string): string {
+  switch (status) {
+    case 'combat':
+      return 'กำลังต่อสู้'
+    case 'moving':
+      return 'กำลังเดิน'
+    case 'town':
+      return 'อยู่ในเมือง'
+    case 'idle':
+      return mapId === 'town' ? 'อยู่ในเมือง' : 'สำรวจพื้นที่'
+    default:
+      return mapId === 'town' ? 'อยู่ในเมือง' : 'ออนไลน์'
+  }
+}
+
+export function filterPlayersForMap(
+  players: readonly RemotePlayerSnapshot[],
+  mapId: string | null | undefined,
+): RemotePlayerSnapshot[] {
+  if (!mapId) return []
+  return players.filter((player) => !player.invisible && player.mapId === mapId)
 }
 
 export function buildWorldPresencePayload(input: BuildPresenceInput): WorldPresencePayload | null {
@@ -118,6 +158,8 @@ export function buildWorldPresencePayload(input: BuildPresenceInput): WorldPrese
   const facing: PresenceFacing = VALID_FACING.has(input.facing as PresenceFacing)
     ? (input.facing as PresenceFacing)
     : 'down'
+  const attackAnim = clampFinite(input.attackAnim, 0, 5, 0, 3)
+  const moving = Boolean(input.moving)
 
   return {
     userId: input.userId,
@@ -131,8 +173,9 @@ export function buildWorldPresencePayload(input: BuildPresenceInput): WorldPrese
     level: clampInt(input.level, 1, 999, 1),
     gm,
     facing,
-    moving: Boolean(input.moving),
-    attackAnim: clampFinite(input.attackAnim, 0, 5, 0, 3),
+    moving,
+    status: resolvePresenceStatus({ mapId, moving, attackAnim, inCombat: input.inCombat }),
+    attackAnim,
     invisible: false,
     heartbeatMs: Math.max(0, Math.floor(Number.isFinite(input.nowMs) ? Number(input.nowMs) : Date.now())),
   }
@@ -163,7 +206,7 @@ export function extractDocTimestampMs(value: unknown): number | null {
 
 export interface ParsePresenceOptions {
   selfUserId: string
-  activeMapId: string
+  activeMapId?: string | null
   nowMs?: number
   clockOffsetMs?: number | null
   existing?: RemotePlayerSnapshot | null
@@ -181,7 +224,8 @@ export function parseWorldPresenceToRemotePlayer(
   if (docData.invisible === true) return null
 
   const mapId = typeof docData.mapId === 'string' ? docData.mapId : ''
-  if (!mapId || mapId !== options.activeMapId) return null
+  if (!mapId) return null
+  if (options.activeMapId && mapId !== options.activeMapId) return null
 
   const x = Number(docData.x)
   const y = Number(docData.y)
@@ -217,6 +261,10 @@ export function parseWorldPresenceToRemotePlayer(
   const uid = gm ? 0 : clampInt(docData.uid, 1, 99_999_999, Number(gameUid ?? 0) || 1)
   const level = clampInt(docData.level, 1, 999, 1)
   const attackAnim = clampFinite(docData.attackAnim, 0, 5, 0, 3)
+  const moving = Boolean(docData.moving)
+  const status: PresenceStatus = VALID_STATUS.has(docData.status as PresenceStatus)
+    ? (docData.status as PresenceStatus)
+    : resolvePresenceStatus({ mapId, moving, attackAnim })
 
   const existing = options.existing
   const sameMapExisting = existing && existing.mapId === mapId ? existing : null
@@ -234,7 +282,8 @@ export function parseWorldPresenceToRemotePlayer(
     level,
     gm,
     facing,
-    moving: Boolean(docData.moving),
+    moving,
+    status,
     attackAnim,
     invisible: false,
     lastSeen: localLastSeen,

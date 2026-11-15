@@ -9,16 +9,24 @@ import {
   PRESENCE_MOVE_THROTTLE_MS,
   PRESENCE_STALE_MS,
   type RemotePlayerSnapshot,
+  filterPlayersForMap,
   pruneStaleRemotePlayers,
+  resolvePresenceStatus,
 } from '@/lib/firebase/presence-helpers'
 import {
   removeWorldPresence,
-  subscribeMapPresence,
+  subscribeWorldPresence,
   upsertWorldPresence,
 } from '@/lib/firebase/presence'
+import { computePartySynergyBonus } from '@/lib/firebase/party-helpers'
+import {
+  subscribeIncomingPartyInvites,
+  subscribeMyPartyState,
+  syncMyPartyMemberSnapshot,
+} from '@/lib/firebase/parties'
 import { createClient } from '@/lib/supabase/client'
 import { isGmAccountUser, PERMANENT_GM_GAME_UID, PERMANENT_GM_UID } from '@/lib/game/permissions'
-import { game, notify, resolveGameUid, saveGame, say, setGameAccountIdentity, subscribe } from '@/lib/game/engine'
+import { game, getStats, notify, resolveGameUid, saveGame, say, setGameAccountIdentity, subscribe } from '@/lib/game/engine'
 
 let lastPrivateMessageId = 0
 
@@ -28,18 +36,33 @@ export function PresenceSync() {
     let activeFbUser: User | null = firebaseAuth.currentUser
     let readyProfileUid: string | null = null
     let subscribedFbUid: string | null = null
-    let subscribedMapId: string | null = null
+    let lastKnownLocalMapId = game.p?.mapId ?? ''
     let unsubFbPresence: (() => void) | null = null
+    let unsubFbParty: (() => void) | null = null
+    let unsubFbPartyInvites: (() => void) | null = null
+    let subscribedPartyUid: string | null = null
     let fbPublishInFlight = false
     let lastFbPublishAt = 0
     let lastFbPruneAt = 0
     let hasPublishedFbPresence = false
+    let partySyncInFlight = false
+    let lastPartySyncAt = 0
+    let lastPartySent = {
+      partyId: '',
+      mapId: '',
+      level: 0,
+      jobId: '',
+      name: '',
+      hp: -1,
+      maxHp: -1,
+    }
     let lastSentState = {
       mapId: '',
       x: Number.NaN,
       y: Number.NaN,
       facing: '',
       moving: false,
+      status: '',
       jobId: '',
       level: 0,
       name: '',
@@ -49,53 +72,173 @@ export function PresenceSync() {
 
     const fbRemotePlayers = new Map<string, RemotePlayerSnapshot>()
 
+    const refreshPartySynergy = () => {
+      const synergy = computePartySynergyBonus(
+        game.party,
+        game.onlinePlayers,
+        activeFbUser?.uid ?? null,
+        game.p?.mapId ?? null,
+      )
+      const changed =
+        game.partySameMapCount !== synergy.sameMapMates ||
+        game.partyExpMul !== synergy.expMul ||
+        game.partyGoldMul !== synergy.goldMul
+      game.partySameMapCount = synergy.sameMapMates
+      game.partyExpMul = synergy.expMul
+      game.partyGoldMul = synergy.goldMul
+      return changed
+    }
+
+    const syncRemoteLists = (players: RemotePlayerSnapshot[]) => {
+      game.onlinePlayers = players
+      game.remotePlayers = filterPlayersForMap(players, game.p?.mapId)
+      refreshPartySynergy()
+      notify()
+    }
+
+    const stopFbParty = () => {
+      if (unsubFbParty) {
+        unsubFbParty()
+        unsubFbParty = null
+      }
+      if (unsubFbPartyInvites) {
+        unsubFbPartyInvites()
+        unsubFbPartyInvites = null
+      }
+      subscribedPartyUid = null
+      lastPartySent = { partyId: '', mapId: '', level: 0, jobId: '', name: '', hp: -1, maxHp: -1 }
+      if (game.party !== null || game.partyInvites.length > 0 || game.partySameMapCount > 0) {
+        game.party = null
+        game.partyInvites = []
+        game.partySameMapCount = 0
+        game.partyExpMul = 1
+        game.partyGoldMul = 1
+        notify()
+      }
+    }
+
     const stopFbPresence = (deleteDocForUid?: string | null) => {
       if (unsubFbPresence) {
         unsubFbPresence()
         unsubFbPresence = null
       }
       subscribedFbUid = null
-      subscribedMapId = null
       fbRemotePlayers.clear()
+      stopFbParty()
       if (deleteDocForUid && hasPublishedFbPresence) {
         hasPublishedFbPresence = false
         void removeWorldPresence(deleteDocForUid)
       } else {
         hasPublishedFbPresence = false
       }
-      if (game.remotePlayers.length > 0) {
+      if (game.onlinePlayers.length > 0 || game.remotePlayers.length > 0) {
+        game.onlinePlayers = []
         game.remotePlayers = []
         notify()
       }
     }
 
-    const ensureFbMapSubscription = (user: User, mapId: string) => {
+    const ensureFbWorldSubscription = (user: User) => {
       if (stopped || !user.emailVerified) return
-      if (subscribedFbUid === user.uid && subscribedMapId === mapId && unsubFbPresence) return
+      if (subscribedFbUid !== user.uid || !unsubFbPresence) {
+        if (unsubFbPresence) {
+          unsubFbPresence()
+          unsubFbPresence = null
+        }
+        fbRemotePlayers.clear()
+        game.onlinePlayers = []
+        game.remotePlayers = []
+        notify()
 
-      if (unsubFbPresence) {
-        unsubFbPresence()
-        unsubFbPresence = null
+        subscribedFbUid = user.uid
+        unsubFbPresence = subscribeWorldPresence(
+          user.uid,
+          fbRemotePlayers,
+          (players) => {
+            if (stopped) return
+            syncRemoteLists(players)
+          },
+          () => {
+            // Errors logged by subscribeWorldPresence; keep game loop non-blocking.
+          },
+        )
       }
-      fbRemotePlayers.clear()
-      game.remotePlayers = []
-      notify()
 
-      subscribedFbUid = user.uid
-      subscribedMapId = mapId
-      unsubFbPresence = subscribeMapPresence(
-        user.uid,
-        mapId,
-        fbRemotePlayers,
-        (players) => {
+      if (subscribedPartyUid !== user.uid || !unsubFbParty || !unsubFbPartyInvites) {
+        if (unsubFbParty) unsubFbParty()
+        if (unsubFbPartyInvites) unsubFbPartyInvites()
+        subscribedPartyUid = user.uid
+        unsubFbParty = subscribeMyPartyState(user.uid, (party) => {
           if (stopped) return
-          game.remotePlayers = players
+          game.party = party
+          refreshPartySynergy()
           notify()
-        },
-        () => {
-          // Errors logged by subscribeMapPresence; keep UI non-blocking.
-        },
-      )
+        })
+        unsubFbPartyInvites = subscribeIncomingPartyInvites(user.uid, (invites) => {
+          if (stopped) return
+          game.partyInvites = invites
+          notify()
+        })
+      }
+    }
+
+    const syncPartySnapshotIfNeeded = async () => {
+      const user = activeFbUser
+      const player = game.p
+      const party = game.party
+      if (stopped || !user || !user.emailVerified || readyProfileUid !== user.uid || !player || !party) {
+        return
+      }
+      if (!party.memberIds.includes(user.uid)) return
+
+      const now = Date.now()
+      const stats = getStats(player)
+      const hp = Math.max(0, Math.min(stats.maxHp, Math.floor(player.hp)))
+      const maxHp = Math.max(1, Math.floor(stats.maxHp))
+      const critical =
+        lastPartySent.partyId !== party.partyId ||
+        lastPartySent.mapId !== player.mapId ||
+        lastPartySent.level !== player.level ||
+        lastPartySent.jobId !== player.jobId ||
+        lastPartySent.name !== player.name
+      const hpChangedEnough =
+        lastPartySent.maxHp !== maxHp ||
+        Math.abs(lastPartySent.hp - hp) >= Math.max(10, Math.round(maxHp * 0.08))
+      const periodicDue = now - lastPartySyncAt >= 2_500
+
+      if (!critical && !(hpChangedEnough && periodicDue) && now - lastPartySyncAt < 6_000) {
+        return
+      }
+      if (partySyncInFlight) return
+
+      partySyncInFlight = true
+      lastPartySyncAt = now
+      lastPartySent = {
+        partyId: party.partyId,
+        mapId: player.mapId,
+        level: player.level,
+        jobId: player.jobId,
+        name: player.name,
+        hp,
+        maxHp,
+      }
+
+      try {
+        await syncMyPartyMemberSnapshot(party.partyId, {
+          gameUid: player.gameUid,
+          uid: player.uid,
+          name: player.name,
+          jobId: player.jobId,
+          level: player.level,
+          hp,
+          maxHp,
+          mapId: player.mapId,
+        })
+      } catch {
+        // Non-blocking; next sync interval retries cleanly.
+      } finally {
+        partySyncInFlight = false
+      }
     }
 
     const publishFbPresenceIfNeeded = async (force = false) => {
@@ -116,6 +259,13 @@ export function PresenceSync() {
 
       const now = Date.now()
       const attacking = game.attackAnim > 0
+      const inCombat = game.combatT < 4
+      const nextStatus = resolvePresenceStatus({
+        mapId: player.mapId,
+        moving: game.moving,
+        attackAnim: game.attackAnim,
+        inCombat,
+      })
       const dist = Number.isFinite(lastSentState.x)
         ? Math.hypot(player.x - lastSentState.x, player.y - lastSentState.y)
         : Number.POSITIVE_INFINITY
@@ -124,6 +274,7 @@ export function PresenceSync() {
         lastSentState.mapId !== player.mapId ||
         lastSentState.facing !== game.facing ||
         lastSentState.moving !== game.moving ||
+        lastSentState.status !== nextStatus ||
         lastSentState.jobId !== player.jobId ||
         lastSentState.level !== player.level ||
         lastSentState.name !== player.name ||
@@ -149,6 +300,7 @@ export function PresenceSync() {
         y: player.y,
         facing: game.facing,
         moving: game.moving,
+        status: nextStatus,
         jobId: player.jobId,
         level: player.level,
         name: player.name,
@@ -171,6 +323,7 @@ export function PresenceSync() {
           facing: game.facing,
           moving: game.moving,
           attackAnim: game.attackAnim,
+          inCombat,
           invisible: Boolean(player.invisible),
           nowMs: now,
         })
@@ -235,11 +388,12 @@ export function PresenceSync() {
           if (p.jobId === 'gm') p.jobId = 'novice'
         }
         readyProfileUid = fbUser.uid
+        lastKnownLocalMapId = p.mapId
         if (changed) {
           saveGame()
           notify()
         }
-        ensureFbMapSubscription(fbUser, p.mapId)
+        ensureFbWorldSubscription(fbUser)
         void publishFbPresenceIfNeeded(true)
       } catch {
         // Keep cached identity if Firestore sync temporarily fails.
@@ -256,9 +410,17 @@ export function PresenceSync() {
       const player = game.p
       if (stopped || !user || !user.emailVerified || !player) return
 
+      if (lastKnownLocalMapId !== player.mapId) {
+        lastKnownLocalMapId = player.mapId
+        game.remotePlayers = filterPlayersForMap([...fbRemotePlayers.values()], player.mapId)
+        refreshPartySynergy()
+        notify()
+      }
+
       if (readyProfileUid === user.uid) {
-        ensureFbMapSubscription(user, player.mapId)
+        ensureFbWorldSubscription(user)
         void publishFbPresenceIfNeeded(false)
+        void syncPartySnapshotIfNeeded()
       }
 
       const now = Date.now()
@@ -267,8 +429,7 @@ export function PresenceSync() {
         const before = fbRemotePlayers.size
         const nextList = pruneStaleRemotePlayers(fbRemotePlayers, now, PRESENCE_STALE_MS)
         if (nextList.length !== before) {
-          game.remotePlayers = nextList
-          notify()
+          syncRemoteLists(nextList)
         }
       }
     }, 100)
@@ -311,7 +472,9 @@ export function PresenceSync() {
     const publishRemotePlayers = () => {
       const cutoff = Date.now() - 15_000
       for (const [userId, player] of remotePlayers) if (player.lastSeen < cutoff) remotePlayers.delete(userId)
-      game.remotePlayers = [...remotePlayers.values()]
+      const all = [...remotePlayers.values()]
+      game.onlinePlayers = all
+      game.remotePlayers = all.filter((other) => !other.invisible && other.mapId === game.p?.mapId)
       notify()
     }
 
@@ -347,6 +510,7 @@ export function PresenceSync() {
       if (channel && supabase) void supabase.removeChannel(channel)
       channel = null
       remotePlayers.clear()
+      game.onlinePlayers = []
       game.remotePlayers = []
     }
 

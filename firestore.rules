@@ -338,6 +338,7 @@ service cloud.firestore {
           'gm',
           'facing',
           'moving',
+          'status',
           'attackAnim',
           'invisible',
           'heartbeatMs',
@@ -356,6 +357,7 @@ service cloud.firestore {
           'gm',
           'facing',
           'moving',
+          'status',
           'attackAnim',
           'invisible',
           'heartbeatMs',
@@ -395,6 +397,8 @@ service cloud.firestore {
         ) &&
         data.facing in ['up', 'down', 'left', 'right'] &&
         data.moving is bool &&
+        data.status is string &&
+        data.status in ['town', 'idle', 'moving', 'combat'] &&
         data.attackAnim is number &&
         data.attackAnim >= 0 &&
         data.attackAnim <= 5 &&
@@ -402,6 +406,124 @@ service cloud.firestore {
         data.invisible == false &&
         data.heartbeatMs is int &&
         data.heartbeatMs >= 0 &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidPartyMemberInfo(member, memberUid) {
+      return member is map &&
+        member.keys().hasAll(['userId', 'uid', 'gameUid', 'name', 'jobId', 'level', 'hp', 'maxHp', 'mapId', 'isGm']) &&
+        member.keys().hasOnly(['userId', 'uid', 'gameUid', 'name', 'jobId', 'level', 'hp', 'maxHp', 'mapId', 'isGm']) &&
+        isValidId(member.userId) &&
+        member.userId == memberUid &&
+        member.uid is int &&
+        member.uid >= 0 &&
+        member.uid <= 99999999 &&
+        isValidGameUid(member.gameUid) &&
+        member.name is string &&
+        member.name.size() >= 1 &&
+        member.name.size() <= 24 &&
+        member.jobId is string &&
+        member.jobId.size() >= 1 &&
+        member.jobId.size() <= 32 &&
+        member.jobId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        member.level is int &&
+        member.level >= 1 &&
+        member.level <= 999 &&
+        member.hp is int &&
+        member.hp >= 0 &&
+        member.hp <= 100000000 &&
+        member.maxHp is int &&
+        member.maxHp >= 1 &&
+        member.maxHp <= 100000000 &&
+        member.mapId is string &&
+        member.mapId.size() >= 1 &&
+        member.mapId.size() <= 32 &&
+        member.mapId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        member.isGm is bool &&
+        (
+          (member.isGm == true && member.uid == 0 && member.gameUid == '0000') ||
+          (member.isGm == false && member.uid > 0 && member.gameUid != '0000')
+        );
+    }
+
+    function isValidPartyDoc(data, partyId) {
+      return data.keys().hasAll(['partyId', 'name', 'leaderId', 'memberIds', 'members', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['partyId', 'name', 'leaderId', 'memberIds', 'members', 'createdAt', 'updatedAt']) &&
+        isValidId(data.partyId) &&
+        data.partyId == partyId &&
+        data.partyId.size() >= 4 &&
+        data.partyId.size() <= 64 &&
+        data.name is string &&
+        data.name.size() >= 1 &&
+        data.name.size() <= 32 &&
+        isValidId(data.leaderId) &&
+        data.memberIds is list &&
+        data.memberIds.size() >= 1 &&
+        data.memberIds.size() <= 4 &&
+        data.memberIds[0] is string &&
+        data.leaderId in data.memberIds &&
+        data.members is map &&
+        data.members.keys().hasAll(data.memberIds) &&
+        data.members.keys().hasOnly(data.memberIds) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidPartyInvite(data, inviteId) {
+      return data.keys().hasAll([
+          'inviteId',
+          'partyId',
+          'partyName',
+          'fromUid',
+          'toUid',
+          'fromGameUid',
+          'toGameUid',
+          'fromName',
+          'toName',
+          'fromIsGm',
+          'status',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'inviteId',
+          'partyId',
+          'partyName',
+          'fromUid',
+          'toUid',
+          'fromGameUid',
+          'toGameUid',
+          'fromName',
+          'toName',
+          'fromIsGm',
+          'status',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.inviteId) &&
+        data.inviteId == inviteId &&
+        isValidId(data.partyId) &&
+        data.partyId.size() >= 4 &&
+        data.partyId.size() <= 64 &&
+        data.partyName is string &&
+        data.partyName.size() >= 1 &&
+        data.partyName.size() <= 32 &&
+        isValidId(data.fromUid) &&
+        isValidId(data.toUid) &&
+        data.fromUid != data.toUid &&
+        data.inviteId == data.partyId + '__' + data.toUid &&
+        isValidGameUid(data.fromGameUid) &&
+        isValidGameUid(data.toGameUid) &&
+        data.fromGameUid != data.toGameUid &&
+        data.fromName is string &&
+        data.fromName.size() >= 1 &&
+        data.fromName.size() <= 24 &&
+        data.toName is string &&
+        data.toName.size() >= 1 &&
+        data.toName.size() <= 24 &&
+        data.fromIsGm is bool &&
+        data.status in ['pending', 'accepted', 'declined'] &&
+        data.createdAt is timestamp &&
         data.updatedAt is timestamp;
     }
 
@@ -517,6 +639,7 @@ service cloud.firestore {
           'gm',
           'facing',
           'moving',
+          'status',
           'attackAnim',
           'invisible',
           'heartbeatMs',
@@ -527,6 +650,157 @@ service cloud.firestore {
         isEmailVerified() &&
         isValidId(userId) &&
         userId == request.auth.uid;
+    }
+
+    match /parties/{partyId} {
+      allow get: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(partyId) &&
+        (resource == null || request.auth.uid in existing().memberIds);
+
+      allow list: if isSignedIn() &&
+        isEmailVerified() &&
+        request.auth.uid in resource.data.memberIds &&
+        request.query.limit != null &&
+        request.query.limit <= 10;
+
+      allow create: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(partyId) &&
+        isValidPartyDoc(incoming(), partyId) &&
+        incoming().leaderId == request.auth.uid &&
+        incoming().memberIds.size() == 1 &&
+        incoming().memberIds[0] == request.auth.uid &&
+        isValidPartyMemberInfo(incoming().members[request.auth.uid], request.auth.uid) &&
+        (incoming().members[request.auth.uid].isGm == false || isGmAccount()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isUserAccountOwner(request.auth.uid);
+
+      allow update: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(partyId) &&
+        isValidPartyDoc(incoming(), partyId) &&
+        incoming().partyId == existing().partyId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          // Action 1: Member updates own live RPG snapshot (hp/level/mapId/jobId/name)
+          (
+            request.auth.uid in existing().memberIds &&
+            incoming().name == existing().name &&
+            incoming().leaderId == existing().leaderId &&
+            incoming().memberIds == existing().memberIds &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['members', 'updatedAt']) &&
+            incoming().members.diff(existing().members).affectedKeys().hasOnly([request.auth.uid]) &&
+            isValidPartyMemberInfo(incoming().members[request.auth.uid], request.auth.uid) &&
+            (incoming().members[request.auth.uid].isGm == false || isGmAccount())
+          ) ||
+          // Action 2: Invited player joins party with a verified pending invite
+          (
+            !(request.auth.uid in existing().memberIds) &&
+            existing().memberIds.size() < 4 &&
+            incoming().name == existing().name &&
+            incoming().leaderId == existing().leaderId &&
+            incoming().memberIds.size() == existing().memberIds.size() + 1 &&
+            incoming().memberIds.hasAll(existing().memberIds) &&
+            request.auth.uid in incoming().memberIds &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['memberIds', 'members', 'updatedAt']) &&
+            incoming().members.diff(existing().members).affectedKeys().hasOnly([request.auth.uid]) &&
+            isValidPartyMemberInfo(incoming().members[request.auth.uid], request.auth.uid) &&
+            (incoming().members[request.auth.uid].isGm == false || isGmAccount()) &&
+            exists(/databases/$(database)/documents/partyInvites/$(partyId + '__' + request.auth.uid)) &&
+            get(/databases/$(database)/documents/partyInvites/$(partyId + '__' + request.auth.uid)).data.status == 'pending' &&
+            get(/databases/$(database)/documents/partyInvites/$(partyId + '__' + request.auth.uid)).data.toUid == request.auth.uid &&
+            get(/databases/$(database)/documents/partyInvites/$(partyId + '__' + request.auth.uid)).data.partyId == partyId
+          ) ||
+          // Action 3: Member voluntarily leaves party (transfers leader if leader leaves with members remaining)
+          (
+            request.auth.uid in existing().memberIds &&
+            !(request.auth.uid in incoming().memberIds) &&
+            incoming().name == existing().name &&
+            incoming().memberIds.size() == existing().memberIds.size() - 1 &&
+            incoming().memberIds.size() >= 1 &&
+            existing().memberIds.hasAll(incoming().memberIds) &&
+            (existing().leaderId == request.auth.uid || incoming().leaderId == existing().leaderId) &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['leaderId', 'memberIds', 'members', 'updatedAt']) &&
+            incoming().members.diff(existing().members).affectedKeys().hasOnly([request.auth.uid])
+          ) ||
+          // Action 4: Leader renames party, transfers leadership, or kicks another member
+          (
+            existing().leaderId == request.auth.uid &&
+            request.auth.uid in incoming().memberIds &&
+            existing().memberIds.hasAll(incoming().memberIds) &&
+            incoming().memberIds.size() >= 1 &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'leaderId', 'memberIds', 'members', 'updatedAt']) &&
+            existing().members.keys().hasAll(incoming().members.keys())
+          )
+        );
+
+      allow delete: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(partyId) &&
+        (
+          existing().leaderId == request.auth.uid ||
+          (existing().memberIds.size() == 1 && request.auth.uid in existing().memberIds)
+        );
+    }
+
+    match /partyInvites/{inviteId} {
+      allow get: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(inviteId) &&
+        (resource == null || existing().fromUid == request.auth.uid || existing().toUid == request.auth.uid);
+
+      allow list: if isSignedIn() &&
+        isEmailVerified() &&
+        (existing().fromUid == request.auth.uid || existing().toUid == request.auth.uid) &&
+        request.query.limit != null &&
+        request.query.limit <= 30;
+
+      allow create: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(inviteId) &&
+        isValidPartyInvite(incoming(), inviteId) &&
+        incoming().fromUid == request.auth.uid &&
+        incoming().status == 'pending' &&
+        incoming().fromIsGm == (incoming().fromGameUid == '0000' && isGmAccount()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/parties/$(incoming().partyId)) &&
+        get(/databases/$(database)/documents/parties/$(incoming().partyId)).data.leaderId == request.auth.uid &&
+        get(/databases/$(database)/documents/parties/$(incoming().partyId)).data.memberIds.size() < 4 &&
+        !(incoming().toUid in get(/databases/$(database)/documents/parties/$(incoming().partyId)).data.memberIds) &&
+        exists(/databases/$(database)/documents/playerUids/$(incoming().fromGameUid)) &&
+        get(/databases/$(database)/documents/playerUids/$(incoming().fromGameUid)).data.ownerId == request.auth.uid &&
+        exists(/databases/$(database)/documents/playerUids/$(incoming().toGameUid)) &&
+        get(/databases/$(database)/documents/playerUids/$(incoming().toGameUid)).data.ownerId == incoming().toUid;
+
+      allow update: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(inviteId) &&
+        isValidPartyInvite(incoming(), inviteId) &&
+        existing().toUid == request.auth.uid &&
+        existing().status == 'pending' &&
+        (incoming().status == 'accepted' || incoming().status == 'declined') &&
+        incoming().inviteId == existing().inviteId &&
+        incoming().partyId == existing().partyId &&
+        incoming().partyName == existing().partyName &&
+        incoming().fromUid == existing().fromUid &&
+        incoming().toUid == existing().toUid &&
+        incoming().fromGameUid == existing().fromGameUid &&
+        incoming().toGameUid == existing().toGameUid &&
+        incoming().fromName == existing().fromName &&
+        incoming().toName == existing().toName &&
+        incoming().fromIsGm == existing().fromIsGm &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
+
+      allow delete: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(inviteId) &&
+        (existing().fromUid == request.auth.uid || existing().toUid == request.auth.uid);
     }
 
     match /users/{userId} {

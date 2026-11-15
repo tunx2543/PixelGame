@@ -4,13 +4,17 @@ import { useEffect, useState } from 'react'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from '@/lib/firebase/client'
 import { subscribeFriendSocialState, type PendingFriendRequest } from '@/lib/firebase/friends'
+import { respondPartyInvite } from '@/lib/firebase/parties'
 import { getOptionalClient } from '@/lib/supabase/client'
-import { game, notify, openPanel } from '@/lib/game/engine'
+import { game, getStats, notify, openPanel } from '@/lib/game/engine'
 import { respondFriendRequest } from '@/lib/game/social'
+import { useGame } from '@/lib/game/use-game'
 
 export function SocialNotifications() {
+  useGame()
   const [request, setRequest] = useState<PendingFriendRequest | null>(null)
   const [trade, setTrade] = useState<{ id: number; userId: string } | null>(null)
+  const [partyBusy, setPartyBusy] = useState(false)
 
   useEffect(() => {
     let unsubSocial = () => {}
@@ -59,7 +63,9 @@ export function SocialNotifications() {
     }
   }, [])
 
-  if (!request && !trade) return null
+  const partyInvite = game.partyInvites[0] ?? null
+
+  if (!request && !trade && !partyInvite) return null
 
   const respond = async (decision: 'accepted' | 'declined') => {
     if (!request) return
@@ -74,6 +80,43 @@ export function SocialNotifications() {
       setRequest(null)
     }
     notify()
+  }
+
+  const respondParty = async (decision: 'accepted' | 'declined') => {
+    if (!partyInvite || !game.p || partyBusy) return
+    setPartyBusy(true)
+    try {
+      const s = getStats(game.p)
+      const res = await respondPartyInvite(
+        partyInvite,
+        decision,
+        {
+          gameUid: game.p.gameUid,
+          uid: game.p.uid,
+          name: game.p.name,
+          jobId: game.p.jobId,
+          level: game.p.level,
+          hp: Math.max(0, Math.min(s.maxHp, Math.floor(game.p.hp))),
+          maxHp: Math.max(1, Math.floor(s.maxHp)),
+          mapId: game.p.mapId,
+        },
+        game.party,
+      )
+      game.chat.push({
+        id: Date.now(),
+        type: res.ok ? 'system' : 'error',
+        text: res.message,
+      })
+      if (res.ok && decision === 'accepted') {
+        game.partyPanelOpen = true
+      }
+      notify()
+    } catch {
+      game.chat.push({ id: Date.now(), type: 'error', text: 'ตอบรับคำเชิญปาร์ตี้ไม่สำเร็จ' })
+      notify()
+    } finally {
+      setPartyBusy(false)
+    }
   }
 
   const acceptTrade = async () => {
@@ -94,6 +137,35 @@ export function SocialNotifications() {
 
   return (
     <div className="pointer-events-auto absolute right-2 top-2 z-50 w-[min(18rem,calc(100vw-1rem))] space-y-2" role="status">
+      {partyInvite && (
+        <div className="rounded-xl border border-purple-400/60 bg-background/95 p-3 shadow-2xl backdrop-blur">
+          <p className="text-[10px] font-bold tracking-[0.15em] text-purple-300">คำเชิญเข้าปาร์ตี้</p>
+          <p className="mt-1 text-xs text-foreground">
+            {partyInvite.fromIsGm && <span className="mr-1 font-bold text-amber-300">[GM]</span>}
+            {partyInvite.fromName}{' '}
+            <span className="font-mono text-[11px] text-purple-300">(UID {partyInvite.fromGameUid})</span>{' '}
+            เชิญคุณเข้าร่วม <strong className="text-purple-200">{partyInvite.partyName}</strong>
+          </p>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              disabled={partyBusy}
+              className="pixel-button primary px-2 py-1.5 text-[10px]"
+              onClick={() => void respondParty('accepted')}
+            >
+              เข้าร่วม
+            </button>
+            <button
+              type="button"
+              disabled={partyBusy}
+              className="pixel-button secondary px-2 py-1.5 text-[10px]"
+              onClick={() => void respondParty('declined')}
+            >
+              ปฏิเสธ
+            </button>
+          </div>
+        </div>
+      )}
       {request && (
         <div className="rounded-xl border border-primary/50 bg-background/95 p-3 shadow-2xl backdrop-blur">
           <p className="text-[10px] font-bold tracking-[0.15em] text-primary">คำขอเพื่อนใหม่</p>

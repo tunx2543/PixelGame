@@ -190,15 +190,17 @@ export function MapMinimap() {
       }
     }
 
-    // Visible Remote Players (cyan / gold for GM)
+    // Visible Remote Players (purple for party mate, gold for GM, cyan for others)
+    const partySet = new Set(game.party?.memberIds ?? [])
     for (const other of game.remotePlayers) {
       if (other.invisible || other.mapId !== cur.id) continue
       const rx = Math.round((other.x / TILE) * MINIMAP_SCALE)
       const ry = Math.round((other.y / TILE) * MINIMAP_SCALE)
+      const isMate = partySet.has(other.userId)
       ctx.fillStyle = '#0e0f1a'
-      ctx.fillRect(rx - 2, ry - 2, 4, 4)
-      ctx.fillStyle = other.gm ? '#ffd60a' : '#8be9fd'
-      ctx.fillRect(rx - 1, ry - 1, 2, 2)
+      ctx.fillRect(rx - 2, ry - 2, isMate ? 5 : 4, isMate ? 5 : 4)
+      ctx.fillStyle = isMate ? '#c77dff' : other.gm ? '#ffd60a' : '#8be9fd'
+      ctx.fillRect(rx - 1, ry - 1, isMate ? 3 : 2, isMate ? 3 : 2)
     }
 
     // Player Marker (bright emerald with dark outline)

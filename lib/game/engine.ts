@@ -25,6 +25,7 @@ import {
   saveUserCharacter,
   type CloudCharacterRecord,
 } from '@/lib/firebase/characters'
+import type { PartyInviteRecord, PartyRecord } from '@/lib/firebase/party-helpers'
 import { cancelTradeRequest, createBan, createTrade, publishAnnouncement, sendFriendRequest, sendWhisper } from './social'
 import { isGmAccountUser, PERMANENT_GM_GAME_UID, PERMANENT_GM_UID } from './permissions'
 import {
@@ -269,6 +270,7 @@ export interface RemotePlayer {
   gm: boolean
   facing: Dir
   moving: boolean
+  status?: 'town' | 'idle' | 'moving' | 'combat'
   attackAnim: number
   invisible: boolean
   lastSeen: number
@@ -358,6 +360,7 @@ export const game = {
   monsters: [] as Monster[],
   groundDrops: [] as GroundDrop[],
   remotePlayers: [] as RemotePlayer[],
+  onlinePlayers: [] as RemotePlayer[],
   floats: [] as FloatText[],
   autoFarm: false,
   autoSkills: false,
@@ -367,6 +370,13 @@ export const game = {
   chat: [] as ChatMsg[],
   panel: null as PanelId | null,
   socialMenuOpen: false,
+  onlinePanelOpen: false,
+  partyPanelOpen: false,
+  party: null as PartyRecord | null,
+  partyInvites: [] as PartyInviteRecord[],
+  partySameMapCount: 0,
+  partyExpMul: 1,
+  partyGoldMul: 1,
   keys: new Set<string>(),
   attackHeld: false,
   facing: 'down' as Dir,
@@ -795,10 +805,65 @@ export function changeMap(mapId: string, tx: number, ty: number) {
   game.effects = []
   game.floats = []
   game.panel = null
+  game.remotePlayers = game.onlinePlayers.filter((other) => !other.invisible && other.mapId === mapId)
   populateMap()
   say('system', `เข้าสู่ ${map.name} (${map.levelLabel})`)
   saveGame()
   notify()
+}
+
+export function getMapMinLevel(map: MapDef): number {
+  if (map.safe) return 1
+  const match = map.levelLabel.match(/Lv\.?\s*(\d+)/i)
+  return match ? Math.max(1, Number(match[1])) : 1
+}
+
+export function warpToMapLocation(
+  mapId: string,
+  worldX?: number,
+  worldY?: number,
+): { ok: boolean; message: string } {
+  const p = game.p
+  if (!p) return { ok: false, message: 'ยังไม่ได้เลือกตัวละคร' }
+  const map = MAPS[mapId]
+  if (!map) return { ok: false, message: 'ไม่พบแผนที่เป้าหมาย' }
+
+  const minLv = getMapMinLevel(map)
+  if (p.level < minLv && !isCurrentAccountGm()) {
+    const msg = `แผนที่ ${map.name} ต้องการ Lv.${minLv}+ จึงจะวาร์ปตามได้`
+    warn(msg)
+    return { ok: false, message: msg }
+  }
+
+  let targetTx = map.spawn.x
+  let targetTy = map.spawn.y
+  if (typeof worldX === 'number' && typeof worldY === 'number' && Number.isFinite(worldX) && Number.isFinite(worldY)) {
+    const baseTx = Math.max(1, Math.min(map.width - 2, Math.floor(worldX / TILE)))
+    const baseTy = Math.max(1, Math.min(map.height - 2, Math.floor(worldY / TILE)))
+    let found = false
+    for (let radius = 0; radius <= 4 && !found; radius++) {
+      for (let dy = -radius; dy <= radius && !found; dy++) {
+        for (let dx = -radius; dx <= radius && !found; dx++) {
+          const tx = baseTx + dx
+          const ty = baseTy + dy
+          if (tx < 1 || ty < 1 || tx >= map.width - 1 || ty >= map.height - 1) continue
+          const px = (tx + 0.5) * TILE
+          const py = (ty + 0.5) * TILE
+          if (!boxBlocked(map, px, py)) {
+            targetTx = tx
+            targetTy = ty
+            found = true
+          }
+        }
+      }
+    }
+  }
+
+  changeMap(mapId, targetTx, targetTy)
+  game.partyPanelOpen = false
+  addEffect({ type: 'ring', x: p.x, y: p.y, r: 22, color: '#4cc9f0', max: 0.45 })
+  notify()
+  return { ok: true, message: `วาร์ปตามปาร์ตี้ไปยัง ${map.name} แล้ว` }
 }
 
 /* ---------------- combat ---------------- */
@@ -898,8 +963,8 @@ function killMonster(m: Monster) {
   const petBonus = getActivePetBonuses(p.petState, p.equippedGemCompanion, p.ownedGemItems)
   addEffect({ type: 'burst', x: m.x, y: m.y - 6, r: def.boss ? 30 : 14, color: def.color, max: 0.4 })
   const baseGold = randInt(def.gold[0], def.gold[1])
-  const gold = Math.round(baseGold * (petBonus?.goldMul ?? 1))
-  const expGain = Math.round(def.exp * (petBonus?.expMul ?? 1))
+  const gold = Math.round(baseGold * (petBonus?.goldMul ?? 1) * (game.partyGoldMul || 1))
+  const expGain = Math.round(def.exp * (petBonus?.expMul ?? 1) * (game.partyExpMul || 1))
   p.gold += gold
   recordDailyMissionProgress({
     kills: 1,
@@ -944,7 +1009,7 @@ function killMonster(m: Monster) {
     monsterName: def.name,
     isBoss: Boolean(def.boss),
     gold,
-    exp: def.exp,
+    exp: expGain,
     items: droppedItems,
     duration: 3.4,
   })
@@ -2255,6 +2320,7 @@ function resetRuntime() {
   game.projectiles = []
   game.chat = []
   game.panel = null
+  game.partyPanelOpen = false
   game.keys.clear()
   game.attackHeld = false
   game.skillCd = {}
