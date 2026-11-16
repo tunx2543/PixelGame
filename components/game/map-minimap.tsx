@@ -122,7 +122,12 @@ export function MapMinimap() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
   useEffect(() => {
-    setExpanded(window.innerWidth >= 640)
+    const syncExpanded = () => {
+      setExpanded(window.innerWidth >= 900 && window.innerHeight >= 560)
+    }
+    syncExpanded()
+    window.addEventListener('resize', syncExpanded)
+    return () => window.removeEventListener('resize', syncExpanded)
   }, [])
 
   const drawOverlay = useCallback(() => {

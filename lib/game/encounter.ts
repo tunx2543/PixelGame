@@ -30,6 +30,14 @@ import {
   recordQuestProgress,
   sanitizePetState,
 } from './systems'
+import {
+  createDefaultRpgExt,
+  getAttackElement,
+  getElementMultiplier,
+  getMonsterElement,
+  recordBestiaryKillInState,
+  type ElementType,
+} from './rpg-systems'
 
 export type EncounterRarity = 'normal' | 'elite' | 'boss'
 
@@ -64,6 +72,10 @@ export interface CombatDamageBreakdown {
   totalAtk: number
   skillMultiplier: number
   enemyDef: number
+  attackerElement: ElementType
+  defenderElement: ElementType
+  elementalMultiplier: number
+  elementalEffectiveness: 'super' | 'resist' | 'normal'
   label: string
 }
 
@@ -158,6 +170,7 @@ export function createDefaultEncounterSave(name = 'นักผจญภัย')
     petState: createDefaultPetState(),
     questState: createDefaultQuestState(0),
     towerState: createDefaultTowerState(),
+    rpgExt: createDefaultRpgExt(),
   }
   const s = getStats(base)
   base.hp = s.maxHp
@@ -311,13 +324,17 @@ export function calculatePlayerAttack(
   enemy: EncounterEnemy,
   skillMultiplier = 1,
   label = 'โจมตีปกติ',
+  skillId?: string | null,
 ): CombatDamageBreakdown {
   const breakdown = getWeaponUpgradeBreakdown(save)
   const gmStaff = save.equipment.weapon?.itemId === 'gm_golden_staff' && save.gm
   const variance = rand(0.92, 1.08)
+  const attackerElement = getAttackElement(skillId, save.rpgExt?.equippedRunes)
+  const defenderElement = getMonsterElement(enemy.def.id)
+  const elemMatch = getElementMultiplier(attackerElement, defenderElement)
   const rawMitigated = gmStaff
     ? 9999999
-    : dmgFormula(breakdown.totalAtk * skillMultiplier, enemy.defStat) * variance
+    : dmgFormula(breakdown.totalAtk * skillMultiplier, enemy.defStat) * elemMatch.multiplier * variance
   const isCrit = !gmStaff && Math.random() < breakdown.critChance
   const critMultiplier = isCrit ? 1.65 + breakdown.weaponPlus * 0.02 : 1
   const damage = Math.max(1, Math.round(rawMitigated * critMultiplier))
@@ -336,6 +353,10 @@ export function calculatePlayerAttack(
     totalAtk: breakdown.totalAtk,
     skillMultiplier,
     enemyDef: enemy.defStat,
+    attackerElement,
+    defenderElement,
+    elementalMultiplier: elemMatch.multiplier,
+    elementalEffectiveness: elemMatch.effectiveness,
     label,
   }
 }
@@ -386,6 +407,7 @@ export function settleEncounterVictory(save: SaveData, enemy: EncounterEnemy): E
     { kills: 1, bossKills: enemy.rarity !== 'normal' ? 1 : 0 },
     nextSave.kills,
   )
+  nextSave.rpgExt = recordBestiaryKillInState(nextSave.rpgExt, enemy.def.id, nextSave)
   const sanitizedPets = sanitizePetState(nextSave.petState, nextSave.ownedGemItems, nextSave.equippedGemCompanion)
   nextSave.petState = grantActivePetExp(sanitizedPets, Math.max(5, Math.round(expEarned * 0.25))).nextPetState
 

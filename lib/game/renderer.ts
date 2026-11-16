@@ -14,6 +14,8 @@ import {
   type SpriteAction,
 } from './sprites'
 import { getActivePetBonuses } from './systems'
+import { TITLE_DEFS } from './rpg-systems'
+import { drawOverworldSkillEffect, drawRebirthAura } from './vfx-canvas'
 
 const THEME_BG: Record<string, string> = {
   town: '#2d5a27',
@@ -523,31 +525,16 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         ctx.fill()
       }
       if ((p.rebirthCount ?? 0) > 0) {
-        ctx.save()
-        const rebirthTier = Math.min(6, p.rebirthCount ?? 1)
-        const pulse = 0.55 + Math.sin(t * (7 + rebirthTier)) * 0.2
-        const colors = ['#b9f6ff', '#8fe9ff', '#72c7ff', '#a78bfa', '#f0abfc', '#ffe08a']
-        ctx.globalAlpha = pulse
-        ctx.strokeStyle = colors[rebirthTier - 1]
-        ctx.shadowColor = colors[rebirthTier - 1]
-        ctx.shadowBlur = 7 + rebirthTier * 2
-        ctx.lineWidth = 1.2 + rebirthTier * 0.18
-        const radius = 9 + rebirthTier * 1.6
-        ctx.beginPath()
-        ctx.ellipse(p.x, p.y - 8, radius, 3.2 + rebirthTier * 0.35, t * 0.35, 0, Math.PI * 2)
-        ctx.stroke()
-        ctx.globalAlpha = pulse * 0.7
-        ctx.beginPath()
-        ctx.ellipse(p.x, p.y - 8, radius + 3, 2.2 + rebirthTier * 0.25, -t * 0.55, 0, Math.PI * 2)
-        ctx.stroke()
-        for (let spark = 0; spark < 4 + rebirthTier; spark++) {
-          const angle = t * 1.8 + spark * (Math.PI * 2 / (4 + rebirthTier))
-          const x = p.x + Math.cos(angle) * (radius + 2)
-          const y = p.y - 9 + Math.sin(angle) * (4 + rebirthTier * 0.5)
-          const size = 1 + (spark % 2)
-          ctx.fillRect(Math.round(x - size / 2), Math.round(y - size / 2), size, size)
-        }
-        ctx.restore()
+        drawRebirthAura(ctx, {
+          x: p.x,
+          y: p.y,
+          timeSec: t,
+          rebirthCount: p.rebirthCount ?? 0,
+          radiusX: 12,
+          spriteHeight: drawH,
+          alphaScale: p.invisible ? 0.25 : 1,
+          layer: 'back',
+        })
       }
       if (gemFashion?.id === 'nebula_dragon_wings') {
         ctx.save()
@@ -563,6 +550,18 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         drawWeaponAttackOverlay(ctx, game.facing, weaponType, atkProgress, weapon?.color ?? job.colors.accent)
       }
       ctx.restore()
+      if ((p.rebirthCount ?? 0) > 0) {
+        drawRebirthAura(ctx, {
+          x: p.x,
+          y: p.y,
+          timeSec: t,
+          rebirthCount: p.rebirthCount ?? 0,
+          radiusX: 12,
+          spriteHeight: drawH,
+          alphaScale: p.invisible ? 0.25 : 1,
+          layer: 'front',
+        })
+      }
       if (gemFashion?.id === 'aurora_cat_hood') {
         drawGemItemPixels(ctx, gemFashion, p.x - 5, p.y - drawH - 1, 1.25)
       }
@@ -619,8 +618,24 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
 
   for (const e of game.effects) {
     const k = 1 - e.life / e.max
+    const alpha = Math.max(0, e.life / e.max)
+    if (e.vfxStyle) {
+      drawOverworldSkillEffect(ctx, {
+        style: e.vfxStyle,
+        primaryColor: e.color,
+        secondaryColor: e.secondaryColor,
+        sourceX: e.sourceX,
+        sourceY: e.sourceY,
+        targetX: e.x,
+        targetY: e.y,
+        radius: e.r,
+        progress: k,
+        alpha,
+      })
+      continue
+    }
     ctx.save()
-    ctx.globalAlpha = Math.max(0, e.life / e.max)
+    ctx.globalAlpha = alpha
     ctx.strokeStyle = e.color
     ctx.fillStyle = e.color
     if (e.type === 'slash') {
@@ -868,13 +883,18 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       ctx.fillStyle = '#4c8bf5'
       ctx.fillRect(Math.round(x - bw / 2), Math.round(barY + hpH + 0.5 * dpr), Math.round(bw * Math.max(0, Math.min(1, p.mp / Math.max(1, stats.maxMp)))), Math.round(mpH))
     }
-    text(`✦ ${job.name} ✦`, x, y - 16 * dpr, p.gm ? '#ffd60a' : '#72efdd', 8)
-    text(`${p.name} [${p.uid === undefined ? 'Guest' : String(p.uid).padStart(5, '0')}]`, x, y - 4 * dpr, p.gm ? '#ffd60a' : '#ffffff', 9.5)
-    if (p.gm) text('[GM]', x, y - 27 * dpr, '#ffd60a', 8)
+    const activeTitleDef = p.rpgExt?.activeTitle ? TITLE_DEFS.find((item) => item.id === p.rpgExt?.activeTitle) : null
+    const guildTagPrefix = p.rpgExt?.guildTag ? `[${p.rpgExt.guildTag}] ` : ''
+    text(`✦ ${job.name} ✦`, x, y - 18 * dpr, p.gm ? '#ffd60a' : '#72efdd', 8)
+    text(`${guildTagPrefix}${p.name} [${p.uid === undefined ? 'Guest' : String(p.uid).padStart(5, '0')}]`, x, y - 5 * dpr, p.gm ? '#ffd60a' : '#ffffff', 9.5)
+    if (activeTitleDef) {
+      text(`«${activeTitleDef.name}»`, x, y - 31 * dpr, activeTitleDef.color, 7.8)
+    }
+    if (p.gm) text('[GM]', x, y - (activeTitleDef ? 43 : 31) * dpr, '#ffd60a', 8)
     if (game.bubble) {
       ctx.font = `${Math.round(11 * dpr * (zoom / 3) * 1.2)}px ${font}`
       const tw = Math.min(ctx.measureText(game.bubble.text).width, 260 * dpr)
-      const by = y - (p.gm ? 47 : 37) * dpr
+      const by = y - (p.gm ? 56 : activeTitleDef ? 48 : 38) * dpr
       ctx.fillStyle = 'rgba(255,250,235,0.95)'
       ctx.fillRect(x - tw / 2 - 6 * dpr, by - 10 * dpr, tw + 12 * dpr, 20 * dpr)
       ctx.fillStyle = 'rgba(10,8,20,0.9)'

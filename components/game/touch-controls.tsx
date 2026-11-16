@@ -1,25 +1,20 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { basicAttack, castSkill, currentJob, drinkPotion, game, interact, skillCooldown } from '@/lib/game/engine'
+import { Shield } from 'lucide-react'
+import {
+  basicAttack,
+  castSkill,
+  currentJob,
+  drinkPotion,
+  game,
+  interact,
+  skillCooldown,
+  triggerOpenWorldGuard,
+} from '@/lib/game/engine'
 import { useGame } from '@/lib/game/use-game'
+import { getSkillIconPath } from '@/lib/game/vfx-specs'
 import { cn } from '@/lib/utils'
-
-const SKILL_ICONS: Record<string, string> = {
-  firebolt: '/images/skills/firebolt.png',
-  meteor: '/images/skills/meteor.png',
-  bash: '/images/skills/whirl.png',
-  whirl: '/images/skills/whirl.png',
-  double: '/images/skills/rain.png',
-  rain: '/images/skills/rain.png',
-  dblatk: '/images/skills/shadow.png',
-  backstab: '/images/skills/shadow.png',
-  shadow: '/images/skills/shadow.png',
-  holy: '/images/skills/thunderstorm.png',
-  sniper: '/images/skills/rain.png',
-  blizzard: '/images/skills/ice-wall.png',
-  power: '/images/skills/whirl.png',
-}
 
 function HoldButton({
   onDown,
@@ -74,71 +69,82 @@ export function TouchControls() {
   }
 
   return (
-    <div className="pointer-events-none absolute inset-0 touch-none">
-      {/* จัดระเบียบ UI ด้านขวาให้กระชับ ไม่บังจอตอนเล่นแนวนอน */}
-      <div className="pointer-events-auto absolute inset-x-0 bottom-2 flex items-end justify-between gap-2 p-2">
-        <div className="grid grid-cols-3 grid-rows-3 gap-0.5 rounded-xl border border-white/15 bg-card/80 p-1 shadow-lg">
+    <div data-testid="touch-controls" className="pointer-events-none absolute inset-0 touch-none">
+      <div className="pointer-events-auto absolute inset-x-0 bottom-2 flex items-end justify-between gap-2 px-2">
+        <div className="grid grid-cols-3 grid-rows-3 gap-0.5 border border-white/15 bg-card/85 p-1 shadow-lg">
           <span />
-          <HoldButton label="เดินขึ้น" onDown={() => setKey('arrowup', true)} onUp={() => setKey('arrowup', false)} className="size-11 rounded-lg bg-secondary/90 text-lg">▲</HoldButton>
+          <HoldButton label="เดินขึ้น" onDown={() => setKey('arrowup', true)} onUp={() => setKey('arrowup', false)} className="size-9 bg-secondary/90 text-sm">▲</HoldButton>
           <span />
-          <HoldButton label="เดินซ้าย" onDown={() => setKey('arrowleft', true)} onUp={() => setKey('arrowleft', false)} className="size-11 rounded-lg bg-secondary/90 text-lg">◀</HoldButton>
-          <span className="grid size-11 place-items-center rounded-lg bg-primary/30 text-[9px] text-primary">เดิน</span>
-          <HoldButton label="เดินขวา" onDown={() => setKey('arrowright', true)} onUp={() => setKey('arrowright', false)} className="size-11 rounded-lg bg-secondary/90 text-lg">▶</HoldButton>
+          <HoldButton label="เดินซ้าย" onDown={() => setKey('arrowleft', true)} onUp={() => setKey('arrowleft', false)} className="size-9 bg-secondary/90 text-sm">◀</HoldButton>
+          <span className="grid size-9 place-items-center bg-primary/25 text-[9px] text-primary">เดิน</span>
+          <HoldButton label="เดินขวา" onDown={() => setKey('arrowright', true)} onUp={() => setKey('arrowright', false)} className="size-9 bg-secondary/90 text-sm">▶</HoldButton>
           <span />
-          <HoldButton label="เดินลง" onDown={() => setKey('arrowdown', true)} onUp={() => setKey('arrowdown', false)} className="size-11 rounded-lg bg-secondary/90 text-lg">▼</HoldButton>
+          <HoldButton label="เดินลง" onDown={() => setKey('arrowdown', true)} onUp={() => setKey('arrowdown', false)} className="size-9 bg-secondary/90 text-sm">▼</HoldButton>
           <span />
-        </div>
-        <div className="flex items-end gap-2">
-        {/* ปุ่มยา HP / MP ขนาดเล็กด้านข้าง */}
-        <div className="flex flex-col gap-1">
-          <HoldButton label="ยา HP" onDown={() => drinkPotion('hp')} className="size-9 bg-hp/80 text-[9px]">
-            HP
-          </HoldButton>
-          <HoldButton label="ยา MP" onDown={() => drinkPotion('mp')} className="size-9 bg-mp/80 text-[9px]">
-            MP
-          </HoldButton>
         </div>
 
-        {/* แถวสกิลและปุ่มโจมตี */}
-        <div className="flex flex-col items-end gap-1">
-          <div className="flex gap-1">
-            {job.skills.map((sk, i) => (
-              <HoldButton
-                key={sk.id}
-                label={sk.name}
-                onDown={() => castSkill(i)}
-                className={cn('relative size-12 rounded-full border-2 border-white/30 bg-card/90 p-1 text-[8px] leading-tight shadow-lg', g.p && g.p.mp < sk.mp && 'opacity-50')}
-              >
-                {SKILL_ICONS[sk.id] ? (
-                  <img src={SKILL_ICONS[sk.id]} alt="" className="asset-no-bg size-full rounded-full object-cover" />
-                ) : (
-                  <span style={{ color: sk.color }}>{sk.name}</span>
-                )}
-                <span className="sr-only">{sk.name}</span>
-                {skillCooldown(sk) > 0 && (
-                  <span
-                    className="absolute inset-x-0 bottom-0 bg-black/60"
-                    style={{ height: `${(skillCooldown(sk) / sk.cooldown) * 100}%` }}
-                    aria-hidden
-                  />
-                )}
-              </HoldButton>
-            ))}
+        <div className="flex items-end gap-1.5">
+          <div className="flex flex-col gap-1">
+            <HoldButton label="ยา HP" onDown={() => drinkPotion('hp')} className="size-8 bg-hp/85 text-[9px] font-bold">
+              HP
+            </HoldButton>
+            <HoldButton label="ยา MP" onDown={() => drinkPotion('mp')} className="size-8 bg-mp/85 text-[9px] font-bold">
+              MP
+            </HoldButton>
           </div>
-          <HoldButton
-            label="โจมตีหรือคุยกับ NPC"
-            onDown={() => {
-              game.attackHeld = true
-              if (!interact()) basicAttack()
-            }}
-            onUp={() => {
-              game.attackHeld = false
-            }}
-            className="size-16 rounded-full border-4 border-primary-foreground/30 bg-primary text-xs font-bold text-primary-foreground shadow-[0_4px_0_rgba(0,0,0,0.35)]"
-          >
-            โจมตี
-          </HoldButton>
-        </div>
+
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex items-center gap-1">
+              <HoldButton
+                label="ป้องกัน (การ์ด)"
+                onDown={() => triggerOpenWorldGuard()}
+                className={cn(
+                  'size-9 bg-sky-500/25 text-sky-200',
+                  game.guardCd > 0 && 'opacity-50',
+                )}
+              >
+                <Shield className="size-4" aria-hidden />
+              </HoldButton>
+              {job.skills.map((sk, i) => (
+                <HoldButton
+                  key={sk.id}
+                  label={sk.name}
+                  onDown={() => castSkill(i)}
+                  className={cn(
+                    'relative size-10 border border-white/25 bg-card/90 p-1 text-[8px] leading-tight shadow-lg',
+                    g.p && g.p.mp < sk.mp && 'opacity-50',
+                  )}
+                >
+                  {getSkillIconPath(sk.id) ? (
+                    <img src={getSkillIconPath(sk.id)} alt="" className="asset-no-bg size-full object-cover" />
+                  ) : (
+                    <span style={{ color: sk.color }}>{sk.name}</span>
+                  )}
+                  <span className="sr-only">{sk.name}</span>
+                  {skillCooldown(sk) > 0 && (
+                    <span
+                      className="absolute inset-x-0 bottom-0 bg-black/65"
+                      style={{ height: `${(skillCooldown(sk) / sk.cooldown) * 100}%` }}
+                      aria-hidden
+                    />
+                  )}
+                </HoldButton>
+              ))}
+            </div>
+            <HoldButton
+              label="โจมตีหรือคุยกับ NPC"
+              onDown={() => {
+                game.attackHeld = true
+                if (!interact()) basicAttack()
+              }}
+              onUp={() => {
+                game.attackHeld = false
+              }}
+              className="h-12 w-24 bg-primary text-xs font-bold text-primary-foreground shadow-[0_3px_0_rgba(0,0,0,0.35)]"
+            >
+              โจมตี / คุย
+            </HoldButton>
+          </div>
         </div>
       </div>
     </div>

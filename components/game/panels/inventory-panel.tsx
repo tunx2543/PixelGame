@@ -1,8 +1,9 @@
 'use client'
 
+import Link from 'next/link'
 import { useState } from 'react'
 import { ITEMS, JOBS } from '@/lib/game/data'
-import { closePanel, consumeItem, drinkPotion, equip, getInventoryCapacity, itemLabel, unequip } from '@/lib/game/engine'
+import { closePanel, consumeItem, drinkPotion, equip, getInventoryCapacity, itemLabel, saveGame, unequip } from '@/lib/game/engine'
 import { useGame } from '@/lib/game/use-game'
 import { ItemIcon } from '../item-icon'
 import { PanelFrame, PxButton } from './panels'
@@ -99,7 +100,16 @@ export function InventoryPanel() {
           </dl>
         </div>
       )}
-      <div className="mt-4 flex justify-end"><PxButton variant="secondary" onClick={closePanel}>ปิด</PxButton></div>
+      <div className="mt-4 flex items-center justify-between gap-2">
+        <Link
+          href="/inventory"
+          onClick={() => saveGame()}
+          className="pixel-btn bg-primary/20 px-3 py-1.5 text-xs font-semibold text-primary hover:brightness-110"
+        >
+          เปิดคลังไอเทมเต็มจอ
+        </Link>
+        <PxButton variant="secondary" onClick={closePanel}>ปิด</PxButton>
+      </div>
     </PanelFrame>
   )
 }

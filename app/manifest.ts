@@ -12,7 +12,7 @@ export default function manifest(): MetadataRoute.Manifest {
     display_override: ['fullscreen', 'standalone'],
     background_color: '#0e0f1a',
     theme_color: '#0e0f1a',
-    orientation: 'any',
+    orientation: 'landscape',
     categories: ['games', 'role playing'],
     icons: [
       {

@@ -4,6 +4,7 @@ import { Coins, Gem } from 'lucide-react'
 import { useGame } from '@/lib/game/use-game'
 import { getStats } from '@/lib/game/engine'
 import { buildVitalsSnapshot } from '@/lib/game/hud-vitals'
+import { computeCombatPower } from '@/lib/game/rpg-systems'
 import { formatNum } from './format'
 
 const BAR_STYLES = {
@@ -28,29 +29,29 @@ function VitalBar({
   const tone = BAR_STYLES[barKey]
 
   return (
-    <div className="flex items-center gap-1.5 text-[10px]">
-      <span className={`w-7 shrink-0 font-bold tracking-wide ${tone.text}`}>{label}</span>
+    <div className="flex items-center gap-1.5 text-[9px]">
+      <span className={`w-6 shrink-0 font-bold tracking-wide ${tone.text}`}>{label}</span>
       <div
         role="progressbar"
         aria-label={label}
         aria-valuemin={0}
         aria-valuemax={max}
         aria-valuenow={current}
-        className="h-2.5 flex-1 overflow-hidden border border-[#0e0f1a] bg-muted/70"
+        className="h-2 flex-1 overflow-hidden border border-[#0e0f1a] bg-muted/70"
       >
         <div
           className={`h-full ${tone.color} transition-[width] duration-150`}
           style={{ width: `${percent}%` }}
         />
       </div>
-      <span className="w-[4.5rem] shrink-0 text-right font-mono text-[10px] text-muted-foreground tabular-nums">
+      <span className="w-[4.1rem] shrink-0 text-right font-mono text-[9px] text-muted-foreground tabular-nums">
         {formatNum(current)}/{formatNum(max)}
       </span>
     </div>
   )
 }
 
-export function Hud() {
+export function Hud({ compact = false }: { compact?: boolean }) {
   const { p } = useGame()
   if (!p) return null
 
@@ -65,15 +66,17 @@ export function Hud() {
     gold: p.gold,
     diamonds: p.diamonds,
   })
+  const cp = computeCombatPower(p, s)
+  const bars = compact ? vitals.bars.filter((b) => b.key !== 'exp') : vitals.bars
 
   return (
     <section
       aria-label="แถบสถานะพลังชีวิตและทรัพยากร"
       data-testid="vitals-hud"
-      className="pointer-events-auto pixel-panel w-full p-2 shadow-lg"
+      className="pointer-events-auto pixel-panel w-full px-2 py-1.5 shadow-lg"
     >
-      <div className="flex flex-col gap-1">
-        {vitals.bars.map((bar) => (
+      <div className="flex flex-col gap-0.5">
+        {bars.map((bar) => (
           <VitalBar
             key={bar.key}
             barKey={bar.key}
@@ -85,16 +88,21 @@ export function Hud() {
         ))}
       </div>
 
-      <div className="mt-1.5 flex items-center justify-between gap-2 border-t border-border/60 pt-1 text-[11px] font-semibold">
-        <span className="flex items-center gap-1 text-gold tabular-nums">
-          <Coins className="size-3 shrink-0" aria-hidden />
-          <span>{formatNum(vitals.gold)} G</span>
-        </span>
-        <span className="flex items-center gap-1 text-cyan-200 tabular-nums">
-          <Gem className="size-3 shrink-0" aria-hidden />
-          <span>{formatNum(vitals.diamonds)} D</span>
-        </span>
-      </div>
+      {!compact && (
+        <div className="mt-1 flex items-center justify-between gap-2 border-t border-border/60 pt-1 text-[10px] font-semibold">
+          <span className="flex items-center gap-1 text-gold tabular-nums">
+            <Coins className="size-3 shrink-0" aria-hidden />
+            <span>{formatNum(vitals.gold)} G</span>
+          </span>
+          <span className="font-mono text-[9px] text-muted-foreground tabular-nums">
+            CP {formatNum(cp)}
+          </span>
+          <span className="flex items-center gap-1 text-cyan-200 tabular-nums">
+            <Gem className="size-3 shrink-0" aria-hidden />
+            <span>{formatNum(vitals.diamonds)} D</span>
+          </span>
+        </div>
+      )}
     </section>
   )
 }

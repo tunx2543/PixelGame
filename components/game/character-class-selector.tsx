@@ -1,10 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { Droplets, Footprints, Heart, RotateCw, Shield, Sparkles, Swords, Target, Wand2, Zap } from 'lucide-react'
+import { Droplets, Footprints, Heart, Play, RotateCw, Shield, Sparkles, Swords, Target, Wand2, Zap } from 'lucide-react'
 import { JOBS, type JobDef } from '@/lib/game/data'
 import { MODEL_DIRS, type ModelDir } from '@/lib/game/models-2d'
+import { getSkillIconPath, getSkillVfxSpec, resolveRebirthAuraSpec } from '@/lib/game/vfx-specs'
 import { formatNum } from './format'
+import { SkillVfxPreview } from './skill-vfx-preview'
 import { SpriteModelCanvas, type PreviewAction } from './sprite-model-canvas'
 
 export type SelectableClassId = 'swordsman' | 'mage' | 'archer'
@@ -142,16 +144,27 @@ export function CharacterClassSelector({
   const [previewLevel, setPreviewLevel] = useState<number>(level)
   const [previewAction, setPreviewAction] = useState<PreviewAction>('auto')
   const [previewDir, setPreviewDir] = useState<ModelDir>('down')
+  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null)
+  const [previewRebirth, setPreviewRebirth] = useState<number>(1)
+  const [vfxNonce, setVfxNonce] = useState<number>(0)
 
   const activeClassId = value ?? internalClassId
   const effectiveLevel = value !== undefined ? level : previewLevel
   const activeRole = CLASS_ROLE_OPTIONS.find((r) => r.id === activeClassId) ?? CLASS_ROLE_OPTIONS[0]
+  const activeSkill =
+    activeRole.job.skills.find((s) => s.id === selectedSkillId) ?? activeRole.job.skills[0] ?? null
+  const activeSkillSpec = activeSkill
+    ? getSkillVfxSpec(activeSkill.id, activeSkill.color, activeSkill.kind, activeRole.job.weaponTypes[0])
+    : null
+  const activeAuraSpec = resolveRebirthAuraSpec(previewRebirth)
   const stats = calculateClassBaseStats(activeRole.id, effectiveLevel)
 
   const selectRole = (role: ClassRoleOption) => {
     if (value === undefined) {
       setInternalClassId(role.id)
     }
+    setSelectedSkillId(role.job.skills[0]?.id ?? null)
+    setVfxNonce((n) => n + 1)
     const nextStats = calculateClassBaseStats(role.id, effectiveLevel)
     onClassChange?.(role.id, nextStats, role)
   }
@@ -274,6 +287,7 @@ export function CharacterClassSelector({
                 action={previewAction}
                 dir={previewDir}
                 size={92}
+                rebirthCount={previewRebirth}
                 label={`โมเดล 2D ${activeRole.englishName}`}
               />
             </div>
@@ -365,21 +379,118 @@ export function CharacterClassSelector({
           />
         </div>
 
-        {/* Class Skills Summary */}
-        <div className="mt-3 border-t border-border/60 pt-2.5">
-          <p className="mb-1.5 flex items-center gap-1 text-[11px] font-semibold text-muted-foreground">
-            <Sparkles className="size-3 text-primary" aria-hidden />
-            สกิลประจำสายอาชีพ
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {activeRole.job.skills.map((skill) => (
-              <span
-                key={skill.id}
-                className="border border-border bg-background/70 px-2 py-0.5 text-[11px] text-foreground"
+        {/* Class Skills & Rebirth Aura Interactive VFX Showcase */}
+        <div className="mt-3 border-t border-border/60 pt-3">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="flex items-center gap-1 text-[11px] font-semibold text-foreground">
+              <Sparkles className="size-3.5 text-primary" aria-hidden />
+              สกิลประจำสายอาชีพ &amp; ตัวอย่างเอฟเฟคจุติ
+            </p>
+            <div className="flex flex-wrap items-center gap-1" role="group" aria-label="พรีวิวระดับออร่าจุติ">
+              {[
+                { count: 0, label: 'ปกติ' },
+                { count: 1, label: 'จุติ 1–4' },
+                { count: 5, label: 'จุติ 5' },
+                { count: 6, label: 'จุติ 6' },
+              ].map((tier) => {
+                const active = previewRebirth === tier.count
+                return (
+                  <button
+                    key={tier.count}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setPreviewRebirth(tier.count)}
+                    className={`pixel-btn px-2 py-0.5 text-[10px] font-semibold ${
+                      active
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-secondary text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {tier.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            {activeRole.job.skills.map((skill) => {
+              const spec = getSkillVfxSpec(skill.id, skill.color, skill.kind, activeRole.job.weaponTypes[0])
+              const isSelected = activeSkill?.id === skill.id
+              return (
+                <button
+                  key={skill.id}
+                  type="button"
+                  aria-pressed={isSelected}
+                  onClick={() => {
+                    setSelectedSkillId(skill.id)
+                    setVfxNonce((n) => n + 1)
+                  }}
+                  className={`flex items-center gap-2 border p-2 text-left transition-colors ${
+                    isSelected
+                      ? 'border-primary bg-primary/12 text-foreground'
+                      : 'border-border bg-background/70 text-foreground hover:border-primary/60'
+                  }`}
+                >
+                  <img
+                    src={getSkillIconPath(skill.id)}
+                    alt=""
+                    width={24}
+                    height={24}
+                    className="pixelated size-6 shrink-0 border border-border/80 bg-[#0e0f1a]"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-1 text-xs font-bold">
+                      <span className="truncate" style={{ color: spec.primaryColor }}>
+                        {skill.name}
+                      </span>
+                      <span className="shrink-0 font-mono text-[10px] text-muted-foreground tabular-nums">
+                        {skill.mp} MP · {skill.mult}x
+                      </span>
+                    </div>
+                    <p className="truncate text-[10px] text-muted-foreground">{spec.effectLabel}</p>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="mt-2.5 grid gap-2 border border-border/80 bg-[#0a0d1c]/70 p-2 sm:grid-cols-[1fr_auto] sm:items-center">
+            <SkillVfxPreview
+              jobId={activeRole.id}
+              skillId={activeSkill?.id ?? null}
+              rebirthCount={previewRebirth}
+              playNonce={vfxNonce}
+              width={320}
+              height={128}
+              label={`จำลองเอฟเฟค ${activeSkill?.name ?? activeRole.thaiName}`}
+            />
+            <div className="flex flex-col justify-between gap-1.5 text-[11px] sm:w-44">
+              <div>
+                <p className="font-bold text-foreground">
+                  {activeSkill ? activeSkill.name : activeRole.thaiName}
+                </p>
+                {activeSkillSpec && (
+                  <p className="text-[10px] leading-snug" style={{ color: activeSkillSpec.primaryColor }}>
+                    {activeSkillSpec.effectLabel}
+                  </p>
+                )}
+              </div>
+              <div className="border-t border-border/60 pt-1.5">
+                <p className="text-[10px] font-semibold" style={{ color: activeAuraSpec.primaryColor }}>
+                  {activeAuraSpec.title}
+                </p>
+                <p className="text-[10px] leading-snug text-muted-foreground">{activeAuraSpec.subtitle}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setVfxNonce((n) => n + 1)}
+                className="pixel-btn mt-0.5 flex items-center justify-center gap-1 bg-accent px-2.5 py-1 text-[10px] font-bold text-accent-foreground hover:brightness-110"
               >
-                {skill.name} <span className="text-muted-foreground">({skill.mp} MP • {skill.mult}x)</span>
-              </span>
-            ))}
+                <Play className="size-3" aria-hidden />
+                เล่นเอฟเฟคอีกครั้ง
+              </button>
+            </div>
           </div>
         </div>
       </div>

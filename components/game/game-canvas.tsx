@@ -5,10 +5,11 @@ import {
   action,
   closePanel,
   game,
-  interact,
   notify,
   openPanel,
   saveGame,
+  toggleZenHud,
+  triggerOpenWorldGuard,
   update,
   drinkPotion,
   castSkill,
@@ -62,7 +63,7 @@ export function GameCanvas() {
             break
           }
         }
-        if (hasActiveSkillCd) notify()
+        if (hasActiveSkillCd || game.guardCd > 0) notify()
       }
       raf = requestAnimationFrame(loop)
     }
@@ -78,7 +79,8 @@ export function GameCanvas() {
       const k = e.key.toLowerCase()
       if (k === 'enter') {
         e.preventDefault()
-        document.getElementById('chat-input')?.focus()
+        window.dispatchEvent(new CustomEvent('pixelquest:open-chat'))
+        window.setTimeout(() => document.getElementById('chat-input')?.focus(), 20)
         return
       }
       if (k === 'escape') return closePanel()
@@ -91,6 +93,12 @@ export function GameCanvas() {
       if (k === ' ' || k === 'j' || k === 'e') {
         e.preventDefault()
         action()
+      } else if (e.key === 'Shift') {
+        e.preventDefault()
+        triggerOpenWorldGuard()
+      } else if (k === 'h') {
+        e.preventDefault()
+        toggleZenHud()
       } else if (k === '1' || k === '2' || k === '3') castSkill(Number(k) - 1)
       else if (k === 'q') drinkPotion('hp')
       else if (k === 'r') drinkPotion('mp')

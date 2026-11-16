@@ -20,6 +20,11 @@ import { StoragePanel } from './storage-panel'
 import { TradePanel } from './trade-panel'
 import { PetsPanel } from './pets-panel'
 import { QuestsPanel } from './quests-panel'
+import { CraftPanel } from './craft-panel'
+import { CodexPanel } from './codex-panel'
+import { GuildBossPanel } from './guild-boss-panel'
+import { ArenaPanel } from './arena-panel'
+import { DungeonPanel } from './dungeon-panel'
 import { ModelGalleryView } from '../model-gallery-view'
 
 export function Panels() {
@@ -55,6 +60,16 @@ export function Panels() {
       return <PetsPanel />
     case 'quests':
       return <QuestsPanel />
+    case 'craft':
+      return <CraftPanel />
+    case 'codex':
+      return <CodexPanel />
+    case 'guild':
+      return <GuildBossPanel />
+    case 'arena':
+      return <ArenaPanel />
+    case 'dungeon':
+      return <DungeonPanel />
     case 'models':
       return (
         <PanelFrame title="คลังโมเดล 2D & แอนิเมชั่น" subtitle="พรีวิวโมเดลครบ 12 อาชีพ และ 17 มอนสเตอร์ พร้อมแอนิเมชั่น Idle / Walk / Attack">
@@ -70,7 +85,7 @@ export function PanelFrame({ title, subtitle, children }: { title: string; subti
   const g = useGame()
   return (
     <div
-      className="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-black/50 p-2 md:p-6"
+      className="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/55 p-1.5 sm:p-3 md:p-5"
       onPointerDown={(e) => {
         if (e.target === e.currentTarget) closePanel()
       }}
@@ -79,9 +94,9 @@ export function PanelFrame({ title, subtitle, children }: { title: string; subti
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="pixel-panel flex max-h-full w-full max-w-3xl flex-col"
+        className="pixel-panel flex max-h-[calc(100dvh-0.75rem)] w-full max-w-3xl flex-col sm:max-h-[calc(100dvh-1.5rem)]"
       >
-        <header className="flex items-center justify-between gap-3 border-b-2 border-border bg-secondary px-4 py-2.5">
+        <header className="flex items-center justify-between gap-2 border-b-2 border-border bg-secondary px-3 py-2 sm:px-4">
           <div className="min-w-0">
             <h2 className="truncate text-lg text-primary">{title}</h2>
             {subtitle && <p className="truncate text-xs text-muted-foreground">{subtitle}</p>}

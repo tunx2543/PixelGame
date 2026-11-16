@@ -527,6 +527,183 @@ service cloud.firestore {
         data.updatedAt is timestamp;
     }
 
+    function isValidGuildDoc(data, guildId) {
+      return data.keys().hasAll([
+          'guildId',
+          'name',
+          'tag',
+          'leaderId',
+          'leaderName',
+          'level',
+          'exp',
+          'totalDonatedGold',
+          'memberIds',
+          'memberCount',
+          'notice',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'guildId',
+          'name',
+          'tag',
+          'leaderId',
+          'leaderName',
+          'level',
+          'exp',
+          'totalDonatedGold',
+          'memberIds',
+          'memberCount',
+          'notice',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.guildId) &&
+        data.guildId == guildId &&
+        data.name is string &&
+        data.name.size() >= 2 &&
+        data.name.size() <= 28 &&
+        data.tag is string &&
+        data.tag.size() >= 2 &&
+        data.tag.size() <= 6 &&
+        isValidId(data.leaderId) &&
+        data.leaderName is string &&
+        data.leaderName.size() >= 1 &&
+        data.leaderName.size() <= 24 &&
+        data.level is int &&
+        data.level >= 1 &&
+        data.level <= 50 &&
+        data.exp is int &&
+        data.exp >= 0 &&
+        data.totalDonatedGold is int &&
+        data.totalDonatedGold >= 0 &&
+        data.memberIds is list &&
+        data.memberIds.size() >= 1 &&
+        data.memberIds.size() <= 30 &&
+        data.memberCount is int &&
+        data.memberCount == data.memberIds.size() &&
+        data.notice is string &&
+        data.notice.size() <= 140 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidLeaderboardHero(data, userId) {
+      return data.keys().hasAll([
+          'userId',
+          'gameUid',
+          'name',
+          'jobId',
+          'level',
+          'rebirthCount',
+          'combatPower',
+          'arenaRating',
+          'arenaWins',
+          'highestTowerFloor',
+          'activeTitle',
+          'guildName',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'userId',
+          'gameUid',
+          'name',
+          'jobId',
+          'level',
+          'rebirthCount',
+          'combatPower',
+          'arenaRating',
+          'arenaWins',
+          'highestTowerFloor',
+          'activeTitle',
+          'guildName',
+          'updatedAt'
+        ]) &&
+        isValidId(data.userId) &&
+        data.userId == userId &&
+        isValidGameUid(data.gameUid) &&
+        data.name is string &&
+        data.name.size() >= 1 &&
+        data.name.size() <= 24 &&
+        data.jobId is string &&
+        data.jobId.size() >= 1 &&
+        data.jobId.size() <= 32 &&
+        data.jobId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.level is int &&
+        data.level >= 1 &&
+        data.level <= 999 &&
+        data.rebirthCount is int &&
+        data.rebirthCount >= 0 &&
+        data.rebirthCount <= 6 &&
+        data.combatPower is int &&
+        data.combatPower >= 1 &&
+        data.arenaRating is int &&
+        data.arenaRating >= 100 &&
+        data.arenaRating <= 9999 &&
+        data.arenaWins is int &&
+        data.arenaWins >= 0 &&
+        data.highestTowerFloor is int &&
+        data.highestTowerFloor >= 0 &&
+        (data.activeTitle == null || (data.activeTitle is string && data.activeTitle.size() <= 64)) &&
+        (data.guildName == null || (data.guildName is string && data.guildName.size() <= 32)) &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidWorldBossRaid(data, cycleKey) {
+      return data.keys().hasAll([
+          'cycleKey',
+          'bossId',
+          'name',
+          'maxHp',
+          'currentHp',
+          'totalDamageDealt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'cycleKey',
+          'bossId',
+          'name',
+          'maxHp',
+          'currentHp',
+          'totalDamageDealt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.cycleKey) &&
+        data.cycleKey == cycleKey &&
+        isValidId(data.bossId) &&
+        data.name is string &&
+        data.name.size() >= 1 &&
+        data.name.size() <= 64 &&
+        data.maxHp is int &&
+        data.maxHp >= 1000 &&
+        data.currentHp is int &&
+        data.currentHp >= 0 &&
+        data.currentHp <= data.maxHp &&
+        data.totalDamageDealt is int &&
+        data.totalDamageDealt >= 0 &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidWorldBossContribution(data, userId) {
+      return data.keys().hasAll(['userId', 'name', 'jobId', 'level', 'damage', 'updatedAt']) &&
+        data.keys().hasOnly(['userId', 'name', 'jobId', 'level', 'damage', 'updatedAt']) &&
+        isValidId(data.userId) &&
+        data.userId == userId &&
+        data.name is string &&
+        data.name.size() >= 1 &&
+        data.name.size() <= 24 &&
+        data.jobId is string &&
+        data.jobId.size() >= 1 &&
+        data.jobId.size() <= 32 &&
+        data.jobId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.level is int &&
+        data.level >= 1 &&
+        data.level <= 999 &&
+        data.damage is int &&
+        data.damage >= 0 &&
+        data.updatedAt is timestamp;
+    }
+
     match /playerUids/{gameUid} {
       allow get: if isSignedIn() && isEmailVerified() && isValidGameUid(gameUid);
       allow list: if false;
@@ -943,6 +1120,196 @@ service cloud.firestore {
           userId == request.auth.uid &&
           dateKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
           existing().ownerId == request.auth.uid;
+      }
+    }
+
+    match /guilds/{guildId} {
+      allow get: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(guildId);
+
+      allow list: if isSignedIn() &&
+        isEmailVerified() &&
+        resource.data.memberCount >= 1 &&
+        request.query.limit != null &&
+        request.query.limit <= 30;
+
+      allow create: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(guildId) &&
+        isValidGuildDoc(incoming(), guildId) &&
+        incoming().leaderId == request.auth.uid &&
+        incoming().memberIds.size() == 1 &&
+        incoming().memberIds[0] == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isUserAccountOwner(request.auth.uid);
+
+      allow update: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(guildId) &&
+        isValidGuildDoc(incoming(), guildId) &&
+        incoming().guildId == existing().guildId &&
+        incoming().name == existing().name &&
+        incoming().tag == existing().tag &&
+        incoming().leaderId == existing().leaderId &&
+        incoming().leaderName == existing().leaderName &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        isUserAccountOwner(request.auth.uid) &&
+        (
+          (
+            request.auth.uid == existing().leaderId &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'level',
+              'exp',
+              'totalDonatedGold',
+              'memberIds',
+              'memberCount',
+              'notice',
+              'updatedAt'
+            ])
+          ) ||
+          (
+            request.auth.uid in existing().memberIds &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'level',
+              'exp',
+              'totalDonatedGold',
+              'memberIds',
+              'memberCount',
+              'updatedAt'
+            ])
+          ) ||
+          (
+            !(request.auth.uid in existing().memberIds) &&
+            request.auth.uid in incoming().memberIds &&
+            incoming().memberCount == existing().memberCount + 1 &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['memberIds', 'memberCount', 'updatedAt'])
+          )
+        );
+
+      allow delete: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(guildId) &&
+        existing().leaderId == request.auth.uid &&
+        existing().memberCount <= 1;
+    }
+
+    match /leaderboard/{userId} {
+      allow get: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(userId);
+
+      allow list: if isSignedIn() &&
+        isEmailVerified() &&
+        resource.data.combatPower >= 1 &&
+        request.query.limit != null &&
+        request.query.limit <= 50;
+
+      allow create: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(userId) &&
+        userId == request.auth.uid &&
+        isValidLeaderboardHero(incoming(), userId) &&
+        incoming().updatedAt == request.time &&
+        isUserAccountOwner(userId);
+
+      allow update: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(userId) &&
+        userId == request.auth.uid &&
+        isValidLeaderboardHero(incoming(), userId) &&
+        incoming().userId == existing().userId &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'gameUid',
+          'name',
+          'jobId',
+          'level',
+          'rebirthCount',
+          'combatPower',
+          'arenaRating',
+          'arenaWins',
+          'highestTowerFloor',
+          'activeTitle',
+          'guildName',
+          'updatedAt'
+        ]) &&
+        isUserAccountOwner(userId);
+
+      allow delete: if false;
+    }
+
+    match /worldBoss/{cycleKey} {
+      allow get: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(cycleKey);
+
+      allow list: if isSignedIn() &&
+        isEmailVerified() &&
+        resource.data.maxHp >= 1000 &&
+        request.query.limit != null &&
+        request.query.limit <= 10;
+
+      allow create: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(cycleKey) &&
+        isValidWorldBossRaid(incoming(), cycleKey) &&
+        incoming().updatedAt == request.time &&
+        isUserAccountOwner(request.auth.uid);
+
+      allow update: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(cycleKey) &&
+        isValidWorldBossRaid(incoming(), cycleKey) &&
+        incoming().cycleKey == existing().cycleKey &&
+        incoming().bossId == existing().bossId &&
+        incoming().name == existing().name &&
+        incoming().maxHp == existing().maxHp &&
+        incoming().currentHp <= existing().currentHp &&
+        incoming().totalDamageDealt >= existing().totalDamageDealt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['currentHp', 'totalDamageDealt', 'updatedAt']) &&
+        isUserAccountOwner(request.auth.uid);
+
+      allow delete: if false;
+
+      match /contributions/{userId} {
+        allow get: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(cycleKey) &&
+          isValidId(userId);
+
+        allow list: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(cycleKey) &&
+          resource.data.damage >= 0 &&
+          request.query.limit != null &&
+          request.query.limit <= 30;
+
+        allow create: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(cycleKey) &&
+          isValidId(userId) &&
+          userId == request.auth.uid &&
+          isValidWorldBossContribution(incoming(), userId) &&
+          incoming().updatedAt == request.time &&
+          isUserAccountOwner(userId);
+
+        allow update: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(cycleKey) &&
+          isValidId(userId) &&
+          userId == request.auth.uid &&
+          isValidWorldBossContribution(incoming(), userId) &&
+          incoming().userId == existing().userId &&
+          incoming().damage >= existing().damage &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'jobId', 'level', 'damage', 'updatedAt']) &&
+          isUserAccountOwner(userId);
+
+        allow delete: if false;
       }
     }
   }

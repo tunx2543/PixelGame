@@ -508,6 +508,12 @@ export function TitleScreen() {
 
         <div className="flex flex-wrap items-center justify-center gap-2">
           <Link
+            href="/inventory"
+            className="pixel-btn bg-primary/25 px-3 py-1.5 text-xs font-semibold text-primary hover:brightness-110"
+          >
+            คลังไอเทม & อุปกรณ์
+          </Link>
+          <Link
             href="/tower"
             className="pixel-btn bg-primary/25 px-3 py-1.5 text-xs font-semibold text-primary hover:brightness-110"
           >

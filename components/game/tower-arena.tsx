@@ -17,6 +17,7 @@ import {
   Hammer,
   Heart,
   PawPrint,
+  Shield,
   Sparkles,
   Swords,
   Trophy,
@@ -27,6 +28,7 @@ import { auth } from '@/lib/firebase/client'
 import { listUserCharacters } from '@/lib/firebase/characters'
 import { AccountPanel } from './account-panel'
 import { JOBS, MAX_LEVEL, expToNext, type SkillDef } from '@/lib/game/data'
+import { getSkillIconPath, getSkillVfxSpec } from '@/lib/game/vfx-specs'
 import {
   SAVE_KEY,
   getActiveCharacterSlot,
@@ -79,6 +81,15 @@ import {
 } from '@/lib/game/floating-damage'
 import { evaluateAttackShake, type ScreenShakeEvent } from '@/lib/game/screen-shake'
 import { pickNewerSave } from '@/lib/game/save-sync'
+import {
+  ELEMENT_META,
+  STATUS_META,
+  evaluateGuardAction,
+  getMonsterElement,
+  recordBestiaryKillInState,
+  rollStatusInfliction,
+  type StatusEffectType,
+} from '@/lib/game/rpg-systems'
 
 type TowerPhase = 'LOADING' | 'READY' | 'FIGHTING' | 'VICTORY' | 'DEFEAT'
 
@@ -151,12 +162,16 @@ export function TowerArena() {
   const [attackCd, setAttackCd] = useState(0)
   const [skillCds, setSkillCds] = useState<Record<string, number>>({})
   const [enemyAttackProgress, setEnemyAttackProgress] = useState(0)
+  const [guardCd, setGuardCd] = useState(0)
+  const [enemyStatuses, setEnemyStatuses] = useState<Partial<Record<StatusEffectType, number>>>({})
+  const [playerShieldSec, setPlayerShieldSec] = useState(0)
   const [victoryOutcome, setVictoryOutcome] = useState<TowerVictoryOutcome | null>(null)
   const [defeatReason, setDefeatReason] = useState<'hp' | 'timeout'>('hp')
   const [logs, setLogs] = useState<TowerLogEntry[]>([])
 
   const [playerAttackPulse, setPlayerAttackPulse] = useState(0)
   const [playerSkillColor, setPlayerSkillColor] = useState<string | null>(null)
+  const [playerSkillId, setPlayerSkillId] = useState<string | null>(null)
   const [playerHitPulse, setPlayerHitPulse] = useState(0)
   const [enemyAttackPulse, setEnemyAttackPulse] = useState(0)
   const [enemyHitPulse, setEnemyHitPulse] = useState(0)
@@ -174,6 +189,11 @@ export function TowerArena() {
   const timeLeftRef = useRef<number>(30)
   const attackCdRef = useRef<number>(0)
   const skillCdsRef = useRef<Record<string, number>>({})
+  const guardCdRef = useRef<number>(0)
+  const enemyProgressRef = useRef<number>(0)
+  const enemyTimerResetReqRef = useRef<boolean>(false)
+  const enemyStatusesRef = useRef<Partial<Record<StatusEffectType, number>>>({})
+  const playerShieldRef = useRef<number>(0)
   const logSeqRef = useRef(0)
   const popupSeqRef = useRef(0)
   const shakeSeqRef = useRef(0)
@@ -260,8 +280,15 @@ export function TowerArena() {
       setShakeEvent(null)
       attackCdRef.current = 0
       skillCdsRef.current = {}
+      guardCdRef.current = 0
+      enemyProgressRef.current = 0
+      enemyStatusesRef.current = {}
+      playerShieldRef.current = 0
       setAttackCd(0)
       setSkillCds({})
+      setGuardCd(0)
+      setEnemyStatuses({})
+      setPlayerShieldSec(0)
       setEnemyAttackProgress(0)
       setPhase('READY')
       appendLog(
@@ -371,6 +398,7 @@ export function TowerArena() {
       const diamondsEarned = isFirstClear ? spec.firstClearDiamonds : spec.isBossFloor ? 5 : 1
 
       nextSave.kills = (nextSave.kills ?? 0) + 1
+      nextSave.rpgExt = recordBestiaryKillInState(nextSave.rpgExt, spec.enemy.def.id, nextSave)
       nextSave.towerState = {
         highestFloor: Math.max(prevTower.highestFloor, spec.floor),
         currentFloor: Math.max(prevTower.highestFloor, spec.floor) + 1,
@@ -484,6 +512,7 @@ export function TowerArena() {
         setSave(nextSave)
         setPlayerAttackPulse(performance.now())
         setPlayerSkillColor(skill.color)
+        setPlayerSkillId(skill.id)
         triggerSkillSound({ muted: mutedRef.current, source: 'tower', detail: { skillId: skill.id, kind: 'heal' } })
         pushPopup('player', recovered, 'heal', '#4fc3a1', { prefix: '+', suffix: ' HP' })
         appendLog(`${skill.name} ฟื้นฟู ${formatNum(recovered)} HP`, 'hero')
@@ -492,10 +521,22 @@ export function TowerArena() {
 
       const skillLv = skill ? nextSave.skillLevels?.[skill.id] ?? 1 : 1
       const mult = skill ? skill.mult * (skill.hits ?? 1) * (1 + (skillLv - 1) * 0.08) : 1
-      const breakdown = calculatePlayerAttack(nextSave, currentEnemy, mult, skill ? skill.name : 'โจมตีปกติ')
+      const breakdown = calculatePlayerAttack(nextSave, currentEnemy, mult, skill ? skill.name : 'โจมตีปกติ', skill?.id ?? null)
+      const inflicted = rollStatusInfliction(skill?.id ?? null, nextSave.rpgExt?.equippedRunes)
+      if (inflicted === 'shield') {
+        playerShieldRef.current = 4.0
+        setPlayerShieldSec(4.0)
+      } else if (inflicted) {
+        const dur = inflicted === 'stun' ? 2.0 : 4.5
+        const nextSt = { ...enemyStatusesRef.current, [inflicted]: dur }
+        enemyStatusesRef.current = nextSt
+        setEnemyStatuses(nextSt)
+        if (inflicted === 'stun') enemyTimerResetReqRef.current = true
+      }
 
       setPlayerAttackPulse(performance.now())
       setPlayerSkillColor(skill ? skill.color : null)
+      setPlayerSkillId(skill ? skill.id : null)
       setEnemyHitPulse(performance.now())
 
       if (breakdown.isCrit) {
@@ -591,6 +632,41 @@ export function TowerArena() {
     [appendLog, handleVictory, pushPopup],
   )
 
+  const handleGuardAction = useCallback(() => {
+    const currentSave = saveRef.current
+    const currentEnemy = enemyRef.current
+    const currentSpec = floorSpecRef.current
+    if (!currentSave || !currentEnemy || !currentSpec || (phaseRef.current !== 'FIGHTING' && phaseRef.current !== 'READY')) return
+    const telegraph = enemyProgressRef.current >= 0.5
+    const evalRes = evaluateGuardAction(telegraph, enemyProgressRef.current, guardCdRef.current)
+    if (evalRes.outcome === 'cooldown') return
+
+    guardCdRef.current = 3.2
+    setGuardCd(3.2)
+
+    if (evalRes.outcome === 'perfect_counter') {
+      enemyTimerResetReqRef.current = true
+      enemyProgressRef.current = 0
+      setEnemyAttackProgress(0)
+      const counterBreakdown = calculatePlayerAttack(currentSave, currentEnemy, evalRes.counterMultiplier, 'โต้กลับ Parry!')
+      pushPopup('enemy', counterBreakdown.damage, 'crit', '#38bdf8', { badge: 'PARRY!' })
+      appendLog(`PERFECT PARRY! โต้กลับ ${formatNum(counterBreakdown.damage)} ดาเมจ!`, 'crit')
+      triggerCritSound({ muted: mutedRef.current, source: 'tower', detail: { parry: true } })
+      setPlayerAttackPulse(performance.now())
+      setEnemyHitPulse(performance.now())
+      const nextHp = Math.max(0, currentEnemy.hp - counterBreakdown.damage)
+      const updatedEnemy = { ...currentEnemy, hp: nextHp }
+      enemyRef.current = updatedEnemy
+      setEnemy(updatedEnemy)
+      if (nextHp <= 0) handleVictory(currentSave, currentSpec)
+    } else {
+      playerShieldRef.current = 2.4
+      setPlayerShieldSec(2.4)
+      pushPopup('player', 0, 'heal', '#60a5fa', { badge: 'GUARD' })
+      appendLog(evalRes.label, 'hero')
+    }
+  }, [appendLog, handleVictory, pushPopup])
+
   const handleUsePotion = useCallback(
     (kind: 'hp' | 'mp') => {
       const currentSave = saveRef.current
@@ -658,6 +734,7 @@ export function TowerArena() {
     let enemyTimer = 0
     let petTimer = 0
     let regenTimer = 0
+    let dotTimer = 0
 
     const interval = window.setInterval(() => {
       const now = performance.now()
@@ -668,6 +745,16 @@ export function TowerArena() {
         const nextCd = Math.max(0, attackCdRef.current - dt)
         attackCdRef.current = nextCd
         setAttackCd(nextCd)
+      }
+      if (guardCdRef.current > 0) {
+        const nextGuard = Math.max(0, guardCdRef.current - dt)
+        guardCdRef.current = nextGuard
+        setGuardCd(nextGuard)
+      }
+      if (playerShieldRef.current > 0) {
+        const nextSh = Math.max(0, playerShieldRef.current - dt)
+        playerShieldRef.current = nextSh
+        setPlayerShieldSec(nextSh)
       }
       if (Object.keys(skillCdsRef.current).length > 0) {
         let changed = false
@@ -694,6 +781,42 @@ export function TowerArena() {
 
       let workingEnemy = currentEnemy
       let workingSave = currentSave
+
+      // Tick status effects on enemy
+      const curStatuses = { ...enemyStatusesRef.current }
+      let statusChanged = false
+      for (const sKey of ['burn', 'freeze', 'stun', 'poison'] as StatusEffectType[]) {
+        const rem = curStatuses[sKey]
+        if (rem && rem > 0) {
+          const nextRem = Math.max(0, rem - dt)
+          if (nextRem > 0) curStatuses[sKey] = nextRem
+          else delete curStatuses[sKey]
+          statusChanged = true
+        }
+      }
+      if (statusChanged) {
+        enemyStatusesRef.current = curStatuses
+        setEnemyStatuses(curStatuses)
+      }
+
+      dotTimer += dt
+      if (dotTimer >= 1.0) {
+        dotTimer -= 1.0
+        let dotDmg = 0
+        if (curStatuses.burn) dotDmg += Math.max(5, Math.round(workingEnemy.maxHp * 0.035))
+        if (curStatuses.poison) dotDmg += Math.max(6, Math.round(workingEnemy.maxHp * 0.04))
+        if (dotDmg > 0) {
+          const nextHpDot = Math.max(0, workingEnemy.hp - dotDmg)
+          workingEnemy = { ...workingEnemy, hp: nextHpDot }
+          enemyRef.current = workingEnemy
+          setEnemy(workingEnemy)
+          pushPopup('enemy', dotDmg, 'damage', curStatuses.burn ? '#fb923c' : '#4ade80', { badge: curStatuses.burn ? 'BURN' : 'POISON' })
+          if (nextHpDot <= 0) {
+            handleVictory(workingSave, currentSpec)
+            return
+          }
+        }
+      }
 
       // Countdown floor timer
       const nextT = Math.max(0, timeLeftRef.current - dt)
@@ -750,21 +873,38 @@ export function TowerArena() {
         }
       }
 
-      // Enemy counter-attack
-      enemyTimer += dt
-      setEnemyAttackProgress(Math.min(1, enemyTimer / workingEnemy.attackInterval))
+      if (enemyTimerResetReqRef.current) {
+        enemyTimer = 0
+        enemyTimerResetReqRef.current = false
+      }
+      if (!curStatuses.stun) {
+        const freezeFactor = curStatuses.freeze ? 0.68 : 1
+        enemyTimer += dt * freezeFactor
+      }
+      const progress = Math.min(1, enemyTimer / workingEnemy.attackInterval)
+      enemyProgressRef.current = progress
+      setEnemyAttackProgress(progress)
+
       if (enemyTimer >= workingEnemy.attackInterval) {
         enemyTimer -= workingEnemy.attackInterval
+        enemyProgressRef.current = 0
         setEnemyAttackProgress(0)
-        const incomingDmg = calculateEnemyAttack(workingEnemy, workingSave)
+        const rawIncoming = calculateEnemyAttack(workingEnemy, workingSave)
+        const shieldMitigated = playerShieldRef.current > 0 ? Math.max(1, Math.round(rawIncoming * 0.35)) : rawIncoming
         setEnemyAttackPulse(performance.now())
         setPlayerHitPulse(performance.now())
         triggerAttackSound({ muted: mutedRef.current, source: 'tower', playSynthFallback: false, detail: { actor: 'enemy' } })
-        triggerHitSound({ muted: mutedRef.current, source: 'tower', detail: { actor: 'enemy', target: 'player', damage: incomingDmg } })
-        pushPopup('player', incomingDmg, 'incoming', '#ff4d4d', { prefix: '-' })
-        appendLog(`${workingEnemy.def.name} โจมตีกลับ ${formatNum(incomingDmg)} ดาเมจ`, 'enemy')
+        triggerHitSound({ muted: mutedRef.current, source: 'tower', detail: { actor: 'enemy', target: 'player', damage: shieldMitigated } })
+        pushPopup('player', shieldMitigated, 'incoming', playerShieldRef.current > 0 ? '#60a5fa' : '#ff4d4d', {
+          prefix: '-',
+          badge: playerShieldRef.current > 0 ? 'GUARDED' : undefined,
+        })
+        appendLog(
+          `${workingEnemy.def.name} โจมตีกลับ ${formatNum(shieldMitigated)} ดาเมจ${playerShieldRef.current > 0 ? ' (ลดทอนโดยโล่)' : ''}`,
+          'enemy',
+        )
 
-        const nextHp = Math.max(0, workingSave.hp - incomingDmg)
+        const nextHp = Math.max(0, workingSave.hp - shieldMitigated)
         const updated = { ...workingSave, hp: nextHp }
         saveRef.current = updated
         setSave(updated)
@@ -796,6 +936,11 @@ export function TowerArena() {
         }
         return
       }
+      if (e.key === 'Shift') {
+        e.preventDefault()
+        handleGuardAction()
+        return
+      }
       if (key === '1' || key === '2' || key === '3') {
         const s = saveRef.current
         if (!s) return
@@ -812,7 +957,7 @@ export function TowerArena() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [executeHeroAttack, handleUsePotion, loadFloor])
+  }, [executeHeroAttack, handleGuardAction, handleUsePotion, loadFloor])
 
   const heroStats = useMemo(() => (save ? getStats(save) : null), [save])
   const activePet = useMemo(
@@ -858,6 +1003,9 @@ export function TowerArena() {
           </Link>
           <Link href="/encounter" className="shrink-0 whitespace-nowrap transition-colors hover:text-foreground">
             สนามล่ามอนสเตอร์
+          </Link>
+          <Link href="/inventory" className="shrink-0 whitespace-nowrap transition-colors hover:text-foreground">
+            คลังไอเทม
           </Link>
           <Link href="/class-selector" className="shrink-0 whitespace-nowrap transition-colors hover:text-foreground">
             สายอาชีพ
@@ -945,9 +1093,20 @@ export function TowerArena() {
 
               <div className="space-y-2 border border-border/60 bg-background/50 p-3">
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="truncate text-sm font-bold text-foreground">
-                    {enemy.def.name}
-                  </span>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="truncate text-sm font-bold text-foreground">
+                      {enemy.def.name}
+                    </span>
+                    <span
+                      className="shrink-0 border border-border/60 px-1.5 py-0.5 text-[10px] font-bold"
+                      style={{
+                        color: ELEMENT_META[getMonsterElement(enemy.def.id)].color,
+                        background: ELEMENT_META[getMonsterElement(enemy.def.id)].bg,
+                      }}
+                    >
+                      {ELEMENT_META[getMonsterElement(enemy.def.id)].label}
+                    </span>
+                  </div>
                   <span className={`flex shrink-0 items-center gap-1 text-xs font-bold tabular-nums ${timeLeft <= 8 ? 'text-[#ff7b7f]' : 'text-amber-300'}`}>
                     <Clock className="size-3.5" aria-hidden />
                     {timeLeft.toFixed(1)} วินาที
@@ -962,18 +1121,34 @@ export function TowerArena() {
                 />
                 <div className="space-y-1">
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>จังหวะศัตรูโจมตี</span>
+                    <span className={enemyAttackProgress >= 0.5 ? 'font-bold text-amber-300' : ''}>
+                      {enemyAttackProgress >= 0.5 ? '⚠ ศัตรูง้างตี! กด Shift โต้กลับ!' : 'จังหวะศัตรูโจมตี'}
+                    </span>
                     <span className="tabular-nums">
                       ATK {formatNum(enemy.atk)} · DEF {formatNum(enemy.defStat)}
                     </span>
                   </div>
                   <div className="h-2 w-full overflow-hidden border border-[#0e0f1a] bg-muted/80">
                     <div
-                      className="h-full bg-amber-400 transition-[width] duration-75"
+                      className={`h-full transition-[width] duration-75 ${enemyAttackProgress >= 0.5 ? 'bg-rose-400' : 'bg-amber-400'}`}
                       style={{ width: `${Math.round(enemyAttackProgress * 100)}%` }}
                     />
                   </div>
                 </div>
+                {(Object.keys(enemyStatuses).length > 0 || playerShieldSec > 0) && (
+                  <div className="flex flex-wrap gap-1.5 text-[10px] font-semibold">
+                    {(Object.entries(enemyStatuses) as Array<[StatusEffectType, number]>).map(([k, sec]) => (
+                      <span key={k} className="border border-border/60 bg-background/80 px-1.5 py-0.5" style={{ color: STATUS_META[k].color }}>
+                        {STATUS_META[k].label} {sec.toFixed(1)}s
+                      </span>
+                    ))}
+                    {playerShieldSec > 0 && (
+                      <span className="border border-sky-400/50 bg-sky-500/15 px-1.5 py-0.5 text-sky-300">
+                        โล่ป้องกัน {playerShieldSec.toFixed(1)}s
+                      </span>
+                    )}
+                  </div>
+                )}
                 <p className="text-[11px] text-muted-foreground tabular-nums">
                   รางวัลผ่านชั้น: {formatNum(floorSpec.clearGold)} G · {formatNum(floorSpec.clearExp)} EXP ·{' '}
                   {floorSpec.floor > towerState.highestFloor
@@ -991,6 +1166,7 @@ export function TowerArena() {
                 phase={phase}
                 playerAttackPulse={playerAttackPulse}
                 playerSkillColor={playerSkillColor}
+                playerSkillId={playerSkillId}
                 playerHitPulse={playerHitPulse}
                 enemyAttackPulse={enemyAttackPulse}
                 enemyHitPulse={enemyHitPulse}
@@ -1084,35 +1260,47 @@ export function TowerArena() {
             </div>
 
             {/* Action Controls */}
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-[0.9fr_1fr_1fr_1fr]">
               <button
                 type="button"
                 onClick={() => executeHeroAttack()}
                 disabled={attackCd > 0 || phase === 'VICTORY' || phase === 'DEFEAT'}
-                className="pixel-btn flex min-h-11 items-center justify-center gap-2 bg-primary px-3 py-2 text-xs font-bold text-primary-foreground hover:brightness-110 disabled:opacity-50"
+                className="pixel-btn flex min-h-11 items-center justify-center gap-1.5 bg-primary px-2.5 py-2 text-xs font-bold text-primary-foreground hover:brightness-110 disabled:opacity-50"
               >
-                <Swords className="size-4" aria-hidden />
+                <Swords className="size-3.5 shrink-0" aria-hidden />
                 <span className="whitespace-nowrap">
-                  โจมตี (ปุ่ม Space) {attackCd > 0 ? `${attackCd.toFixed(1)}s` : ''}
+                  โจมตี (Space) {attackCd > 0 ? `${attackCd.toFixed(1)}s` : ''}
                 </span>
               </button>
 
               {job.skills.slice(0, 3).map((skill, idx) => {
                 const cd = skillCds[skill.id] ?? 0
                 const noMp = save.mp < skill.mp
+                const vfx = getSkillVfxSpec(skill.id, skill.color, skill.kind, job.weaponTypes[0])
                 return (
                   <button
                     key={skill.id}
                     type="button"
+                    title={vfx.effectLabel}
                     onClick={() => executeHeroAttack(skill)}
                     disabled={cd > 0 || noMp || phase === 'VICTORY' || phase === 'DEFEAT'}
-                    className="pixel-btn flex min-h-11 flex-col items-center justify-center bg-secondary px-3 py-1.5 text-xs text-foreground hover:brightness-110 disabled:opacity-45"
+                    className="pixel-btn flex min-h-11 items-center justify-start gap-1.5 bg-secondary px-2 py-1.5 text-left text-xs text-foreground hover:brightness-110 disabled:opacity-45"
+                    style={{ borderColor: vfx.primaryColor }}
                   >
-                    <span className="font-semibold">
-                      [{idx + 1}] {skill.name}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground tabular-nums">
-                      {cd > 0 ? `CD ${cd.toFixed(1)}s` : `${skill.mp} MP · ${skill.mult}x`}
+                    <img
+                      src={getSkillIconPath(skill.id)}
+                      alt=""
+                      width={20}
+                      height={20}
+                      className="pixelated size-5 shrink-0 border border-border/80 bg-[#0e0f1a]"
+                    />
+                    <span className="min-w-0 leading-tight">
+                      <span className="block truncate text-[11px] font-semibold" style={{ color: vfx.primaryColor }}>
+                        [{idx + 1}] {skill.name}
+                      </span>
+                      <span className="block text-[10px] text-muted-foreground tabular-nums">
+                        {cd > 0 ? `CD ${cd.toFixed(1)}s` : `${skill.mp} MP · ${skill.mult}x`}
+                      </span>
                     </span>
                   </button>
                 )
@@ -1121,6 +1309,19 @@ export function TowerArena() {
 
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-2.5">
               <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleGuardAction}
+                  disabled={guardCd > 0 || phase === 'VICTORY' || phase === 'DEFEAT'}
+                  className={`pixel-btn flex min-h-10 items-center gap-1.5 px-3 py-1.5 text-xs font-bold disabled:opacity-45 ${
+                    enemyAttackProgress >= 0.5
+                      ? 'bg-sky-500 text-slate-950 animate-pulse'
+                      : 'bg-sky-500/20 text-sky-300 hover:bg-sky-500/30'
+                  }`}
+                >
+                  <Shield className="size-3.5" aria-hidden />
+                  {guardCd > 0 ? `เกราะ ${guardCd.toFixed(1)}s` : enemyAttackProgress >= 0.5 ? 'Parry โต้กลับ! (Shift)' : 'ป้องกัน (Shift)'}
+                </button>
                 <button
                   type="button"
                   onClick={() => handleUsePotion('hp')}

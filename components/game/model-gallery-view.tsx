@@ -10,7 +10,9 @@ import {
   type ModelDir,
 } from '@/lib/game/models-2d'
 import type { SpriteAction } from '@/lib/game/sprites'
+import { getSkillIconPath, getSkillVfxSpec, resolveRebirthAuraSpec } from '@/lib/game/vfx-specs'
 import { formatNum } from './format'
+import { SkillVfxPreview } from './skill-vfx-preview'
 import { SpriteModelCanvas, type PreviewAction } from './sprite-model-canvas'
 
 const ACTION_OPTIONS: Array<{ id: PreviewAction; label: string; short: string }> = [
@@ -84,11 +86,17 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
   const [action, setAction] = useState<PreviewAction>('auto')
   const [dir, setDir] = useState<ModelDir>('down')
   const [liveAutoPhase, setLiveAutoPhase] = useState<SpriteAction>('idle')
+  const [previewRebirth, setPreviewRebirth] = useState<number>(1)
+  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null)
+  const [vfxNonce, setVfxNonce] = useState<number>(0)
 
   const selectedJobEntry =
     jobModels.find((entry) => entry.job.id === selectedJobId) ?? jobModels[0]
   const selectedMonsterEntry =
     monsterModels.find((entry) => entry.monster.id === selectedMonsterId) ?? monsterModels[0]
+  const activeJobSkill =
+    selectedJobEntry.job.skills.find((s) => s.id === selectedSkillId) ?? selectedJobEntry.job.skills[0] ?? null
+  const activeRebirthSpec = resolveRebirthAuraSpec(previewRebirth)
 
   const rotateDir = () => {
     const idx = MODEL_DIRS.indexOf(dir)
@@ -206,6 +214,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                 dir={dir}
                 size={compact ? 124 : 144}
                 isGm={selectedJobEntry.job.id === 'gm'}
+                rebirthCount={previewRebirth}
                 onAutoPhaseChange={setLiveAutoPhase}
                 label={`โมเดลอาชีพ ${selectedJobEntry.job.name}`}
               />
@@ -272,18 +281,64 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
             </div>
 
             <div>
-              <p className="mb-1 text-[11px] text-muted-foreground">สกิลประจำอาชีพ &amp; เฟรมแอนิเมชั่น</p>
+              <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[11px] font-semibold text-muted-foreground">
+                  สกิลประจำอาชีพ &amp; เอฟเฟคจุติ (<span style={{ color: activeRebirthSpec.primaryColor }}>{activeRebirthSpec.title}</span>)
+                </p>
+                <div className="flex flex-wrap gap-1" role="group" aria-label="ออร่าจุติในแกลเลอรี">
+                  {[
+                    { count: 0, label: 'ปกติ' },
+                    { count: 1, label: 'จุติ 1–4' },
+                    { count: 5, label: 'จุติ 5' },
+                    { count: 6, label: 'จุติ 6' },
+                  ].map((tier) => (
+                    <button
+                      key={tier.count}
+                      type="button"
+                      aria-pressed={previewRebirth === tier.count}
+                      onClick={() => setPreviewRebirth(tier.count)}
+                      className={`pixel-btn px-1.5 py-0.5 text-[10px] font-semibold ${
+                        previewRebirth === tier.count
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-secondary text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {tier.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="flex flex-wrap items-center gap-1.5">
                 {selectedJobEntry.job.skills.length > 0 ? (
-                  selectedJobEntry.job.skills.map((s) => (
-                    <span
-                      key={s.id}
-                      className="border border-border bg-background px-2 py-0.5 text-[11px]"
-                      style={{ color: s.color }}
-                    >
-                      {s.name} ({s.mp}MP • {s.mult}x)
-                    </span>
-                  ))
+                  selectedJobEntry.job.skills.map((s) => {
+                    const vfx = getSkillVfxSpec(s.id, s.color, s.kind, selectedJobEntry.job.weaponTypes[0])
+                    const isPicked = activeJobSkill?.id === s.id
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        aria-pressed={isPicked}
+                        onClick={() => {
+                          setSelectedSkillId(s.id)
+                          setVfxNonce((n) => n + 1)
+                        }}
+                        className={`flex items-center gap-1.5 border px-2 py-1 text-[11px] transition-colors ${
+                          isPicked
+                            ? 'border-primary bg-primary/15 text-foreground'
+                            : 'border-border bg-background hover:border-primary/60'
+                        }`}
+                      >
+                        <img src={getSkillIconPath(s.id)} alt="" width={16} height={16} className="pixelated size-4 shrink-0" />
+                        <span className="font-semibold" style={{ color: vfx.primaryColor }}>
+                          {s.name}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground tabular-nums">
+                          ({s.mp}MP · {s.mult}x)
+                        </span>
+                      </button>
+                    )
+                  })
                 ) : (
                   <span className="border border-gold/40 bg-gold/10 px-2 py-0.5 text-[11px] text-gold">
                     พลัง GM พิเศษ: ล่องหน / เสกของ / อมตะ / โจมตี 9,999,999
@@ -293,6 +348,35 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                   Idle 4F • Walk 6F • Attack 4F
                 </span>
               </div>
+
+              {selectedJobEntry.job.skills.length > 0 && activeJobSkill && (
+                <div className="mt-2 grid gap-2 border border-border/70 bg-[#0a0d1c]/70 p-2 sm:grid-cols-[17rem_1fr] sm:items-center">
+                  <SkillVfxPreview
+                    jobId={selectedJobEntry.job.id}
+                    skillId={activeJobSkill.id}
+                    rebirthCount={previewRebirth}
+                    playNonce={vfxNonce}
+                    width={272}
+                    height={112}
+                    label={`ตัวอย่างเอฟเฟคสกิล ${activeJobSkill.name}`}
+                  />
+                  <div className="flex flex-col gap-1 text-[11px]">
+                    <p className="font-bold text-foreground">{activeJobSkill.name}</p>
+                    <p className="text-[10px]" style={{ color: getSkillVfxSpec(activeJobSkill.id, activeJobSkill.color).primaryColor }}>
+                      {getSkillVfxSpec(activeJobSkill.id, activeJobSkill.color).effectLabel}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">{activeRebirthSpec.subtitle}</p>
+                    <button
+                      type="button"
+                      onClick={() => setVfxNonce((n) => n + 1)}
+                      className="pixel-btn mt-1 inline-flex w-fit items-center gap-1 bg-accent px-2.5 py-1 text-[10px] font-bold text-accent-foreground hover:brightness-110"
+                    >
+                      <Play className="size-3" aria-hidden />
+                      ทดสอบเอฟเฟคสกิล
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </section>
@@ -409,7 +493,11 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
               <button
                 key={job.id}
                 type="button"
-                onClick={() => setSelectedJobId(job.id)}
+                onClick={() => {
+                  setSelectedJobId(job.id)
+                  setSelectedSkillId(job.skills[0]?.id ?? null)
+                  setVfxNonce((n) => n + 1)
+                }}
                 aria-pressed={selected}
                 className={`flex flex-col items-center gap-1.5 p-2 text-center transition-all hover:brightness-110 ${
                   selected

@@ -22,6 +22,7 @@ import { auth } from '@/lib/firebase/client'
 import { listUserCharacters } from '@/lib/firebase/characters'
 import { AccountPanel } from './account-panel'
 import { ITEMS, JOBS, MAX_LEVEL, MAX_PLUS, enhanceCost, enhanceRate, expToNext, type SkillDef } from '@/lib/game/data'
+import { getSkillIconPath, getSkillVfxSpec } from '@/lib/game/vfx-specs'
 import {
   SAVE_KEY,
   getActiveCharacterSlot,
@@ -70,6 +71,14 @@ import {
 } from '@/lib/game/floating-damage'
 import { evaluateAttackShake, type ScreenShakeEvent } from '@/lib/game/screen-shake'
 import { pickNewerSave } from '@/lib/game/save-sync'
+import {
+  ELEMENT_META,
+  STATUS_META,
+  evaluateGuardAction,
+  getMonsterElement,
+  rollStatusInfliction,
+  type StatusEffectType,
+} from '@/lib/game/rpg-systems'
 
 type ArenaPhase = 'LOADING' | 'READY' | 'FIGHTING' | 'VICTORY' | 'DEFEAT'
 
@@ -142,6 +151,9 @@ export function MonsterEncounterArena() {
   const [attackCd, setAttackCd] = useState(0)
   const [skillCds, setSkillCds] = useState<Record<string, number>>({})
   const [enemyAttackProgress, setEnemyAttackProgress] = useState(0)
+  const [guardCd, setGuardCd] = useState(0)
+  const [enemyStatuses, setEnemyStatuses] = useState<Partial<Record<StatusEffectType, number>>>({})
+  const [playerShieldSec, setPlayerShieldSec] = useState(0)
 
   const [lastBreakdown, setLastBreakdown] = useState<CombatDamageBreakdown | null>(null)
   const [victoryResult, setVictoryResult] = useState<EncounterVictoryResult | null>(null)
@@ -151,6 +163,7 @@ export function MonsterEncounterArena() {
 
   const [playerAttackPulse, setPlayerAttackPulse] = useState(0)
   const [playerSkillColor, setPlayerSkillColor] = useState<string | null>(null)
+  const [playerSkillId, setPlayerSkillId] = useState<string | null>(null)
   const [playerHitPulse, setPlayerHitPulse] = useState(0)
   const [enemyAttackPulse, setEnemyAttackPulse] = useState(0)
   const [enemyHitPulse, setEnemyHitPulse] = useState(0)
@@ -166,6 +179,11 @@ export function MonsterEncounterArena() {
   const mutedRef = useRef<boolean>(false)
   const attackCdRef = useRef<number>(0)
   const skillCdsRef = useRef<Record<string, number>>({})
+  const guardCdRef = useRef<number>(0)
+  const enemyProgressRef = useRef<number>(0)
+  const enemyTimerResetReqRef = useRef<boolean>(false)
+  const enemyStatusesRef = useRef<Partial<Record<StatusEffectType, number>>>({})
+  const playerShieldRef = useRef<number>(0)
   const logSeqRef = useRef(0)
   const popupSeqRef = useRef(0)
   const shakeSeqRef = useRef(0)
@@ -336,8 +354,15 @@ export function MonsterEncounterArena() {
       setShakeEvent(null)
       attackCdRef.current = 0
       skillCdsRef.current = {}
+      guardCdRef.current = 0
+      enemyProgressRef.current = 0
+      enemyStatusesRef.current = {}
+      playerShieldRef.current = 0
       setAttackCd(0)
       setSkillCds({})
+      setGuardCd(0)
+      setEnemyStatuses({})
+      setPlayerShieldSec(0)
       setEnemyAttackProgress(0)
       setPhase('READY')
       appendLog(
@@ -435,9 +460,11 @@ export function MonsterEncounterArena() {
         const healRatio = skill.mult * (1 + (skillLv - 1) * 0.08)
         const recovered = Math.max(10, Math.round(stats.maxHp * healRatio))
         nextSave.hp = Math.min(stats.maxHp, nextSave.hp + recovered)
+        saveRef.current = nextSave
         setSave(nextSave)
         setPlayerAttackPulse(performance.now())
         setPlayerSkillColor(skill.color)
+        setPlayerSkillId(skill.id)
         triggerSkillSound({ muted: mutedRef.current, source: 'encounter', detail: { skillId: skill.id, kind: 'heal' } })
         pushPopup('player', recovered, 'heal', '#4fc3a1', { prefix: '+', suffix: ' HP' })
         appendLog(`${skill.name} ฟื้นฟู ${formatNum(recovered)} HP`, 'hero')
@@ -454,12 +481,28 @@ export function MonsterEncounterArena() {
         currentEnemy,
         mult,
         skill ? skill.name : 'โจมตีปกติ',
+        skill?.id ?? null,
       )
+
+      const inflicted = rollStatusInfliction(skill?.id ?? null, nextSave.rpgExt?.equippedRunes)
+      if (inflicted === 'shield') {
+        playerShieldRef.current = 4.0
+        setPlayerShieldSec(4.0)
+        appendLog('เปิดใช้งานเกราะศักดิ์สิทธิ์ ดูดซับดาเมจ 35% (4 วิ)', 'hero')
+      } else if (inflicted) {
+        const dur = inflicted === 'stun' ? 2.0 : 4.5
+        const nextSt = { ...enemyStatusesRef.current, [inflicted]: dur }
+        enemyStatusesRef.current = nextSt
+        setEnemyStatuses(nextSt)
+        if (inflicted === 'stun') enemyTimerResetReqRef.current = true
+        appendLog(`ศัตรูติดสถานะ ${STATUS_META[inflicted].label}!`, 'crit')
+      }
 
       setSave(nextSave)
       setLastBreakdown(breakdown)
       setPlayerAttackPulse(performance.now())
       setPlayerSkillColor(skill ? skill.color : null)
+      setPlayerSkillId(skill ? skill.id : null)
       setEnemyHitPulse(performance.now())
 
       if (breakdown.isCrit) {
@@ -537,8 +580,14 @@ export function MonsterEncounterArena() {
         })
       }
 
+      const elemTag =
+        breakdown.elementalEffectiveness === 'super'
+          ? ' [แพ้ธาตุ!]'
+          : breakdown.elementalEffectiveness === 'resist'
+            ? ' [ต้านธาตุ]'
+            : ''
       appendLog(
-        `${breakdown.label} ทำความเสียหาย ${formatNum(breakdown.damage)}${breakdown.isCrit ? ' (คริติคอล!)' : ''}`,
+        `${breakdown.label} ทำความเสียหาย ${formatNum(breakdown.damage)}${breakdown.isCrit ? ' (คริติคอล!)' : ''}${elemTag}`,
         breakdown.isCrit ? 'crit' : 'hero',
       )
 
@@ -554,6 +603,40 @@ export function MonsterEncounterArena() {
     },
     [appendLog, handleVictory, pushPopup],
   )
+
+  const handleGuardAction = useCallback(() => {
+    const currentSave = saveRef.current
+    const currentEnemy = enemyRef.current
+    if (!currentSave || !currentEnemy || (phaseRef.current !== 'FIGHTING' && phaseRef.current !== 'READY')) return
+    const telegraph = enemyProgressRef.current >= 0.5
+    const evalRes = evaluateGuardAction(telegraph, enemyProgressRef.current, guardCdRef.current)
+    if (evalRes.outcome === 'cooldown') return
+
+    guardCdRef.current = 3.2
+    setGuardCd(3.2)
+
+    if (evalRes.outcome === 'perfect_counter') {
+      enemyTimerResetReqRef.current = true
+      enemyProgressRef.current = 0
+      setEnemyAttackProgress(0)
+      const counterBreakdown = calculatePlayerAttack(currentSave, currentEnemy, evalRes.counterMultiplier, 'โต้กลับ Parry!')
+      pushPopup('enemy', counterBreakdown.damage, 'crit', '#38bdf8', { badge: 'PARRY!' })
+      appendLog(`PERFECT PARRY! ปัดป้องสมบูรณ์และสวนกลับ ${formatNum(counterBreakdown.damage)} ดาเมจ!`, 'crit')
+      triggerCritSound({ muted: mutedRef.current, source: 'encounter', detail: { parry: true } })
+      setPlayerAttackPulse(performance.now())
+      setEnemyHitPulse(performance.now())
+      const nextHp = Math.max(0, currentEnemy.hp - counterBreakdown.damage)
+      const updatedEnemy = { ...currentEnemy, hp: nextHp }
+      enemyRef.current = updatedEnemy
+      setEnemy(updatedEnemy)
+      if (nextHp <= 0) handleVictory(currentSave, updatedEnemy)
+    } else {
+      playerShieldRef.current = 2.4
+      setPlayerShieldSec(2.4)
+      pushPopup('player', 0, 'heal', '#60a5fa', { badge: 'GUARD' })
+      appendLog(evalRes.label, 'hero')
+    }
+  }, [appendLog, handleVictory, pushPopup])
 
   const handleUsePotion = useCallback(
     (kind: 'hp' | 'mp') => {
@@ -643,6 +726,7 @@ export function MonsterEncounterArena() {
     let enemyTimer = 0
     let petTimer = 0
     let regenAccum = 0
+    let dotAccum = 0
 
     const interval = window.setInterval(() => {
       const now = performance.now()
@@ -653,6 +737,16 @@ export function MonsterEncounterArena() {
         const nextCd = Math.max(0, attackCdRef.current - dt)
         attackCdRef.current = nextCd
         setAttackCd(nextCd)
+      }
+      if (guardCdRef.current > 0) {
+        const nextGuard = Math.max(0, guardCdRef.current - dt)
+        guardCdRef.current = nextGuard
+        setGuardCd(nextGuard)
+      }
+      if (playerShieldRef.current > 0) {
+        const nextSh = Math.max(0, playerShieldRef.current - dt)
+        playerShieldRef.current = nextSh
+        setPlayerShieldSec(nextSh)
       }
       if (Object.keys(skillCdsRef.current).length > 0) {
         let changed = false
@@ -678,6 +772,43 @@ export function MonsterEncounterArena() {
 
       let workingEnemy = currentEnemy
       let workingSave = currentSave
+
+      // Tick status effects on enemy
+      const curStatuses = { ...enemyStatusesRef.current }
+      let statusChanged = false
+      for (const sKey of ['burn', 'freeze', 'stun', 'poison'] as StatusEffectType[]) {
+        const rem = curStatuses[sKey]
+        if (rem && rem > 0) {
+          const nextRem = Math.max(0, rem - dt)
+          if (nextRem > 0) curStatuses[sKey] = nextRem
+          else delete curStatuses[sKey]
+          statusChanged = true
+        }
+      }
+      if (statusChanged) {
+        enemyStatusesRef.current = curStatuses
+        setEnemyStatuses(curStatuses)
+      }
+
+      dotAccum += dt
+      if (dotAccum >= 1.0) {
+        dotAccum -= 1.0
+        let dotDmg = 0
+        if (curStatuses.burn) dotDmg += Math.max(5, Math.round(workingEnemy.maxHp * 0.035))
+        if (curStatuses.poison) dotDmg += Math.max(6, Math.round(workingEnemy.maxHp * 0.04))
+        if (dotDmg > 0) {
+          const nextHpDot = Math.max(0, workingEnemy.hp - dotDmg)
+          workingEnemy = { ...workingEnemy, hp: nextHpDot }
+          enemyRef.current = workingEnemy
+          setEnemy(workingEnemy)
+          pushPopup('enemy', dotDmg, 'damage', curStatuses.burn ? '#fb923c' : '#4ade80', { badge: curStatuses.burn ? 'BURN' : 'POISON' })
+          if (nextHpDot <= 0) {
+            handleVictory(workingSave, workingEnemy)
+            return
+          }
+        }
+      }
+
       // Gentle passive MP regen during combat
       regenAccum += dt
       if (regenAccum >= 1.5) {
@@ -719,21 +850,38 @@ export function MonsterEncounterArena() {
         }
       }
 
-      enemyTimer += dt
-      setEnemyAttackProgress(Math.min(1, enemyTimer / workingEnemy.attackInterval))
+      if (enemyTimerResetReqRef.current) {
+        enemyTimer = 0
+        enemyTimerResetReqRef.current = false
+      }
+      if (!curStatuses.stun) {
+        const freezeFactor = curStatuses.freeze ? 0.68 : 1
+        enemyTimer += dt * freezeFactor
+      }
+      const progress = Math.min(1, enemyTimer / workingEnemy.attackInterval)
+      enemyProgressRef.current = progress
+      setEnemyAttackProgress(progress)
 
       if (enemyTimer >= workingEnemy.attackInterval) {
         enemyTimer -= workingEnemy.attackInterval
+        enemyProgressRef.current = 0
         setEnemyAttackProgress(0)
-        const incomingDmg = calculateEnemyAttack(workingEnemy, workingSave)
+        const rawIncoming = calculateEnemyAttack(workingEnemy, workingSave)
+        const shieldMitigated = playerShieldRef.current > 0 ? Math.max(1, Math.round(rawIncoming * 0.35)) : rawIncoming
         setEnemyAttackPulse(performance.now())
         setPlayerHitPulse(performance.now())
         triggerAttackSound({ muted: mutedRef.current, source: 'encounter', playSynthFallback: false, detail: { actor: 'enemy' } })
-        triggerHitSound({ muted: mutedRef.current, source: 'encounter', detail: { actor: 'enemy', target: 'player', damage: incomingDmg } })
-        pushPopup('player', incomingDmg, 'incoming', '#ff4d4d', { prefix: '-' })
-        appendLog(`${workingEnemy.def.name} โจมตีสวนกลับ ${formatNum(incomingDmg)} ความเสียหาย`, 'enemy')
+        triggerHitSound({ muted: mutedRef.current, source: 'encounter', detail: { actor: 'enemy', target: 'player', damage: shieldMitigated } })
+        pushPopup('player', shieldMitigated, 'incoming', playerShieldRef.current > 0 ? '#60a5fa' : '#ff4d4d', {
+          prefix: '-',
+          badge: playerShieldRef.current > 0 ? 'GUARDED' : undefined,
+        })
+        appendLog(
+          `${workingEnemy.def.name} โจมตีสวนกลับ ${formatNum(shieldMitigated)} ความเสียหาย${playerShieldRef.current > 0 ? ' (ลดทอนโดยโล่)' : ''}`,
+          'enemy',
+        )
 
-        const nextHp = Math.max(0, workingSave.hp - incomingDmg)
+        const nextHp = Math.max(0, workingSave.hp - shieldMitigated)
         const updated = { ...workingSave, hp: nextHp }
         saveRef.current = updated
         setSave(updated)
@@ -765,6 +913,11 @@ export function MonsterEncounterArena() {
         }
         return
       }
+      if (e.key === 'Shift') {
+        e.preventDefault()
+        handleGuardAction()
+        return
+      }
       if (key === '1' || key === '2' || key === '3') {
         const s = saveRef.current
         if (!s) return
@@ -783,7 +936,7 @@ export function MonsterEncounterArena() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [executeHeroAttack, handleFlee, handleUsePotion, spawnNextEncounter])
+  }, [executeHeroAttack, handleFlee, handleGuardAction, handleUsePotion, spawnNextEncounter])
 
   const weaponInfo = useMemo(() => (save ? getWeaponUpgradeBreakdown(save) : null), [save])
   const heroStats = useMemo(() => (save ? getStats(save) : null), [save])
@@ -841,6 +994,9 @@ export function MonsterEncounterArena() {
         <nav aria-label="นำทางหลัก" className="hidden items-center gap-6 text-xs font-medium text-muted-foreground md:flex">
           <Link href="/" className="shrink-0 whitespace-nowrap transition-colors hover:text-foreground">
             โลกผจญภัย
+          </Link>
+          <Link href="/inventory" className="shrink-0 whitespace-nowrap text-primary transition-colors hover:brightness-110">
+            คลังไอเทม
           </Link>
           <Link href="/tower" className="shrink-0 whitespace-nowrap transition-colors hover:text-foreground">
             หอคอยไต่ชั้น
@@ -924,7 +1080,18 @@ export function MonsterEncounterArena() {
               {enemy && (
                 <div className="space-y-2 border border-border/60 bg-background/50 p-3">
                   <div className="flex items-baseline justify-between gap-2">
-                    <span className="truncate text-sm font-bold text-foreground">{enemy.def.name}</span>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="truncate text-sm font-bold text-foreground">{enemy.def.name}</span>
+                      <span
+                        className="shrink-0 border border-border/60 px-1.5 py-0.5 text-[10px] font-bold"
+                        style={{
+                          color: ELEMENT_META[getMonsterElement(enemy.def.id)].color,
+                          background: ELEMENT_META[getMonsterElement(enemy.def.id)].bg,
+                        }}
+                      >
+                        {ELEMENT_META[getMonsterElement(enemy.def.id)].label}
+                      </span>
+                    </div>
                     <span className={`shrink-0 text-xs font-semibold tabular-nums ${rarityMeta.className}`}>
                       Lv.{enemy.effectiveLevel} · {rarityMeta.title}
                     </span>
@@ -932,18 +1099,34 @@ export function MonsterEncounterArena() {
                   <MeterBar label="HP มอนสเตอร์" value={enemy.hp} max={enemy.maxHp} colorClass="bg-destructive" textClassName="text-[#ff8b8e]" />
                   <div className="space-y-1">
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>เกจโจมตีศัตรู</span>
+                      <span className={enemyAttackProgress >= 0.5 ? 'font-bold text-amber-300' : ''}>
+                        {enemyAttackProgress >= 0.5 ? '⚠ ศัตรูง้างตี! กด Shift โต้กลับ!' : 'เกจโจมตีศัตรู'}
+                      </span>
                       <span className="tabular-nums">
                         ATK {formatNum(enemy.atk)} · DEF {formatNum(enemy.defStat)}
                       </span>
                     </div>
                     <div className="h-2 w-full overflow-hidden border border-[#0e0f1a] bg-muted/80">
                       <div
-                        className="h-full bg-amber-400 transition-[width] duration-75"
+                        className={`h-full transition-[width] duration-75 ${enemyAttackProgress >= 0.5 ? 'bg-rose-400' : 'bg-amber-400'}`}
                         style={{ width: `${Math.round(enemyAttackProgress * 100)}%` }}
                       />
                     </div>
                   </div>
+                  {(Object.keys(enemyStatuses).length > 0 || playerShieldSec > 0) && (
+                    <div className="flex flex-wrap gap-1.5 text-[10px] font-semibold">
+                      {(Object.entries(enemyStatuses) as Array<[StatusEffectType, number]>).map(([k, sec]) => (
+                        <span key={k} className="border border-border/60 bg-background/80 px-1.5 py-0.5" style={{ color: STATUS_META[k].color }}>
+                          {STATUS_META[k].label} {sec.toFixed(1)}s
+                        </span>
+                      ))}
+                      {playerShieldSec > 0 && (
+                        <span className="border border-sky-400/50 bg-sky-500/15 px-1.5 py-0.5 text-sky-300">
+                          โล่ป้องกัน {playerShieldSec.toFixed(1)}s
+                        </span>
+                      )}
+                    </div>
+                  )}
                   <p className="text-[11px] text-muted-foreground tabular-nums">
                     พื้นที่: {BIOME_LABELS[enemy.biome]} · รางวัล {formatNum(enemy.goldRange[0])}–{formatNum(enemy.goldRange[1])} G · {formatNum(enemy.expReward)} EXP
                   </p>
@@ -959,6 +1142,7 @@ export function MonsterEncounterArena() {
                 phase={phase}
                 playerAttackPulse={playerAttackPulse}
                 playerSkillColor={playerSkillColor}
+                playerSkillId={playerSkillId}
                 playerHitPulse={playerHitPulse}
                 enemyAttackPulse={enemyAttackPulse}
                 enemyHitPulse={enemyHitPulse}
@@ -1010,6 +1194,12 @@ export function MonsterEncounterArena() {
                         ลุยมอนสเตอร์ตัวถัดไป (กด Enter)
                       </button>
                       <Link
+                        href="/inventory"
+                        className="pixel-btn min-h-11 bg-accent px-4 py-2 text-xs font-bold text-accent-foreground hover:brightness-110"
+                      >
+                        เปิดคลังไอเทม & สวมใส่
+                      </Link>
+                      <Link
                         href="/"
                         className="pixel-btn min-h-11 bg-secondary px-4 py-2 text-xs font-semibold text-foreground hover:brightness-110"
                       >
@@ -1052,44 +1242,69 @@ export function MonsterEncounterArena() {
             </div>
 
             {/* Action Combat Controls */}
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-[0.9fr_1fr_1fr_1fr]">
               <button
                 type="button"
                 onClick={() => executeHeroAttack()}
                 disabled={attackCd > 0 || phase === 'VICTORY' || phase === 'DEFEAT'}
-                className="pixel-btn flex min-h-11 items-center justify-center gap-2 bg-primary px-3 py-2 text-xs font-bold text-primary-foreground hover:brightness-110 disabled:opacity-50"
+                className="pixel-btn flex min-h-11 items-center justify-center gap-1.5 bg-primary px-2.5 py-2 text-xs font-bold text-primary-foreground hover:brightness-110 disabled:opacity-50"
               >
-                <Swords className="size-4" aria-hidden />
+                <Swords className="size-3.5 shrink-0" aria-hidden />
                 <span className="whitespace-nowrap">
-                  โจมตี (ปุ่ม Space) {attackCd > 0 ? `${attackCd.toFixed(1)}s` : ''}
+                  โจมตี (Space) {attackCd > 0 ? `${attackCd.toFixed(1)}s` : ''}
                 </span>
               </button>
 
               {job.skills.slice(0, 3).map((skill, idx) => {
                 const cd = skillCds[skill.id] ?? 0
                 const noMp = save.mp < skill.mp
+                const vfx = getSkillVfxSpec(skill.id, skill.color, skill.kind, job.weaponTypes[0])
                 return (
                   <button
                     key={skill.id}
                     type="button"
+                    title={vfx.effectLabel}
                     onClick={() => executeHeroAttack(skill)}
                     disabled={cd > 0 || noMp || phase === 'VICTORY' || phase === 'DEFEAT'}
-                    className="pixel-btn flex min-h-11 flex-col items-center justify-center bg-secondary px-3 py-1.5 text-xs text-foreground hover:brightness-110 disabled:opacity-45"
+                    className="pixel-btn flex min-h-11 items-center justify-start gap-1.5 bg-secondary px-2 py-1.5 text-left text-xs text-foreground hover:brightness-110 disabled:opacity-45"
+                    style={{ borderColor: vfx.primaryColor }}
                   >
-                    <span className="font-semibold">
-                      [{idx + 1}] {skill.name}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground tabular-nums">
-                      {cd > 0 ? `CD ${cd.toFixed(1)}s` : `${skill.mp} MP · ${skill.mult}x`}
+                    <img
+                      src={getSkillIconPath(skill.id)}
+                      alt=""
+                      width={20}
+                      height={20}
+                      className="pixelated size-5 shrink-0 border border-border/80 bg-[#0e0f1a]"
+                    />
+                    <span className="min-w-0 leading-tight">
+                      <span className="block truncate text-[11px] font-semibold" style={{ color: vfx.primaryColor }}>
+                        [{idx + 1}] {skill.name}
+                      </span>
+                      <span className="block text-[10px] text-muted-foreground tabular-nums">
+                        {cd > 0 ? `CD ${cd.toFixed(1)}s` : `${skill.mp} MP · ${skill.mult}x`}
+                      </span>
                     </span>
                   </button>
                 )
               })}
             </div>
 
-            {/* Recovery & Retreat Row */}
+            {/* Recovery, Guard/Parry & Retreat Row */}
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-2.5">
               <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleGuardAction}
+                  disabled={guardCd > 0 || phase === 'VICTORY' || phase === 'DEFEAT'}
+                  className={`pixel-btn flex min-h-10 items-center gap-1.5 px-3 py-1.5 text-xs font-bold disabled:opacity-45 ${
+                    enemyAttackProgress >= 0.5
+                      ? 'bg-sky-500 text-slate-950 animate-pulse'
+                      : 'bg-sky-500/20 text-sky-300 hover:bg-sky-500/30'
+                  }`}
+                >
+                  <Shield className="size-3.5" aria-hidden />
+                  {guardCd > 0 ? `เกราะ ${guardCd.toFixed(1)}s` : enemyAttackProgress >= 0.5 ? 'Parry โต้กลับ! (Shift)' : 'ป้องกัน (Shift)'}
+                </button>
                 <button
                   type="button"
                   onClick={() => handleUsePotion('hp')}
@@ -1244,7 +1459,12 @@ export function MonsterEncounterArena() {
 
           {/* Owned Weapons Switcher */}
           <div className="pixel-panel p-4">
-            <h2 className="text-sm font-bold text-foreground">สลับอาวุธในกระเป๋า ({ownedWeapons.length})</h2>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-sm font-bold text-foreground">สลับอาวุธในกระเป๋า ({ownedWeapons.length})</h2>
+              <Link href="/inventory" className="text-xs font-semibold text-primary hover:underline">
+                จัดการอุปกรณ์ทั้งหมด
+              </Link>
+            </div>
             {ownedWeapons.length === 0 ? (
               <p className="mt-2 text-xs text-muted-foreground">
                 ยังไม่มีอาวุธสำรองที่อาชีพนี้ใช้ได้ในกระเป๋า

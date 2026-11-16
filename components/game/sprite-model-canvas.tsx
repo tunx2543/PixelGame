@@ -10,6 +10,7 @@ import {
   monsterSprite,
   type SpriteAction,
 } from '@/lib/game/sprites'
+import { drawRebirthAura } from '@/lib/game/vfx-canvas'
 
 export type PreviewAction = SpriteAction | 'auto'
 
@@ -23,6 +24,7 @@ export interface SpriteModelCanvasProps {
   size?: number
   scale?: number
   isGm?: boolean
+  rebirthCount?: number
   showShadow?: boolean
   showAura?: boolean
   variant?: 'full' | 'portrait'
@@ -41,6 +43,7 @@ export function SpriteModelCanvas({
   size = 88,
   scale,
   isGm,
+  rebirthCount = 0,
   showShadow = true,
   showAura = true,
   variant = 'full',
@@ -177,8 +180,12 @@ export function SpriteModelCanvas({
           ? Math.round(Math.sin(attackProgress * Math.PI) * (dir === 'left' ? -4 : dir === 'right' ? 4 : 0))
           : 0
       const slashBucket = isAttack && attackProgress > 0.2 && attackProgress < 0.85 ? Math.round(attackProgress * 6) : -1
-      const auraBucket = showAura && auraColor && !reducedMotion ? Math.round(Math.sin(elapsed * 4.2) * 3) : 0
-      const sig = `${effectiveAction}|${frame}|${hoverY}|${lungeOffset}|${slashBucket}|${auraBucket}`
+      const hasRebirth = mode === 'job' && rebirthCount > 0
+      const auraBucket =
+        showAura && (auraColor || hasRebirth) && !reducedMotion
+          ? Math.round(elapsed * 8)
+          : 0
+      const sig = `${effectiveAction}|${frame}|${hoverY}|${lungeOffset}|${slashBucket}|${auraBucket}|${rebirthCount}`
 
       if (sig !== lastSig) {
         lastSig = sig
@@ -214,7 +221,17 @@ export function SpriteModelCanvas({
             ctx.restore()
           }
 
-          if (showAura && auraColor) {
+          if (showAura && hasRebirth) {
+            drawRebirthAura(ctx, {
+              x: centerX + lungeOffset,
+              y: baseFloorY,
+              timeSec: elapsed,
+              rebirthCount,
+              radiusX: Math.max(13, Math.round(drawW * 0.42)),
+              spriteHeight: drawH,
+              layer: 'back',
+            })
+          } else if (showAura && auraColor) {
             ctx.save()
             ctx.strokeStyle = auraColor
             ctx.lineWidth = isBoss ? 2 : 1.5
@@ -254,6 +271,18 @@ export function SpriteModelCanvas({
             ctx.stroke()
           }
           ctx.restore()
+
+          if (showAura && hasRebirth) {
+            drawRebirthAura(ctx, {
+              x: centerX + lungeOffset,
+              y: baseFloorY,
+              timeSec: elapsed,
+              rebirthCount,
+              radiusX: Math.max(13, Math.round(drawW * 0.42)),
+              spriteHeight: drawH,
+              layer: 'front',
+            })
+          }
         }
       }
 
@@ -267,7 +296,7 @@ export function SpriteModelCanvas({
       if (rafId) cancelAnimationFrame(rafId)
       observer?.disconnect()
     }
-  }, [mode, id, action, dir, weaponOverride, weaponColorOverride, size, scale, isGm, showShadow, showAura, variant])
+  }, [mode, id, action, dir, weaponOverride, weaponColorOverride, size, scale, isGm, rebirthCount, showShadow, showAura, variant])
 
   return (
     <canvas

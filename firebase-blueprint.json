@@ -610,6 +610,77 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "Guild": {
+      "title": "Guild",
+      "description": "Public player-created guild with member roster, donation level, and passive buffs.",
+      "type": "object",
+      "properties": {
+        "guildId": { "type": "string", "minLength": 3, "maxLength": 48, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 2, "maxLength": 28 },
+        "tag": { "type": "string", "minLength": 2, "maxLength": 6 },
+        "leaderId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "leaderName": { "type": "string", "minLength": 1, "maxLength": 24 },
+        "level": { "type": "integer", "minimum": 1, "maximum": 50 },
+        "exp": { "type": "integer", "minimum": 0 },
+        "totalDonatedGold": { "type": "integer", "minimum": 0 },
+        "memberIds": { "type": "array", "maxItems": 30, "items": { "type": "string" } },
+        "memberCount": { "type": "integer", "minimum": 1, "maximum": 30 },
+        "notice": { "type": "string", "maxLength": 140 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["guildId", "name", "tag", "leaderId", "leaderName", "level", "exp", "totalDonatedGold", "memberIds", "memberCount", "notice", "createdAt", "updatedAt"]
+    },
+    "LeaderboardHero": {
+      "title": "LeaderboardHero",
+      "description": "Public non-PII character snapshot for Hall of Fame and Async PvP Arena.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "gameUid": { "type": "string", "minLength": 4, "maxLength": 8, "pattern": "^[0-9]{4,8}$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 24 },
+        "jobId": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "level": { "type": "integer", "minimum": 1, "maximum": 999 },
+        "rebirthCount": { "type": "integer", "minimum": 0, "maximum": 6 },
+        "combatPower": { "type": "integer", "minimum": 1 },
+        "arenaRating": { "type": "integer", "minimum": 100, "maximum": 9999 },
+        "arenaWins": { "type": "integer", "minimum": 0 },
+        "highestTowerFloor": { "type": "integer", "minimum": 0 },
+        "activeTitle": { "type": "string", "maxLength": 64 },
+        "guildName": { "type": "string", "maxLength": 32 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "gameUid", "name", "jobId", "level", "rebirthCount", "combatPower", "arenaRating", "arenaWins", "highestTowerFloor", "updatedAt"]
+    },
+    "WorldBossRaid": {
+      "title": "WorldBossRaid",
+      "description": "Shared timed World Boss instance keyed by hourly rotation cycleKey.",
+      "type": "object",
+      "properties": {
+        "cycleKey": { "type": "string", "minLength": 4, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "bossId": { "type": "string", "minLength": 2, "maxLength": 48, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "maxHp": { "type": "integer", "minimum": 1000 },
+        "currentHp": { "type": "integer", "minimum": 0 },
+        "totalDamageDealt": { "type": "integer", "minimum": 0 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["cycleKey", "bossId", "name", "maxHp", "currentHp", "totalDamageDealt", "updatedAt"]
+    },
+    "WorldBossContribution": {
+      "title": "WorldBossContribution",
+      "description": "Player damage contribution record for a timed World Boss cycle.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 24 },
+        "jobId": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "level": { "type": "integer", "minimum": 1, "maximum": 999 },
+        "damage": { "type": "integer", "minimum": 0 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "jobId", "level", "damage", "updatedAt"]
     }
   },
   "firestore": {
@@ -644,6 +715,22 @@
     "/partyInvites/{inviteId}": {
       "schema": { "$ref": "#/entities/PartyInvite" },
       "description": "Pending and resolved party invitations keyed as {partyId}__{toUid}."
+    },
+    "/guilds/{guildId}": {
+      "schema": { "$ref": "#/entities/Guild" },
+      "description": "Player guilds with collective donation progression and passive RPG buffs."
+    },
+    "/leaderboard/{userId}": {
+      "schema": { "$ref": "#/entities/LeaderboardHero" },
+      "description": "Public non-PII hero combat power & arena leaderboard snapshots."
+    },
+    "/worldBoss/{cycleKey}": {
+      "schema": { "$ref": "#/entities/WorldBossRaid" },
+      "description": "Active timed World Boss raid instances."
+    },
+    "/worldBoss/{cycleKey}/contributions/{userId}": {
+      "schema": { "$ref": "#/entities/WorldBossContribution" },
+      "description": "Per-player damage ranking inside a World Boss raid cycle."
     }
   }
 }

@@ -1,0 +1,418 @@
+'use client'
+
+import { useCallback, useEffect, useState } from 'react'
+import { Coins, Crown, Flame, Shield, Swords, Users } from 'lucide-react'
+import { JOBS } from '@/lib/game/data'
+import {
+  claimWorldBossMilestoneAction,
+  getStats,
+  recordWorldBossDamageAction,
+  syncGuildStateAction,
+} from '@/lib/game/engine'
+import {
+  attackWorldBossOnline,
+  createGuildOnline,
+  donateGuildOnline,
+  fetchWorldBossState,
+  joinGuildOnline,
+  leaveGuildOnline,
+  listGuildsOnline,
+  type GuildRecord,
+  type WorldBossRaidState,
+} from '@/lib/firebase/rpg-online'
+import {
+  ELEMENT_META,
+  getActiveWorldBoss,
+  getAttackElement,
+  getElementMultiplier,
+  getGuildBuffs,
+  guildExpToNext,
+  sanitizeRpgExt,
+} from '@/lib/game/rpg-systems'
+import { useGame } from '@/lib/game/use-game'
+import { formatNum } from '../format'
+import { PanelFrame, PxButton } from './panels'
+
+export function GuildBossPanel() {
+  const g = useGame()
+  const p = g.p
+  const [tab, setTab] = useState<'worldboss' | 'guild'>('worldboss')
+  const [guilds, setGuilds] = useState<GuildRecord[]>([])
+  const [worldBoss, setWorldBoss] = useState<WorldBossRaidState | null>(null)
+  const [guildNameInput, setGuildNameInput] = useState('')
+  const [guildTagInput, setGuildTagInput] = useState('')
+  const [notice, setNotice] = useState<string | null>(null)
+  const [attackCdMs, setAttackCdMs] = useState(0)
+  const [busy, setBusy] = useState(false)
+
+  const refreshData = useCallback(async () => {
+    const [gList, wb] = await Promise.all([listGuildsOnline(), fetchWorldBossState()])
+    setGuilds(gList)
+    setWorldBoss(wb)
+  }, [])
+
+  useEffect(() => {
+    void refreshData()
+  }, [refreshData])
+
+  useEffect(() => {
+    if (attackCdMs <= 0) return
+    const timer = window.setInterval(() => {
+      setAttackCdMs((prev) => Math.max(0, prev - 250))
+    }, 250)
+    return () => window.clearInterval(timer)
+  }, [attackCdMs])
+
+  if (!p) return null
+  const ext = sanitizeRpgExt(p.rpgExt)
+  const bossSpec = getActiveWorldBoss()
+  const bossElem = ELEMENT_META[bossSpec.element]
+  const myGuild = guilds.find((item) => item.guildId === ext.guildId) ?? null
+  const guildBuffs = ext.guildId ? getGuildBuffs(myGuild?.level ?? ext.guildLevel) : null
+  const remainingSec = Math.max(0, Math.floor((bossSpec.endsAtMs - Date.now()) / 1000))
+  const mins = Math.floor(remainingSec / 60)
+  const secs = remainingSec % 60
+
+  const handleCreateGuild = async () => {
+    if (busy) return
+    setBusy(true)
+    const res = await createGuildOnline({
+      name: guildNameInput,
+      tag: guildTagInput || 'STAR',
+      leaderName: p.name,
+    })
+    setBusy(false)
+    if (!res.ok || !res.guild) {
+      setNotice(res.error ?? 'สร้างกิลด์ไม่สำเร็จ')
+      return
+    }
+    syncGuildStateAction({
+      guildId: res.guild.guildId,
+      guildName: res.guild.name,
+      guildTag: res.guild.tag,
+      guildLevel: res.guild.level,
+    })
+    setGuildNameInput('')
+    setGuildTagInput('')
+    setNotice(`ก่อตั้งกิลด์ [${res.guild.tag}] ${res.guild.name} สำเร็จ!`)
+    await refreshData()
+  }
+
+  const handleJoinGuild = async (guildId: string) => {
+    if (busy) return
+    setBusy(true)
+    const res = await joinGuildOnline(guildId)
+    setBusy(false)
+    if (!res.ok || !res.guild) {
+      setNotice(res.error ?? 'เข้าร่วมกิลด์ไม่สำเร็จ')
+      return
+    }
+    syncGuildStateAction({
+      guildId: res.guild.guildId,
+      guildName: res.guild.name,
+      guildTag: res.guild.tag,
+      guildLevel: res.guild.level,
+    })
+    setNotice(`เข้าร่วมกิลด์ ${res.guild.name} สำเร็จ!`)
+    await refreshData()
+  }
+
+  const handleDonate = async (amount: number) => {
+    if (!ext.guildId || busy) return
+    if (p.gold < amount) {
+      setNotice(`ทองไม่พอ (ต้องการ ${formatNum(amount)} G)`)
+      return
+    }
+    setBusy(true)
+    const res = await donateGuildOnline(ext.guildId, amount)
+    setBusy(false)
+    if (res.ok) {
+      syncGuildStateAction({
+        guildId: ext.guildId,
+        guildName: ext.guildName,
+        guildTag: ext.guildTag,
+        guildLevel: res.newLevel,
+        donateCostGold: amount,
+      })
+      setNotice(`บริจาค ${formatNum(amount)} G สำเร็จ! กิลด์ Lv.${res.newLevel}`)
+      await refreshData()
+    }
+  }
+
+  const handleAttackWorldBoss = async () => {
+    if (attackCdMs > 0 || busy) return
+    setBusy(true)
+    const s = getStats(p)
+    const atkElem = getAttackElement(null, ext.equippedRunes)
+    const elem = getElementMultiplier(atkElem, bossSpec.element)
+    const crit = Math.random() < s.crit
+    const raw = ((s.atk * 2.2) ** 2) / Math.max(1, s.atk * 2.2 + bossSpec.def)
+    const damage = Math.max(45, Math.round(raw * elem.multiplier * (crit ? 1.65 : 1) * (0.92 + Math.random() * 0.16)))
+
+    recordWorldBossDamageAction(damage)
+    const updatedWb = await attackWorldBossOnline({
+      playerName: p.name,
+      jobId: p.jobId,
+      level: p.level,
+      damage,
+    })
+    setWorldBoss(updatedWb)
+    setAttackCdMs(3000)
+    setBusy(false)
+    setNotice(
+      `โจมตี ${bossSpec.name} ทำดาเมจ ${formatNum(damage)}${crit ? ' (คริติคอล!)' : ''}${elem.effectiveness === 'super' ? ' [ชนะธาตุ!]' : ''}`,
+    )
+  }
+
+  return (
+    <PanelFrame
+      title="เวิลด์บอส & สมาคมกิลด์"
+      subtitle="ร่วมมือพิชิตเวิลด์บอสหมุนเวียนรายชั่วโมง และสะสมบัฟกิลด์ถาวร"
+    >
+      <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-border/70 pb-2.5">
+        <PxButton
+          variant={tab === 'worldboss' ? 'primary' : 'secondary'}
+          onClick={() => setTab('worldboss')}
+        >
+          <span className="flex items-center gap-1.5">
+            <Flame className="size-3.5" aria-hidden /> เวิลด์บอสประจำชั่วโมง
+          </span>
+        </PxButton>
+        <PxButton
+          variant={tab === 'guild' ? 'primary' : 'secondary'}
+          onClick={() => setTab('guild')}
+        >
+          <span className="flex items-center gap-1.5">
+            <Users className="size-3.5" aria-hidden /> กิลด์ {ext.guildTag ? `[${ext.guildTag}]` : ''}
+          </span>
+        </PxButton>
+      </div>
+
+      {notice && (
+        <div className="mb-3 border border-primary/50 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary">
+          {notice}
+        </div>
+      )}
+
+      {tab === 'worldboss' && (
+        <div className="grid gap-3 md:grid-cols-[1.2fr_1fr]">
+          <div className="space-y-3 border border-border/80 bg-background/60 p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-rose-300">{bossSpec.name}</h3>
+                  <span
+                    className="border border-border/60 px-1.5 py-0.5 text-[10px] font-bold"
+                    style={{ color: bossElem.color, background: bossElem.bg }}
+                  >
+                    {bossElem.label}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground tabular-nums">
+                  รีเซ็ตบอสตัวถัดไปใน {String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')} · ดาเมจของคุณ: {formatNum(ext.worldBossDamage)}
+                </p>
+              </div>
+              <PxButton disabled={attackCdMs > 0 || busy} onClick={handleAttackWorldBoss}>
+                <span className="flex items-center gap-1.5">
+                  <Swords className="size-3.5" aria-hidden />
+                  {attackCdMs > 0 ? `รอ ${(attackCdMs / 1000).toFixed(1)}s` : 'โจมตีบอส!'}
+                </span>
+              </PxButton>
+            </div>
+
+            {worldBoss && (
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs font-semibold tabular-nums">
+                  <span className="text-rose-300">HP เวิลด์บอส</span>
+                  <span>
+                    {formatNum(worldBoss.currentHp)} / {formatNum(worldBoss.maxHp)}
+                  </span>
+                </div>
+                <div className="h-3 w-full overflow-hidden border border-border bg-muted">
+                  <div
+                    className="h-full bg-rose-500 transition-[width]"
+                    style={{
+                      width: `${Math.max(0, Math.round((worldBoss.currentHp / Math.max(1, worldBoss.maxHp)) * 100))}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1.5 border-t border-border/60 pt-2">
+              <p className="text-xs font-bold text-foreground">รางวัลตามยอดดาเมจสะสมรอบนี้</p>
+              <div className="grid gap-1.5 sm:grid-cols-2">
+                {bossSpec.milestones.map((ms) => {
+                  const claimed = ext.claimedWorldBossMilestones.includes(ms.id)
+                  const reached = ext.worldBossDamage >= ms.damage
+                  return (
+                    <div
+                      key={ms.id}
+                      className="flex items-center justify-between gap-2 border border-border/70 bg-background/80 p-2 text-[11px] tabular-nums"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-amber-300">{formatNum(ms.damage)} DMG</p>
+                        <p className="truncate text-muted-foreground">
+                          +{formatNum(ms.gold)} G · +{ms.diamonds} เพชร · หิน x{ms.stones}
+                        </p>
+                      </div>
+                      <PxButton
+                        variant={claimed ? 'secondary' : 'primary'}
+                        disabled={claimed || !reached}
+                        className="shrink-0 whitespace-nowrap"
+                        onClick={() => {
+                          const res = claimWorldBossMilestoneAction(ms.id)
+                          setNotice(res.message)
+                        }}
+                      >
+                        {claimed ? 'รับแล้ว' : reached ? 'รับรางวัล' : 'ยังไม่ถึง'}
+                      </PxButton>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2 border border-border/80 bg-background/60 p-3">
+            <h3 className="flex items-center gap-1.5 text-xs font-bold text-primary">
+              <Crown className="size-3.5" aria-hidden /> อันดับดาเมจสูงสุดรอบนี้
+            </h3>
+            {!worldBoss || worldBoss.contributions.length === 0 ? (
+              <p className="text-xs text-muted-foreground">ยังไม่มีผู้เปิดฉากโจมตี — เป็นคนแรกที่ได้ขึ้นตารางเลย!</p>
+            ) : (
+              <div className="space-y-1">
+                {worldBoss.contributions.slice(0, 8).map((c, idx) => (
+                  <div
+                    key={c.userId}
+                    className="flex items-center justify-between border border-border/50 bg-background/80 px-2 py-1.5 text-xs tabular-nums"
+                  >
+                    <span className="truncate">
+                      #{idx + 1} {c.name} <span className="text-muted-foreground">({JOBS[c.jobId]?.name ?? c.jobId})</span>
+                    </span>
+                    <span className="font-bold text-amber-300">{formatNum(c.damage)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === 'guild' && (
+        <div className="space-y-3">
+          {ext.guildId ? (
+            <div className="space-y-3 border border-primary/50 bg-primary/5 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-base font-bold text-primary">
+                    [{ext.guildTag}] {ext.guildName} · Lv.{myGuild?.level ?? ext.guildLevel}
+                  </h3>
+                  <p className="text-xs text-muted-foreground tabular-nums">
+                    สมาชิก {myGuild?.memberCount ?? 1}/30 · บริจาคสะสมของคุณ: {formatNum(ext.guildContribution)} G
+                  </p>
+                </div>
+                <PxButton
+                  variant="danger"
+                  onClick={async () => {
+                    if (!ext.guildId) return
+                    await leaveGuildOnline(ext.guildId)
+                    syncGuildStateAction({ guildId: null, guildName: null, guildTag: null, guildLevel: 1 })
+                    setNotice('ออกจากกิลด์แล้ว')
+                    await refreshData()
+                  }}
+                >
+                  ออกจากกิลด์
+                </PxButton>
+              </div>
+
+              {guildBuffs && (
+                <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 tabular-nums">
+                  <div className="border border-border/60 bg-background/70 p-2">
+                    <span className="text-muted-foreground">บัฟ ATK กิลด์</span>
+                    <p className="font-bold text-rose-300">+{guildBuffs.atkPct}%</p>
+                  </div>
+                  <div className="border border-border/60 bg-background/70 p-2">
+                    <span className="text-muted-foreground">บัฟ DEF กิลด์</span>
+                    <p className="font-bold text-sky-300">+{guildBuffs.defPct}%</p>
+                  </div>
+                  <div className="border border-border/60 bg-background/70 p-2">
+                    <span className="text-muted-foreground">โบนัส EXP</span>
+                    <p className="font-bold text-purple-300">+{guildBuffs.expPct}%</p>
+                  </div>
+                  <div className="border border-border/60 bg-background/70 p-2">
+                    <span className="text-muted-foreground">โบนัสดรอป Gold</span>
+                    <p className="font-bold text-gold">+{guildBuffs.goldPct}%</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-2">
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  EXP กิลด์: {formatNum(myGuild?.exp ?? 0)} / {formatNum(guildExpToNext(myGuild?.level ?? ext.guildLevel))}
+                </span>
+                <div className="flex gap-2">
+                  <PxButton disabled={busy} onClick={() => handleDonate(200)}>
+                    <span className="flex items-center gap-1">
+                      <Coins className="size-3.5" aria-hidden /> บริจาค 200 G
+                    </span>
+                  </PxButton>
+                  <PxButton disabled={busy} onClick={() => handleDonate(1000)}>
+                    <span className="flex items-center gap-1">
+                      <Shield className="size-3.5" aria-hidden /> บริจาค 1,000 G
+                    </span>
+                  </PxButton>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-[1fr_1.3fr]">
+              <div className="space-y-2 border border-border/80 bg-background/60 p-3">
+                <h3 className="text-sm font-bold text-primary">ก่อตั้งกิลด์ใหม่</h3>
+                <input
+                  value={guildNameInput}
+                  onChange={(e) => setGuildNameInput(e.target.value)}
+                  maxLength={24}
+                  placeholder="ชื่อกิลด์ (2-24 ตัวอักษร)"
+                  className="pixel-input w-full px-2.5 py-1.5 text-xs"
+                />
+                <input
+                  value={guildTagInput}
+                  onChange={(e) => setGuildTagInput(e.target.value.toUpperCase())}
+                  maxLength={5}
+                  placeholder="แท็กย่อ เช่น STAR"
+                  className="pixel-input w-full px-2.5 py-1.5 text-xs uppercase"
+                />
+                <PxButton disabled={busy || guildNameInput.trim().length < 2} onClick={handleCreateGuild}>
+                  สร้างกิลด์ (ฟรี)
+                </PxButton>
+              </div>
+
+              <div className="space-y-2 border border-border/80 bg-background/60 p-3">
+                <h3 className="text-sm font-bold text-foreground">รายชื่อกิลด์ที่เปิดรับ</h3>
+                <div className="space-y-1.5">
+                  {guilds.map((gd) => (
+                    <div
+                      key={gd.guildId}
+                      className="flex items-center justify-between gap-2 border border-border/70 bg-background/80 p-2 text-xs"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-bold text-foreground">
+                          [{gd.tag}] {gd.name} · Lv.{gd.level}
+                        </p>
+                        <p className="truncate text-[11px] text-muted-foreground">{gd.notice}</p>
+                      </div>
+                      <PxButton disabled={busy} onClick={() => handleJoinGuild(gd.guildId)}>
+                        เข้าร่วม
+                      </PxButton>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </PanelFrame>
+  )
+}

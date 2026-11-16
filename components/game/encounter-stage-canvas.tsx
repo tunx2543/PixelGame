@@ -11,6 +11,7 @@ import { computeShakeFrame, type ScreenShakeEvent } from '@/lib/game/screen-shak
 import { getMonsterModelSpec } from '@/lib/game/models-2d'
 import { humanSprite, jobHumanColors, monsterSprite, type SpriteAction } from '@/lib/game/sprites'
 import { getActivePetBonuses } from '@/lib/game/systems'
+import { drawRebirthAura, drawStageSkillEffect } from '@/lib/game/vfx-canvas'
 
 export type StagePopup = FloatingDamagePopup
 
@@ -20,6 +21,7 @@ interface EncounterStageCanvasProps {
   phase: 'LOADING' | 'READY' | 'FIGHTING' | 'VICTORY' | 'DEFEAT'
   playerAttackPulse: number
   playerSkillColor: string | null
+  playerSkillId?: string | null
   playerHitPulse: number
   enemyAttackPulse: number
   enemyHitPulse: number
@@ -117,6 +119,7 @@ export function EncounterStageCanvas({
   phase,
   playerAttackPulse,
   playerSkillColor,
+  playerSkillId = null,
   playerHitPulse,
   enemyAttackPulse,
   enemyHitPulse,
@@ -133,6 +136,7 @@ export function EncounterStageCanvas({
     phase,
     playerAttackPulse,
     playerSkillColor,
+    playerSkillId,
     playerHitPulse,
     enemyAttackPulse,
     enemyHitPulse,
@@ -146,6 +150,7 @@ export function EncounterStageCanvas({
     phase,
     playerAttackPulse,
     playerSkillColor,
+    playerSkillId,
     playerHitPulse,
     enemyAttackPulse,
     enemyHitPulse,
@@ -198,6 +203,7 @@ export function EncounterStageCanvas({
         phase: ph,
         playerAttackPulse: pAtk,
         playerSkillColor: pSkillCol,
+        playerSkillId: pSkillId,
         playerHitPulse: pHit,
         enemyAttackPulse: eAtk,
         enemyHitPulse: eHit,
@@ -320,12 +326,38 @@ export function EncounterStageCanvas({
           ctx.ellipse(heroX + heroLunge, floorY + 2, 22, 7, 0, 0, Math.PI * 2)
           ctx.fill()
 
+          if ((s.rebirthCount ?? 0) > 0 && ph !== 'DEFEAT') {
+            drawRebirthAura(ctx, {
+              x: heroX + heroLunge + heroShake,
+              y: floorY,
+              timeSec: t,
+              rebirthCount: s.rebirthCount ?? 0,
+              radiusX: 28,
+              spriteHeight: hh,
+              alphaScale: isPlayerHurt ? 0.65 : 1,
+              layer: 'back',
+            })
+          }
+
           ctx.save()
           if (ph === 'DEFEAT') ctx.globalAlpha = 0.45
           else if (isPlayerHurt) ctx.globalAlpha = 0.65
           ctx.translate(heroX + heroLunge + heroShake, floorY)
           ctx.drawImage(heroSprite, Math.round(-hw / 2), Math.round(-hh + 2 * heroScale), hw, hh)
           ctx.restore()
+
+          if ((s.rebirthCount ?? 0) > 0 && ph !== 'DEFEAT') {
+            drawRebirthAura(ctx, {
+              x: heroX + heroLunge + heroShake,
+              y: floorY,
+              timeSec: t,
+              rebirthCount: s.rebirthCount ?? 0,
+              radiusX: 28,
+              spriteHeight: hh,
+              alphaScale: isPlayerHurt ? 0.65 : 1,
+              layer: 'front',
+            })
+          }
 
           // --- Active Combat Pet Sprite ---
           const activePet = getActivePetBonuses(s.petState, s.equippedGemCompanion, s.ownedGemItems)
@@ -452,14 +484,17 @@ export function EncounterStageCanvas({
             ctx.restore()
 
             if (isPlayerAttacking) {
-              drawSlashEffect(
-                ctx,
-                enemyX - 10,
-                floorY - mh * 0.45,
+              drawStageSkillEffect(ctx, {
+                heroX: heroX + heroLunge,
+                heroY: floorY,
+                enemyX: enemyX - 10,
+                enemyY: floorY - mh * 0.45,
+                floorY,
+                skillId: pSkillId ?? null,
                 weaponType,
-                pAtkAge,
-                pSkillCol || weaponColor || '#ffd60a',
-              )
+                progress: pAtkAge,
+                color: pSkillCol || weaponColor || '#ffd60a',
+              })
             }
             if (isEnemyAttacking) {
               const enemyFxType: WeaponType =

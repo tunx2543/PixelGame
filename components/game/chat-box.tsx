@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown, ChevronUp, MessageSquare } from 'lucide-react'
 import { game, submitChat, type ChatType } from '@/lib/game/engine'
 import { useGame } from '@/lib/game/use-game'
 import { cn } from '@/lib/utils'
@@ -24,54 +24,19 @@ const TYPE_TAG: Record<ChatType, string> = {
   npc: '[NPC]',
 }
 
-export function ChatBox() {
+export function ChatBox({ offsetTouch = false }: { offsetTouch?: boolean }) {
   const g = useGame()
   const [text, setText] = useState('')
-  const [isOpen, setIsOpen] = useState(true)
-  const [position, setPosition] = useState<{ x: number; y: number } | null>(null)
-  const dragRef = useRef({ active: false, moved: false, offsetX: 0, offsetY: 0 })
+  const [isOpen, setIsOpen] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const mq = window.matchMedia('(max-width: 767px)')
-    if (mq.matches) setIsOpen(false)
-    const onChange = (e: MediaQueryListEvent) => {
-      if (e.matches) setIsOpen(false)
-    }
-    mq.addEventListener('change', onChange)
-    return () => mq.removeEventListener('change', onChange)
-  }, [])
-
-  useEffect(() => {
-    const move = (event: PointerEvent) => {
-      if (!dragRef.current.active) return
-      event.preventDefault()
-      event.stopPropagation()
-      dragRef.current.moved = true
-      setPosition({
-        x: Math.max(4, Math.min(window.innerWidth - 260, event.clientX - dragRef.current.offsetX)),
-        y: Math.max(4, Math.min(window.innerHeight - 96, event.clientY - dragRef.current.offsetY)),
-      })
-    }
-    const stop = () => { dragRef.current.active = false }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', stop)
-    return () => {
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', stop)
-    }
-  }, [])
-
-  const startDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    event.stopPropagation()
-    const rect = event.currentTarget.parentElement?.getBoundingClientRect()
-    if (!rect) return
-    dragRef.current = { active: true, moved: false, offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top }
-    event.currentTarget.setPointerCapture?.(event.pointerId)
-  }
   const lastId = g.chat.at(-1)?.id ?? 0
+
+  useEffect(() => {
+    const onOpenChat = () => setIsOpen(true)
+    window.addEventListener('pixelquest:open-chat', onOpenChat)
+    return () => window.removeEventListener('pixelquest:open-chat', onOpenChat)
+  }, [])
 
   useEffect(() => {
     const el = listRef.current
@@ -80,36 +45,35 @@ export function ChatBox() {
 
   return (
     <div
+      data-testid="chat-box"
       onPointerDown={(event) => event.stopPropagation()}
       className={cn(
-        'pointer-events-auto pixel-panel absolute z-20 flex w-[min(11.5rem,calc(100vw-12rem))] touch-none flex-col bg-card/90 shadow-lg sm:w-[16rem]',
-        !position && 'bottom-[10.75rem] left-2 md:bottom-3 md:left-[11rem]',
+        'pointer-events-auto pixel-panel absolute bottom-2 z-20 flex flex-col bg-card/90 shadow-lg transition-[width]',
+        offsetTouch ? 'left-[8.25rem]' : 'left-2',
+        isOpen ? 'w-[min(17.5rem,calc(100vw-1rem))]' : 'w-28 sm:w-36',
       )}
-      style={position ? { left: position.x, top: position.y } : undefined}
     >
       <button
         type="button"
-        onPointerDown={startDrag}
-        onClick={() => {
-          if (!dragRef.current.moved) setIsOpen((open) => !open)
-          dragRef.current.moved = false
-        }}
+        onClick={() => setIsOpen((open) => !open)}
         aria-expanded={isOpen}
         aria-label={isOpen ? 'พับหน้าต่างแชท' : 'เปิดหน้าต่างแชท'}
-        className="flex w-full cursor-pointer select-none items-center justify-between border-b border-border bg-secondary/70 px-2.5 py-1 text-[11px] font-semibold text-foreground hover:opacity-90"
+        className="flex w-full cursor-pointer select-none items-center justify-between px-2 py-1 text-[10px] font-semibold text-foreground hover:bg-secondary/60"
       >
-        <span>💬 แชท ({g.chat.length})</span>
-        <span className="p-0.5 text-muted-foreground" aria-hidden>
-          {isOpen ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
+        <span className="flex items-center gap-1 truncate">
+          <MessageSquare className="size-3 shrink-0 text-primary" aria-hidden />
+          แชท ({g.chat.length})
+        </span>
+        <span className="shrink-0 text-muted-foreground" aria-hidden>
+          {isOpen ? <ChevronDown className="size-3.5" /> : <ChevronUp className="size-3.5" />}
         </span>
       </button>
 
-      {/* ส่วนเนื้อหาแชทและฟอร์มพิมพ์ จะแสดงก็ต่อเมื่อ isOpen เป็น true */}
       {isOpen && (
         <>
           <div
             ref={listRef}
-            className="h-14 overflow-y-auto px-2 py-1 text-[11px] leading-snug md:h-24"
+            className="h-24 overflow-y-auto border-t border-border px-2 py-1 text-[11px] leading-snug"
             role="log"
             aria-live="polite"
             aria-label="ช่องแชท"
@@ -148,10 +112,10 @@ export function ChatBox() {
               }}
               maxLength={140}
               autoComplete="off"
-              placeholder="พิมพ์แชท..."
+              placeholder="พิมพ์แชท... (Enter)"
               className="min-w-0 flex-1 bg-transparent px-2 py-1 text-xs text-foreground outline-none placeholder:text-muted-foreground"
             />
-            <button type="submit" className="px-2.5 py-1 text-xs text-primary hover:bg-secondary">
+            <button type="submit" className="px-2.5 py-1 text-xs font-semibold text-primary hover:bg-secondary">
               ส่ง
             </button>
           </form>

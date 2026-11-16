@@ -65,6 +65,7 @@ export function CharacterPanel() {
               weaponColorOverride={p.equipment.weapon ? ITEMS[p.equipment.weapon.itemId]?.color : undefined}
               size={84}
               isGm={p.gm}
+              rebirthCount={p.rebirthCount ?? 0}
               label={`โมเดลตัวละคร ${p.name}`}
             />
             <p className="text-xs font-bold text-primary">

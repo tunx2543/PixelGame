@@ -55,6 +55,32 @@ import {
   recordDailyMissionProgress,
 } from './daily-missions'
 import { pickNewerSave } from './save-sync'
+import { getSkillVfxSpec, resolveRebirthAuraSpec, type SkillVfxStyle } from './vfx-specs'
+import {
+  BESTIARY_TIERS,
+  CRAFT_RECIPES,
+  DAILY_DUNGEONS,
+  RUNE_DEFS,
+  TITLE_DEFS,
+  calculateDailyDungeonRewards,
+  calculateDismantleYield,
+  canCraftRecipe,
+  computeBestiaryAndTitleBonuses,
+  computeEquipmentSetBonuses,
+  computeRuneBonuses,
+  createDefaultRpgExt,
+  evaluateUnlockedTitleIds,
+  getActiveWorldBoss,
+  getAttackElement,
+  getElementMultiplier,
+  getGuildBuffs,
+  getMonsterElement,
+  recordBestiaryKillInState,
+  sanitizeRpgExt,
+  todayIsoDate,
+  type DailyDungeonId,
+  type RpgExtensionState,
+} from './rpg-systems'
 
 if (typeof window !== 'undefined') {
   onDailyMissionCompleted((mission) => {
@@ -254,6 +280,7 @@ export interface SaveData {
   petState?: PetState
   questState?: QuestState
   towerState?: TowerState
+  rpgExt?: RpgExtensionState
 }
 
 export interface RemotePlayer {
@@ -331,6 +358,10 @@ export interface Effect {
   life: number
   max: number
   angle?: number
+  vfxStyle?: SkillVfxStyle
+  secondaryColor?: string
+  sourceX?: number
+  sourceY?: number
 }
 
 interface Projectile {
@@ -344,9 +375,10 @@ interface Projectile {
   aoe: number
   delay: number
   flatDmg?: number
+  skillId?: string
 }
 
-export type PanelId = 'shop' | 'gem-shop' | 'enhance' | 'job' | 'storage' | 'character' | 'gacha' | 'rebirth' | 'friends' | 'trade' | 'inventory' | 'gm-summon' | 'dev-tools' | 'pets' | 'quests' | 'models'
+export type PanelId = 'shop' | 'gem-shop' | 'enhance' | 'job' | 'storage' | 'character' | 'gacha' | 'rebirth' | 'friends' | 'trade' | 'inventory' | 'gm-summon' | 'dev-tools' | 'pets' | 'quests' | 'models' | 'craft' | 'codex' | 'guild' | 'arena' | 'dungeon'
 export type ChatType = 'system' | 'player' | 'gm' | 'loot' | 'error' | 'npc'
 export interface ChatMsg {
   id: number
@@ -411,6 +443,9 @@ export const game = {
   combatT: 99,
   lastSavedAt: 0,
   lastWarnAt: 0,
+  guardCd: 0,
+  guardUntil: 0,
+  zenHud: false,
   version: 0,
 }
 
@@ -489,14 +524,43 @@ export function getStats(p: SaveData = game.p!) {
   const wAtk = itemPower(p.equipment.weapon)
   const aDef = (['armor', 'shoes', 'cloak', 'accessory'] as const).reduce((total, slot) => total + itemPower(p.equipment[slot]), 0)
   const petBonus = getActivePetBonuses(p.petState, p.equippedGemCompanion, p.ownedGemItems)
+  const ext = sanitizeRpgExt(p.rpgExt)
+  const codexBonus = computeBestiaryAndTitleBonuses(ext)
+  const runeBonus = computeRuneBonuses(ext)
+  const setBonus = computeEquipmentSetBonuses(p.equipment)
+  const guildBuff = ext.guildId ? getGuildBuffs(ext.guildLevel) : null
+
+  const rawHp =
+    Math.floor((80 + L * 22) * job.hpMul + aDef * 2) +
+    (p.rebirthBonus?.maxHp ?? 0) +
+    (petBonus?.hpBonus ?? 0) +
+    codexBonus.hpBonus +
+    runeBonus.hpBonus +
+    setBonus.hpBonus
+  const rawAtk =
+    Math.floor((8 + L * 2.6 + wAtk) * job.atkMul) +
+    (p.rebirthBonus?.atk ?? 0) +
+    (petBonus?.atkBonus ?? 0) +
+    codexBonus.atkBonus +
+    runeBonus.atkBonus +
+    setBonus.atkBonus
+  const rawDef =
+    Math.floor((3 + L * 1.4) * job.defMul + aDef) +
+    (p.rebirthBonus?.def ?? 0) +
+    (petBonus?.defBonus ?? 0) +
+    codexBonus.defBonus +
+    runeBonus.defBonus +
+    setBonus.defBonus
+
   return {
-    maxHp: Math.floor((80 + L * 22) * job.hpMul + aDef * 2) + (p.rebirthBonus?.maxHp ?? 0) + (petBonus?.hpBonus ?? 0),
+    maxHp: rawHp,
     maxMp: Math.floor((30 + L * 7) * job.mpMul) + (p.rebirthBonus?.maxMp ?? 0) + (petBonus?.mpBonus ?? 0),
-    atk: Math.floor((8 + L * 2.6 + wAtk) * job.atkMul) + (p.rebirthBonus?.atk ?? 0) + (petBonus?.atkBonus ?? 0),
-    def: Math.floor((3 + L * 1.4) * job.defMul + aDef) + (p.rebirthBonus?.def ?? 0) + (petBonus?.defBonus ?? 0),
+    atk: guildBuff ? Math.round(rawAtk * (1 + guildBuff.atkPct / 100)) : rawAtk,
+    def: guildBuff ? Math.round(rawDef * (1 + guildBuff.defPct / 100)) : rawDef,
     speed: 72 * job.speedMul * (p.speed || 1) * (p.equippedGemCompanion === 'aurora_cloud_dragon' ? 1.2 : 1),
-    crit: job.crit,
+    crit: Math.min(0.75, job.crit + codexBonus.critBonus + runeBonus.critBonus + setBonus.critBonus),
     attackSpeed: job.attackSpeed,
+    lifestealPct: runeBonus.lifestealPct,
   }
 }
 
@@ -891,14 +955,17 @@ function faceToward(x: number, y: number) {
   game.facing = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 'left' : 'right') : dy < 0 ? 'up' : 'down'
 }
 
-  function damageMonster(m: Monster, mult: number) {
+function damageMonster(m: Monster, mult: number, skillId?: string) {
   if (m.dead) return
   const p = player()
   const s = getStats()
   const def = MONSTERS[m.defId]
   if (!def) return
   const gmStaff = p.equipment.weapon?.itemId === 'gm_golden_staff' && p.gm
-  let dmg = gmStaff ? 9999999 : dmgFormula(s.atk * mult, def.def) * rand(0.9, 1.1)
+  const atkElem = getAttackElement(skillId, p.rpgExt?.equippedRunes)
+  const defElem = getMonsterElement(m.defId)
+  const elemMatch = getElementMultiplier(atkElem, defElem)
+  let dmg = gmStaff ? 9999999 : dmgFormula(s.atk * mult, def.def) * elemMatch.multiplier * rand(0.9, 1.1)
   const crit = !gmStaff && Math.random() < s.crit
   if (crit) dmg *= 1.6
   const amount = Math.max(1, Math.round(dmg))
@@ -906,7 +973,13 @@ function faceToward(x: number, y: number) {
   m.provoked = true
   m.hitFlash = 0.15
   game.combatT = 0
-  addFloat(m.x, m.y - 20, crit ? `${amount}!` : `${amount}`, crit ? '#ffd60a' : '#ffffff', crit ? 20 : 16)
+  if (s.lifestealPct > 0 && p.hp < s.maxHp) {
+    const heal = Math.max(1, Math.round((amount * s.lifestealPct) / 100))
+    p.hp = Math.min(s.maxHp, p.hp + heal)
+  }
+  const color = crit ? '#ffd60a' : elemMatch.effectiveness === 'super' ? '#fb923c' : elemMatch.effectiveness === 'resist' ? '#94a3b8' : '#ffffff'
+  const suffix = crit ? '!' : elemMatch.effectiveness === 'super' ? '▲' : ''
+  addFloat(m.x, m.y - 20, `${amount}${suffix}`, color, crit ? 20 : 16)
   if (m.hp <= 0) killMonster(m)
 }
 
@@ -960,11 +1033,15 @@ function killMonster(m: Monster) {
   m.respawnAt = game.time + (def.boss ? 90 : 10)
   p.kills++
   p.questState = recordQuestProgress(p.questState, { kills: 1, bossKills: def.boss ? 1 : 0 }, p.kills)
+  p.rpgExt = recordBestiaryKillInState(p.rpgExt, m.defId, p)
   const petBonus = getActivePetBonuses(p.petState, p.equippedGemCompanion, p.ownedGemItems)
+  const guildBuff = p.rpgExt?.guildId ? getGuildBuffs(p.rpgExt.guildLevel) : null
+  const guildGoldMul = guildBuff ? 1 + guildBuff.goldPct / 100 : 1
+  const guildExpMul = guildBuff ? 1 + guildBuff.expPct / 100 : 1
   addEffect({ type: 'burst', x: m.x, y: m.y - 6, r: def.boss ? 30 : 14, color: def.color, max: 0.4 })
   const baseGold = randInt(def.gold[0], def.gold[1])
-  const gold = Math.round(baseGold * (petBonus?.goldMul ?? 1) * (game.partyGoldMul || 1))
-  const expGain = Math.round(def.exp * (petBonus?.expMul ?? 1) * (game.partyExpMul || 1))
+  const gold = Math.round(baseGold * (petBonus?.goldMul ?? 1) * (game.partyGoldMul || 1) * guildGoldMul)
+  const expGain = Math.round(def.exp * (petBonus?.expMul ?? 1) * (game.partyExpMul || 1) * guildExpMul)
   p.gold += gold
   recordDailyMissionProgress({
     kills: 1,
@@ -1063,9 +1140,9 @@ function projectileColor(job: JobDef) {
   return '#f1faee'
 }
 
-function shoot(t: Monster, mults: number[], color: string, size: number, aoe = 0, delay = 0) {
+function shoot(t: Monster, mults: number[], color: string, size: number, aoe = 0, delay = 0, skillId?: string) {
   const p = player()
-  game.projectiles.push({ x: p.x, y: p.y - 10, targetUid: t.uid, speed: 240, color, size, mults, aoe, delay })
+  game.projectiles.push({ x: p.x, y: p.y - 10, targetUid: t.uid, speed: 240, color, size, mults, aoe, delay, skillId })
 }
 
 export function basicAttack() {
@@ -1096,6 +1173,7 @@ export function castSkill(index: number) {
   if (!skill) return
   const skillLevel = p.skillLevels?.[skill.id] ?? 1
   const skillMult = skill.mult * (1 + (skillLevel - 1) * 0.08)
+  const vfx = getSkillVfxSpec(skill.id, skill.color, skill.kind, job.weaponTypes[0])
   if (skillCooldown(skill) > 0) return
   if (p.mp < skill.mp) {
     warn('MP ไม่พอ!')
@@ -1112,8 +1190,17 @@ export function castSkill(index: number) {
     p.mp -= skill.mp
     game.skillCd[skill.id] = skill.cooldown
     game.attackAnim = 0.32
-    addEffect({ type: 'ring', x: p.x, y: p.y - 6, r: 38, color: skill.color, max: 0.55 })
-    addFloat(p.x, p.y - 30, `+${recovered} HP`, skill.color)
+    addEffect({
+      type: 'ring',
+      x: p.x,
+      y: p.y - 6,
+      r: 34,
+      color: vfx.primaryColor,
+      secondaryColor: vfx.secondaryColor,
+      max: 0.65,
+      vfxStyle: vfx.style,
+    })
+    addFloat(p.x, p.y - 30, `+${recovered} HP`, vfx.primaryColor)
     say('system', `${skill.name} ฟื้นฟู HP ${recovered}`)
     recordDailyMissionProgress({ skillsUsed: 1 })
     notify()
@@ -1122,8 +1209,19 @@ export function castSkill(index: number) {
   const range = job.ranged ? job.range + 12 : skill.kind === 'aoe-target' ? 90 : job.range + 12
   if (skill.kind === 'aoe-self') {
     const r = skill.radius ?? 40
-    addEffect({ type: 'ring', x: p.x, y: p.y - 6, r, color: skill.color, max: 0.45 })
-    for (const m of game.monsters) if (!m.dead && Math.hypot(m.x - p.x, m.y - p.y) <= r) damageMonster(m, skillMult)
+    addEffect({
+      type: 'ring',
+      x: p.x,
+      y: p.y - 6,
+      sourceX: p.x,
+      sourceY: p.y - 6,
+      r,
+      color: vfx.primaryColor,
+      secondaryColor: vfx.secondaryColor,
+      max: 0.55,
+      vfxStyle: vfx.style,
+    })
+      for (const m of game.monsters) if (!m.dead && Math.hypot(m.x - p.x, m.y - p.y) <= r) damageMonster(m, skillMult, skill.id)
   } else {
     const t = nearestMonster(range)
     if (!t) {
@@ -1132,30 +1230,96 @@ export function castSkill(index: number) {
     }
     faceToward(t.x, t.y)
     if (skill.kind === 'single') {
-      if (job.ranged) shoot(t, [skillMult], skill.color, 4)
-      else {
-        damageMonster(t, skillMult)
-        addEffect({ type: 'slash', x: t.x, y: t.y - 8, r: 16, color: skill.color, max: 0.3, angle: Math.random() * Math.PI })
+      if (job.ranged) {
+        shoot(t, [skillMult], vfx.primaryColor, 4, 0, 0, skill.id)
+        addEffect({
+          type: 'burst',
+          x: t.x,
+          y: t.y - 8,
+          sourceX: p.x,
+          sourceY: p.y - 8,
+          r: 22,
+          color: vfx.primaryColor,
+          secondaryColor: vfx.secondaryColor,
+          max: 0.45,
+          vfxStyle: vfx.style,
+        })
+      } else {
+        damageMonster(t, skillMult, skill.id)
+        addEffect({
+          type: 'slash',
+          x: t.x,
+          y: t.y - 8,
+          sourceX: p.x,
+          sourceY: p.y - 8,
+          r: 20,
+          color: vfx.primaryColor,
+          secondaryColor: vfx.secondaryColor,
+          max: 0.36,
+          angle: Math.random() * Math.PI,
+          vfxStyle: vfx.style,
+        })
       }
     } else if (skill.kind === 'multi') {
       const hits = skill.hits ?? 2
-      if (job.ranged) for (let i = 0; i < hits; i++) shoot(t, [skillMult], skill.color, 2, 0, i * 0.1)
-      else
+      if (job.ranged) {
+        for (let i = 0; i < hits; i++) shoot(t, [skillMult], vfx.primaryColor, 2, 0, i * 0.1, skill.id)
+      } else {
         for (let i = 0; i < hits; i++) {
-          damageMonster(t, skillMult)
-          addEffect({ type: 'slash', x: t.x + i * 3, y: t.y - 8 - i * 3, r: 12, color: skill.color, max: 0.25, angle: i })
+          damageMonster(t, skillMult, skill.id)
         }
+      }
+      addEffect({
+        type: 'slash',
+        x: t.x,
+        y: t.y - 8,
+        sourceX: p.x,
+        sourceY: p.y - 8,
+        r: 20,
+        color: vfx.primaryColor,
+        secondaryColor: vfx.secondaryColor,
+        max: 0.4,
+        vfxStyle: vfx.style,
+      })
     } else if (skill.kind === 'aoe-target') {
       const r = skill.radius ?? 48
-      addEffect({ type: 'burst', x: t.x, y: t.y - 6, r, color: skill.color, max: 0.55 })
-      for (const m of game.monsters) if (!m.dead && Math.hypot(m.x - t.x, m.y - t.y) <= r) damageMonster(m, skillMult)
+      addEffect({
+        type: 'burst',
+        x: t.x,
+        y: t.y - 6,
+        sourceX: p.x,
+        sourceY: p.y - 8,
+        r,
+        color: vfx.primaryColor,
+        secondaryColor: vfx.secondaryColor,
+        max: 0.65,
+        vfxStyle: vfx.style,
+      })
+      for (const m of game.monsters) if (!m.dead && Math.hypot(m.x - t.x, m.y - t.y) <= r) damageMonster(m, skillMult, skill.id)
     }
   }
   p.mp -= skill.mp
   game.skillCd[skill.id] = skill.cooldown
   game.attackAnim = 0.32
-  addFloat(p.x, p.y - 30, skill.name, skill.color, 9)
+  addFloat(p.x, p.y - 30, skill.name, vfx.primaryColor, 9)
   recordDailyMissionProgress({ skillsUsed: 1 })
+}
+
+export function triggerOpenWorldGuard() {
+  const p = game.p
+  if (!p || game.panel) return false
+  if (game.guardCd > 0) return false
+  game.guardCd = 3.5
+  game.guardUntil = game.time + 1.25
+  addEffect({ type: 'ring', x: p.x, y: p.y - 6, r: 22, color: '#60a5fa', max: 0.45 })
+  addFloat(p.x, p.y - 28, 'GUARD!', '#60a5fa', 10)
+  notify()
+  return true
+}
+
+export function toggleZenHud(force?: boolean) {
+  game.zenHud = typeof force === 'boolean' ? force : !game.zenHud
+  notify()
 }
 
 function hurtPlayer(rawAtk: number) {
@@ -1166,9 +1330,10 @@ function hurtPlayer(rawAtk: number) {
     return
   }
   const s = getStats()
-  const dmg = Math.max(1, Math.round(dmgFormula(rawAtk * 1.5, s.def) * rand(0.85, 1.15)))
+  const guarded = game.guardUntil > game.time
+  const dmg = Math.max(1, Math.round(dmgFormula(rawAtk * 1.5, s.def) * (guarded ? 0.25 : 1) * rand(0.85, 1.15)))
   p.hp -= dmg
-  addFloat(p.x, p.y - 22, `-${dmg}`, '#ff4d4d', 10)
+  addFloat(p.x, p.y - 22, guarded ? `-${dmg} [GUARD]` : `-${dmg}`, guarded ? '#60a5fa' : '#ff4d4d', 10)
   if (p.hp <= 0) die()
 }
 
@@ -1229,9 +1394,30 @@ export function rebirth() {
   p.mp = baseMp + p.rebirthBonus.maxMp
   const spawn = MAPS.town.spawn
   changeMap('town', spawn.x, spawn.y)
-  game.effects.push({ type: 'levelup', x: p.x, y: p.y, r: 36, color: '#ffd60a', life: 3, max: 3 })
-  addFloat(p.x, p.y - 42, `REBIRTH ${p.rebirthCount}`, '#ffd60a', 15)
-  say('system', 'จุติสำเร็จ! กลับไปเลเวล 1 และคงค่าสเตตัสเดิมไว้')
+  const rebirthAura = resolveRebirthAuraSpec(p.rebirthCount)
+  game.effects.push({
+    type: 'levelup',
+    x: p.x,
+    y: p.y,
+    r: 38,
+    color: rebirthAura.primaryColor,
+    secondaryColor: rebirthAura.secondaryColor,
+    life: 3,
+    max: 3,
+  })
+  game.effects.push({
+    type: 'burst',
+    x: p.x,
+    y: p.y - 6,
+    r: 44,
+    color: rebirthAura.primaryColor,
+    secondaryColor: rebirthAura.secondaryColor,
+    vfxStyle: 'light_judgment',
+    life: 1.4,
+    max: 1.4,
+  })
+  addFloat(p.x, p.y - 42, `REBIRTH ${p.rebirthCount}`, rebirthAura.primaryColor, 15)
+  say('system', `จุติครั้งที่ ${p.rebirthCount} (${rebirthAura.title}) สำเร็จ! กลับไปเลเวล 1 และคงค่าสเตตัสเดิมไว้`)
   saveGame()
   game.panel = null
   notify()
@@ -1818,6 +2004,289 @@ export function moveGold(amount: number, toStorage: boolean) {
     p.gold += take
   }
   notify()
+}
+
+/* ---------------- RPG 8-System Actions ---------------- */
+
+export function craftRecipeAction(recipeId: string): { ok: boolean; message: string } {
+  const p = player()
+  const recipe = CRAFT_RECIPES.find((r) => r.id === recipeId)
+  if (!recipe) return { ok: false, message: 'ไม่พบสูตรคราฟต์' }
+  const check = canCraftRecipe(recipe, p.inventory, p.gold)
+  if (!check.ok) return { ok: false, message: check.reason ?? 'วัตถุดิบไม่เพียงพอ' }
+  if (recipe.resultItemId) {
+    const def = ITEMS[recipe.resultItemId]
+    if (!def) return { ok: false, message: 'ไม่พบไอเทมปลายทาง' }
+    if (!stackable(def) && p.inventory.length >= getInventoryCapacity(p)) {
+      return { ok: false, message: 'กระเป๋าเต็ม กรุณาเคลียร์ช่องก่อนคราฟต์' }
+    }
+  }
+  for (const ing of recipe.ingredients) {
+    removeItemId(ing.itemId, ing.qty)
+  }
+  p.gold -= recipe.goldCost
+  if (recipe.resultItemId) {
+    addItem(recipe.resultItemId, recipe.resultQty)
+  } else if (recipe.resultRuneId) {
+    const ext = sanitizeRpgExt(p.rpgExt)
+    ext.runeBag[recipe.resultRuneId] = (ext.runeBag[recipe.resultRuneId] ?? 0) + recipe.resultQty
+    p.rpgExt = ext
+  }
+  say('loot', `คราฟต์สำเร็จ: ${recipe.name}`)
+  saveGame()
+  notify()
+  return { ok: true, message: `สร้าง ${recipe.name} สำเร็จ!` }
+}
+
+export function dismantleItemAction(itemUid: string): { ok: boolean; message: string } {
+  const p = player()
+  const it = p.inventory.find((i) => i.uid === itemUid)
+  if (!it) return { ok: false, message: 'ไม่พบอุปกรณ์ในกระเป๋า' }
+  const yieldRes = calculateDismantleYield(it)
+  if (yieldRes.stones <= 0 && yieldRes.gold <= 0) {
+    return { ok: false, message: 'ไอเทมนี้ไม่สามารถย่อยได้' }
+  }
+  const removed = removeUid(p.inventory, itemUid, 1)
+  if (!removed) return { ok: false, message: 'ไม่สามารถย่อยไอเทมได้' }
+  p.gold += yieldRes.gold
+  addItem('enhance_stone', yieldRes.stones)
+  const ext = sanitizeRpgExt(p.rpgExt)
+  if (yieldRes.bonusRuneId) {
+    ext.runeBag[yieldRes.bonusRuneId] = (ext.runeBag[yieldRes.bonusRuneId] ?? 0) + 1
+  }
+  p.rpgExt = ext
+  const runeNote = yieldRes.bonusRuneId ? ` + ${RUNE_DEFS[yieldRes.bonusRuneId]?.name ?? 'รูน'}` : ''
+  const msg = `ย่อยสำเร็จ: +${yieldRes.gold} G, หินตีบวก x${yieldRes.stones}${runeNote}`
+  say('loot', msg)
+  saveGame()
+  notify()
+  return { ok: true, message: msg }
+}
+
+export function socketRuneAction(slot: EquipmentSlot, runeId: string | null): { ok: boolean; message: string } {
+  const p = player()
+  const ext = sanitizeRpgExt(p.rpgExt)
+  const prevRune = ext.equippedRunes[slot]
+  if (runeId === null) {
+    if (!prevRune) return { ok: false, message: 'ช่องนี้ยังไม่ได้ฝังรูน' }
+    ext.runeBag[prevRune] = (ext.runeBag[prevRune] ?? 0) + 1
+    delete ext.equippedRunes[slot]
+    p.rpgExt = ext
+    clampVitals()
+    saveGame()
+    notify()
+    return { ok: true, message: `ถอด ${RUNE_DEFS[prevRune]?.name ?? 'รูน'} ออกจากช่องแล้ว` }
+  }
+  if (!RUNE_DEFS[runeId] || (ext.runeBag[runeId] ?? 0) <= 0) {
+    return { ok: false, message: 'ไม่มีรูนนี้ในกระเป๋ารูน' }
+  }
+  if (prevRune) {
+    ext.runeBag[prevRune] = (ext.runeBag[prevRune] ?? 0) + 1
+  }
+  ext.runeBag[runeId] = Math.max(0, (ext.runeBag[runeId] ?? 0) - 1)
+  if (ext.runeBag[runeId] <= 0) delete ext.runeBag[runeId]
+  ext.equippedRunes[slot] = runeId
+  p.rpgExt = ext
+  clampVitals()
+  saveGame()
+  notify()
+  return { ok: true, message: `ฝัง ${RUNE_DEFS[runeId].name} สำเร็จ!` }
+}
+
+export function claimBestiaryRewardAction(monsterId: string): { ok: boolean; message: string } {
+  const p = player()
+  const def = MONSTERS[monsterId]
+  if (!def) return { ok: false, message: 'ไม่พบข้อมูลมอนสเตอร์' }
+  const ext = sanitizeRpgExt(p.rpgExt)
+  const kills = ext.bestiary[monsterId] ?? 0
+  const currentTier = ext.claimedBestiaryTiers[monsterId] ?? 0
+  const nextTier = BESTIARY_TIERS.find((t) => t.tier === currentTier + 1)
+  if (!nextTier) return { ok: false, message: 'รับรางวัลครบทุกขั้นแล้ว' }
+  if (kills < nextTier.target) {
+    return { ok: false, message: `ต้องล่า ${def.name} อีก ${nextTier.target - kills} ตัว` }
+  }
+  ext.claimedBestiaryTiers[monsterId] = nextTier.tier
+  ext.titles = evaluateUnlockedTitleIds({
+    kills: p.kills,
+    rebirthCount: p.rebirthCount,
+    questState: p.questState,
+    towerState: p.towerState,
+    rpgExt: ext,
+  })
+  p.rpgExt = ext
+  const diamondBonus = nextTier.tier * (def.boss ? 15 : 6)
+  p.diamonds = (p.diamonds ?? 0) + diamondBonus
+  clampVitals()
+  saveGame()
+  notify()
+  return {
+    ok: true,
+    message: `ปลดล็อกโบนัส ${def.name} ระดับ ${nextTier.tier} (+${diamondBonus} เพชร & ค่าสถานะถาวร)!`,
+  }
+}
+
+export function equipTitleAction(titleId: string | null): { ok: boolean; message: string } {
+  const p = player()
+  const ext = sanitizeRpgExt(p.rpgExt)
+  ext.titles = evaluateUnlockedTitleIds({
+    kills: p.kills,
+    rebirthCount: p.rebirthCount,
+    questState: p.questState,
+    towerState: p.towerState,
+    rpgExt: ext,
+  })
+  if (titleId === null) {
+    ext.activeTitle = null
+    p.rpgExt = ext
+    clampVitals()
+    saveGame()
+    notify()
+    return { ok: true, message: 'ถอดฉายาที่แสดงแล้ว' }
+  }
+  if (!ext.titles.includes(titleId)) {
+    return { ok: false, message: 'ยังไม่ปลดล็อกฉายานี้' }
+  }
+  ext.activeTitle = titleId
+  p.rpgExt = ext
+  clampVitals()
+  saveGame()
+  notify()
+  const titleName = TITLE_DEFS.find((t) => t.id === titleId)?.name ?? titleId
+  return { ok: true, message: `ติดตั้งฉายา "${titleName}" แล้ว!` }
+}
+
+export function completeDailyDungeonAction(
+  dungeonId: DailyDungeonId,
+  clearBonusFactor = 1,
+): { ok: boolean; message: string; rewards?: ReturnType<typeof calculateDailyDungeonRewards> } {
+  const p = player()
+  const def = DAILY_DUNGEONS.find((d) => d.id === dungeonId)
+  if (!def) return { ok: false, message: 'ไม่พบดันเจี้ยน' }
+  const ext = sanitizeRpgExt(p.rpgExt)
+  const today = todayIsoDate()
+  if (ext.dailyDungeonDate !== today) {
+    ext.dailyDungeonDate = today
+    ext.dailyDungeonRuns = { gold_vault: 0, stone_mine: 0, boss_rush: 0 }
+  }
+  if ((ext.dailyDungeonRuns[dungeonId] ?? 0) >= def.dailyLimit) {
+    return { ok: false, message: `ลง ${def.name} ครบ ${def.dailyLimit} รอบของวันนี้แล้ว` }
+  }
+  ext.dailyDungeonRuns[dungeonId] = (ext.dailyDungeonRuns[dungeonId] ?? 0) + 1
+  const rewards = calculateDailyDungeonRewards(def, p.level, clearBonusFactor)
+  p.gold += rewards.gold
+  p.diamonds = (p.diamonds ?? 0) + rewards.diamonds
+  if (rewards.stones > 0) addItem('enhance_stone', rewards.stones)
+  if (rewards.materialId) addItem(rewards.materialId, 2)
+  if (rewards.runeId) {
+    ext.runeBag[rewards.runeId] = (ext.runeBag[rewards.runeId] ?? 0) + 1
+  }
+  p.rpgExt = ext
+  gainExp(rewards.exp)
+  saveGame()
+  notify()
+  return {
+    ok: true,
+    rewards,
+    message: `พิชิต ${def.name}! +${rewards.gold.toLocaleString()} G · +${rewards.diamonds} เพชร · หิน x${rewards.stones}`,
+  }
+}
+
+export function recordPvpResultAction(ratingDelta: number, gold: number, diamonds: number, won: boolean) {
+  const p = player()
+  const ext = sanitizeRpgExt(p.rpgExt)
+  ext.arenaRating = Math.max(100, Math.min(9999, ext.arenaRating + ratingDelta))
+  if (won) ext.arenaWins += 1
+  else ext.arenaLosses += 1
+  p.gold += Math.max(0, gold)
+  p.diamonds = (p.diamonds ?? 0) + Math.max(0, diamonds)
+  ext.titles = evaluateUnlockedTitleIds({
+    kills: p.kills,
+    rebirthCount: p.rebirthCount,
+    questState: p.questState,
+    towerState: p.towerState,
+    rpgExt: ext,
+  })
+  p.rpgExt = ext
+  saveGame()
+  notify()
+}
+
+export function syncGuildStateAction(patch: {
+  guildId: string | null
+  guildName: string | null
+  guildTag: string | null
+  guildLevel?: number
+  donateCostGold?: number
+}) {
+  const p = player()
+  const ext = sanitizeRpgExt(p.rpgExt)
+  if (patch.donateCostGold && patch.donateCostGold > 0) {
+    if (p.gold < patch.donateCostGold) return false
+    p.gold -= patch.donateCostGold
+    ext.guildContribution += patch.donateCostGold
+  }
+  ext.guildId = patch.guildId
+  ext.guildName = patch.guildName
+  ext.guildTag = patch.guildTag
+  if (typeof patch.guildLevel === 'number') ext.guildLevel = Math.max(1, patch.guildLevel)
+  ext.titles = evaluateUnlockedTitleIds({
+    kills: p.kills,
+    rebirthCount: p.rebirthCount,
+    questState: p.questState,
+    towerState: p.towerState,
+    rpgExt: ext,
+  })
+  p.rpgExt = ext
+  clampVitals()
+  saveGame()
+  notify()
+  return true
+}
+
+export function recordWorldBossDamageAction(damageDealt: number) {
+  const p = player()
+  const ext = sanitizeRpgExt(p.rpgExt)
+  const spec = getActiveWorldBoss()
+  if (ext.worldBossCycleKey !== spec.cycleKey) {
+    ext.worldBossCycleKey = spec.cycleKey
+    ext.worldBossDamage = 0
+    ext.claimedWorldBossMilestones = []
+  }
+  ext.worldBossDamage += Math.max(0, Math.round(damageDealt))
+  p.rpgExt = ext
+  saveGame()
+  notify()
+}
+
+export function claimWorldBossMilestoneAction(milestoneId: string): { ok: boolean; message: string } {
+  const p = player()
+  const ext = sanitizeRpgExt(p.rpgExt)
+  const spec = getActiveWorldBoss()
+  if (ext.worldBossCycleKey !== spec.cycleKey) {
+    return { ok: false, message: 'รอบเวิลด์บอสเปลี่ยนแล้ว' }
+  }
+  const ms = spec.milestones.find((m) => m.id === milestoneId)
+  if (!ms) return { ok: false, message: 'ไม่พบรางวัล' }
+  if (ext.worldBossDamage < ms.damage) {
+    return { ok: false, message: `ต้องทำดาเมจรวมอย่างน้อย ${ms.damage.toLocaleString()}` }
+  }
+  if (ext.claimedWorldBossMilestones.includes(milestoneId)) {
+    return { ok: false, message: 'รับรางวัลระดับนี้ไปแล้ว' }
+  }
+  ext.claimedWorldBossMilestones.push(milestoneId)
+  p.gold += ms.gold
+  p.diamonds = (p.diamonds ?? 0) + ms.diamonds
+  if (ms.stones > 0) addItem('enhance_stone', ms.stones)
+  if (ms.runeId) {
+    ext.runeBag[ms.runeId] = (ext.runeBag[ms.runeId] ?? 0) + 1
+  }
+  p.rpgExt = ext
+  saveGame()
+  notify()
+  return {
+    ok: true,
+    message: `รับรางวัลเวิลด์บอสสำเร็จ! +${ms.gold.toLocaleString()} G, +${ms.diamonds} เพชร, หิน x${ms.stones}`,
+  }
 }
 
 /* ---------------- chat & commands ---------------- */
@@ -2436,6 +2905,7 @@ export function loadGame(d: SaveData) {
     petState: sanitizePetState(d.petState, d.ownedGemItems ?? [], d.equippedGemCompanion ?? null),
     questState: sanitizeQuestState(d.questState, finiteInt(d.kills, 0, Number.MAX_SAFE_INTEGER, 0)),
     towerState: sanitizeTowerState(d.towerState),
+    rpgExt: sanitizeRpgExt(d.rpgExt),
   }
   if (p.hp <= 0) p.hp = getStats(p).maxHp
   startSession(p, `ยินดีต้อนรับกลับ ${p.name}! โหลดความคืบหน้าล่าสุดแล้ว`, true)
@@ -2486,6 +2956,7 @@ export function newGame(name: string) {
     petState: createDefaultPetState(),
     questState: createDefaultQuestState(0),
     towerState: createDefaultTowerState(),
+    rpgExt: createDefaultRpgExt(),
   }
   const s = getStats(p)
   p.hp = s.maxHp
@@ -2531,6 +3002,7 @@ export function update(dt: number) {
   game.attackCd -= dt
   game.attackAnim = Math.max(0, game.attackAnim - dt)
   game.petAttackCd = Math.max(0, game.petAttackCd - dt)
+  game.guardCd = Math.max(0, game.guardCd - dt)
   for (const k in game.skillCd) game.skillCd[k] -= dt
   game.combatT += dt
   const prevNearNpcId = game.nearNpc?.id ?? null
@@ -2757,7 +3229,7 @@ function updateProjectiles(dt: number) {
           if (t.hp <= 0) killMonster(t)
         }
       } else {
-        for (const mult of pr.mults) damageMonster(t, mult)
+        for (const mult of pr.mults) damageMonster(t, mult, pr.skillId)
       }
       addEffect({ type: 'spark', x: tx, y: ty, r: 6 + pr.size * 2, color: pr.color, max: 0.2 })
       continue

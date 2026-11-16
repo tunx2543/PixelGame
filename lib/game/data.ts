@@ -58,7 +58,10 @@ export const JOBS: Record<string, JobDef> = {
     ranged: false,
     weaponTypes: ['stick'],
     colors: { hair: '#6b4226', body: '#8a9a5b', legs: '#5a4632', accent: '#c9b27c' },
-    skills: [{ id: 'power', name: 'ฟาดแรง', mp: 5, mult: 1.7, cooldown: 2, kind: 'single', color: '#ffe08a' }],
+    skills: [
+      { id: 'power', name: 'ฟาดแรง', mp: 5, mult: 1.7, cooldown: 2, kind: 'single', color: '#ffe08a' },
+      { id: 'first-aid', name: 'ปฐมพยาบาล', mp: 8, mult: 0.25, cooldown: 6, kind: 'heal', color: '#80ed99' },
+    ],
   },
   swordsman: {
     id: 'swordsman',
@@ -202,7 +205,8 @@ export const JOBS: Record<string, JobDef> = {
     colors: { hair: '#d4a017', body: '#d9e2ec', legs: '#526174', accent: '#f4d35e' },
     skills: [
       { id: 'holy-strike', name: 'ฟันศักดิ์สิทธิ์', mp: 12, mult: 2.8, cooldown: 2.2, kind: 'single', color: '#ffe08a' },
-      { id: 'light-judgment', name: 'พิพากษาแห่งแสง', mp: 35, mult: 2.1, cooldown: 6, kind: 'aoe-target', radius: 52, color: '#fff3b0' },
+      { id: 'light-judgment', name: 'พิพากษาแห่งแสง', mp: 35, mult: 2.1, cooldown: 6, kind: 'aoe-target', radius: 52, color: '#fef08a' },
+      { id: 'sacred-aegis', name: 'เกราะแสงศักดิ์สิทธิ์', mp: 28, mult: 0.35, cooldown: 7, kind: 'heal', color: '#fef08a' },
     ],
   },
   wizard: {
@@ -250,9 +254,9 @@ export const JOBS: Record<string, JobDef> = {
     weaponTypes: ['staff'],
     colors: { hair: '#e8d4a2', body: '#f1ead5', legs: '#b58b56', accent: '#f4d35e' },
     skills: [
-      { id: 'grace-heal', name: 'แสงเยียวยา', mp: 25, mult: 0.3, cooldown: 5, kind: 'heal', color: '#80ed99' },
+      { id: 'grace-heal', name: 'แสงเยียวยา', mp: 25, mult: 0.32, cooldown: 5, kind: 'heal', color: '#80ed99' },
       { id: 'holy-bolt', name: 'ศรแห่งแสง', mp: 15, mult: 2.5, cooldown: 2.2, kind: 'single', color: '#b7f7c4' },
-      { id: 'sanctuary', name: 'เขตศักดิ์สิทธิ์', mp: 35, mult: 1.4, cooldown: 7, kind: 'aoe-self', radius: 62, color: '#b7f7c4' },
+      { id: 'sanctuary', name: 'เขตศักดิ์สิทธิ์', mp: 35, mult: 1.75, cooldown: 7, kind: 'aoe-self', radius: 66, color: '#fef08a' },
     ],
   },
   hunter: {
