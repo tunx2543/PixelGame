@@ -194,7 +194,12 @@ export function subscribeWorldChatMessages(
     return () => {}
   }
 
-  const q = query(collection(db, 'worldChat'), orderBy('createdAtMs', 'desc'), limit(50))
+  const q = query(
+    collection(db, 'worldChat'),
+    where('createdAtMs', '>=', 0),
+    orderBy('createdAtMs', 'desc'),
+    limit(50),
+  )
   return onSnapshot(
     q,
     (snap) => {

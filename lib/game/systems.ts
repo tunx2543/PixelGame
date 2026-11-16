@@ -51,6 +51,7 @@ export interface TowerState {
 export interface CombatPetDef {
   id: string
   name: string
+  category?: 'phao' | 'companion'
   rarity: 'ทั่วไป' | 'หายาก' | 'อีปิก' | 'ตำนาน'
   description: string
   unlockGold?: number
@@ -75,6 +76,7 @@ export const COMBAT_PETS: CombatPetDef[] = [
   {
     id: 'buddy_slime',
     name: 'สไลม์น้อยคู่ใจ',
+    category: 'companion',
     rarity: 'ทั่วไป',
     description: 'คู่หูเริ่มต้นสุดน่ารัก ยิงกระสุนเมือกสีเขียวช่วยโจมตีมอนสเตอร์',
     unlockGold: 250,
@@ -93,6 +95,7 @@ export const COMBAT_PETS: CombatPetDef[] = [
   {
     id: 'flame_fox',
     name: 'จิ้งจอกเพลิงน้อย',
+    category: 'companion',
     rarity: 'หายาก',
     description: 'จิ้งจอกหางเปลวไฟ ปล่อยลูกไฟพิกเซลโจมตีแรงและเพิ่มทองดรอป',
     unlockGold: 1800,
@@ -111,6 +114,7 @@ export const COMBAT_PETS: CombatPetDef[] = [
   {
     id: 'crystal_owl',
     name: 'นกฮูกผลึกเวท',
+    category: 'companion',
     rarity: 'อีปิก',
     description: 'นกฮูกเวทมนตร์ ยิงลำแสงผลึกถี่และเพิ่มค่าประสบการณ์ที่ได้รับ',
     unlockGold: 4500,
@@ -129,6 +133,7 @@ export const COMBAT_PETS: CombatPetDef[] = [
   {
     id: 'moonlight_firefly',
     name: 'ภูตหิ่งห้อยมูนไลท์',
+    category: 'companion',
     rarity: 'หายาก',
     description: 'ภูตแสงจันทร์จากร้านเพชร ยิงประกายแสงจันทร์และช่วยเก็บดรอป',
     linkedGemItemId: 'moonlight_firefly',
@@ -147,6 +152,7 @@ export const COMBAT_PETS: CombatPetDef[] = [
   {
     id: 'gem_raccoon',
     name: 'แรคคูนพ่อค้าอัญมณี',
+    category: 'companion',
     rarity: 'อีปิก',
     description: 'แรคคูนจากร้านเพชร ยิงผลึกอัญมณีและเพิ่มทองมหาศาล',
     linkedGemItemId: 'gem_raccoon',
@@ -165,6 +171,7 @@ export const COMBAT_PETS: CombatPetDef[] = [
   {
     id: 'aurora_cloud_dragon',
     name: 'มังกรเมฆาออโรรา',
+    category: 'companion',
     rarity: 'ตำนาน',
     description: 'สัตว์คู่หูระดับตำนานจากร้านเพชร ยิงลมหายใจแสงเหนือสุดทรงพลัง',
     linkedGemItemId: 'aurora_cloud_dragon',
@@ -179,6 +186,82 @@ export const COMBAT_PETS: CombatPetDef[] = [
     goldBonusPct: 20,
     colors: { primary: '#5eead4', secondary: '#818cf8', accent: '#f0abfc' },
     pixels: ['..1..1..', '.121.121', '12221222', '12322232', '.1222221', '..12221.', '.1.2.2.1', '...1.1..'],
+  },
+  {
+    id: 'phao_lotus',
+    name: 'ผอบบัวแก้ว',
+    category: 'phao',
+    rarity: 'ทั่วไป',
+    description: 'ผอบเครื่องแก้วทรงยอดบัว ลอยอารักขาข้างกายและเปิดฝาปล่อยกลีบปราณบัวพิสุทธิ์',
+    unlockGold: 400,
+    baseAtk: 14,
+    atkPerLevel: 4,
+    attackInterval: 2.2,
+    hpBonus: 55,
+    mpBonus: 24,
+    atkBuff: 6,
+    defBuff: 6,
+    expBonusPct: 8,
+    goldBonusPct: 4,
+    colors: { primary: '#5eead4', secondary: '#0f766e', accent: '#fef08a' },
+    pixels: ['...33...', '..3113..', '..1331..', '.211112.', '.213312.', '..2222..', '...22...', '..2222..'],
+  },
+  {
+    id: 'phao_gold_naga',
+    name: 'ผอบทองพญานาค',
+    category: 'phao',
+    rarity: 'หายาก',
+    description: 'ผอบทองคำสลักลายกนกนาคราช เปิดฝาพ่นลูกแก้วนาคาสีมรกตและเสริมโชคลาภทองคำ',
+    unlockGold: 2400,
+    baseAtk: 24,
+    atkPerLevel: 6,
+    attackInterval: 1.9,
+    hpBonus: 85,
+    mpBonus: 30,
+    atkBuff: 15,
+    defBuff: 10,
+    expBonusPct: 6,
+    goldBonusPct: 16,
+    colors: { primary: '#f59e0b', secondary: '#92400e', accent: '#34d399' },
+    pixels: ['...11...', '..1331..', '.111111.', '.213312.', '.211112.', '..2112..', '...22...', '.221122.'],
+  },
+  {
+    id: 'phao_celestial',
+    name: 'ผอบสุริยันจันทรา',
+    category: 'phao',
+    rarity: 'อีปิก',
+    description: 'ผอบเบญจรงค์ผนึกธาตุสุริยะ-จันทรา หมุนวนรอบผู้ใช้และยิงลำแสงดาวเคราะห์',
+    unlockGold: 6800,
+    baseAtk: 34,
+    atkPerLevel: 8,
+    attackInterval: 1.7,
+    hpBonus: 120,
+    mpBonus: 55,
+    atkBuff: 22,
+    defBuff: 14,
+    expBonusPct: 18,
+    goldBonusPct: 10,
+    colors: { primary: '#f8fafc', secondary: '#1d4ed8', accent: '#fbbf24' },
+    pixels: ['...33...', '..1331..', '.211112.', '21311312', '.211112.', '..2332..', '...22...', '..2332..'],
+  },
+  {
+    id: 'phao_phantom',
+    name: 'ผอบวิญญาณอเวจี',
+    category: 'phao',
+    rarity: 'ตำนาน',
+    description: 'ผอบสัมฤทธิ์โบราณสะกดดวงจิตเทพอสูร เปิดยอดปล่อยเพลิงวิญญาณเจาะเกราะศัตรู',
+    unlockGold: 16000,
+    baseAtk: 48,
+    atkPerLevel: 10,
+    attackInterval: 1.45,
+    hpBonus: 175,
+    mpBonus: 70,
+    atkBuff: 34,
+    defBuff: 20,
+    expBonusPct: 22,
+    goldBonusPct: 18,
+    colors: { primary: '#9333ea', secondary: '#311042', accent: '#f43f5e' },
+    pixels: ['...33...', '..2332..', '.211112.', '21333312', '.211112.', '..2112..', '...22...', '.223322.'],
   },
 ]
 

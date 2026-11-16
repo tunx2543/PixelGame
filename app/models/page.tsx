@@ -10,10 +10,10 @@ export default function ModelsGalleryPage() {
           <div>
             <h1 className="flex items-center gap-2 text-xl font-bold text-primary md:text-2xl">
               <Sparkles className="size-5 text-gold" aria-hidden />
-              คลังโมเดล 2D &amp; แอนิเมชั่น (12 อาชีพ • 17 มอนสเตอร์)
+              คลังโมเดล 2D &amp; แอนิเมชั่น (21 อาชีพ • 17 มอนสเตอร์ • 5 สัตว์ขี่ • 10 ผอบ/สัตว์เลี้ยง)
             </h1>
             <p className="text-xs text-muted-foreground">
-              สำรวจโมเดลพิกเซล 2D พร้อมแอนิเมชั่น Idle, Walk และ Attack สำหรับทุกสายอาชีพและมอนสเตอร์ทุกตัวใน Pixel Quest
+              สำรวจโมเดลพิกเซล 2D พร้อมแอนิเมชั่น Idle, Walk และ Attack สำหรับทุกสายอาชีพ มอนสเตอร์ สัตว์ขี่ และผอบ/สัตว์เลี้ยงใน Pixel Quest
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">

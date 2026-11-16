@@ -46,8 +46,12 @@ describe('MMORPG Systems Pure Logic', () => {
 
   it('computes Party Role Synergy Trinity when Tank, Healer, DPS are on the same map', () => {
     assert.equal(getJobRole('paladin'), 'tank')
+    assert.equal(getJobRole('templar'), 'tank')
+    assert.equal(getJobRole('iron_fist'), 'tank')
     assert.equal(getJobRole('cleric'), 'healer')
     assert.equal(getJobRole('wizard'), 'dps')
+    assert.equal(getJobRole('the_king'), 'dps')
+    assert.equal(getJobRole('nekobaku'), 'dps')
 
     const party: PartyRecord = {
       partyId: 'pty_1',

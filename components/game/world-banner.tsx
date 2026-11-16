@@ -70,7 +70,7 @@ export function WorldBanner() {
             className="pointer-events-auto pixel-panel flex items-center gap-1 border-rose-400/50 px-2 py-0.5 font-semibold text-rose-200 shadow hover:border-rose-400 tabular-nums"
           >
             <Flame className="size-3 text-rose-400" aria-hidden />
-            <span>WB {String(wbMin).padStart(2, '0')}:{String(wbSec).padStart(2, '0')}</span>
+            <span>บอสโลก {String(wbMin).padStart(2, '0')}:{String(wbSec).padStart(2, '0')}</span>
           </button>
           {fieldBoss && (
             <button

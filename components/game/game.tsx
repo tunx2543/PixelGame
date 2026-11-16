@@ -35,14 +35,14 @@ function LootToast() {
   if (!loot || !item || loot.until <= game.time) return null
   return (
     <div
-      className="pointer-events-auto pixel-panel absolute left-1/2 top-16 z-50 flex -translate-x-1/2 items-center gap-3 px-3 py-2 shadow-2xl"
+      data-testid="rare-loot-toast"
+      className="pointer-events-auto pixel-panel absolute left-1/2 top-2 z-50 flex max-w-[min(16rem,72vw)] -translate-x-1/2 items-center gap-2 px-2.5 py-1 shadow-xl sm:top-3"
       role="status"
     >
-      <ItemIcon itemId={item.id} size={40} />
-      <span>
-        <strong className="block text-xs text-yellow-300">บอสทำไอเทมตก!</strong>
-        <span className="text-xs text-foreground">{item.name}</span>
-        <span className="block text-[10px] text-muted-foreground">โอกาสดรอป 1%</span>
+      <ItemIcon itemId={item.id} size={22} />
+      <span className="min-w-0 leading-tight">
+        <strong className="block truncate text-[10px] text-yellow-300">ดรอปแรร์! {item.name}</strong>
+        <span className="block text-[9px] text-muted-foreground">โอกาสดรอป 1%</span>
       </span>
     </div>
   )

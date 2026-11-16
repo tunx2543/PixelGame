@@ -38,9 +38,11 @@ function StatBars({ job }: { job: JobDef }) {
 function JobTree({ currentJobId }: { currentJobId: string }) {
   const roots = Object.values(JOBS).filter((j) => j.tier === 1)
   return (
-    <div className="grid grid-cols-2 gap-1.5 text-[11px] md:grid-cols-4">
+    <div className="grid grid-cols-2 gap-1.5 text-[11px] md:grid-cols-5">
       {roots.map((j) => {
-        const nextJobs = Object.values(JOBS).filter((nextJob) => nextJob.from === j.id)
+        const nextJobs = Object.values(JOBS).filter(
+          (nextJob) => nextJob.from === j.id || Boolean(nextJob.alsoFrom?.includes(j.id)),
+        )
         const activeRoot = currentJobId === j.id
         return (
           <div key={j.id} className={`border-2 bg-background p-1.5 text-center ${activeRoot ? 'border-primary' : 'border-border'}`}>
@@ -48,20 +50,26 @@ function JobTree({ currentJobId }: { currentJobId: string }) {
               <SpriteModelCanvas mode="job" id={j.id} action="idle" dir="down" size={38} showAura={false} label={`โมเดล ${j.name}`} />
             </div>
             <p className="font-semibold text-foreground">{j.name}</p>
-            <p className="text-muted-foreground">Lv.{j.reqLevel}</p>
+            <p className="text-muted-foreground">
+              Lv.{j.reqLevel}
+              {j.origin === 'lumivara' ? ' · ★' : ''}
+            </p>
             {nextJobs.length > 0 && <p className="my-0.5 text-primary">↓</p>}
             <div className="flex flex-col gap-1">
               {nextJobs.map((nextJob) => (
                 <div
-                  key={nextJob.id}
+                  key={`${j.id}-${nextJob.id}`}
                   className={`flex items-center justify-center gap-1 border px-1 py-0.5 ${
                     currentJobId === nextJob.id ? 'border-primary bg-primary/10' : 'border-border/60 bg-muted/40'
                   }`}
                 >
                   <SpriteModelCanvas mode="job" id={nextJob.id} action="idle" dir="down" size={28} showAura={false} showShadow={false} label={`โมเดล ${nextJob.name}`} />
-                  <div className="text-left leading-tight">
-                    <p className="text-foreground">{nextJob.name}</p>
-                    <p className="text-[10px] text-muted-foreground">Lv.{nextJob.reqLevel}</p>
+                  <div className="min-w-0 text-left leading-tight">
+                    <p className="truncate text-foreground">{nextJob.name}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Lv.{nextJob.reqLevel}
+                      {nextJob.origin === 'lumivara' ? ' · Lumivara' : ''}
+                    </p>
                   </div>
                 </div>
               ))}
@@ -149,7 +157,19 @@ export function JobPanel() {
                       />
                     </div>
                     <div>
-                      <p className="text-base text-foreground">{j.name}</p>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <p className="text-base text-foreground">{j.name}</p>
+                        {j.origin === 'lumivara' && (
+                          <span className="border border-amber-400/50 bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold text-amber-200">
+                            ★ Lumivara
+                          </span>
+                        )}
+                        {j.goldBonus ? (
+                          <span className="border border-gold/50 bg-gold/10 px-1.5 py-0.5 text-[9px] font-bold text-gold">
+                            +{Math.round(j.goldBonus * 100)}% Gold
+                          </span>
+                        ) : null}
+                      </div>
                       <p className="text-[11px] text-muted-foreground">{j.description}</p>
                     </div>
                   </div>

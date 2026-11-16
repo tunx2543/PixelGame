@@ -51,6 +51,15 @@ import {
   type TowerState,
 } from './systems'
 import {
+  MAX_MOUNT_LEVEL,
+  createDefaultMountState,
+  getActiveMountBonuses,
+  getMountDef,
+  mountUpgradeCost,
+  sanitizeMountState,
+  type MountState,
+} from './mounts'
+import {
   claimDailyMission,
   onDailyMissionCompleted,
   recordDailyMissionProgress,
@@ -328,6 +337,7 @@ export interface SaveData {
   rebirthCount?: number
   rebirthBonus?: { maxHp: number; maxMp: number; atk: number; def: number }
   petState?: PetState
+  mountState?: MountState
   questState?: QuestState
   towerState?: TowerState
   rpgExt?: RpgExtensionState
@@ -380,6 +390,8 @@ export interface Monster {
   flip: boolean
   moving: boolean
   animT: number
+  isWorldBoss?: boolean
+  worldBossName?: string
 }
 
 export interface FloatText {
@@ -449,6 +461,7 @@ export const game = {
   groundDrops: [] as GroundDrop[],
   remotePlayers: [] as RemotePlayer[],
   onlinePlayers: [] as RemotePlayer[],
+  presenceError: null as string | null,
   floats: [] as FloatText[],
   autoFarm: false,
   autoSkills: false,
@@ -489,6 +502,7 @@ export const game = {
   skillAnimMax: 0.55,
   skillVfxColor: '#38bdf8',
   petAttackCd: 0,
+  petAttackAnim: 0,
   skillCd: {} as Record<string, number>,
   bubble: null as null | { text: string; until: number },
   announcement: null as null | { body: string; authorId: string; until: number },
@@ -607,6 +621,7 @@ export function getStats(p: SaveData = game.p!) {
   const wAtk = itemPower(p.equipment.weapon)
   const aDef = (['armor', 'shoes', 'cloak', 'accessory'] as const).reduce((total, slot) => total + itemPower(p.equipment[slot]), 0)
   const petBonus = getActivePetBonuses(p.petState, p.equippedGemCompanion, p.ownedGemItems)
+  const mountBonus = getActiveMountBonuses(p.mountState, p.ownedGemItems)
   const ext = sanitizeRpgExt(p.rpgExt)
   const codexBonus = computeBestiaryAndTitleBonuses(ext)
   const runeBonus = computeRuneBonuses(ext)
@@ -622,6 +637,7 @@ export function getStats(p: SaveData = game.p!) {
     Math.floor((80 + L * 22) * job.hpMul + aDef * 2) +
     (p.rebirthBonus?.maxHp ?? 0) +
     (petBonus?.hpBonus ?? 0) +
+    (mountBonus?.hpBonus ?? 0) +
     codexBonus.hpBonus +
     runeBonus.hpBonus +
     setBonus.hpBonus +
@@ -630,6 +646,7 @@ export function getStats(p: SaveData = game.p!) {
     Math.floor((8 + L * 2.6 + wAtk) * job.atkMul) +
     (p.rebirthBonus?.atk ?? 0) +
     (petBonus?.atkBonus ?? 0) +
+    (mountBonus?.atkBonus ?? 0) +
     codexBonus.atkBonus +
     runeBonus.atkBonus +
     setBonus.atkBonus +
@@ -638,6 +655,7 @@ export function getStats(p: SaveData = game.p!) {
     Math.floor((3 + L * 1.4) * job.defMul + aDef) +
     (p.rebirthBonus?.def ?? 0) +
     (petBonus?.defBonus ?? 0) +
+    (mountBonus?.defBonus ?? 0) +
     codexBonus.defBonus +
     runeBonus.defBonus +
     setBonus.defBonus +
@@ -646,6 +664,11 @@ export function getStats(p: SaveData = game.p!) {
   const rawHp = Math.round(baseHp * (1 + talentBonus.hpPct / 100))
   const rawAtk = Math.round(baseAtk * (1 + (talentBonus.atkPct + foodBuff.atkPct + roleSynergy.atkPct) / 100))
   const rawDef = Math.round(baseDef * (1 + (talentBonus.defPct + foodBuff.defPct + roleSynergy.defPct) / 100))
+  const mountSpeedMul = mountBonus?.mounted
+    ? mountBonus.speedMul
+    : p.equippedGemCompanion === 'aurora_cloud_dragon'
+      ? 1.2
+      : 1
 
   return {
     maxHp: rawHp,
@@ -656,7 +679,7 @@ export function getStats(p: SaveData = game.p!) {
       72 *
       job.speedMul *
       (p.speed || 1) *
-      (p.equippedGemCompanion === 'aurora_cloud_dragon' ? 1.2 : 1) *
+      mountSpeedMul *
       (1 + talentBonus.speedPct / 100),
     crit: Math.min(
       0.85,
@@ -1150,6 +1173,9 @@ function damageMonster(m: Monster, mult: number, skillId?: string) {
   const color = crit ? '#ffd60a' : elemMatch.effectiveness === 'super' ? '#fb923c' : elemMatch.effectiveness === 'resist' ? '#94a3b8' : '#ffffff'
   const suffix = crit ? '!' : elemMatch.effectiveness === 'super' ? '▲' : ''
   addFloat(m.x, m.y - 20, `${amount}${suffix}`, color, crit ? 20 : 16)
+  if (m.isWorldBoss) {
+    recordWorldBossDamageAction(amount)
+  }
   if (m.hp <= 0) killMonster(m)
 }
 
@@ -1203,9 +1229,9 @@ function killMonster(m: Monster) {
   }
   m.dead = true
   m.hp = 0
-  m.respawnAt = game.invasion?.active && p.mapId === 'town' ? Infinity : game.time + (def.boss ? 90 : 10)
+  m.respawnAt = m.isWorldBoss || (game.invasion?.active && p.mapId === 'town') ? Infinity : game.time + (def.boss ? 90 : 10)
   p.kills++
-  p.questState = recordQuestProgress(p.questState, { kills: 1, bossKills: def.boss ? 1 : 0 }, p.kills)
+  p.questState = recordQuestProgress(p.questState, { kills: 1, bossKills: def.boss || m.isWorldBoss ? 1 : 0 }, p.kills)
   p.rpgExt = recordBestiaryKillInState(p.rpgExt, m.defId, p)
   const petBonus = getActivePetBonuses(p.petState, p.equippedGemCompanion, p.ownedGemItems)
   const guildBuff = p.rpgExt?.guildId ? getGuildBuffs(p.rpgExt.guildLevel) : null
@@ -1216,16 +1242,18 @@ function killMonster(m: Monster) {
   const foodBuff = getActiveFoodBuffBonuses(extV2.activeFoodBuff)
   const worldPhase = getWorldTimePhase()
   const timeExpMul = 1 + worldPhase.expBonusPct / 100
-  const bpRes = grantBattlePassExpToState(extV2.battlePass, def.boss ? 45 : 12)
+  const jobGoldMul = 1 + (currentJob().goldBonus ?? 0)
+  const bpRes = grantBattlePassExpToState(extV2.battlePass, def.boss || m.isWorldBoss ? 45 : 12)
   extV2.battlePass = bpRes.next
   p.extV2 = extV2
   if (bpRes.leveledUp) {
     say('loot', `★ Battle Pass เลื่อนเป็น Lv.${bpRes.next.level}! เปิดดูรางวัลได้เลย`)
   }
-  addEffect({ type: 'burst', x: m.x, y: m.y - 6, r: def.boss ? 30 : 14, color: def.color, max: 0.4 })
+  addEffect({ type: 'burst', x: m.x, y: m.y - 6, r: def.boss || m.isWorldBoss ? 30 : 14, color: def.color, max: 0.4 })
   const baseGold = randInt(def.gold[0], def.gold[1])
   const gold = Math.round(
     baseGold *
+      jobGoldMul *
       (petBonus?.goldMul ?? 1) *
       (game.partyGoldMul || 1) *
       guildGoldMul *
@@ -1243,9 +1271,13 @@ function killMonster(m: Monster) {
       (1 + (getStats(p).affixExpPct ?? 0) / 100),
   )
   p.gold += gold
+  if (m.isWorldBoss) {
+    p.diamonds = (p.diamonds ?? 0) + 15
+    say('loot', `★ พิชิตบอสโลก ${m.worldBossName ?? def.name} บนแมพ! รับโบนัส +15 เพชร!`)
+  }
   recordDailyMissionProgress({
     kills: 1,
-    bossKills: def.boss ? 1 : 0,
+    bossKills: def.boss || m.isWorldBoss ? 1 : 0,
     goldEarned: gold,
   })
   addFloat(m.x, m.y - 30, `+${gold}G`, '#f2c94c', 9)
@@ -1263,7 +1295,7 @@ function killMonster(m: Monster) {
       .filter((item) => (item.kind === 'weapon' || item.kind === 'armor') && !item.gmOnly)
       .map((item) => [item.id, item]),
   ).values()]
-  const dynamicDrops = def.boss
+  const dynamicDrops = def.boss || m.isWorldBoss
     ? equipmentPool.map((item) => ({ itemId: item.id, chance: 0.001 }))
     : []
   const junkDrops = def.drops.filter((drop) => {
@@ -1283,14 +1315,14 @@ function killMonster(m: Monster) {
   }
   pushKillToast({
     kind: 'kill',
-    monsterName: def.name,
-    isBoss: Boolean(def.boss),
+    monsterName: m.worldBossName ?? def.name,
+    isBoss: Boolean(def.boss || m.isWorldBoss),
     gold,
     exp: expGain,
     items: droppedItems,
     duration: 3.4,
   })
-  if (def.boss) say('system', `★ ${p.name} ได้ปราบ ${def.name} สำเร็จ! ★`)
+  if (def.boss || m.isWorldBoss) say('system', `★ ${p.name} ได้ปราบ ${m.worldBossName ?? def.name} สำเร็จ! ★`)
 }
 
 export function gainExp(n: number) {
@@ -2074,6 +2106,11 @@ export function buyGemShopItem(itemId: string) {
       p.petState = sanitizePetState(p.petState, p.ownedGemItems, p.equippedGemCompanion)
       p.petState.activePetId = itemId
       p.equippedGemCompanion = itemId
+      p.mountState = sanitizeMountState(p.mountState, p.ownedGemItems)
+      if (itemId === 'aurora_cloud_dragon') {
+        p.mountState.activeMountId = 'aurora_cloud_dragon'
+        p.mountState.mounted = true
+      }
     }
   }
 
@@ -2225,6 +2262,86 @@ export function feedCombatPet(petId: string): { ok: boolean; message: string } {
   return { ok: true, message: `อัปเกรด ${def.name} เป็น Lv.${entry.level} สำเร็จ` }
 }
 
+export function unlockMount(mountId: string): { ok: boolean; message: string } {
+  const p = player()
+  const def = getMountDef(mountId)
+  if (!def || def.linkedGemItemId) return { ok: false, message: 'สัตว์ขี่นี้ต้องปลดล็อกจากร้านเพชร' }
+  p.mountState = sanitizeMountState(p.mountState, p.ownedGemItems)
+  if (p.mountState.ownedMounts[mountId]) return { ok: false, message: 'คุณมีสัตว์ขี่ตัวนี้แล้ว' }
+  const costGold = def.unlockGold ?? 0
+  if (p.gold < costGold) return { ok: false, message: `ทองไม่พอ (ต้องการ ${costGold.toLocaleString()} G)` }
+  p.gold -= costGold
+  p.mountState.ownedMounts[mountId] = { level: 1 }
+  p.mountState.activeMountId = mountId
+  p.mountState.mounted = true
+  clampVitals()
+  saveGame()
+  notify()
+  say('loot', `ปลดล็อกและขึ้นขี่ ${def.name} แล้ว! (ความเร็ว +${def.speedBonusPct}%)`)
+  return { ok: true, message: `ปลดล็อกและขึ้นขี่ ${def.name} สำเร็จ` }
+}
+
+export function equipMount(mountId: string | null) {
+  const p = player()
+  p.mountState = sanitizeMountState(p.mountState, p.ownedGemItems)
+  if (!mountId) {
+    p.mountState.mounted = false
+    p.mountState.activeMountId = null
+    say('system', 'ลงจากสัตว์ขี่และเก็บเข้าคอกแล้ว')
+  } else if (p.mountState.ownedMounts[mountId]) {
+    const def = getMountDef(mountId)
+    p.mountState.activeMountId = mountId
+    p.mountState.mounted = true
+    say('system', `เรียกและขึ้นขี่ ${def?.name ?? mountId} แล้ว!`)
+  }
+  clampVitals()
+  saveGame()
+  notify()
+}
+
+export function toggleMountRiding(): { ok: boolean; mounted: boolean; message: string } {
+  const p = player()
+  p.mountState = sanitizeMountState(p.mountState, p.ownedGemItems)
+  let targetId = p.mountState.activeMountId
+  if (!targetId) {
+    const firstOwned = Object.keys(p.mountState.ownedMounts)[0]
+    if (!firstOwned) {
+      say('error', 'ยังไม่มีสัตว์ขี่ — ปลดล็อกได้ในเมนู สัตว์เลี้ยง (ผอบ) & สัตว์ขี่')
+      notify()
+      return { ok: false, mounted: false, message: 'ยังไม่มีสัตว์ขี่' }
+    }
+    targetId = firstOwned
+    p.mountState.activeMountId = targetId
+  }
+  const nextMounted = !p.mountState.mounted
+  p.mountState.mounted = nextMounted
+  const def = getMountDef(targetId)
+  const msg = nextMounted ? `ขึ้นขี่ ${def?.name ?? targetId} แล้ว` : `ลงจาก ${def?.name ?? targetId} แล้ว`
+  say('system', msg)
+  clampVitals()
+  saveGame()
+  notify()
+  return { ok: true, mounted: nextMounted, message: msg }
+}
+
+export function upgradeMount(mountId: string): { ok: boolean; message: string } {
+  const p = player()
+  p.mountState = sanitizeMountState(p.mountState, p.ownedGemItems)
+  const entry = p.mountState.ownedMounts[mountId]
+  const def = getMountDef(mountId)
+  if (!entry || !def) return { ok: false, message: 'ไม่พบสัตว์ขี่' }
+  if (entry.level >= MAX_MOUNT_LEVEL) return { ok: false, message: 'สัตว์ขี่เลเวลสูงสุดแล้ว' }
+  const cost = mountUpgradeCost(entry.level)
+  if (p.gold < cost) return { ok: false, message: `ทองไม่พอ (ต้องการ ${cost.toLocaleString()} G)` }
+  p.gold -= cost
+  entry.level += 1
+  clampVitals()
+  saveGame()
+  notify()
+  say('system', `ฝึกฝนสัตว์ขี่ ${def.name} สำเร็จ! เลื่อนเป็น Lv.${entry.level}`)
+  return { ok: true, message: `อัปเกรด ${def.name} เป็น Lv.${entry.level} สำเร็จ` }
+}
+
 export function claimQuestReward(questId: string): { ok: boolean; message: string } {
   const p = player()
   const quest = QUEST_DEFS.find((q) => q.id === questId)
@@ -2293,13 +2410,14 @@ export async function claimDailyMissionReward(missionId: string): Promise<{ ok: 
 
 export function availableJobs() {
   const p = player()
-  return Object.values(JOBS).filter((j) => j.from === p.jobId)
+  return Object.values(JOBS).filter((j) => j.from === p.jobId || Boolean(j.alsoFrom?.includes(p.jobId)))
 }
 
 export function changeJob(jobId: string) {
   const p = player()
   const job = JOBS[jobId]
-  if (!job || job.from !== p.jobId) return say('error', 'ไม่สามารถเปลี่ยนเป็นอาชีพนี้ได้'), notify()
+  const canPromote = Boolean(job && (job.from === p.jobId || job.alsoFrom?.includes(p.jobId)))
+  if (!job || !canPromote) return say('error', 'ไม่สามารถเปลี่ยนเป็นอาชีพนี้ได้'), notify()
   if (p.level < job.reqLevel) return say('error', `ต้องการเลเวล ${job.reqLevel}`), notify()
   if (p.gold < job.cost) return say('error', 'เงินไม่พอ'), notify()
   const w = p.equipment.weapon
@@ -2633,6 +2751,48 @@ export function recordWorldBossDamageAction(damageDealt: number) {
   p.rpgExt = ext
   saveGame()
   notify()
+}
+
+export function summonWorldBossInField(): { ok: boolean; message: string } {
+  const p = game.p
+  if (!p) return { ok: false, message: 'ยังไม่ได้เลือกตัวละคร' }
+  if (p.mapId === 'town') {
+    changeMap('meadow', 24, 18)
+  }
+  const map = currentMap()
+  const spec = getActiveWorldBoss()
+  game.monsters = game.monsters.filter((m) => !m.isWorldBoss)
+  const candidateOffsets = [
+    { dx: 36, dy: 0 },
+    { dx: -36, dy: 0 },
+    { dx: 0, dy: 36 },
+    { dx: 0, dy: -36 },
+  ]
+  let spawnX = p.x
+  let spawnY = p.y
+  for (const off of candidateOffsets) {
+    const cx = Math.max(TILE * 2, Math.min((map.width - 2) * TILE, p.x + off.dx))
+    const cy = Math.max(TILE * 2, Math.min((map.height - 2) * TILE, p.y + off.dy))
+    if (!boxBlocked(map, cx, cy, 8, 8)) {
+      spawnX = cx
+      spawnY = cy
+      break
+    }
+  }
+  const wbMonster = makeMonster(spec.monsterId, spawnX, spawnY)
+  wbMonster.hp = spec.maxHp
+  wbMonster.maxHp = spec.maxHp
+  wbMonster.provoked = true
+  wbMonster.isWorldBoss = true
+  wbMonster.worldBossName = spec.name
+  game.monsters.push(wbMonster)
+  game.panel = null
+  addEffect({ type: 'burst', x: spawnX, y: spawnY - 8, r: 34, color: '#f43f5e', max: 0.65 })
+  syncBgmForMap(p.mapId, true)
+  const msg = `★ อัญเชิญบอสโลก "${spec.name}" ลงสู่แมพ ${map.name} แล้ว! ★`
+  say('system', msg)
+  notify()
+  return { ok: true, message: msg }
 }
 
 export function claimWorldBossMilestoneAction(milestoneId: string): { ok: boolean; message: string } {
@@ -3827,6 +3987,7 @@ function resetRuntime() {
   game.attackHeld = false
   game.attackAnim = 0
   game.skillAnim = 0
+  game.petAttackAnim = 0
   game.skillCd = {}
   game.bubble = null
   game.socialTargetId = null
@@ -3947,6 +4108,7 @@ export function loadGame(d: SaveData) {
       def: finiteInt(d.rebirthBonus?.def, 0, Number.MAX_SAFE_INTEGER, 0),
     },
     petState: sanitizePetState(d.petState, d.ownedGemItems ?? [], d.equippedGemCompanion ?? null),
+    mountState: sanitizeMountState(d.mountState, d.ownedGemItems ?? []),
     questState: sanitizeQuestState(d.questState, finiteInt(d.kills, 0, Number.MAX_SAFE_INTEGER, 0)),
     towerState: sanitizeTowerState(d.towerState),
     rpgExt: sanitizeRpgExt(d.rpgExt),
@@ -4004,6 +4166,7 @@ export function newGame(name: string) {
     kills: 0,
     savedAt: Date.now(),
     petState: createDefaultPetState(),
+    mountState: createDefaultMountState(),
     questState: createDefaultQuestState(0),
     towerState: createDefaultTowerState(),
     rpgExt: createDefaultRpgExt(),
@@ -4055,6 +4218,7 @@ export function update(dt: number) {
   game.attackAnim = Math.max(0, game.attackAnim - dt)
   game.skillAnim = Math.max(0, game.skillAnim - dt)
   game.petAttackCd = Math.max(0, game.petAttackCd - dt)
+  game.petAttackAnim = Math.max(0, game.petAttackAnim - dt)
   game.guardCd = Math.max(0, game.guardCd - dt)
   game.dashCd = Math.max(0, game.dashCd - dt)
   game.gatherCd = Math.max(0, game.gatherCd - dt)
@@ -4140,6 +4304,7 @@ export function update(dt: number) {
       }
       if (bestTarget) {
         game.petAttackCd = petBonus.attackInterval
+        game.petAttackAnim = 0.45
         const petOffsetX = game.facing === 'left' ? 12 : game.facing === 'right' ? -12 : -14
         game.projectiles.push({
           x: p.x + petOffsetX,

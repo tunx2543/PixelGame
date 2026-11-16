@@ -69,16 +69,35 @@ describe('Per-class skill definitions and VFX mapping', () => {
     assert.equal(JOBS.novice.skills.length, 2)
     assert.ok(JOBS.novice.skills.some((s) => s.id === 'first-aid' && s.kind === 'heal'))
 
-    const tier2Combat = ['knight', 'paladin', 'wizard', 'cleric', 'hunter', 'assassin']
+    const tier2Combat = [
+      'knight',
+      'paladin',
+      'wizard',
+      'cleric',
+      'hunter',
+      'assassin',
+      'templar',
+      'kensei',
+      'iron_fist',
+      'the_king',
+      'wicked_necromancer',
+      'mamushi',
+      'nekobaku',
+      'sinister',
+    ]
     for (const jobId of tier2Combat) {
       assert.equal(JOBS[jobId].skills.length, 3, `Expected 3 skills on Tier 2 job ${jobId}`)
     }
     assert.ok(JOBS.paladin.skills.some((s) => s.id === 'sacred-aegis' && s.kind === 'heal'))
+    assert.equal(JOBS.merchant.from, 'novice')
+    assert.equal(JOBS.merchant.goldBonus, 0.15)
+    assert.ok(JOBS.the_king.from === 'merchant' && JOBS.the_king.alsoFrom?.includes('mage'))
+    assert.ok(JOBS.kensei.from === 'swordsman' && JOBS.kensei.alsoFrom?.includes('thief'))
   })
 
-  it('maps every skill across all 11 combat classes to a distinct VFX spec and valid icon path', () => {
+  it('maps every skill across all 20 combat classes to a distinct VFX spec and valid icon path', () => {
     const combatJobs = Object.values(JOBS).filter((j) => j.id !== 'gm')
-    assert.equal(combatJobs.length, 11)
+    assert.equal(combatJobs.length, 20)
 
     for (const job of combatJobs) {
       assert.ok(job.skills.length >= 2, `${job.id} should have at least 2 skills`)

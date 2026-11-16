@@ -93,7 +93,7 @@ export function Panels() {
       return <GuidePanel />
     case 'models':
       return (
-        <PanelFrame title="คลังโมเดล 2D & แอนิเมชั่น" subtitle="พรีวิวโมเดลครบ 12 อาชีพ และ 17 มอนสเตอร์ พร้อมแอนิเมชั่น Idle / Walk / Attack">
+        <PanelFrame title="คลังโมเดล 2D & แอนิเมชั่น" subtitle="พรีวิวโมเดลครบ 21 อาชีพ (รวม Lumivara), 17 มอนสเตอร์, 5 สัตว์ขี่ และ 10 สัตว์เลี้ยง/ผอบ">
           <ModelGalleryView compact />
         </PanelFrame>
       )

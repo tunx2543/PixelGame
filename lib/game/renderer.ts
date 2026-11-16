@@ -1,6 +1,7 @@
 import { ITEMS, JOBS, MONSTERS, type MonsterSprite } from './data'
 import { GEM_SHOP_ITEMS } from './gem-shop'
 import { currentMap, game, getStats } from './engine'
+import { computeCameraZoom } from './camera'
 import { T, TILE } from './maps'
 import { getMonsterModelSpec } from './models-2d'
 import {
@@ -10,9 +11,12 @@ import {
   mapCanvas,
   mapObjectSprite,
   monsterSprite,
+  mountSprite,
+  petSprite,
   type SpriteAction,
 } from './sprites'
 import { getActivePetBonuses } from './systems'
+import { getActiveMountBonuses } from './mounts'
 import { TITLE_DEFS } from './rpg-systems'
 import { GATHERING_NODES, getCosmeticDef, getWorldTimePhase, sanitizeExtV2 } from './extended-systems'
 import { drawOverworldSkillEffect, drawRebirthAura } from './vfx-canvas'
@@ -159,7 +163,8 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   ctx.imageSmoothingEnabled = false
 
   const cssW = cw / dpr
-  const zoom = cssW < 700 ? 1.6 : 2.4
+  const cssH = ch / dpr
+  const zoom = computeCameraZoom(cssW, cssH)
   const s = zoom * dpr
   const viewW = cw / s
   const viewH = ch / s
@@ -395,13 +400,13 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         const hitShake = m.hitFlash > 0 ? Math.sin(m.hitFlash * 95) * 2.2 : 0
 
         shadow(ctx, m.x + hoverX, m.y, (5.5 - (flying ? Math.sin(m.animT * 4.2) * 0.4 : 0)) * (def.boss ? 1.55 : 1))
-        if (def.boss || mSpec.auraColor) {
+        if (def.boss || mSpec.auraColor || m.isWorldBoss) {
           ctx.save()
-          ctx.strokeStyle = mSpec.auraColor ?? def.color
-          ctx.globalAlpha = (def.boss ? 0.28 : 0.16) + Math.sin(t * 4) * 0.1
-          ctx.lineWidth = def.boss ? 1.3 : 1
+          ctx.strokeStyle = m.isWorldBoss ? '#fde047' : mSpec.auraColor ?? def.color
+          ctx.globalAlpha = (def.boss || m.isWorldBoss ? 0.34 : 0.16) + Math.sin(t * 4) * 0.1
+          ctx.lineWidth = m.isWorldBoss ? 1.8 : def.boss ? 1.3 : 1
           ctx.beginPath()
-          ctx.ellipse(m.x, m.y, (w * 0.32), (w * 0.12), 0, 0, Math.PI * 2)
+          ctx.ellipse(m.x, m.y, w * (m.isWorldBoss ? 0.38 : 0.32), w * (m.isWorldBoss ? 0.14 : 0.12), 0, 0, Math.PI * 2)
           ctx.stroke()
           ctx.restore()
         }
@@ -497,6 +502,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   const weapon = p.equipment.weapon ? ITEMS[p.equipment.weapon.itemId] : null
   const gemFashion = GEM_SHOP_ITEMS.find((item) => item.id === p.equippedGemFashion)
   const activePet = getActivePetBonuses(p.petState, p.equippedGemCompanion, p.ownedGemItems)
+  const activeMount = getActiveMountBonuses(p.mountState, p.ownedGemItems)
   const extV2 = sanitizeExtV2(p.extV2)
   const equippedWing = getCosmeticDef(extV2.equippedWing)
   const equippedWeaponSkin = getCosmeticDef(extV2.equippedWeaponSkin)
@@ -553,7 +559,12 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         else oy = lungeDist
       }
 
-      shadow(ctx, p.x, p.y, 6)
+      const isMounted = Boolean(activeMount?.mounted)
+      const mountHover =
+        isMounted && activeMount?.def.flying ? Math.round(Math.sin(t * 4.2) * 1.5 - 2) : 0
+      const riderSeatY = isMounted && activeMount ? activeMount.def.seatOffsetY + mountHover : 0
+
+      shadow(ctx, p.x, p.y, isMounted ? 9 : 6)
       if (game.invulnUntil > t) {
         ctx.save()
         ctx.strokeStyle = '#22d3ee'
@@ -566,14 +577,24 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       }
       if (game.moving && !p.invisible) {
         ctx.save()
-        ctx.fillStyle = 'rgba(255,255,255,0.28)'
+        ctx.fillStyle = isMounted && activeMount?.def.auraColor ? activeMount.def.auraColor : 'rgba(255,255,255,0.28)'
         const dustPhase = (game.walkT * 4) % 1
-        ctx.globalAlpha = (1 - dustPhase) * 0.45
-        const dx = game.facing === 'left' ? 4 : game.facing === 'right' ? -4 : (stride > 0 ? -3 : 3)
-        ctx.fillRect(Math.round(p.x + dx - dustPhase * dx), Math.round(p.y - 1 - dustPhase * 2), 2, 1.5)
+        ctx.globalAlpha = (1 - dustPhase) * (isMounted ? 0.6 : 0.45)
+        const dx = game.facing === 'left' ? 5 : game.facing === 'right' ? -5 : (stride > 0 ? -3 : 3)
+        ctx.fillRect(Math.round(p.x + dx - dustPhase * dx), Math.round(p.y - 1 - dustPhase * 2), isMounted ? 3 : 2, 1.5)
         ctx.restore()
       }
       ctx.globalAlpha = p.invisible ? 0.18 : 1
+      if (isMounted && activeMount?.def.auraColor) {
+        ctx.save()
+        ctx.strokeStyle = activeMount.def.auraColor
+        ctx.lineWidth = 1.2
+        ctx.globalAlpha = (p.invisible ? 0.12 : 0.38) + Math.sin(t * 4) * 0.12
+        ctx.beginPath()
+        ctx.ellipse(p.x, p.y - 1, 13, 5, 0, 0, Math.PI * 2)
+        ctx.stroke()
+        ctx.restore()
+      }
       if (p.gm) {
         ctx.fillStyle = `rgba(255, 214, 10, ${0.18 + Math.sin(t * 5) * 0.08})`
         ctx.beginPath()
@@ -592,6 +613,25 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           layer: 'back',
         })
       }
+      if (isMounted && activeMount) {
+        const mAction: SpriteAction = game.moving ? 'walk' : attacking ? 'attack' : 'idle'
+        const mFrame =
+          mAction === 'walk'
+            ? Math.floor(game.walkT * 10) % 6
+            : mAction === 'attack'
+              ? atkFrame
+              : Math.floor(t * 2.5) % 4
+        const mImg = mountSprite(activeMount.mountId, game.facing, mAction, mFrame, atkFrame)
+        const mDrawW = Math.round(mImg.width * 0.78)
+        const mDrawH = Math.round(mImg.height * 0.78)
+        ctx.drawImage(
+          mImg,
+          Math.round(p.x + ox * 0.4 - mDrawW / 2),
+          Math.round(p.y + oy * 0.4 + mountHover - mDrawH + 3),
+          mDrawW,
+          mDrawH,
+        )
+      }
       if (equippedWing) {
         ctx.save()
         ctx.globalAlpha = p.invisible ? 0.15 : 0.9
@@ -600,16 +640,16 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         ctx.strokeStyle = equippedWing.secondaryColor
         ctx.lineWidth = 1
         ctx.beginPath()
-        ctx.moveTo(p.x - 2, p.y - 15)
-        ctx.lineTo(p.x - 14, p.y - 23 - flap)
-        ctx.lineTo(p.x - 10, p.y - 11 - flap * 0.4)
+        ctx.moveTo(p.x - 2, p.y + riderSeatY - 15)
+        ctx.lineTo(p.x - 14, p.y + riderSeatY - 23 - flap)
+        ctx.lineTo(p.x - 10, p.y + riderSeatY - 11 - flap * 0.4)
         ctx.closePath()
         ctx.fill()
         ctx.stroke()
         ctx.beginPath()
-        ctx.moveTo(p.x + 2, p.y - 15)
-        ctx.lineTo(p.x + 14, p.y - 23 - flap)
-        ctx.lineTo(p.x + 10, p.y - 11 - flap * 0.4)
+        ctx.moveTo(p.x + 2, p.y + riderSeatY - 15)
+        ctx.lineTo(p.x + 14, p.y + riderSeatY - 23 - flap)
+        ctx.lineTo(p.x + 10, p.y + riderSeatY - 11 - flap * 0.4)
         ctx.closePath()
         ctx.fill()
         ctx.stroke()
@@ -619,11 +659,11 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         ctx.save()
         ctx.globalAlpha = p.invisible ? 0.14 : 0.86
         const wingBob = Math.sin(t * 5) * 0.7
-        drawGemItemPixels(ctx, gemFashion, p.x - 8, p.y - drawH + 5 + wingBob, 2)
+        drawGemItemPixels(ctx, gemFashion, p.x - 8, p.y + riderSeatY - drawH + 5 + wingBob, 2)
         ctx.restore()
       }
       ctx.save()
-      ctx.translate(Math.round(p.x + ox), Math.round(p.y + oy))
+      ctx.translate(Math.round(p.x + ox), Math.round(p.y + oy + riderSeatY))
       ctx.drawImage(img, Math.round(-drawW / 2), Math.round(-drawH + footOffset), drawW, drawH)
       if ((attacking || (castingSkill && !isGmEpic)) && !isGmEpic) {
         drawWeaponAttackOverlay(
@@ -638,7 +678,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       if ((p.rebirthCount ?? 0) > 0) {
         drawRebirthAura(ctx, {
           x: p.x,
-          y: p.y,
+          y: p.y + riderSeatY,
           timeSec: t,
           rebirthCount: p.rebirthCount ?? 0,
           radiusX: 12,
@@ -648,7 +688,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         })
       }
       if (gemFashion?.id === 'aurora_cat_hood') {
-        drawGemItemPixels(ctx, gemFashion, p.x - 5, p.y - drawH - 1, 1.25)
+        drawGemItemPixels(ctx, gemFashion, p.x - 5, p.y + riderSeatY - drawH - 1, 1.25)
       }
       if (gemFashion?.id === 'sunfire_aura') {
         ctx.save()
@@ -672,17 +712,41 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   })
 
   if (activePet) {
-    const petOffsetX = game.facing === 'left' ? 12 : game.facing === 'right' ? -12 : -14
+    const isPhao = activePet.def.category === 'phao' || activePet.petId.startsWith('phao_')
+    const petOffsetX = game.facing === 'left' ? 14 : game.facing === 'right' ? -14 : -15
     const petX = p.x + petOffsetX + Math.sin(t * 2.5) * 1.5
-    const petY = p.y - 8 + Math.sin(t * 4) * 2
-    const petScale = activePet.petId === 'aurora_cloud_dragon' ? 2 : 1.5
+    const petY = p.y - (isPhao ? 5 : 3) + Math.sin(t * 4) * (isPhao ? 2.4 : 1.6)
+    const petAttacking = game.petAttackAnim > 0
+    const petAtkProgress = petAttacking ? Math.max(0, Math.min(1, 1 - game.petAttackAnim / 0.45)) : 0
+    const petAtkFrame = Math.min(3, Math.floor(petAtkProgress * 4))
+    const petAction: SpriteAction = petAttacking ? 'attack' : game.moving ? 'walk' : 'idle'
+    const petFrame = petAttacking
+      ? petAtkFrame
+      : petAction === 'walk'
+        ? Math.floor(game.walkT * 9) % 6
+        : Math.floor(t * 2.6) % 4
+    const pImg = petSprite(activePet.petId, game.facing, petAction, petFrame, petAtkFrame)
+    const pScale = activePet.petId === 'aurora_cloud_dragon' ? 0.85 : isPhao ? 0.74 : 0.7
+    const pDrawW = Math.round(pImg.width * pScale)
+    const pDrawH = Math.round(pImg.height * pScale)
+
     ents.push({
-      y: petY,
+      y: p.y + 1,
       draw: () => {
         ctx.save()
         ctx.globalAlpha = p.invisible ? 0.18 : 1
-        shadow(ctx, petX, petY + 1, activePet.petId === 'aurora_cloud_dragon' ? 6 : 4)
-        drawGemItemPixels(ctx, activePet.def, petX - 4 * petScale, petY - 6 * petScale, petScale)
+        shadow(ctx, petX, p.y + 1, isPhao ? 5 : 4)
+        if (isPhao) {
+          ctx.save()
+          ctx.strokeStyle = activePet.def.colors.accent
+          ctx.globalAlpha = (p.invisible ? 0.1 : 0.45) + Math.sin(t * 5) * 0.15
+          ctx.lineWidth = 1
+          ctx.beginPath()
+          ctx.ellipse(petX, petY + 1, 7, 2.5, 0, 0, Math.PI * 2)
+          ctx.stroke()
+          ctx.restore()
+        }
+        ctx.drawImage(pImg, Math.round(petX - pDrawW / 2), Math.round(petY - pDrawH + 2), pDrawW, pDrawH)
         ctx.restore()
       },
     })
@@ -944,16 +1008,18 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       ? 31
       : Math.round(mSpec.canvasSize.height * mScale * 0.78) + (mSpec.flying ? 5 : 0)
     const [x, y] = toS(m.x, m.y - h)
-    const color = def.boss ? '#ff6b6b' : def.level > p.level + 5 ? '#ff8fa3' : def.level < p.level - 5 ? '#a0a0a0' : '#ffffff'
-    text(`${def.boss ? '★ ' : ''}${def.name} Lv.${def.level}`, x, y - 8 * dpr, color, def.boss ? 10 : 8)
-    if (m.hp < m.maxHp || def.boss) {
-      const bw = (def.boss ? 40 : 18) * s
-      const bh = 2 * s
+    const isAnyBoss = Boolean(def.boss || m.isWorldBoss)
+    const color = m.isWorldBoss ? '#fde047' : def.boss ? '#ff6b6b' : def.level > p.level + 5 ? '#ff8fa3' : def.level < p.level - 5 ? '#a0a0a0' : '#ffffff'
+    const label = m.isWorldBoss ? `[บอสโลก] ${m.worldBossName ?? def.name}` : `${def.boss ? '★ ' : ''}${def.name} Lv.${def.level}`
+    text(label, x, y - 8 * dpr, color, isAnyBoss ? 10 : 8)
+    if (m.hp < m.maxHp || isAnyBoss) {
+      const bw = (m.isWorldBoss ? 48 : def.boss ? 40 : 18) * s
+      const bh = (m.isWorldBoss ? 2.5 : 2) * s
       ctx.fillStyle = 'rgba(10,8,20,0.9)'
       ctx.fillRect(x - bw / 2 - dpr, y - dpr, bw + 2 * dpr, bh + 2 * dpr)
       ctx.fillStyle = '#3a0d12'
       ctx.fillRect(x - bw / 2, y, bw, bh)
-      ctx.fillStyle = '#e5484d'
+      ctx.fillStyle = m.isWorldBoss ? '#f43f5e' : '#e5484d'
       ctx.fillRect(x - bw / 2, y, bw * Math.max(0, m.hp / m.maxHp), bh)
     }
   }

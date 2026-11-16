@@ -1422,7 +1422,7 @@ service cloud.firestore {
 
       allow list: if isSignedIn() &&
         isEmailVerified() &&
-        resource.data.mapId is string &&
+        (resource.data.heartbeatMs >= 0 || resource.data.mapId is string) &&
         request.query.limit != null &&
         request.query.limit <= 60;
 
@@ -1872,7 +1872,7 @@ service cloud.firestore {
 
       allow list: if isSignedIn() &&
         isEmailVerified() &&
-        resource.data.memberCount >= 1 &&
+        resource.data.level >= 1 &&
         request.query.limit != null &&
         request.query.limit <= 30;
 

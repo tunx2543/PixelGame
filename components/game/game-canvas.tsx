@@ -9,6 +9,7 @@ import {
   openPanel,
   saveGame,
   toggleZenHud,
+  toggleMountRiding,
   triggerDodgeDash,
   triggerOpenWorldGuard,
   triggerUltimateSkill,
@@ -107,6 +108,9 @@ export function GameCanvas() {
       } else if (k === 'h') {
         e.preventDefault()
         toggleZenHud()
+      } else if (k === 'm') {
+        e.preventDefault()
+        toggleMountRiding()
       } else if (k === '1' || k === '2' || k === '3') castSkill(Number(k) - 1)
       else if (k === 'q') drinkPotion('hp')
       else if (k === 'r') drinkPotion('mp')

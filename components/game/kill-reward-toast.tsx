@@ -16,9 +16,9 @@ export function KillRewardToast({
   onDismiss?: (id: number) => void
 }) {
   const g = useGame()
-  const activeToasts = (toasts ?? g.killToasts).filter((toast) =>
-    toasts ? true : toast.until > game.time,
-  )
+  const activeToasts = (toasts ?? g.killToasts)
+    .filter((toast) => (toasts ? true : toast.until > game.time))
+    .slice(0, 2)
 
   const handleDismiss = (id: number) => {
     if (onDismiss) onDismiss(id)
@@ -29,7 +29,8 @@ export function KillRewardToast({
     <div
       aria-live="polite"
       aria-label="แจ้งเตือนรางวัลการกำจัดมอนสเตอร์"
-      className="pointer-events-none absolute right-2 top-2 z-40 flex w-[min(17.5rem,calc(100vw-1rem))] flex-col gap-2 md:right-3 md:top-3"
+      data-testid="kill-reward-toast-list"
+      className="pointer-events-none absolute right-2 top-11 z-40 flex w-[min(12.25rem,38vw)] flex-col gap-1 sm:top-12 sm:w-[14.25rem] md:right-3"
     >
       <AnimatePresence initial={false}>
         {activeToasts.map((toast) => {
@@ -38,29 +39,31 @@ export function KillRewardToast({
           const remaining = toasts
             ? totalDuration
             : Math.max(0.2, Math.min(totalDuration, toast.until - game.time))
+          const shownItems = toast.items.slice(0, 2)
+          const extraItems = Math.max(0, toast.items.length - shownItems.length)
 
           return (
             <motion.div
               key={toast.id}
               layout
-              initial={{ opacity: 0, x: 28, scale: 0.94 }}
+              initial={{ opacity: 0, x: 20, scale: 0.95 }}
               animate={{ opacity: 1, x: 0, scale: 1 }}
-              exit={{ opacity: 0, x: 24, scale: 0.94 }}
-              transition={{ duration: 0.22, ease: 'easeOut' }}
+              exit={{ opacity: 0, x: 18, scale: 0.95 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
               role="status"
-              className={`pointer-events-auto pixel-panel relative overflow-hidden p-2.5 shadow-xl ${
+              className={`pointer-events-auto pixel-panel relative overflow-hidden px-2 py-1.5 shadow-lg ${
                 toast.isBoss
-                  ? 'border-[#ffd60a] bg-[#1b1c2e]/95'
+                  ? 'border-[#ffd60a] bg-[#1b1c2e]/92'
                   : isPickup
-                    ? 'border-accent/70 bg-[#1b1c2e]/95'
-                    : 'bg-[#1b1c2e]/95'
+                    ? 'border-accent/70 bg-[#1b1c2e]/92'
+                    : 'bg-[#1b1c2e]/92'
               }`}
             >
-              {/* Header */}
-              <div className="flex items-start justify-between gap-2">
+              {/* Compact Header */}
+              <div className="flex items-center justify-between gap-1.5">
                 <div className="flex min-w-0 items-center gap-1.5">
                   <span
-                    className={`grid size-6 shrink-0 place-items-center border border-[#0e0f1a] ${
+                    className={`grid size-4 shrink-0 place-items-center border border-[#0e0f1a] ${
                       toast.isBoss
                         ? 'bg-[#ffd60a]/20 text-[#ffd60a]'
                         : isPickup
@@ -69,69 +72,60 @@ export function KillRewardToast({
                     }`}
                   >
                     {toast.isBoss ? (
-                      <Crown className="size-3.5" aria-hidden />
+                      <Crown className="size-2.5" aria-hidden />
                     ) : isPickup ? (
-                      <Package className="size-3.5" aria-hidden />
+                      <Package className="size-2.5" aria-hidden />
                     ) : (
-                      <Skull className="size-3.5" aria-hidden />
+                      <Skull className="size-2.5" aria-hidden />
                     )}
                   </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-bold text-foreground">
-                      {isPickup ? toast.monsterName : `กำจัด ${toast.monsterName}`}
-                    </p>
-                    {toast.isBoss && (
-                      <span className="text-[10px] font-semibold text-[#ffd60a]">
-                        BOSS DEFEATED
-                      </span>
-                    )}
-                  </div>
+                  <p className="truncate text-[10px] font-bold leading-tight text-foreground sm:text-[11px]">
+                    {isPickup ? toast.monsterName : `กำจัด ${toast.monsterName}`}
+                  </p>
                 </div>
 
                 <button
                   type="button"
                   aria-label="ปิดการแจ้งเตือน"
                   onClick={() => handleDismiss(toast.id)}
-                  className="p-0.5 text-muted-foreground hover:text-foreground"
+                  className="shrink-0 p-0.5 text-muted-foreground hover:text-foreground"
                 >
-                  <X className="size-3.5" aria-hidden />
+                  <X className="size-3" aria-hidden />
                 </button>
               </div>
 
-              {/* Gold & EXP Rewards */}
+              {/* Compact Inline Gold & EXP */}
               {(toast.gold > 0 || toast.exp > 0) && (
-                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[9px] leading-tight sm:text-[10px]">
                   {toast.gold > 0 && (
-                    <span className="flex items-center gap-1 border border-[#0e0f1a] bg-gold/15 px-1.5 py-0.5 font-semibold text-gold tabular-nums">
-                      <Coins className="size-3" aria-hidden />
-                      +{formatNum(toast.gold)} Gold
+                    <span className="inline-flex items-center gap-0.5 font-semibold text-gold tabular-nums">
+                      <Coins className="size-2.5 shrink-0" aria-hidden />+{formatNum(toast.gold)}G
                     </span>
                   )}
                   {toast.exp > 0 && (
-                    <span className="flex items-center gap-1 border border-[#0e0f1a] bg-exp/15 px-1.5 py-0.5 font-semibold text-[#e0b3ff] tabular-nums">
-                      <Sparkles className="size-3" aria-hidden />
-                      +{formatNum(toast.exp)} EXP
+                    <span className="inline-flex items-center gap-0.5 font-semibold text-[#e0b3ff] tabular-nums">
+                      <Sparkles className="size-2.5 shrink-0" aria-hidden />+{formatNum(toast.exp)} EXP
                     </span>
                   )}
                 </div>
               )}
 
-              {/* Dropped / Received Items */}
-              {toast.items.length > 0 && (
-                <div className="mt-2 space-y-1 border-t border-border/60 pt-1.5">
-                  {toast.items.map((entry, idx) => {
+              {/* Compact Dropped / Received Items */}
+              {shownItems.length > 0 && (
+                <div className="mt-1 space-y-0.5 border-t border-border/50 pt-1">
+                  {shownItems.map((entry, idx) => {
                     const item = ITEMS[entry.itemId]
                     return (
                       <div
                         key={`${entry.itemId}-${idx}`}
-                        className="flex items-center justify-between gap-2 text-[11px]"
+                        className="flex items-center justify-between gap-1.5 text-[9px] leading-tight sm:text-[10px]"
                       >
-                        <div className="flex min-w-0 items-center gap-1.5">
+                        <div className="flex min-w-0 items-center gap-1">
                           {item ? (
-                            <ItemIcon itemId={entry.itemId} size={18} />
+                            <ItemIcon itemId={entry.itemId} size={13} />
                           ) : (
                             <Package
-                              className="size-3.5 shrink-0 text-[#f3ecd9]"
+                              className="size-3 shrink-0 text-[#f3ecd9]"
                               aria-hidden
                             />
                           )}
@@ -148,6 +142,9 @@ export function KillRewardToast({
                       </div>
                     )
                   })}
+                  {extraItems > 0 && (
+                    <p className="text-[9px] text-muted-foreground tabular-nums">+{extraItems} รายการ</p>
+                  )}
                 </div>
               )}
 
@@ -157,7 +154,7 @@ export function KillRewardToast({
                 animate={{ scaleX: 0 }}
                 transition={{ duration: remaining, ease: 'linear' }}
                 style={{ transformOrigin: 'left' }}
-                className={`mt-2 h-0.5 w-full ${
+                className={`mt-1 h-0.5 w-full ${
                   toast.isBoss ? 'bg-[#ffd60a]' : isPickup ? 'bg-accent' : 'bg-primary'
                 }`}
               />

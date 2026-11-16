@@ -9,7 +9,7 @@ import type { FloatingDamagePopup } from '@/lib/game/floating-damage'
 import { registerCombatAudioHandler } from '@/lib/game/combat-audio'
 import { computeShakeFrame, type ScreenShakeEvent } from '@/lib/game/screen-shake'
 import { getMonsterModelSpec } from '@/lib/game/models-2d'
-import { humanSprite, jobHumanColors, monsterSprite, type SpriteAction } from '@/lib/game/sprites'
+import { humanSprite, jobHumanColors, monsterSprite, petSprite, type SpriteAction } from '@/lib/game/sprites'
 import { getActivePetBonuses } from '@/lib/game/systems'
 import { drawRebirthAura, drawStageSkillEffect } from '@/lib/game/vfx-canvas'
 
@@ -361,38 +361,28 @@ export function EncounterStageCanvas({
             })
           }
 
-          // --- Active Combat Pet Sprite ---
+          // --- Active Combat Pet Sprite (2D Pet / ผอบ Model) ---
           const activePet = getActivePetBonuses(s.petState, s.equippedGemCompanion, s.ownedGemItems)
           const petX = heroX - 54 + Math.sin(t * 2.5) * 4
-          const petY = floorY - 38 + Math.sin(t * 4) * 5
+          const petY = floorY - 12 + Math.sin(t * 4) * 4
           if (activePet) {
-            const pCell = 3.5
-            const pPalette = {
-              '1': activePet.def.colors.primary,
-              '2': activePet.def.colors.secondary,
-              '3': activePet.def.colors.accent,
-            }
+            const petBoltAge = (now - petAtk) / 260
+            const petIsAttacking = petAtk > 0 && petBoltAge >= 0 && petBoltAge < 1.3
+            const petAction: SpriteAction = petIsAttacking ? 'attack' : ph === 'FIGHTING' ? 'walk' : 'idle'
+            const petAtkFrame = petIsAttacking ? Math.min(3, Math.floor((petBoltAge / 1.3) * 4)) : 0
+            const petFrame = petIsAttacking ? petAtkFrame : Math.floor(t * 3.2) % 6
+            const pImg = petSprite(activePet.petId, 'right', petAction, petFrame, petAtkFrame)
+            const pScale = 1.9
+            const pw = Math.round(pImg.width * pScale)
+            const phPx = Math.round(pImg.height * pScale)
+
             ctx.fillStyle = 'rgba(0,0,0,0.28)'
             ctx.beginPath()
-            ctx.ellipse(petX, floorY + 1, 12, 4, 0, 0, Math.PI * 2)
+            ctx.ellipse(petX, floorY + 1, 14, 4.5, 0, 0, Math.PI * 2)
             ctx.fill()
 
-            ctx.save()
-            activePet.def.pixels.forEach((row, rIdx) => {
-              Array.from(row.padEnd(8, '.').slice(0, 8)).forEach((cell, cIdx) => {
-                if (cell === '.') return
-                ctx.fillStyle = pPalette[cell as keyof typeof pPalette]
-                ctx.fillRect(
-                  Math.round(petX - 4 * pCell + cIdx * pCell),
-                  Math.round(petY - 4 * pCell + rIdx * pCell),
-                  pCell,
-                  pCell,
-                )
-              })
-            })
-            ctx.restore()
+            ctx.drawImage(pImg, Math.round(petX - pw / 2), Math.round(petY - phPx + 6), pw, phPx)
 
-            const petBoltAge = (now - petAtk) / 260
             if (petAtk > 0 && petBoltAge >= 0 && petBoltAge < 1 && mon) {
               const bx = petX + (enemyX - petX) * petBoltAge
               const by = petY + (floorY - 36 - petY) * petBoltAge

@@ -3,8 +3,12 @@ import { T, TILE, type MapDef, type MapObjectKind } from './maps'
 import {
   getJobModelSpec,
   getMonsterModelSpec,
+  getMountModelSpec,
+  getPetModelSpec,
   type ArmorStyle,
   type HatStyle as RegistryHatStyle,
+  type MountModelSpec,
+  type PetModelSpec,
 } from './models-2d'
 import {
   computeGmPoseSpec,
@@ -1002,6 +1006,42 @@ function drawHatOrHair(
     s.rect(cx - 5, headTopY + 1, 11, 1, '#ffd60a')
     s.line(cx, headTopY - 5, cx, headTopY + 1, '#ffd60a', 1)
     s.line(cx - 2, headTopY - 3, cx + 2, headTopY - 3, '#ffd60a', 1)
+    return
+  }
+
+  if (style === 'merchant_beret') {
+    drawBaseHair(true)
+    // Puffed merchant beret with gold coin crest and plume
+    s.rect(cx - 6, headTopY - 1, 13, 2, hatDark)
+    s.rect(cx - 5, headTopY - 3, 11, 3, hatCol)
+    s.rect(cx - 3, headTopY - 4, 7, 2, hatHi)
+    s.rect(cx - 4, headTopY, 9, 1, colors.accent)
+    if (dir !== 'up') {
+      s.px(cx + 1, headTopY - 1, '#ffd60a')
+      s.px(cx + 2, headTopY - 1, '#fef08a')
+    }
+    s.line(cx - 4, headTopY - 2, cx - 7, headTopY - 5, '#fef08a', 1)
+    return
+  }
+
+  if (style === 'cat_hood') {
+    drawBaseHair(true)
+    // Cat-ear alchemy hood & brass goggles (Nekobaku)
+    s.rect(cx - 5, headTopY - 1, 11, 2, hatDark)
+    s.rect(cx - 4, headTopY - 2, 9, 2, hatCol)
+    // Twin cat ears
+    s.rect(cx - 5, headTopY - 5, 3, 3, hatCol)
+    s.rect(cx + 3, headTopY - 5, 3, 3, hatCol)
+    s.px(cx - 4, headTopY - 6, hatHi)
+    s.px(cx + 4, headTopY - 6, hatHi)
+    s.px(cx - 4, headTopY - 4, '#fda4af')
+    s.px(cx + 4, headTopY - 4, '#fda4af')
+    if (dir !== 'up') {
+      // Forehead alchemy goggles
+      s.rect(cx - 4, headTopY - 1, 3, 2, '#38bdf8')
+      s.rect(cx + 2, headTopY - 1, 3, 2, '#fbbf24')
+      s.px(cx, headTopY - 1, '#cbd5e1')
+    }
     return
   }
 }
@@ -2510,6 +2550,593 @@ export function monsterSprite(
         return renderSlime(color, dir, action, f, false)
     }
   })
+}
+
+/* ---------------- Pets & ผอบ (Phao-ob) 2D Models ---------------- */
+
+function renderPhaoPet(spec: PetModelSpec, dir: Dir, action: SpriteAction, f: number): HTMLCanvasElement {
+  const s = new PixelSurface(28, 30)
+  const primary = spec.colors.primary
+  const secondary = spec.colors.secondary
+  const accent = spec.colors.accent
+  const dark = shade(secondary, -0.35)
+  const hi = shade(primary, 0.35)
+  const gold = spec.petId === 'phao_phantom' ? '#c084fc' : '#f59e0b'
+  const goldHi = spec.petId === 'phao_phantom' ? '#f0abfc' : '#fef08a'
+  const cx = 14
+
+  let bob = 0
+  let leanX = 0
+  let lidLift = 0
+  let orbPulse = 0
+
+  if (action === 'idle') {
+    bob = f === 1 ? -1 : f === 3 ? 1 : 0
+    orbPulse = f % 2
+  } else if (action === 'walk') {
+    bob = [-1, -2, -1, 0, -1, 0][f % 6]
+    leanX = dir === 'right' || dir === 'left' ? 1 : 0
+    orbPulse = f % 3 === 0 ? 1 : 0
+  } else {
+    const seq = [
+      { bob: -1, lift: 1, pulse: 1 },
+      { bob: -2, lift: 4, pulse: 2 },
+      { bob: -1, lift: 3, pulse: 2 },
+      { bob: 0, lift: 1, pulse: 1 },
+    ][f % 4]
+    bob = seq.bob
+    lidLift = seq.lift
+    orbPulse = seq.pulse
+  }
+
+  const by = 18 + bob
+  const bx = cx + leanX
+
+  // Ethereal spirit mist & aura sparks under/around the Phao-ob
+  if (action === 'walk') {
+    const mistX = bx - 5 - (f % 3)
+    s.px(mistX, by + 5, accent)
+    s.px(mistX - 2, by + 4, hi)
+  }
+
+  // Stepped Thai Lotus Pedestal Base (ฐานบัว)
+  s.rect(bx - 5, by + 6, 11, 2, dark)
+  s.rect(bx - 4, by + 5, 9, 1, gold)
+  s.rect(bx - 2, by + 3, 5, 2, secondary)
+  s.rect(bx - 4, by + 2, 9, 2, gold)
+  // Upturned lotus petals around the base collar
+  s.px(bx - 5, by + 1, hi)
+  s.px(bx - 3, by + 1, accent)
+  s.px(bx, by + 1, goldHi)
+  s.px(bx + 3, by + 1, accent)
+  s.px(bx + 5, by + 1, hi)
+
+  // Ceremonial Rounded Bowl Body (ตัวผอบ)
+  s.rect(bx - 5, by - 4, 11, 6, primary)
+  s.rect(bx - 6, by - 3, 13, 4, secondary)
+  s.rect(bx - 5, by - 3, 11, 4, primary)
+  s.rect(bx - 4, by - 2, 4, 2, hi)
+  // Rim filigree band
+  s.rect(bx - 6, by - 4, 13, 1, gold)
+  s.rect(bx - 5, by + 1, 11, 1, gold)
+
+  // Archetype-specific ornaments on the body & side kanok fins (ลายกนก)
+  if (spec.petId === 'phao_lotus') {
+    // Glass lotus petals cradling the bowl
+    s.line(bx - 6, by, bx - 7, by - 3, hi, 1)
+    s.line(bx + 6, by, bx + 7, by - 3, hi, 1)
+    s.px(bx - 7, by - 4, accent)
+    s.px(bx + 7, by - 4, accent)
+  } else if (spec.petId === 'phao_gold_naga') {
+    // Twin Naga crests curving upward from shoulders
+    s.line(bx - 6, by - 2, bx - 8, by - 6, gold, 1)
+    s.px(bx - 8, by - 7, accent)
+    s.line(bx + 6, by - 2, bx + 8, by - 6, gold, 1)
+    s.px(bx + 8, by - 7, accent)
+  } else if (spec.petId === 'phao_celestial') {
+    // Orbiting Sun (gold) and Crescent Moon (cyan-white)
+    const orbit = action === 'idle' ? f % 4 : f % 6
+    const sunX = bx + (orbit < 2 ? -8 : 8)
+    const moonX = bx + (orbit < 2 ? 8 : -8)
+    s.rect(sunX, by - 5, 2, 2, '#fbbf24')
+    s.px(moonX, by - 3, '#67e8f9')
+    s.px(moonX, by - 4, '#ffffff')
+  } else if (spec.petId === 'phao_phantom') {
+    // Spirit seal talisman strips & ghostly wisps
+    s.rect(bx - 1, by - 2, 3, 3, '#f43f5e')
+    const wispY = by - 5 - (f % 2)
+    s.px(bx - 8, wispY, accent)
+    s.px(bx + 8, wispY - 1, hi)
+  }
+
+  // Directional Emblem / Core Clasp
+  if (dir === 'down') {
+    s.rect(bx - 1, by - 3, 3, 3, accent)
+    s.px(bx, by - 2, '#ffffff')
+  } else if (dir === 'up') {
+    s.rect(bx - 2, by - 3, 5, 3, dark)
+    s.px(bx, by - 2, gold)
+  } else {
+    // Side profile medallion + kanok tail fin on back side
+    s.rect(bx + 2, by - 3, 2, 3, accent)
+    s.line(bx - 6, by - 2, bx - 8, by - 5, gold, 1)
+  }
+
+  // Glowing Spirit Core revealed when the Lid lifts open on Attack!
+  if (lidLift > 0) {
+    const coreY = by - 5 - Math.floor(lidLift / 2)
+    s.rect(bx - 3, coreY, 7, 3, accent)
+    s.rect(bx - 1, coreY, 3, 2, '#ffffff')
+    if (lidLift >= 3) {
+      // Bursting spirit bolts around the open mouth
+      s.px(bx - 7, coreY - 2, goldHi)
+      s.px(bx + 7, coreY - 2, goldHi)
+      s.px(bx, coreY - 3, '#ffffff')
+    }
+  } else if (orbPulse > 0) {
+    s.px(bx, by - 2, '#ffffff')
+  }
+
+  // Conical Tiered Spire Lid (ฝาผอบทรงยอดแหลม / ยอดฉัตร)
+  const lidY = by - 5 - lidLift
+  s.rect(bx - 5, lidY, 11, 2, primary)
+  s.rect(bx - 6, lidY + 1, 13, 1, gold)
+  s.rect(bx - 4, lidY - 2, 9, 2, secondary)
+  s.rect(bx - 3, lidY - 3, 7, 1, goldHi)
+  s.rect(bx - 2, lidY - 5, 5, 2, primary)
+  s.rect(bx - 1, lidY - 7, 3, 2, gold)
+  // Sacred jewel finial tip (ยอดเม็ดน้ำค้าง)
+  s.px(bx, lidY - 8, accent)
+  s.px(bx, lidY - 9, orbPulse > 0 || lidLift > 0 ? '#ffffff' : goldHi)
+
+  return s.toCanvas(true, dir === 'left')
+}
+
+function renderCreaturePet(spec: PetModelSpec, dir: Dir, action: SpriteAction, f: number): HTMLCanvasElement {
+  const s = new PixelSurface(28, 30)
+  const c1 = spec.colors.primary
+  const c2 = spec.colors.secondary
+  const c3 = spec.colors.accent
+  const hi = shade(c1, 0.35)
+  const dark = shade(c2, -0.25)
+  const cx = 14
+  const footY = 25
+
+  const bob =
+    action === 'idle'
+      ? f === 1
+        ? -1
+        : 0
+      : action === 'walk'
+        ? [-1, -2, 0, -1, -2, 0][f % 6]
+        : [-1, -2, 1, 0][f % 4]
+
+  switch (spec.archetype) {
+    case 'buddy_slime': {
+      const squish = action === 'attack' && (f === 1 || f === 2) ? 2 : action === 'walk' && f % 3 === 1 ? 1 : 0
+      const by = 18 + bob + squish
+      s.rect(cx - 5 - squish, by, 11 + squish * 2, 6 - Math.min(2, squish), c1)
+      s.rect(cx - 4, by - 3 + squish, 9, 4, c1)
+      s.rect(cx - 2, by - 4 + squish, 5, 2, hi)
+      s.rect(cx - 4 - squish, by + 4 - squish, 9 + squish * 2, 2, c2)
+      s.px(cx - 2, by - 2 + squish, c3)
+      if (dir !== 'up') {
+        const ex = dir === 'right' ? 2 : 0
+        s.px(cx - 2 + ex, by + squish, '#1a1423')
+        s.px(cx + 2 + ex, by + squish, '#1a1423')
+        s.px(cx - 3 + ex, by + 1 + squish, '#ff9aa2')
+        s.px(cx + 3 + ex, by + 1 + squish, '#ff9aa2')
+      }
+      if (action === 'attack' && f >= 1 && f <= 2) {
+        s.rect(cx + 6, by, 3, 2, c3)
+      }
+      return s.toCanvas(true, dir === 'left')
+    }
+
+    case 'flame_fox': {
+      const by = 17 + bob
+      const wag = f % 2 === 0 ? -1 : 1
+      const stride = action === 'walk' ? (f % 2 === 0 ? 1 : -1) : 0
+      // Flame tail
+      s.line(cx - 4, by + 3, cx - 9, by - 1 + wag, c1, 3)
+      s.line(cx - 8, by - 1 + wag, cx - 10, by - 4 + wag, c3, 2)
+      // Legs
+      s.line(cx - 3, by + 5, cx - 3 + stride, footY, c2, 2)
+      s.line(cx + 3, by + 5, cx + 3 - stride, footY, c1, 2)
+      // Torso & white chest ruff
+      s.rect(cx - 4, by + 1, 8, 5, c1)
+      s.rect(cx + 1, by + 1, 3, 4, '#fff3e0')
+      // Fox head & pointed ears
+      s.rect(cx - 2, by - 5, 8, 6, c1)
+      s.rect(cx + 4, by - 2, 3, 2, hi)
+      s.line(cx - 1, by - 5, cx - 2, by - 9, c2, 2)
+      s.line(cx + 3, by - 5, cx + 4, by - 9, c2, 2)
+      s.px(cx - 2, by - 9, c3)
+      s.px(cx + 4, by - 9, c3)
+      if (dir !== 'up') {
+        s.px(cx + 3, by - 3, '#1a1423')
+        s.px(cx + 6, by - 2, '#1a1423')
+      }
+      if (action === 'attack' && (f === 1 || f === 2)) {
+        s.rect(cx + 7, by - 3, 3, 3, c3)
+        s.px(cx + 9, by - 2, '#ffffff')
+      }
+      return s.toCanvas(true, dir === 'left')
+    }
+
+    case 'crystal_owl': {
+      const by = 14 + bob
+      const flap = action === 'idle' ? (f % 2 === 0 ? 0 : -1) : [-3, -1, 2, 3, 1, -2][f % 6]
+      // Wings
+      s.line(cx - 4, by + 2, cx - 9, by + flap, c2, 2)
+      s.line(cx + 4, by + 2, cx + 9, by + flap, c2, 2)
+      // Feathered oval body
+      s.rect(cx - 4, by, 9, 8, c1)
+      s.rect(cx - 2, by + 2, 5, 5, hi)
+      s.rect(cx - 1, by + 3, 3, 3, c3) // crystal core on chest
+      // Ear tufts
+      s.line(cx - 3, by - 3, cx - 5, by - 6, c2, 2)
+      s.line(cx + 3, by - 3, cx + 5, by - 6, c2, 2)
+      s.rect(cx - 4, by - 4, 9, 5, c1)
+      if (dir !== 'up') {
+        s.rect(cx - 3, by - 2, 2, 2, c3)
+        s.rect(cx + 2, by - 2, 2, 2, c3)
+        s.px(cx, by, '#fbbf24')
+      }
+      // Talons
+      s.px(cx - 2, by + 8, '#fbbf24')
+      s.px(cx + 2, by + 8, '#fbbf24')
+      if (action === 'attack' && (f === 1 || f === 2)) {
+        s.px(cx, by - 7, '#ffffff')
+        s.rect(cx + 6, by - 1, 3, 2, c3)
+      }
+      return s.toCanvas(true, dir === 'left')
+    }
+
+    case 'moonlight_firefly': {
+      const by = 14 + bob
+      const flap = [-2, 0, 2, 0, -2, 1][f % 6]
+      // Iridescent fairy wings
+      s.rect(cx - 7, by - 2 + flap, 4, 4, '#e0f2fe')
+      s.rect(cx + 4, by - 2 + flap, 4, 4, '#e0f2fe')
+      // Glowing lantern abdomen
+      s.rect(cx - 3, by - 2, 7, 7, c2)
+      s.rect(cx - 2, by, 5, 5, c1)
+      s.rect(cx - 1, by + 2, 3, 3, c3)
+      // Antennae
+      s.line(cx - 1, by - 2, cx - 3, by - 6, hi, 1)
+      s.line(cx + 1, by - 2, cx + 3, by - 6, hi, 1)
+      s.px(cx - 3, by - 6, c3)
+      s.px(cx + 3, by - 6, c3)
+      if (dir !== 'up') {
+        s.px(cx - 1, by, '#1a1423')
+        s.px(cx + 1, by, '#1a1423')
+      }
+      if (action === 'attack' && (f === 1 || f === 2)) {
+        s.px(cx - 6, by + 5, '#ffffff')
+        s.px(cx + 6, by + 5, '#ffffff')
+      }
+      return s.toCanvas(true, dir === 'left')
+    }
+
+    case 'gem_raccoon': {
+      const by = 16 + bob
+      const stride = action === 'walk' ? (f % 2 === 0 ? 1 : -1) : 0
+      // Striped tail
+      s.line(cx - 4, by + 5, cx - 9, by + 2 + (f % 2), c2, 3)
+      s.px(cx - 7, by + 3, hi)
+      s.px(cx - 9, by + 2 + (f % 2), dark)
+      // Legs & body
+      s.line(cx - 2, by + 6, cx - 3 + stride, footY, dark, 2)
+      s.line(cx + 2, by + 6, cx + 3 - stride, footY, c2, 2)
+      s.rect(cx - 4, by + 1, 9, 6, c1)
+      s.rect(cx - 4, by + 4, 4, 3, '#b45309') // merchant satchel
+      // Raccoon head & bandit mask
+      s.rect(cx - 4, by - 5, 9, 6, c1)
+      s.px(cx - 4, by - 6, c2)
+      s.px(cx + 4, by - 6, c2)
+      if (dir !== 'up') {
+        s.rect(cx - 3, by - 3, 7, 2, dark)
+        s.px(cx - 2, by - 3, '#ffffff')
+        s.px(cx + 2, by - 3, '#ffffff')
+      }
+      // Sparkling gem held in paws
+      s.rect(cx + 4, by + 2, 3, 3, c3)
+      if (action === 'attack' || f % 2 === 0) s.px(cx + 5, by + 2, '#ffffff')
+      return s.toCanvas(true, dir === 'left')
+    }
+
+    case 'aurora_cloud_dragon':
+    default: {
+      const by = 14 + bob
+      const wing = [-3, -1, 2, 0, -2, 1][f % 6]
+      // Swirling serpentine tail & cloud tuft
+      s.line(cx - 4, by + 5, cx - 10, by + 3 + (f % 2), c2, 2)
+      s.px(cx - 11, by + 2 + (f % 2), c3)
+      // Wings
+      s.line(cx - 2, by, cx - 8, by - 5 + wing, c2, 2)
+      s.line(cx + 1, by, cx - 4, by - 6 + wing, c3, 2)
+      // Torso & head
+      s.rect(cx - 4, by + 1, 9, 6, c1)
+      s.rect(cx - 2, by + 4, 5, 3, '#e0f2fe')
+      s.rect(cx + 1, by - 5, 7, 5, c1)
+      s.rect(cx + 5, by - 3, 4, 3, hi)
+      // Crystal horns
+      s.line(cx + 2, by - 5, cx, by - 9, c3, 1)
+      s.line(cx + 4, by - 5, cx + 3, by - 9, '#ffffff', 1)
+      if (dir !== 'up') {
+        s.px(cx + 5, by - 4, '#ffd60a')
+      }
+      if (action === 'attack' && (f === 1 || f === 2)) {
+        s.rect(cx + 9, by - 3, 4, 2, c3)
+        s.px(cx + 12, by - 3, '#ffffff')
+      }
+      return s.toCanvas(true, dir === 'left')
+    }
+  }
+}
+
+export function petSprite(
+  petId: string,
+  dir: Dir = 'down',
+  action: SpriteAction = 'idle',
+  frame = 0,
+  attackFrameOverride?: number,
+): HTMLCanvasElement {
+  const f =
+    action === 'attack'
+      ? Math.abs(attackFrameOverride ?? frame) % 4
+      : action === 'walk'
+        ? Math.abs(frame) % 6
+        : Math.abs(frame) % 4
+  const spec = getPetModelSpec(petId)
+  const key = `pet2d|${spec.petId}|${dir}|${action}|${f}`
+  return cached(key, () => {
+    if (spec.category === 'phao') {
+      return renderPhaoPet(spec, dir, action, f)
+    }
+    return renderCreaturePet(spec, dir, action, f)
+  })
+}
+
+/* ---------------- Mounts 2D Models ---------------- */
+
+function renderMountModel(spec: MountModelSpec, dir: Dir, action: SpriteAction, f: number): HTMLCanvasElement {
+  const s = new PixelSurface(44, 38)
+  const c1 = spec.colors.primary
+  const c2 = spec.colors.secondary
+  const accent = spec.colors.accent
+  const saddle = spec.colors.saddle
+  const hi = shade(c1, 0.32)
+  const dark = shade(c2, -0.25)
+  const cx = 22
+  const footY = 34
+
+  let bob = 0
+  let rearTilt = 0
+  let wingFlap = 0
+  let stride = 0
+
+  if (action === 'idle') {
+    bob = f === 1 ? -1 : 0
+    wingFlap = [-1, 1, 2, 0][f % 4]
+  } else if (action === 'walk') {
+    bob = [-1, -2, 0, -1, -2, 0][f % 6]
+    stride = [-3, -1, 2, 3, 1, -2][f % 6]
+    wingFlap = [-4, -1, 3, 5, 2, -2][f % 6]
+  } else {
+    const seq = [
+      { bob: -1, tilt: -1, wf: -4, st: -2 },
+      { bob: -3, tilt: -3, wf: 2, st: 3 },
+      { bob: -2, tilt: -2, wf: 4, st: 4 },
+      { bob: 0, tilt: 0, wf: 0, st: 1 },
+    ][f % 4]
+    bob = seq.bob
+    rearTilt = seq.tilt
+    wingFlap = seq.wf
+    stride = seq.st
+  }
+
+  const by = 22 + bob
+
+  // Front or Rear perspective (down / up)
+  if (dir === 'down' || dir === 'up') {
+    const isFront = dir === 'down'
+    const lLegY = action === 'walk' && f % 2 === 0 ? footY - 2 : footY
+    const rLegY = action === 'walk' && f % 2 === 1 ? footY - 2 : footY
+
+    // Flying wings for griffin / kirin / cloud_dragon
+    if (spec.flying) {
+      const span = spec.archetype === 'cloud_dragon' ? 16 : 14
+      s.line(cx - 5, by - 1, cx - span, by - 7 + wingFlap, c2, 3)
+      s.line(cx - span, by - 7 + wingFlap, cx - span - 2, by + wingFlap, c1, 2)
+      s.line(cx - 5, by, cx - span + 3, by - 4 + wingFlap, accent, 1)
+      s.line(cx + 5, by - 1, cx + span, by - 7 + wingFlap, c2, 3)
+      s.line(cx + span, by - 7 + wingFlap, cx + span + 2, by + wingFlap, c1, 2)
+      s.line(cx + 5, by, cx + span - 3, by - 4 + wingFlap, accent, 1)
+    }
+
+    // 4 Legs (front pair & hind peek)
+    s.line(cx - 5, by + 6, cx - 5, lLegY, dark, 2)
+    s.line(cx + 5, by + 6, cx + 5, rLegY, dark, 2)
+    s.line(cx - 3, by + 5, cx - 3, rLegY - 1, c1, 2)
+    s.line(cx + 3, by + 5, cx + 3, lLegY - 1, c1, 2)
+    if (spec.archetype === 'kirin' || spec.archetype === 'cloud_dragon') {
+      s.px(cx - 3, rLegY - 1, accent)
+      s.px(cx + 3, lLegY - 1, accent)
+    }
+
+    // Broad Chest / Hindquarters
+    s.rect(cx - 6, by - 2, 13, 9, c1)
+    s.rect(cx - 5, by, 11, 5, hi)
+    // Ornate Saddle & Stirrups
+    s.rect(cx - 6, by - 3, 13, 3, saddle)
+    s.rect(cx - 4, by - 3, 9, 1, accent)
+
+    if (isFront) {
+      // Neck & Head facing viewer
+      s.rect(cx - 4, by - 10 + rearTilt, 9, 8, c1)
+      s.rect(cx - 3, by - 11 + rearTilt, 7, 5, hi)
+      // Ears / Horns / Beak
+      if (spec.archetype === 'warhorse') {
+        s.line(cx - 3, by - 11 + rearTilt, cx - 4, by - 15 + rearTilt, c2, 1)
+        s.line(cx + 3, by - 11 + rearTilt, cx + 4, by - 15 + rearTilt, c2, 1)
+        s.rect(cx - 1, by - 12 + rearTilt, 3, 3, accent)
+      } else if (spec.archetype === 'direwolf') {
+        s.line(cx - 3, by - 11 + rearTilt, cx - 5, by - 15 + rearTilt, c2, 2)
+        s.line(cx + 3, by - 11 + rearTilt, cx + 5, by - 15 + rearTilt, c2, 2)
+        s.rect(cx - 2, by - 7 + rearTilt, 5, 3, '#e2e8f0')
+      } else if (spec.archetype === 'griffin') {
+        s.rect(cx - 3, by - 12 + rearTilt, 7, 5, '#f8fafc')
+        s.rect(cx - 1, by - 9 + rearTilt, 3, 3, '#fbbf24') // curved eagle beak
+      } else if (spec.archetype === 'kirin' || spec.archetype === 'cloud_dragon') {
+        s.line(cx - 2, by - 12 + rearTilt, cx - 6, by - 17 + rearTilt, accent, 1)
+        s.line(cx + 2, by - 12 + rearTilt, cx + 6, by - 17 + rearTilt, accent, 1)
+        s.px(cx, by - 13 + rearTilt, '#ffffff')
+      }
+      // Eyes & Bridle
+      s.px(cx - 2, by - 9 + rearTilt, spec.archetype === 'direwolf' || spec.archetype === 'kirin' ? accent : '#ffd60a')
+      s.px(cx + 2, by - 9 + rearTilt, spec.archetype === 'direwolf' || spec.archetype === 'kirin' ? accent : '#ffd60a')
+      s.rect(cx - 5, by - 1, 11, 1, accent)
+    } else {
+      // Rear Tail view (up)
+      const tailSway = action === 'walk' ? (f % 2 === 0 ? -1 : 1) : 0
+      s.line(cx, by + 1, cx + tailSway, by + 9, c2, 3)
+      s.line(cx + tailSway, by + 5, cx + tailSway * 2, by + 11, accent, 2)
+      s.rect(cx - 3, by - 9, 7, 6, c1)
+    }
+
+    return s.toCanvas(true, false)
+  }
+
+  // Side profile (right; mirrored automatically for left)
+  const tailWave = action === 'walk' ? (f % 2 === 0 ? -2 : 1) : f % 2
+
+  // Flowing Tail
+  if (spec.archetype === 'cloud_dragon') {
+    s.line(cx - 9, by + 2, cx - 16, by + tailWave, c1, 3)
+    s.line(cx - 16, by + tailWave, cx - 20, by - 4 + tailWave, accent, 2)
+    s.px(cx - 20, by - 5 + tailWave, '#ffffff')
+  } else if (spec.archetype === 'kirin') {
+    s.line(cx - 9, by + 1, cx - 15, by - 2 + tailWave, c2, 2)
+    s.rect(cx - 18, by - 4 + tailWave, 4, 3, accent)
+  } else if (spec.archetype === 'direwolf') {
+    s.line(cx - 9, by + 2, cx - 17, by - 1 + tailWave, c1, 3)
+    s.px(cx - 18, by - 2 + tailWave, '#e0f2fe')
+  } else {
+    s.line(cx - 9, by + 1, cx - 15, by + 4 + tailWave, c2, 3)
+    s.line(cx - 13, by + 3 + tailWave, cx - 17, by + 7 + tailWave, dark, 2)
+  }
+
+  // Far Wings (for flying mounts)
+  if (spec.flying) {
+    s.line(cx - 2, by - 1, cx - 11, by - 10 + wingFlap, c2, 3)
+    s.line(cx - 11, by - 10 + wingFlap, cx - 17, by - 3 + wingFlap, c1, 2)
+    s.line(cx - 9, by - 8 + wingFlap, cx - 12, by + wingFlap, accent, 1)
+  }
+
+  // 4 Galloping Legs (far & near)
+  const fStride = stride
+  const hStride = -stride
+  // Far legs
+  s.line(cx - 6, by + 5, cx - 7 + Math.round(hStride * 0.7), footY - 1, dark, 2)
+  s.line(cx + 6, by + 5, cx + 7 - Math.round(fStride * 0.7), footY - 1, dark, 2)
+  // Near legs
+  s.line(cx - 7, by + 5, cx - 8 - hStride, footY, c2, 2)
+  s.line(cx + 7, by + 5, cx + 8 + fStride, footY, c1, 2)
+  if (spec.archetype === 'kirin' || spec.archetype === 'cloud_dragon') {
+    s.px(cx - 8 - hStride, footY, accent)
+    s.px(cx + 8 + fStride, footY, accent)
+  } else if (spec.archetype === 'warhorse') {
+    s.px(cx - 8 - hStride, footY, '#343a40')
+    s.px(cx + 8 + fStride, footY, '#343a40')
+  }
+
+  // Muscular Body Barrel
+  s.rect(cx - 9, by - 2 + Math.round(rearTilt * 0.3), 19, 8, c1)
+  s.rect(cx - 7, by - 1 + Math.round(rearTilt * 0.3), 15, 5, hi)
+  s.rect(cx - 7, by + 4 + Math.round(rearTilt * 0.3), 14, 2, c2)
+
+  // Ornate Saddle & Rider Blanket
+  s.rect(cx - 4, by - 4 + Math.round(rearTilt * 0.3), 9, 4, saddle)
+  s.rect(cx - 3, by - 4 + Math.round(rearTilt * 0.3), 7, 1, accent)
+  s.px(cx, by, '#fbbf24') // stirrup buckle
+
+  // Neck & Archetype-Distinct Head (facing right)
+  const hx = cx + 10
+  const hy = by - 9 + rearTilt
+  s.line(cx + 6, by, hx, hy + 4, c1, 4)
+
+  if (spec.archetype === 'warhorse') {
+    // Mane along neck
+    s.line(cx + 4, by - 2, hx - 2, hy + 1, c2, 2)
+    // Equine head & snout
+    s.rect(hx - 1, hy, 6, 5, c1)
+    s.rect(hx + 4, hy + 2, 4, 3, hi)
+    s.line(hx, hy, hx - 1, hy - 3, c1, 1)
+    s.px(hx + 3, hy + 1, '#1a1423')
+    s.line(hx + 1, hy + 3, hx + 6, hy + 4, accent, 1) // golden bridle
+  } else if (spec.archetype === 'direwolf') {
+    // Frost fur ruff
+    s.rect(cx + 5, by - 3 + rearTilt, 5, 5, '#cbd5e1')
+    s.rect(hx - 1, hy + 1, 7, 5, c1)
+    s.rect(hx + 5, hy + 3, 4, 2, hi)
+    s.line(hx, hy + 1, hx - 2, hy - 3, c2, 2)
+    s.px(hx + 4, hy + 2, accent)
+    s.px(hx + 7, hy + 5, '#ffffff') // fang
+  } else if (spec.archetype === 'griffin') {
+    // White-gold eagle head & curved golden beak
+    s.rect(cx + 5, by - 3 + rearTilt, 5, 5, '#fef3c7')
+    s.rect(hx - 1, hy, 6, 5, '#f8fafc')
+    s.rect(hx + 5, hy + 2, 3, 2, '#f59e0b')
+    s.px(hx + 7, hy + 4, '#d97706')
+    s.line(hx, hy, hx - 3, hy - 3, accent, 1) // crest feather
+    s.px(hx + 3, hy + 1, '#0f172a')
+  } else if (spec.archetype === 'kirin') {
+    // Starlight mane & twin dragon-antler horns
+    s.line(cx + 4, by - 2 + rearTilt, hx - 2, hy + 1, accent, 2)
+    s.rect(hx - 1, hy, 6, 5, c1)
+    s.rect(hx + 4, hy + 2, 4, 3, hi)
+    s.line(hx + 1, hy, hx - 3, hy - 6, accent, 1)
+    s.line(hx + 3, hy, hx + 1, hy - 6, '#ffffff', 1)
+    s.px(hx + 3, hy + 1, '#38bdf8')
+  } else {
+    // Aurora Cloud Dragon head, horns & whiskers
+    s.line(cx + 4, by - 2 + rearTilt, hx - 2, hy + 2, accent, 2)
+    s.rect(hx - 1, hy, 7, 5, c1)
+    s.rect(hx + 5, hy + 2, 4, 3, hi)
+    s.line(hx, hy, hx - 4, hy - 5, accent, 2)
+    s.line(hx + 2, hy, hx - 1, hy - 5, '#ffffff', 1)
+    s.line(hx + 6, hy + 4, hx + 10, hy + 2, accent, 1) // whisker
+    s.px(hx + 4, hy + 1, '#ffd60a')
+  }
+
+  // Near Wing (for flying mounts)
+  if (spec.flying) {
+    s.line(cx, by - 1, cx - 6, by - 12 + wingFlap, hi, 2)
+    s.line(cx - 6, by - 12 + wingFlap, cx - 14, by - 6 + wingFlap, c1, 2)
+    s.line(cx - 5, by - 10 + wingFlap, cx - 4, by - 2 + wingFlap, accent, 1)
+  }
+
+  return s.toCanvas(true, dir === 'left')
+}
+
+export function mountSprite(
+  mountId: string,
+  dir: Dir = 'right',
+  action: SpriteAction = 'idle',
+  frame = 0,
+  attackFrameOverride?: number,
+): HTMLCanvasElement {
+  const f =
+    action === 'attack'
+      ? Math.abs(attackFrameOverride ?? frame) % 4
+      : action === 'walk'
+        ? Math.abs(frame) % 6
+        : Math.abs(frame) % 4
+  const spec = getMountModelSpec(mountId)
+  const key = `mount2d|${spec.mountId}|${dir}|${action}|${f}`
+  return cached(key, () => renderMountModel(spec, dir, action, f))
 }
 
 /* ---------------- Tiles ---------------- */

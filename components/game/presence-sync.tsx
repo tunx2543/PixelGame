@@ -37,6 +37,7 @@ export function PresenceSync() {
     let activeFbUser: User | null = firebaseAuth.currentUser
     let readyProfileUid: string | null = null
     let subscribedFbUid: string | null = null
+    let subscribedMapId: string = ''
     let lastKnownLocalMapId = game.p?.mapId ?? ''
     let unsubFbPresence: (() => void) | null = null
     let unsubFbParty: (() => void) | null = null
@@ -46,6 +47,8 @@ export function PresenceSync() {
     let lastFbPublishAt = 0
     let lastFbPruneAt = 0
     let hasPublishedFbPresence = false
+    let profileSyncInFlight = false
+    let lastProfileRetryAt = 0
     let partySyncInFlight = false
     let lastPartySyncAt = 0
     let lastPartySent = {
@@ -183,7 +186,8 @@ export function PresenceSync() {
 
     const ensureFbWorldSubscription = (user: User) => {
       if (stopped || !user.emailVerified) return
-      if (subscribedFbUid !== user.uid || !unsubFbPresence) {
+      const activeMapId = game.p?.mapId || 'town'
+      if (subscribedFbUid !== user.uid || subscribedMapId !== activeMapId || !unsubFbPresence) {
         if (unsubFbPresence) {
           unsubFbPresence()
           unsubFbPresence = null
@@ -194,16 +198,30 @@ export function PresenceSync() {
         notify()
 
         subscribedFbUid = user.uid
+        subscribedMapId = activeMapId
         unsubFbPresence = subscribeWorldPresence(
           user.uid,
           fbRemotePlayers,
           (players) => {
             if (stopped) return
+            if (game.presenceError) {
+              game.presenceError = null
+            }
             syncRemoteLists(players)
           },
-          () => {
-            // Errors logged by subscribeWorldPresence; keep game loop non-blocking.
+          (error) => {
+            if (stopped) return
+            const raw = error instanceof Error ? error.message : String(error ?? '')
+            if (raw.includes('permission-denied') || raw.includes('Missing or insufficient permissions')) {
+              game.presenceError = 'สิทธิ์การอ่านรายชื่อผู้เล่นออนไลน์ถูกปฏิเสธ (permission-denied)'
+            } else if (raw.includes('failed-precondition')) {
+              game.presenceError = 'ต้องอัปเดตดัชนี Firestore สำหรับระบบผู้เล่นออนไลน์'
+            } else {
+              game.presenceError = 'เชื่อมต่อรายชื่อผู้เล่นออนไลน์ไม่สำเร็จ กรุณารอสักครู่'
+            }
+            notify()
           },
+          activeMapId,
         )
       }
 
@@ -372,9 +390,17 @@ export function PresenceSync() {
         })
         if (ok) {
           hasPublishedFbPresence = true
+          if (game.presenceError) {
+            game.presenceError = null
+            notify()
+          }
         }
-      } catch {
-        // Keep game loop running; next heartbeat or move retries automatically.
+      } catch (error) {
+        const raw = error instanceof Error ? error.message : String(error ?? '')
+        if (raw.includes('permission-denied') || raw.includes('Missing or insufficient permissions')) {
+          game.presenceError = 'ไม่สามารถอัปเดตพิกัดออนไลน์ได้ (permission-denied)'
+          notify()
+        }
       } finally {
         fbPublishInFlight = false
       }
@@ -388,7 +414,16 @@ export function PresenceSync() {
 
       if (!fbUser) {
         readyProfileUid = null
+        game.presenceError = null
         stopFbPresence(prevUid)
+        return
+      }
+
+      if (!fbUser.emailVerified) {
+        readyProfileUid = null
+        game.presenceError = 'บัญชีนี้ยังไม่ได้ยืนยันอีเมล จึงยังไม่สามารถเชื่อมออนไลน์ได้'
+        stopFbPresence(prevUid)
+        notify()
         return
       }
 
@@ -410,6 +445,8 @@ export function PresenceSync() {
         if (changed) notify()
       }
 
+      if (profileSyncInFlight) return
+      profileSyncInFlight = true
       try {
         const identity = await ensureUserProfile(fbUser)
         if (stopped || !game.p || activeFbUser?.uid !== fbUser.uid) return
@@ -432,14 +469,23 @@ export function PresenceSync() {
         }
         readyProfileUid = fbUser.uid
         lastKnownLocalMapId = p.mapId
+        game.presenceError = null
         if (changed) {
           saveGame()
-          notify()
         }
+        notify()
         ensureFbWorldSubscription(fbUser)
         void publishFbPresenceIfNeeded(true)
-      } catch {
-        // Keep cached identity if Firestore sync temporarily fails.
+      } catch (error) {
+        const raw = error instanceof Error ? error.message : String(error ?? '')
+        if (raw.includes('permission-denied') || raw.includes('Missing or insufficient permissions')) {
+          game.presenceError = 'ซิงค์บัญชีกับ Firestore ไม่ผ่าน (permission-denied)'
+        } else {
+          game.presenceError = 'กำลังเชื่อมต่อเซิร์ฟเวอร์ออนไลน์ใหม่...'
+        }
+        notify()
+      } finally {
+        profileSyncInFlight = false
       }
     }
 
@@ -464,6 +510,9 @@ export function PresenceSync() {
         ensureFbWorldSubscription(user)
         void publishFbPresenceIfNeeded(false)
         void syncPartySnapshotIfNeeded()
+      } else if (!profileSyncInFlight && Date.now() - lastProfileRetryAt >= 4_000) {
+        lastProfileRetryAt = Date.now()
+        void syncFirebaseIdentity(user)
       }
 
       const now = Date.now()

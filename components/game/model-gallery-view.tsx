@@ -1,11 +1,13 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Crown, Eye, Flame, Footprints, Pause, Play, RotateCw, Shield, Sparkles, Swords } from 'lucide-react'
+import { Crown, Eye, Flame, Footprints, Pause, PawPrint, Play, RotateCw, Shield, Sparkles, Swords, Wind } from 'lucide-react'
 import { ITEMS } from '@/lib/game/data'
 import {
   getAllJobModels,
   getAllMonsterModels,
+  getAllMountModels,
+  getAllPetModels,
   MODEL_DIRS,
   type ModelDir,
 } from '@/lib/game/models-2d'
@@ -51,6 +53,15 @@ function getJobTraitTags(jobId: string): string[] {
     hunter: ['ฮู้ดพรานป่าชั้นสูง', 'เกราะหนังประดับทอง', 'ธนูพราน + ซองธนู'],
     assassin: ['หน้ากากนินจาเงา', 'มีดคู่ม่วงอเวจี', 'ผ้าคลุมรัตติกาล'],
     gm: ['มงกุฎทองลอยตัว', 'ปีกโฮโลแกรมเรืองแสง', 'ผ้าคลุมราชันย์ 8 ทิศ + สกิล 6F'],
+    merchant: ['หมวกเบเร่ต์พ่อค้าติดเหรียญทอง', 'กระเป๋าสินค้า + โบนัส +15% Gold', 'ดาบ + สกิลรถเข็นพุ่งชน'],
+    templar: ['หมวกอัศวินวิหาร + วงแหวนศักดิ์สิทธิ์', 'เกราะทอง-ขาว + โล่กางเขนสุริยัน', 'ท่าประสานศักดิ์สิทธิ์ + ฮีลป้อมปราการ'],
+    kensei: ['ผ้าคาดหัวนักดาบสายฟ้า', 'ผ้าคลุมโลหิต + เกราะซามูไร', 'คอมโบอิไอจุตสึ + ดาบคู่/ดาบยาว'],
+    iron_fist: ['สนับมือเหล็กกล้า + เกราะหนัก', 'ออร่าเพลิงส้ม + โล่กำปั้น', 'พุ่งซัด Flash Smash & ทุบพสุธา'],
+    the_king: ['มงกุฎจักรพรรดิตลาดทุน', 'เสื้อคลุมม่วงราชันย์ + โบนัส +25% Gold', 'พายุแท่งเทียน + ลำแสง Stop-Loss'],
+    wicked_necromancer: ['หมวกอาร์คเมจต้องสาป', 'อาภรณ์รัตติกาล + ออร่าม่วงทมิฬ', 'มนต์แมวดำ + คำสาปทลายเกราะ'],
+    mamushi: ['หน้ากากชิโนบิอสรพิษมรกต', 'ซองลูกดอก + ผ้าคลุมพิษ', 'เขี้ยวอสรพิษ + ดาวกระจายสะท้อน'],
+    nekobaku: ['ฮู้ดหูแมว + แว่นเล่นแร่แปรธาตุ', 'กระเป๋าระเบิดเคมี + ซองกระสุน', 'ขวดระเบิด Fizz Flask & Tar Flask'],
+    sinister: ['ผ้าคลุมมัจจุราชสีชาด', 'มีดคู่สังหาร + อัตราคริสูงสุด', 'กากบาททมิฬ + จันทราโลหิต'],
   }
   return map[jobId] ?? []
 }
@@ -78,13 +89,44 @@ function getMonsterTraitLabel(archetype: string): string {
   return map[archetype] ?? archetype
 }
 
+function getPetTraitTags(petId: string): string[] {
+  const map: Record<string, string[]> = {
+    phao_lotus: ['ฐานบัวแก้วมงคล', 'ลายกนกข้างตัวผอบ', 'เปิดฝาปล่อยกลีบบัว'],
+    phao_gold_naga: ['ผอบทองคำยอดพญานาค', 'เขี้ยวนาคาคู่', 'เปิดฝาพ่นลูกแก้วมรกต'],
+    phao_celestial: ['ลายเบญจรงค์สุริยัน-จันทรา', 'ดาวเคราะห์โคจรรอบผอบ', 'ลำแสงทวิธาตุ'],
+    phao_phantom: ['ผอบสัมฤทธิ์ดำผนึกยันต์', 'ดวงไฟวิญญาณลอยรอบ', 'เปิดฝาปล่อยเพลิงอเวจี'],
+    buddy_slime: ['หยดเจลเด้งดึ๋ง', 'ใบหน้าน่ารัก', 'กระสุนเมือกสีเขียว'],
+    flame_fox: ['หางเปลวไฟคู่', 'หูแหลมปลายทอง', 'ลูกไฟพิกเซล'],
+    crystal_owl: ['ปีกผลึกเวทกระพือ', 'แก่นคริสตัลกลางอก', 'ลำแสงผลึก'],
+    moonlight_firefly: ['ปีกภูตโปร่งแสง', 'ตะเกียงแสงจันทร์', 'ดูดไอเทมอัตโนมัติ'],
+    gem_raccoon: ['หน้ากากแรคคูน + หางลาย', 'กระเป๋าพ่อค้า', 'ผลึกอัญมณีสีฟ้า'],
+    aurora_cloud_dragon: ['เขาคริสตัล', 'ปีกแสงเหนือ', 'ลมหายใจออโรรา'],
+  }
+  return map[petId] ?? ['โมเดล 2D 4 ทิศทาง']
+}
+
+function getMountTraitTags(archetype: string): string[] {
+  const map: Record<string, string[]> = {
+    warhorse: ['อานศึกสีชาดขอบทอง', 'แผงคอพลิ้ว + บังเหียนทอง', 'ท่าควบ 4 ขา 6 เฟรม'],
+    direwolf: ['แผงขนน้ำแข็งสีเงิน', 'เขี้ยวหิมะ + ดวงตาคริสตัล', 'หางพวงน้ำแข็ง'],
+    griffin: ['หัวพญาอินทรี + จะงอยปากทอง', 'ปีกทองกระพือกลางอากาศ', 'ร่างราชสีห์สี่ขา'],
+    kirin: ['เขากิเลนคู่ประกายดารา', 'แผงคอดวงดาว', 'กีบแสงดาวเรืองรอง'],
+    cloud_dragon: ['มังกรฟ้าหนวดยาว', 'ปีกเมฆาแสงเหนือ', 'หางมังกรพลิ้วไสว'],
+  }
+  return map[archetype] ?? ['โมเดลสัตว์ขี่ 4 ทิศทาง']
+}
+
 export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
   const jobModels = useMemo(() => getAllJobModels(), [])
   const monsterModels = useMemo(() => getAllMonsterModels(), [])
+  const mountModels = useMemo(() => getAllMountModels(), [])
+  const petModels = useMemo(() => getAllPetModels(), [])
 
-  const [tab, setTab] = useState<'jobs' | 'monsters'>('jobs')
+  const [tab, setTab] = useState<'jobs' | 'monsters' | 'mounts' | 'pets'>('jobs')
   const [selectedJobId, setSelectedJobId] = useState<string>('paladin')
   const [selectedMonsterId, setSelectedMonsterId] = useState<string>('abyss_dragon')
+  const [selectedMountId, setSelectedMountId] = useState<string>('starlight_kirin')
+  const [selectedPetId, setSelectedPetId] = useState<string>('phao_gold_naga')
   const [action, setAction] = useState<PreviewAction>('auto')
   const [dir, setDir] = useState<ModelDir>('down')
   const [liveAutoPhase, setLiveAutoPhase] = useState<SpriteAction>('idle')
@@ -96,6 +138,10 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
     jobModels.find((entry) => entry.job.id === selectedJobId) ?? jobModels[0]
   const selectedMonsterEntry =
     monsterModels.find((entry) => entry.monster.id === selectedMonsterId) ?? monsterModels[0]
+  const selectedMountEntry =
+    mountModels.find((entry) => entry.mount.id === selectedMountId) ?? mountModels[0]
+  const selectedPetEntry =
+    petModels.find((entry) => entry.pet.id === selectedPetId) ?? petModels[0]
   const activeJobSkill =
     selectedJobEntry.job.skills.find((s) => s.id === selectedSkillId) ?? selectedJobEntry.job.skills[0] ?? null
   const activeRebirthSpec = resolveRebirthAuraSpec(previewRebirth)
@@ -122,7 +168,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
             }`}
           >
             <Swords className="size-3.5" aria-hidden />
-            อาชีพทั้งหมด ({jobModels.length})
+            อาชีพ ({jobModels.length})
           </button>
           <button
             type="button"
@@ -136,7 +182,35 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
             }`}
           >
             <Flame className="size-3.5" aria-hidden />
-            มอนสเตอร์ &amp; บอส ({monsterModels.length})
+            มอนสเตอร์ ({monsterModels.length})
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'mounts'}
+            onClick={() => setTab('mounts')}
+            className={`pixel-btn flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold ${
+              tab === 'mounts'
+                ? 'bg-amber-500 text-slate-950'
+                : 'bg-secondary text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Wind className="size-3.5" aria-hidden />
+            สัตว์ขี่ ({mountModels.length})
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'pets'}
+            onClick={() => setTab('pets')}
+            className={`pixel-btn flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold ${
+              tab === 'pets'
+                ? 'bg-emerald-500 text-slate-950'
+                : 'bg-secondary text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <PawPrint className="size-3.5" aria-hidden />
+            สัตว์เลี้ยง &amp; ผอบ ({petModels.length})
           </button>
         </div>
 
@@ -246,7 +320,12 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                   </h3>
                   <p className="text-xs text-muted-foreground">{selectedJobEntry.job.description}</p>
                 </div>
-                <div className="flex items-center gap-1.5 text-[11px]">
+                <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                  {selectedJobEntry.job.origin === 'lumivara' && (
+                    <span className="border border-amber-400/50 bg-amber-500/15 px-2 py-0.5 font-semibold text-amber-200">
+                      ★ Lumivara Online
+                    </span>
+                  )}
                   <span className="border border-border bg-background px-2 py-0.5 text-accent">
                     {selectedJobEntry.job.ranged ? 'โจมตีระยะไกล' : 'โจมตีระยะประชิด'}
                   </span>
@@ -386,7 +465,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
             </div>
           </div>
         </section>
-      ) : (
+      ) : tab === 'monsters' ? (
         <section
           aria-label={`ตัวอย่างโมเดล ${selectedMonsterEntry.monster.name}`}
           className="grid gap-3 border-2 border-destructive/50 bg-muted p-3 md:grid-cols-[11.5rem_1fr]"
@@ -488,6 +567,183 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
             </div>
           </div>
         </section>
+      ) : tab === 'mounts' ? (
+        <section
+          aria-label={`ตัวอย่างโมเดลสัตว์ขี่ ${selectedMountEntry.mount.name}`}
+          className="grid gap-3 border-2 border-amber-400/50 bg-muted p-3 md:grid-cols-[11.5rem_1fr]"
+        >
+          <div className="mmorpg-showcase-card flex flex-col items-center justify-between p-2.5">
+            <div className="flex w-full items-center justify-between text-[10px]">
+              <span className="border border-amber-400/50 bg-amber-500/15 px-1.5 py-0.5 font-semibold text-amber-200">
+                {selectedMountEntry.mount.rarity}
+              </span>
+              <span className="text-accent">
+                {action === 'auto' ? ACTION_THAI[liveAutoPhase] : ACTION_THAI[action]}
+              </span>
+            </div>
+
+            <div className="relative my-1.5 flex items-center justify-center rounded-sm border border-[#c9993f]/40 bg-[#0b0f21]/85 p-2 shadow-inner">
+              <SpriteModelCanvas
+                mode="mount"
+                id={selectedMountEntry.mount.id}
+                action={action}
+                dir={dir}
+                size={compact ? 124 : 144}
+                onAutoPhaseChange={setLiveAutoPhase}
+                label={`โมเดลสัตว์ขี่ ${selectedMountEntry.mount.name}`}
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={rotateDir}
+              className="pixel-btn flex w-full items-center justify-center gap-1 bg-secondary px-2 py-1 text-[11px] text-foreground hover:brightness-110"
+            >
+              <RotateCw className="size-3" aria-hidden />
+              หมุนทิศ ({DIR_LABELS[dir]})
+            </button>
+          </div>
+
+          <div className="flex flex-col justify-between gap-2.5">
+            <div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-lg font-bold text-amber-300">
+                    {selectedMountEntry.mount.name}
+                    <span className="ml-2 font-mono text-xs font-normal text-muted-foreground">
+                      ({selectedMountEntry.mount.id})
+                    </span>
+                  </h3>
+                  <p className="text-xs text-muted-foreground">{selectedMountEntry.mount.description}</p>
+                </div>
+                <div className="flex items-center gap-1.5 text-[11px]">
+                  <span className="border border-border bg-background px-2 py-0.5 text-accent">
+                    {selectedMountEntry.model.flying ? 'ลอย/บินได้' : 'วิ่งบนพื้น'}
+                  </span>
+                  <span className="border border-border bg-background px-2 py-0.5 text-gold tabular-nums">
+                    +{selectedMountEntry.mount.speedBonusPct}% ความเร็ว
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {getMountTraitTags(selectedMountEntry.model.archetype).map((trait) => (
+                  <span key={trait} className="border border-amber-400/35 bg-amber-500/10 px-2 py-0.5 text-[11px] text-foreground">
+                    <Sparkles className="mr-1 inline size-3 text-amber-300" aria-hidden />
+                    {trait}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-1.5 text-center text-[11px] sm:grid-cols-4">
+              {[
+                ['ความเร็วขี่', `+${selectedMountEntry.mount.speedBonusPct}%`],
+                ['HP เสริม', `+${formatNum(selectedMountEntry.mount.hpBonus)}`],
+                ['ATK เสริม', `+${formatNum(selectedMountEntry.mount.atkBonus)}`],
+                ['DEF เสริม', `+${formatNum(selectedMountEntry.mount.defBonus)}`],
+              ].map(([k, v]) => (
+                <div key={k} className="border border-border bg-background/80 px-1.5 py-1">
+                  <p className="text-[10px] text-muted-foreground">{k}</p>
+                  <p className="font-bold tabular-nums text-foreground">{v}</p>
+                </div>
+              ))}
+            </div>
+
+            <p className="font-mono text-[10px] text-muted-foreground tabular-nums">
+              {selectedMountEntry.model.canvasSize.width}x{selectedMountEntry.model.canvasSize.height}px • 4 ทิศทาง • Idle 4F / Gallop 6F / Dash 4F
+            </p>
+          </div>
+        </section>
+      ) : (
+        <section
+          aria-label={`ตัวอย่างโมเดล ${selectedPetEntry.pet.name}`}
+          className="grid gap-3 border-2 border-emerald-400/50 bg-muted p-3 md:grid-cols-[11.5rem_1fr]"
+        >
+          <div className="mmorpg-showcase-card flex flex-col items-center justify-between p-2.5">
+            <div className="flex w-full items-center justify-between text-[10px]">
+              <span className="border border-emerald-400/50 bg-emerald-500/15 px-1.5 py-0.5 font-semibold text-emerald-200">
+                {selectedPetEntry.model.category === 'phao' ? 'ผอบ (Phao-ob)' : 'คู่หูสัตว์'}
+              </span>
+              <span className="text-accent">
+                {action === 'auto' ? ACTION_THAI[liveAutoPhase] : ACTION_THAI[action]}
+              </span>
+            </div>
+
+            <div className="relative my-1.5 flex items-center justify-center rounded-sm border border-[#c9993f]/40 bg-[#0b0f21]/85 p-2 shadow-inner">
+              <SpriteModelCanvas
+                mode="pet"
+                id={selectedPetEntry.pet.id}
+                action={action}
+                dir={dir}
+                size={compact ? 124 : 144}
+                onAutoPhaseChange={setLiveAutoPhase}
+                label={`โมเดล ${selectedPetEntry.pet.name}`}
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={rotateDir}
+              className="pixel-btn flex w-full items-center justify-center gap-1 bg-secondary px-2 py-1 text-[11px] text-foreground hover:brightness-110"
+            >
+              <RotateCw className="size-3" aria-hidden />
+              หมุนทิศ ({DIR_LABELS[dir]})
+            </button>
+          </div>
+
+          <div className="flex flex-col justify-between gap-2.5">
+            <div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-lg font-bold text-emerald-300">
+                    {selectedPetEntry.pet.name}
+                    <span className="ml-2 font-mono text-xs font-normal text-muted-foreground">
+                      ({selectedPetEntry.pet.id})
+                    </span>
+                  </h3>
+                  <p className="text-xs text-muted-foreground">{selectedPetEntry.pet.description}</p>
+                </div>
+                <div className="flex items-center gap-1.5 text-[11px]">
+                  <span className="border border-border bg-background px-2 py-0.5 text-amber-300">
+                    {selectedPetEntry.pet.rarity}
+                  </span>
+                  <span className="border border-border bg-background px-2 py-0.5 text-accent">
+                    {selectedPetEntry.model.floating ? 'ลอยอารักขา' : 'เดินตามข้างกาย'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {getPetTraitTags(selectedPetEntry.pet.id).map((trait) => (
+                  <span key={trait} className="border border-emerald-400/35 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-foreground">
+                    <Sparkles className="mr-1 inline size-3 text-emerald-300" aria-hidden />
+                    {trait}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-1.5 text-center text-[11px] sm:grid-cols-5">
+              {[
+                ['พลังยิง', formatNum(selectedPetEntry.pet.baseAtk)],
+                ['ATK บัฟ', `+${selectedPetEntry.pet.atkBuff}`],
+                ['HP บัฟ', `+${selectedPetEntry.pet.hpBonus}`],
+                ['EXP บัฟ', `+${selectedPetEntry.pet.expBonusPct}%`],
+                ['ทอง บัฟ', `+${selectedPetEntry.pet.goldBonusPct}%`],
+              ].map(([k, v]) => (
+                <div key={k} className="border border-border bg-background/80 px-1.5 py-1">
+                  <p className="text-[10px] text-muted-foreground">{k}</p>
+                  <p className="font-bold tabular-nums text-foreground">{v}</p>
+                </div>
+              ))}
+            </div>
+
+            <p className="font-mono text-[10px] text-muted-foreground tabular-nums">
+              {selectedPetEntry.model.canvasSize.width}x{selectedPetEntry.model.canvasSize.height}px • 4 ทิศทาง • Idle 4F / Walk 6F / Attack (เปิดฝาผอบ) 4F
+            </p>
+          </div>
+        </section>
       )}
 
       {/* Grid of All Models */}
@@ -538,7 +794,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
             )
           })}
         </div>
-      ) : (
+      ) : tab === 'monsters' ? (
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
           {monsterModels.map(({ monster, model }) => {
             const selected = monster.id === selectedMonsterEntry.monster.id
@@ -580,6 +836,84 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
             )
           })}
         </div>
+      ) : tab === 'mounts' ? (
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
+          {mountModels.map(({ mount, model }) => {
+            const selected = mount.id === selectedMountEntry.mount.id
+            return (
+              <button
+                key={mount.id}
+                type="button"
+                onClick={() => setSelectedMountId(mount.id)}
+                aria-pressed={selected}
+                className={`flex flex-col items-center gap-1.5 p-2 text-center transition-all hover:brightness-110 ${
+                  selected ? 'mmorpg-showcase-card-active border-amber-400' : 'mmorpg-showcase-card'
+                }`}
+              >
+                <div className="flex w-full items-center justify-between text-[10px]">
+                  <span className="font-semibold text-amber-300">{mount.rarity}</span>
+                  <span className="font-mono text-accent tabular-nums">+{mount.speedBonusPct}%</span>
+                </div>
+                <div className="grid size-24 place-items-center border border-[#c9993f]/35 bg-[#0b1024]/90 shadow-[inset_0_0_16px_rgba(245,158,11,0.16)]">
+                  <SpriteModelCanvas
+                    mode="mount"
+                    id={mount.id}
+                    action={compact && !selected && action === 'auto' ? 'idle' : action}
+                    dir={dir}
+                    size={88}
+                    label={`พรีวิวสัตว์ขี่ ${mount.name}`}
+                  />
+                </div>
+                <div className="mmorpg-ribbon w-full px-2 py-1">
+                  <p className="truncate text-xs font-bold text-[#ffeaa7]">{mount.name}</p>
+                  <p className="truncate text-[10px] text-muted-foreground">
+                    {model.flying ? 'บิน/ลอยตัว' : 'วิ่งพื้นดิน'} • +{mount.atkBonus} ATK
+                  </p>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
+          {petModels.map(({ pet, model }) => {
+            const selected = pet.id === selectedPetEntry.pet.id
+            return (
+              <button
+                key={pet.id}
+                type="button"
+                onClick={() => setSelectedPetId(pet.id)}
+                aria-pressed={selected}
+                className={`flex flex-col items-center gap-1.5 p-2 text-center transition-all hover:brightness-110 ${
+                  selected ? 'mmorpg-showcase-card-active border-emerald-400' : 'mmorpg-showcase-card'
+                }`}
+              >
+                <div className="flex w-full items-center justify-between text-[10px]">
+                  <span className={`font-semibold ${model.category === 'phao' ? 'text-amber-300' : 'text-emerald-300'}`}>
+                    {model.category === 'phao' ? 'ผอบ' : 'คู่หู'}
+                  </span>
+                  <span className="font-mono text-muted-foreground tabular-nums">{pet.rarity}</span>
+                </div>
+                <div className="grid size-24 place-items-center border border-[#c9993f]/35 bg-[#0b1024]/90 shadow-[inset_0_0_16px_rgba(16,185,129,0.16)]">
+                  <SpriteModelCanvas
+                    mode="pet"
+                    id={pet.id}
+                    action={compact && !selected && action === 'auto' ? 'idle' : action}
+                    dir={dir}
+                    size={88}
+                    label={`พรีวิว ${pet.name}`}
+                  />
+                </div>
+                <div className="mmorpg-ribbon w-full px-2 py-1">
+                  <p className="truncate text-xs font-bold text-foreground">{pet.name}</p>
+                  <p className="truncate text-[10px] text-muted-foreground">
+                    ยิง {pet.baseAtk} • +{pet.hpBonus} HP
+                  </p>
+                </div>
+              </button>
+            )
+          })}
+        </div>
       )}
 
       <p className="flex items-center justify-between border-t border-border/60 pt-2 text-[11px] text-muted-foreground">
@@ -589,7 +923,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
         </span>
         <span className="hidden items-center gap-1 sm:flex">
           <Shield className="size-3 text-accent" aria-hidden />
-          ครบทั้ง 12 อาชีพ และ 17 มอนสเตอร์
+          ครบทั้ง {jobModels.length} อาชีพ • {monsterModels.length} มอนสเตอร์ • {mountModels.length} สัตว์ขี่ • {petModels.length} ผอบ/สัตว์เลี้ยง
         </span>
       </p>
     </div>

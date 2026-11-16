@@ -135,12 +135,19 @@ export function OnlinePlayersPopover() {
               เข้าสู่ระบบ Google ในหน้าต่างเพื่อนหรือหน้าแรก เพื่อซิงค์ตำแหน่งกับผู้เล่นออนไลน์คนอื่น
             </p>
           </div>
+        ) : game.presenceError ? (
+          <div className="rounded-xl border border-rose-400/40 bg-rose-500/10 p-3 text-center">
+            <p className="text-xs font-semibold text-rose-200">พบปัญหาการซิงค์ออนไลน์</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">{game.presenceError}</p>
+          </div>
         ) : sortedPlayers.length === 0 ? (
           <div className="rounded-xl border border-border bg-secondary/40 p-3 text-center">
             <Users className="mx-auto mb-1.5 size-5 text-muted-foreground" aria-hidden />
             <p className="text-xs font-semibold text-foreground">ยังไม่มีผู้เล่นคนอื่นออนไลน์ตอนนี้</p>
             <p className="mt-1 text-[11px] text-muted-foreground">
-              เมื่อผู้เล่นที่ล็อกอิน Google เข้าเกม ระบบจะแสดงแมพที่อยู่และสถานะที่นี่อัตโนมัติ
+              {game.p.invisible
+                ? 'คุณกำลังเปิดโหมดล่องหน (GM) อยู่ จึงซ่อนตัวจากผู้เล่นอื่น'
+                : 'เมื่ออีกจอเข้าสู่ระบบ Google คนละบัญชีและเข้าเกมแล้ว ระบบจะแสดงตำแหน่งที่นี่อัตโนมัติ'}
             </p>
           </div>
         ) : (

@@ -2,12 +2,14 @@
 
 import { useEffect, useRef } from 'react'
 import { JOBS, MONSTERS, type WeaponType } from '@/lib/game/data'
-import { getJobModelSpec, getMonsterModelSpec } from '@/lib/game/models-2d'
+import { getJobModelSpec, getMonsterModelSpec, getMountModelSpec, getPetModelSpec } from '@/lib/game/models-2d'
 import {
   type Dir,
   humanSprite,
   jobHumanColors,
   monsterSprite,
+  mountSprite,
+  petSprite,
   type SpriteAction,
 } from '@/lib/game/sprites'
 import { drawRebirthAura } from '@/lib/game/vfx-canvas'
@@ -15,7 +17,7 @@ import { drawRebirthAura } from '@/lib/game/vfx-canvas'
 export type PreviewAction = SpriteAction | 'auto'
 
 export interface SpriteModelCanvasProps {
-  mode: 'job' | 'monster'
+  mode: 'job' | 'monster' | 'pet' | 'mount'
   id: string
   action?: PreviewAction
   dir?: Dir
@@ -164,6 +166,18 @@ export function SpriteModelCanvas({
           attackFrame,
         )
         auraColor = spec.auraColor
+      } else if (mode === 'pet') {
+        const spec = getPetModelSpec(id)
+        const petAction: SpriteAction = effectiveAction === 'skill' ? 'attack' : effectiveAction
+        spriteImg = petSprite(spec.petId, dir, petAction, frame, attackFrame)
+        auraColor = spec.auraColor
+        isFlying = spec.floating
+      } else if (mode === 'mount') {
+        const spec = getMountModelSpec(id)
+        const mountAction: SpriteAction = effectiveAction === 'skill' ? 'attack' : effectiveAction
+        spriteImg = mountSprite(spec.mountId, dir, mountAction, frame, attackFrame)
+        auraColor = spec.auraColor
+        isFlying = spec.flying
       } else {
         const monDef = MONSTERS[id] ?? MONSTERS.slime
         const spec = getMonsterModelSpec(monDef.id, monDef.sprite, monDef.color)

@@ -14,10 +14,10 @@ import {
 } from '../lib/game/models-2d'
 
 describe('2D character job models & animations', () => {
-  it('defines a 42x48 2D model spec with hairStyle for every job in JOBS (12/12)', () => {
+  it('defines a 42x48 2D model spec with hairStyle for every job in JOBS (21/21)', () => {
     const jobIds = Object.keys(JOBS)
-    assert.equal(jobIds.length, 12)
-    assert.equal(getAllJobModels().length, 12)
+    assert.equal(jobIds.length, 21)
+    assert.equal(getAllJobModels().length, 21)
     assert.deepEqual(HUMAN_MODEL_CANVAS_SIZE, { width: 42, height: 48 })
 
     for (const id of jobIds) {
@@ -46,6 +46,13 @@ describe('2D character job models & animations', () => {
     assert.equal(getJobModelSpec('assassin').dualDaggers, true)
     assert.equal(getJobModelSpec('hunter').quiver, true)
     assert.equal(getJobModelSpec('gm').wingStyle, 'seraph')
+    assert.equal(getJobModelSpec('merchant').hatStyle, 'merchant_beret')
+    assert.equal(getJobModelSpec('nekobaku').hatStyle, 'cat_hood')
+    assert.equal(getJobModelSpec('templar').halo, true)
+    assert.equal(getJobModelSpec('the_king').hatStyle, 'crown')
+    assert.equal(getJobModelSpec('the_king').armorStyle, 'sovereign')
+    assert.equal(getJobModelSpec('sinister').dualDaggers, true)
+    assert.equal(getJobModelSpec('mamushi').quiver, true)
     assert.equal(getJobModelSpec('unknown_job').jobId, 'novice')
   })
 })

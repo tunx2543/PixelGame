@@ -2,7 +2,7 @@ import { normalizeGameUidInput } from '@/lib/game/permissions'
 
 export const PRESENCE_HEARTBEAT_MS = 4_000
 export const PRESENCE_MOVE_THROTTLE_MS = 200
-export const PRESENCE_STALE_MS = 25_000
+export const PRESENCE_STALE_MS = 45_000
 export const PRESENCE_QUERY_LIMIT = 60
 
 export type PresenceFacing = 'up' | 'down' | 'left' | 'right'

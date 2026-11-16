@@ -9,6 +9,7 @@ import {
   Castle,
   ChevronDown,
   Compass,
+  Crown,
   EyeOff,
   Feather,
   Gamepad2,
@@ -54,11 +55,12 @@ const RPG_MENU_ITEMS: Array<{
   { panel: 'arena', label: 'ลานประลอง & อันดับ', hint: 'PvP 1v1 / ตารางอันดับ', Icon: Swords, tone: 'text-rose-300' },
   { panel: 'dungeon', label: 'ดันเจี้ยน & Co-op', hint: 'รายวัน / ปาร์ตี้เรดบอส', Icon: Castle, tone: 'text-purple-300' },
   { panel: 'quests', label: 'ภารกิจ & เควสต์', hint: 'รางวัลความก้าวหน้า', Icon: ScrollText, tone: 'text-amber-200' },
-  { panel: 'pets', label: 'สัตว์เลี้ยง & วิวัฒน์', hint: 'คู่หู / 1★–5★ / ดูดของ', Icon: PawPrint, tone: 'text-accent' },
+  { panel: 'pets', label: 'สัตว์เลี้ยง (ผอบ) & สัตว์ขี่', hint: 'ผอบ / คู่หู / สัตว์ขี่เพิ่มเร็ว', Icon: PawPrint, tone: 'text-accent' },
   { panel: 'gacha', label: 'เปิดตู้กาชา', hint: 'สุ่มอาวุธหายาก', Icon: Gift, tone: 'text-primary' },
   { panel: 'character', label: 'ตัวละคร & สกิล', hint: 'อัปสเตตัส / สวมใส่', Icon: User, tone: 'text-foreground' },
+  { panel: 'job', label: 'เปลี่ยนอาชีพ & สายคลาส', hint: '21 อาชีพ (รวม Lumivara)', Icon: Crown, tone: 'text-amber-300' },
   { panel: 'shop', label: 'ร้านค้า & โพชั่น', hint: 'ซื้อยา / อุปกรณ์เริ่มต้น', Icon: ShoppingBag, tone: 'text-emerald-200' },
-  { panel: 'models', label: 'คลังโมเดล 2D', hint: 'พรีวิวอาชีพและมอน', Icon: Sparkles, tone: 'text-gold' },
+  { panel: 'models', label: 'คลังโมเดล 2D', hint: 'อาชีพ / มอน / สัตว์ขี่ / ผอบ', Icon: Sparkles, tone: 'text-gold' },
 ]
 
 export function MenuDock({

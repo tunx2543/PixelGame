@@ -1,4 +1,6 @@
 import { JOBS, MONSTERS, type JobDef, type MonsterDef, type MonsterSprite, type WeaponType } from './data'
+import { MOUNT_DEFS, type MountArchetype, type MountDef } from './mounts'
+import { COMBAT_PETS, type CombatPetDef } from './systems'
 
 export type ModelDir = 'down' | 'up' | 'left' | 'right'
 export type ModelAction = 'idle' | 'walk' | 'attack'
@@ -15,6 +17,8 @@ export type HatStyle =
   | 'crown'
   | 'mitre'
   | 'bandana'
+  | 'merchant_beret'
+  | 'cat_hood'
 
 export type ArmorStyle =
   | 'tunic'
@@ -312,6 +316,162 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     auraColor: '#ffd60a',
     animationFrames: { idle: 4, walk: 6, attack: 4 },
   },
+  merchant: {
+    jobId: 'merchant',
+    name: JOBS.merchant.name,
+    tier: 1,
+    hatStyle: 'merchant_beret',
+    armorStyle: 'brigandine',
+    hairStyle: 'parted',
+    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
+    weapon: 'sword',
+    hatColor: '#b45309',
+    scarfColor: '#fbbf24',
+    backpack: true,
+    wingStyle: 'none',
+    animationFrames: { idle: 4, walk: 6, attack: 4 },
+  },
+  templar: {
+    jobId: 'templar',
+    name: JOBS.templar.name,
+    tier: 2,
+    hatStyle: 'paladin_helm',
+    armorStyle: 'paladin_plate',
+    hairStyle: 'royal',
+    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
+    weapon: 'sword',
+    hatColor: '#f8fafc',
+    capeColor: '#b45309',
+    shieldColor: '#fef3c7',
+    shieldCrestColor: '#f59e0b',
+    shoulderPads: true,
+    halo: true,
+    auraColor: '#fbbf24',
+    wingStyle: 'angel',
+    animationFrames: { idle: 4, walk: 6, attack: 4 },
+  },
+  kensei: {
+    jobId: 'kensei',
+    name: JOBS.kensei.name,
+    tier: 2,
+    hatStyle: 'bandana',
+    armorStyle: 'brigandine',
+    hairStyle: 'ponytail',
+    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
+    weapon: 'sword',
+    hatColor: '#e11d48',
+    capeColor: '#450a0a',
+    scarfColor: '#fb7185',
+    shoulderPads: true,
+    auraColor: '#f43f5e',
+    wingStyle: 'none',
+    animationFrames: { idle: 4, walk: 6, attack: 4 },
+  },
+  iron_fist: {
+    jobId: 'iron_fist',
+    name: JOBS.iron_fist.name,
+    tier: 2,
+    hatStyle: 'bandana',
+    armorStyle: 'plate',
+    hairStyle: 'spiky',
+    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
+    weapon: 'sword',
+    hatColor: '#ea580c',
+    scarfColor: '#fb923c',
+    shieldColor: '#78716c',
+    shieldCrestColor: '#f97316',
+    shoulderPads: true,
+    auraColor: '#fb923c',
+    wingStyle: 'none',
+    animationFrames: { idle: 4, walk: 6, attack: 4 },
+  },
+  the_king: {
+    jobId: 'the_king',
+    name: JOBS.the_king.name,
+    tier: 2,
+    hatStyle: 'crown',
+    armorStyle: 'sovereign',
+    hairStyle: 'royal',
+    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
+    weapon: 'staff',
+    hatColor: '#facc15',
+    capeColor: '#6b21a8',
+    shoulderPads: true,
+    halo: true,
+    auraColor: '#facc15',
+    wingStyle: 'none',
+    animationFrames: { idle: 4, walk: 6, attack: 4 },
+  },
+  wicked_necromancer: {
+    jobId: 'wicked_necromancer',
+    name: JOBS.wicked_necromancer.name,
+    tier: 2,
+    hatStyle: 'archmage',
+    armorStyle: 'arch_robe',
+    hairStyle: 'long',
+    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
+    weapon: 'staff',
+    hatColor: '#3b0764',
+    capeColor: '#1e1b4b',
+    scarfColor: '#c084fc',
+    shoulderPads: true,
+    auraColor: '#a855f7',
+    wingStyle: 'none',
+    animationFrames: { idle: 4, walk: 6, attack: 4 },
+  },
+  mamushi: {
+    jobId: 'mamushi',
+    name: JOBS.mamushi.name,
+    tier: 2,
+    hatStyle: 'cowl',
+    armorStyle: 'shadow',
+    hairStyle: 'swept',
+    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
+    weapon: 'bow',
+    hatColor: '#064e3b',
+    capeColor: '#022c22',
+    scarfColor: '#4ade80',
+    quiver: true,
+    auraColor: '#22c55e',
+    wingStyle: 'none',
+    animationFrames: { idle: 4, walk: 6, attack: 4 },
+  },
+  nekobaku: {
+    jobId: 'nekobaku',
+    name: JOBS.nekobaku.name,
+    tier: 2,
+    hatStyle: 'cat_hood',
+    armorStyle: 'leather',
+    hairStyle: 'ponytail',
+    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
+    weapon: 'bow',
+    hatColor: '#9a3412',
+    capeColor: '#7c2d12',
+    scarfColor: '#fbbf24',
+    backpack: true,
+    quiver: true,
+    auraColor: '#fb923c',
+    wingStyle: 'none',
+    animationFrames: { idle: 4, walk: 6, attack: 4 },
+  },
+  sinister: {
+    jobId: 'sinister',
+    name: JOBS.sinister.name,
+    tier: 2,
+    hatStyle: 'cowl',
+    armorStyle: 'shadow',
+    hairStyle: 'swept',
+    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
+    weapon: 'dagger',
+    hatColor: '#18181b',
+    capeColor: '#881337',
+    scarfColor: '#e11d48',
+    shoulderPads: true,
+    dualDaggers: true,
+    auraColor: '#e11d48',
+    wingStyle: 'none',
+    animationFrames: { idle: 4, walk: 6, attack: 4 },
+  },
 }
 
 const ARCHETYPE_BY_ID: Record<string, MonsterModelArchetype> = {
@@ -449,3 +609,131 @@ export function getAllMonsterModels(): Array<{ monster: MonsterDef; model: Monst
       model: getMonsterModelSpec(monster.id, monster.sprite, monster.color),
     }))
 }
+
+export type PetModelArchetype =
+  | 'phao_lotus'
+  | 'phao_gold_naga'
+  | 'phao_celestial'
+  | 'phao_phantom'
+  | 'buddy_slime'
+  | 'flame_fox'
+  | 'crystal_owl'
+  | 'moonlight_firefly'
+  | 'gem_raccoon'
+  | 'aurora_cloud_dragon'
+
+export interface PetModelSpec {
+  petId: string
+  name: string
+  category: 'phao' | 'companion'
+  rarity: CombatPetDef['rarity']
+  archetype: PetModelArchetype
+  colors: CombatPetDef['colors']
+  canvasSize: { width: number; height: number }
+  supports4Way: boolean
+  floating: boolean
+  auraColor: string
+  animationFrames: {
+    idle: number
+    walk: number
+    attack: number
+  }
+}
+
+export const PET_MODEL_CANVAS_SIZE = { width: 28, height: 30 } as const
+
+function buildPetModelSpec(def: CombatPetDef): PetModelSpec {
+  const category = def.category ?? (def.id.startsWith('phao_') ? 'phao' : 'companion')
+  const archetype = (def.id as PetModelArchetype) ?? 'buddy_slime'
+  const floating =
+    category === 'phao' ||
+    def.id === 'crystal_owl' ||
+    def.id === 'moonlight_firefly' ||
+    def.id === 'aurora_cloud_dragon'
+  return {
+    petId: def.id,
+    name: def.name,
+    category,
+    rarity: def.rarity,
+    archetype,
+    colors: def.colors,
+    canvasSize: { ...PET_MODEL_CANVAS_SIZE },
+    supports4Way: true,
+    floating,
+    auraColor: def.colors.accent,
+    animationFrames: { idle: 4, walk: 6, attack: 4 },
+  }
+}
+
+export const PET_MODEL_SPECS: Record<string, PetModelSpec> = Object.fromEntries(
+  COMBAT_PETS.map((def) => [def.id, buildPetModelSpec(def)]),
+)
+
+export function getPetModelSpec(petId?: string | null): PetModelSpec {
+  if (petId && PET_MODEL_SPECS[petId]) {
+    return PET_MODEL_SPECS[petId]
+  }
+  return PET_MODEL_SPECS.phao_lotus ?? PET_MODEL_SPECS.buddy_slime
+}
+
+export function getAllPetModels(): Array<{ pet: CombatPetDef; model: PetModelSpec }> {
+  return COMBAT_PETS.map((pet) => ({
+    pet,
+    model: getPetModelSpec(pet.id),
+  }))
+}
+
+export interface MountModelSpec {
+  mountId: string
+  name: string
+  rarity: MountDef['rarity']
+  archetype: MountArchetype
+  colors: MountDef['colors']
+  canvasSize: { width: number; height: number }
+  seatOffsetY: number
+  supports4Way: boolean
+  flying: boolean
+  auraColor?: string
+  animationFrames: {
+    idle: number
+    walk: number
+    attack: number
+  }
+}
+
+export const MOUNT_MODEL_CANVAS_SIZE = { width: 44, height: 38 } as const
+
+function buildMountModelSpec(def: MountDef): MountModelSpec {
+  return {
+    mountId: def.id,
+    name: def.name,
+    rarity: def.rarity,
+    archetype: def.archetype,
+    colors: def.colors,
+    canvasSize: { ...MOUNT_MODEL_CANVAS_SIZE },
+    seatOffsetY: def.seatOffsetY,
+    supports4Way: true,
+    flying: def.flying,
+    auraColor: def.auraColor,
+    animationFrames: { idle: 4, walk: 6, attack: 4 },
+  }
+}
+
+export const MOUNT_MODEL_SPECS: Record<string, MountModelSpec> = Object.fromEntries(
+  MOUNT_DEFS.map((def) => [def.id, buildMountModelSpec(def)]),
+)
+
+export function getMountModelSpec(mountId?: string | null): MountModelSpec {
+  if (mountId && MOUNT_MODEL_SPECS[mountId]) {
+    return MOUNT_MODEL_SPECS[mountId]
+  }
+  return MOUNT_MODEL_SPECS.meadow_pony
+}
+
+export function getAllMountModels(): Array<{ mount: MountDef; model: MountModelSpec }> {
+  return MOUNT_DEFS.map((mount) => ({
+    mount,
+    model: getMountModelSpec(mount.id),
+  }))
+}
+

@@ -264,7 +264,9 @@ export interface PartyRoleSynergyResult {
 
 export function getJobRole(jobId: string): PartyRole {
   if (jobId === 'cleric') return 'healer'
-  if (jobId === 'swordsman' || jobId === 'knight' || jobId === 'paladin') return 'tank'
+  if (jobId === 'swordsman' || jobId === 'knight' || jobId === 'paladin' || jobId === 'templar' || jobId === 'iron_fist') {
+    return 'tank'
+  }
   return 'dps'
 }
 

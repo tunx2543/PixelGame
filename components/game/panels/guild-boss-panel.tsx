@@ -1,15 +1,17 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Clock, Coins, Crown, Flame, Gift, MapPin, MessageSquare, Send, Shield, Swords, Trophy, Users } from 'lucide-react'
+import { Clock, Coins, Crown, Flame, Gift, MapPin, MessageSquare, Send, Shield, Sparkles, Swords, Trophy, Users } from 'lucide-react'
 import { JOBS } from '@/lib/game/data'
 import {
   addItem,
   applyFieldBossRewardAction,
   claimWorldBossMilestoneAction,
+  closePanel,
   getStats,
   recordWorldBossDamageAction,
   saveGame,
+  summonWorldBossInField,
   syncGuildStateAction,
 } from '@/lib/game/engine'
 import {
@@ -52,6 +54,7 @@ import {
 } from '@/lib/game/rpg-systems'
 import { useGame } from '@/lib/game/use-game'
 import { formatNum } from '../format'
+import { SpriteModelCanvas } from '../sprite-model-canvas'
 import { PanelFrame, PxButton } from './panels'
 
 const FIELD_MAP_OPTIONS: Array<{ id: FieldBossSpec['mapId']; label: string }> = [
@@ -60,6 +63,13 @@ const FIELD_MAP_OPTIONS: Array<{ id: FieldBossSpec['mapId']; label: string }> = 
   { id: 'cave', label: 'ถ้ำมืด (Lv.32)' },
   { id: 'volcano', label: 'ภูเขาไฟ (Lv.45)' },
 ]
+
+const FIELD_BOSS_MONSTER_IDS: Record<FieldBossSpec['mapId'], string> = {
+  meadow: 'goblin_chief',
+  forest: 'abyss_knight',
+  cave: 'earth_golem',
+  volcano: 'demon_lord',
+}
 
 export function GuildBossPanel() {
   const g = useGame()
@@ -80,6 +90,8 @@ export function GuildBossPanel() {
   const [guildRaid, setGuildRaid] = useState<GuildRaidState | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [attackCdMs, setAttackCdMs] = useState(0)
+  const [skillCdMs, setSkillCdMs] = useState(0)
+  const [wbAnim, setWbAnim] = useState<'idle' | 'attack'>('idle')
   const [busy, setBusy] = useState(false)
 
   const currentGuildId = p ? sanitizeRpgExt(p.rpgExt).guildId : null
@@ -113,13 +125,14 @@ export function GuildBossPanel() {
   }, [currentGuildId])
 
   useEffect(() => {
-    if (attackCdMs <= 0 && fieldCdMs <= 0) return
+    if (attackCdMs <= 0 && skillCdMs <= 0 && fieldCdMs <= 0) return
     const timer = window.setInterval(() => {
       setAttackCdMs((prev) => Math.max(0, prev - 250))
+      setSkillCdMs((prev) => Math.max(0, prev - 250))
       setFieldCdMs((prev) => Math.max(0, prev - 250))
     }, 250)
     return () => window.clearInterval(timer)
-  }, [attackCdMs, fieldCdMs])
+  }, [attackCdMs, skillCdMs, fieldCdMs])
 
   if (!p) return null
   const ext = sanitizeRpgExt(p.rpgExt)
@@ -206,6 +219,8 @@ export function GuildBossPanel() {
   const handleAttackWorldBoss = async () => {
     if (attackCdMs > 0 || busy) return
     setBusy(true)
+    setWbAnim('attack')
+    window.setTimeout(() => setWbAnim('idle'), 550)
     const s = getStats(p)
     const atkElem = getAttackElement(null, ext.equippedRunes)
     const elem = getElementMultiplier(atkElem, bossSpec.element)
@@ -226,6 +241,49 @@ export function GuildBossPanel() {
     setNotice(
       `โจมตี ${bossSpec.name} ทำดาเมจ ${formatNum(damage)}${crit ? ' (คริติคอล!)' : ''}${elem.effectiveness === 'super' ? ' [ชนะธาตุ!]' : ''}`,
     )
+  }
+
+  const handleSkillWorldBoss = async () => {
+    if (skillCdMs > 0 || busy) return
+    const job = JOBS[p.jobId]
+    const bestSkill = [...(job?.skills ?? [])]
+      .filter((sk) => sk.kind !== 'heal')
+      .sort((a, b) => b.mult * (b.hits ?? 1) - a.mult * (a.hits ?? 1))[0]
+    const skillMult = bestSkill ? Math.max(2.6, bestSkill.mult * (bestSkill.hits ?? 1) * 0.95) : 3.6
+    const skillLabel = bestSkill?.name ?? 'พลังราชันย์สกิล'
+
+    setBusy(true)
+    setWbAnim('attack')
+    window.setTimeout(() => setWbAnim('idle'), 650)
+    const s = getStats(p)
+    const atkElem = getAttackElement(bestSkill?.id ?? null, ext.equippedRunes)
+    const elem = getElementMultiplier(atkElem, bossSpec.element)
+    const crit = Math.random() < Math.min(0.95, s.crit + 0.15)
+    const raw = ((s.atk * skillMult) ** 2) / Math.max(1, s.atk * skillMult + bossSpec.def)
+    const damage = Math.max(120, Math.round(raw * elem.multiplier * (crit ? 1.7 : 1) * (0.95 + Math.random() * 0.15)))
+
+    recordWorldBossDamageAction(damage)
+    const updatedWb = await attackWorldBossOnline({
+      playerName: p.name,
+      jobId: p.jobId,
+      level: p.level,
+      damage,
+    })
+    setWorldBoss(updatedWb)
+    setSkillCdMs(5000)
+    setBusy(false)
+    setNotice(
+      `ใช้สกิล "${skillLabel}" ใส่ ${bossSpec.name} ทำดาเมจ ${formatNum(damage)}!${crit ? ' (คริติคอล!)' : ''}${elem.effectiveness === 'super' ? ' [ชนะธาตุ!]' : ''}`,
+    )
+  }
+
+  const handleSummonWorldBossOnMap = () => {
+    const res = summonWorldBossInField()
+    if (!res.ok) {
+      setNotice(res.message)
+      return
+    }
+    closePanel()
   }
 
   const handleAttackFieldBoss = async () => {
@@ -321,27 +379,53 @@ export function GuildBossPanel() {
         <div className="space-y-3">
           <div className="grid gap-3 md:grid-cols-[1.2fr_1fr]">
             <div className="space-y-3 border border-border/80 bg-background/60 p-3">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-bold text-rose-300">{bossSpec.name}</h3>
-                    <span
-                      className="border border-border/60 px-1.5 py-0.5 text-[10px] font-bold"
-                      style={{ color: bossElem.color, background: bossElem.bg }}
-                    >
-                      {bossElem.label}
-                    </span>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="grid size-24 shrink-0 place-items-center border-2 border-rose-400/50 bg-[#0b1024]/90 shadow-[inset_0_0_18px_rgba(244,63,94,0.2)]">
+                    <SpriteModelCanvas
+                      mode="monster"
+                      id={bossSpec.monsterId}
+                      action={wbAnim}
+                      dir="down"
+                      size={88}
+                      label={`โมเดลบอสโลก ${bossSpec.name}`}
+                    />
                   </div>
-                  <p className="text-xs text-muted-foreground tabular-nums">
-                    รีเซ็ตบอสตัวถัดไปใน {String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')} · ดาเมจของคุณ: {formatNum(ext.worldBossDamage)}
-                  </p>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-base font-bold text-rose-300">{bossSpec.name}</h3>
+                      <span
+                        className="border border-border/60 px-1.5 py-0.5 text-[10px] font-bold"
+                        style={{ color: bossElem.color, background: bossElem.bg }}
+                      >
+                        {bossElem.label}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
+                      รีเซ็ตบอสตัวถัดไปใน {String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')} · ดาเมจของคุณ: {formatNum(ext.worldBossDamage)}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <PxButton disabled={attackCdMs > 0 || busy} onClick={handleAttackWorldBoss}>
+                        <span className="flex items-center gap-1">
+                          <Swords className="size-3.5" aria-hidden />
+                          {attackCdMs > 0 ? `รอ ${(attackCdMs / 1000).toFixed(1)}s` : 'โจมตีบอส!'}
+                        </span>
+                      </PxButton>
+                      <PxButton variant="accent" disabled={skillCdMs > 0 || busy} onClick={handleSkillWorldBoss}>
+                        <span className="flex items-center gap-1">
+                          <Sparkles className="size-3.5" aria-hidden />
+                          {skillCdMs > 0 ? `สกิล ${(skillCdMs / 1000).toFixed(1)}s` : 'ใช้สกิลโจมตี!'}
+                        </span>
+                      </PxButton>
+                      <PxButton variant="secondary" disabled={busy} onClick={handleSummonWorldBossOnMap}>
+                        <span className="flex items-center gap-1">
+                          <MapPin className="size-3.5 text-amber-300" aria-hidden />
+                          ปะทะบอสโลกบนแมพ
+                        </span>
+                      </PxButton>
+                    </div>
+                  </div>
                 </div>
-                <PxButton disabled={attackCdMs > 0 || busy} onClick={handleAttackWorldBoss}>
-                  <span className="flex items-center gap-1.5">
-                    <Swords className="size-3.5" aria-hidden />
-                    {attackCdMs > 0 ? `รอ ${(attackCdMs / 1000).toFixed(1)}s` : 'โจมตีบอส!'}
-                  </span>
-                </PxButton>
               </div>
 
               {worldBoss && (
@@ -376,7 +460,7 @@ export function GuildBossPanel() {
                       >
                         <div className="min-w-0 flex-1">
                           <p className="font-bold text-amber-300">{formatNum(ms.damage)} DMG</p>
-                          <p className="truncate text-muted-foreground">
+                          <p className="text-[10px] leading-tight text-muted-foreground">
                             +{formatNum(ms.gold)} G · +{ms.diamonds} เพชร · หิน x{ms.stones}
                           </p>
                         </div>
@@ -439,9 +523,23 @@ export function GuildBossPanel() {
                           slot.isCurrent ? 'border-rose-400/60 bg-rose-500/10' : 'border-border/50 bg-background/80'
                         }`}
                       >
-                        <span className="truncate">
-                          <strong className="text-foreground">{hhmm}</strong> · {slot.boss.name}
-                        </span>
+                        <div className="flex min-w-0 items-center gap-2">
+                          <div className="grid size-8 shrink-0 place-items-center border border-border/50 bg-[#0b1024]">
+                            <SpriteModelCanvas
+                              mode="monster"
+                              id={slot.boss.monsterId}
+                              action="idle"
+                              dir="down"
+                              size={30}
+                              showAura={false}
+                              showShadow={false}
+                              label={`ไอคอน ${slot.boss.name}`}
+                            />
+                          </div>
+                          <span className="truncate">
+                            <strong className="text-foreground">{hhmm}</strong> · {slot.boss.name}
+                          </span>
+                        </div>
                         <span className="shrink-0 text-[10px]" style={{ color: elem.color }}>
                           {slot.isCurrent ? 'กำลังเปิดศึก' : `อีก ${waitMins} นาที`}
                         </span>
@@ -481,19 +579,31 @@ export function GuildBossPanel() {
             <div className="grid gap-3 md:grid-cols-[1.2fr_1fr]">
               <div className="space-y-2 border border-border/70 bg-background/70 p-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-sm font-bold text-foreground">{fieldBossSpec.name}</p>
-                      <span
-                        className="border border-border/60 px-1.5 py-0.5 text-[10px] font-bold"
-                        style={{ color: fieldBossElem.color, background: fieldBossElem.bg }}
-                      >
-                        {fieldBossElem.label}
-                      </span>
+                  <div className="flex items-center gap-2.5">
+                    <div className="grid size-16 shrink-0 place-items-center border border-amber-400/50 bg-[#0b1024]">
+                      <SpriteModelCanvas
+                        mode="monster"
+                        id={FIELD_BOSS_MONSTER_IDS[selectedFieldMap]}
+                        action="idle"
+                        dir="down"
+                        size={60}
+                        label={`โมเดล ${fieldBossSpec.name}`}
+                      />
                     </div>
-                    <p className="text-[11px] text-muted-foreground tabular-nums">
-                      รางวัลโค่นล้ม: +{formatNum(fieldBossSpec.rewardGold)} G · +{fieldBossSpec.rewardDiamonds} เพชร · หิน x{fieldBossSpec.rewardStones}
-                    </p>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <p className="text-sm font-bold text-foreground">{fieldBossSpec.name}</p>
+                        <span
+                          className="border border-border/60 px-1.5 py-0.5 text-[10px] font-bold"
+                          style={{ color: fieldBossElem.color, background: fieldBossElem.bg }}
+                        >
+                          {fieldBossElem.label}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground tabular-nums">
+                        รางวัลโค่นล้ม: +{formatNum(fieldBossSpec.rewardGold)} G · +{fieldBossSpec.rewardDiamonds} เพชร · หิน x{fieldBossSpec.rewardStones}
+                      </p>
+                    </div>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     <PxButton

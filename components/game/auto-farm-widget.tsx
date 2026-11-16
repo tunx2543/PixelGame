@@ -13,11 +13,13 @@ import {
   isCurrentAccountGm,
   notify,
   skillCooldown,
+  toggleMountRiding,
   triggerDodgeDash,
   triggerOpenWorldGuard,
   triggerUltimateSkill,
 } from '@/lib/game/engine'
 import { GM_ACTIVE_SKILLS } from '@/lib/game/gm-sprite'
+import { sanitizeMountState } from '@/lib/game/mounts'
 import { findNearbyGatheringNode } from '@/lib/game/extended-systems'
 import { getSkillIconPath } from '@/lib/game/vfx-specs'
 
@@ -29,6 +31,9 @@ export function AutoFarmWidget({ compactTouchMode = false }: { compactTouchMode?
   const ultPct = Math.min(100, Math.round(game.ultimateCharge))
   const nearbyNode = findNearbyGatheringNode(p.mapId, p.x, p.y)
   const comboActive = game.comboCount > 1 && game.comboUntil > game.time
+  const mountState = sanitizeMountState(p.mountState, p.ownedGemItems)
+  const hasMount = Object.keys(mountState.ownedMounts).length > 0
+  const isMounted = Boolean(mountState.activeMountId && mountState.mounted)
 
   if (compactTouchMode) {
     return (
@@ -55,6 +60,19 @@ export function AutoFarmWidget({ compactTouchMode = false }: { compactTouchMode?
           <Wind className="size-3" aria-hidden />
           แดช
         </button>
+        {hasMount && (
+          <button
+            type="button"
+            aria-pressed={isMounted}
+            onClick={() => toggleMountRiding()}
+            className={`pixel-btn flex items-center gap-1 whitespace-nowrap px-1.5 py-1 text-[9px] font-semibold ${
+              isMounted ? 'bg-amber-500/30 text-amber-200' : 'bg-secondary text-muted-foreground'
+            }`}
+          >
+            <Wind className="size-3" aria-hidden />
+            {isMounted ? 'ลงขี่' : 'ขี่สัตว์'}
+          </button>
+        )}
         <button
           type="button"
           disabled={ultPct < 100}
@@ -257,6 +275,23 @@ export function AutoFarmWidget({ compactTouchMode = false }: { compactTouchMode?
           MP <span className="font-mono text-[8px] opacity-75">[R]</span>
         </button>
 
+        {hasMount && (
+          <button
+            type="button"
+            aria-pressed={isMounted}
+            onClick={() => toggleMountRiding()}
+            title="ขึ้นขี่ / ลงจากสัตว์ขี่ (M)"
+            className={`pixel-btn flex items-center gap-1 px-1.5 py-1 text-[10px] font-semibold ${
+              isMounted
+                ? 'bg-amber-500/30 text-amber-200 hover:bg-amber-500/40'
+                : 'bg-secondary text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Wind className="size-3.5" aria-hidden />
+            <span className="hidden md:inline">{isMounted ? 'ลงขี่' : 'ขี่สัตว์'}</span>
+            <span className="font-mono text-[8px] opacity-75">[M]</span>
+          </button>
+        )}
         <div className="mx-0.5 h-5 w-px bg-border/70" aria-hidden="true" />
 
         <button

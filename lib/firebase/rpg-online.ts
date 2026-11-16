@@ -126,7 +126,7 @@ export async function listGuildsOnline(): Promise<GuildRecord[]> {
     return localGuilds
   }
   try {
-    const q = query(collection(db, 'guilds'), orderBy('level', 'desc'), limit(24))
+    const q = query(collection(db, 'guilds'), where('level', '>=', 1), orderBy('level', 'desc'), limit(24))
     const snap = await getDocs(q)
     const remote = snap.docs.map((d) => d.data() as GuildRecord)
     const seen = new Set(remote.map((g) => g.guildId))
@@ -356,7 +356,12 @@ export async function fetchLeaderboardHeroes(selfEntry?: LeaderboardHeroEntry): 
 
   if (isSignedInVerified()) {
     try {
-      const q = query(collection(db, 'leaderboard'), orderBy('combatPower', 'desc'), limit(35))
+      const q = query(
+        collection(db, 'leaderboard'),
+        where('combatPower', '>=', 1),
+        orderBy('combatPower', 'desc'),
+        limit(35),
+      )
       const snap = await getDocs(q)
       for (const d of snap.docs) {
         const data = d.data() as LeaderboardHeroEntry
@@ -428,7 +433,12 @@ export async function fetchWorldBossState(): Promise<WorldBossRaidState> {
       }
     }
     const contribSnap = await getDocs(
-      query(collection(db, 'worldBoss', spec.cycleKey, 'contributions'), orderBy('damage', 'desc'), limit(20)),
+      query(
+        collection(db, 'worldBoss', spec.cycleKey, 'contributions'),
+        where('damage', '>=', 0),
+        orderBy('damage', 'desc'),
+        limit(20),
+      ),
     )
     const contributions = contribSnap.docs.map((d) => d.data() as WorldBossContributionRecord)
     return { ...raidData, contributions }

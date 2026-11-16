@@ -1,8 +1,26 @@
 'use client'
 
 import { useState } from 'react'
-import { Coins, Gem, Shield, Sparkles, Star, Swords } from 'lucide-react'
-import { countItem, equipCombatPet, evolveCombatPetAction, feedCombatPet, openPanel, unlockCombatPet } from '@/lib/game/engine'
+import { Coins, Gem, PawPrint, Shield, Sparkles, Star, Swords, Wind } from 'lucide-react'
+import {
+  countItem,
+  equipCombatPet,
+  equipMount,
+  evolveCombatPetAction,
+  feedCombatPet,
+  openPanel,
+  toggleMountRiding,
+  unlockCombatPet,
+  unlockMount,
+  upgradeMount,
+} from '@/lib/game/engine'
+import {
+  MAX_MOUNT_LEVEL,
+  MOUNT_DEFS,
+  getActiveMountBonuses,
+  mountUpgradeCost,
+  sanitizeMountState,
+} from '@/lib/game/mounts'
 import { playEnhanceSfx, playQuestClaimSfx } from '@/lib/game/sfx'
 import {
   COMBAT_PETS,
@@ -14,78 +32,70 @@ import {
   petExpToNext,
   petFeedCost,
   sanitizePetState,
-  type CombatPetDef,
 } from '@/lib/game/systems'
 import { useGame } from '@/lib/game/use-game'
 import { formatNum } from '../format'
+import { SpriteModelCanvas } from '../sprite-model-canvas'
 import { PanelFrame, PxButton } from './panels'
 
-function PetPixelPreview({ pet }: { pet: CombatPetDef }) {
-  const palette = {
-    '1': pet.colors.primary,
-    '2': pet.colors.secondary,
-    '3': pet.colors.accent,
-  }
-  return (
-    <div
-      aria-hidden
-      className="grid size-12 shrink-0 grid-cols-8 grid-rows-8 border-2 border-[#0e0f1a] bg-background/80 p-1"
-    >
-      {pet.pixels.flatMap((row, rIdx) =>
-        Array.from(row.padEnd(8, '.').slice(0, 8)).map((cell, cIdx) => (
-          <span
-            key={`${rIdx}-${cIdx}`}
-            style={{
-              backgroundColor: cell === '.' ? 'transparent' : palette[cell as keyof typeof palette],
-            }}
-          />
-        )),
-      )}
-    </div>
-  )
-}
+type MainTab = 'pets' | 'mounts'
+type PetFilter = 'all' | 'phao' | 'companion'
 
 export function PetsPanel() {
   const { p } = useGame()
+  const [mainTab, setMainTab] = useState<MainTab>('pets')
+  const [petFilter, setPetFilter] = useState<PetFilter>('all')
   const [notice, setNotice] = useState<string | null>(null)
   if (!p) return null
 
   const petState = sanitizePetState(p.petState, p.ownedGemItems, p.equippedGemCompanion)
   const activeBonus = getActivePetBonuses(petState, p.equippedGemCompanion, p.ownedGemItems)
+  const mountState = sanitizeMountState(p.mountState, p.ownedGemItems)
+  const activeMountBonus = getActiveMountBonuses(mountState, p.ownedGemItems)
+
+  const filteredPets = COMBAT_PETS.filter((pet) => {
+    const cat = pet.category ?? (pet.id.startsWith('phao_') ? 'phao' : 'companion')
+    if (petFilter === 'phao') return cat === 'phao'
+    if (petFilter === 'companion') return cat === 'companion'
+    return true
+  })
 
   return (
-    <PanelFrame title="ระบบสัตว์เลี้ยงคู่หู" subtitle="คู่หูช่วยยิงโจมตีมอนสเตอร์และเพิ่มบัฟสเตตัสให้ตัวละคร">
+    <PanelFrame
+      title="สัตว์เลี้ยง (ผอบ) & สัตว์ขี่"
+      subtitle="ผอบอารักขา คู่หูช่วยต่อสู้ และสัตว์ขี่เพิ่มความเร็วเคลื่อนที่พร้อมโบนัสสเตตัส"
+    >
       <div className="space-y-4">
-        {/* Active Companion Summary */}
-        <div className="border-2 border-border bg-muted/60 p-3">
-          {activeBonus ? (
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <PetPixelPreview pet={activeBonus.def} />
-                <div>
-                  <p className="text-sm font-bold text-primary">
-                    กำลังใช้งาน: {activeBonus.def.name} (Lv.{activeBonus.level} · {'★'.repeat(activeBonus.stars)})
-                  </p>
-                  <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
-                    พลังช่วยยิง {formatNum(activeBonus.companionAtk)} · ยิงทุก {activeBonus.attackInterval.toFixed(1)} วินาที
-                    {activeBonus.autoLootMagnet ? ' · ดูดไอเทมตกอัตโนมัติ (2★+)' : ''}
-                  </p>
-                  <p className="mt-0.5 text-xs text-accent tabular-nums">
-                    บัฟตัวละคร: +{formatNum(activeBonus.atkBonus)} ATK · +{formatNum(activeBonus.defBonus)} DEF · +{formatNum(activeBonus.hpBonus)} HP
-                    {activeBonus.def.expBonusPct > 0 ? ` · EXP +${Math.round((activeBonus.expMul - 1) * 100)}%` : ''}
-                    {activeBonus.def.goldBonusPct > 0 ? ` · ทอง +${Math.round((activeBonus.goldMul - 1) * 100)}%` : ''}
-                  </p>
-                </div>
-              </div>
-              <PxButton variant="secondary" onClick={() => equipCombatPet(null)}>
-                เก็บคู่หู
-              </PxButton>
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              ยังไม่ได้เรียกสัตว์เลี้ยงคู่หู — ปลดล็อกหรือเลือกคู่หูด้านล่างเพื่อช่วยสู้และรับบัฟสเตตัสทันที
-            </p>
-          )}
+        {/* Top Mode Tabs */}
+        <div role="tablist" aria-label="หมวดหมู่สัตว์เลี้ยงและสัตว์ขี่" className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mainTab === 'pets'}
+            onClick={() => setMainTab('pets')}
+            className={`pixel-btn flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold ${
+              mainTab === 'pets'
+                ? 'bg-emerald-500 text-slate-950'
+                : 'bg-secondary text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <PawPrint className="size-3.5" aria-hidden />
+            สัตว์เลี้ยง &amp; ผอบ ({COMBAT_PETS.length})
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mainTab === 'mounts'}
+            onClick={() => setMainTab('mounts')}
+            className={`pixel-btn flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold ${
+              mainTab === 'mounts'
+                ? 'bg-amber-500 text-slate-950'
+                : 'bg-secondary text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Wind className="size-3.5" aria-hidden />
+            สัตว์ขี่ ({MOUNT_DEFS.length})
+          </button>
         </div>
 
         {notice && (
@@ -94,128 +104,398 @@ export function PetsPanel() {
           </p>
         )}
 
-        {/* Pet Roster */}
-        <div className="grid gap-3 sm:grid-cols-2">
-          {COMBAT_PETS.map((pet) => {
-            const owned = petState.ownedPets[pet.id]
-            const isActive = petState.activePetId === pet.id
-            const lv = owned?.level ?? 1
-            const stars = owned?.stars ?? 1
-            const scale = (1 + (lv - 1) * 0.14) * getPetStarMultiplier(stars)
-            const previewAtk = Math.round((pet.baseAtk + (lv - 1) * pet.atkPerLevel) * getPetStarMultiplier(stars))
-            const feedCost = petFeedCost(lv)
-            const evolveCost = petEvolveCost(stars)
-            const needExp = petExpToNext(lv)
-            const essenceOwned = countItem('pet_essence')
-
-            return (
-              <div
-                key={pet.id}
-                className={`flex flex-col justify-between gap-3 border-2 p-3 ${
-                  isActive ? 'border-accent bg-accent/10' : 'border-border bg-background/50'
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <PetPixelPreview pet={pet} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <h3 className="truncate text-sm font-bold text-foreground">{pet.name}</h3>
-                      <span className="shrink-0 text-[11px] font-semibold text-amber-300 tabular-nums">
-                        {owned ? `Lv.${lv} · ${'★'.repeat(stars)}` : pet.rarity}
-                      </span>
+        {mainTab === 'pets' ? (
+          <>
+            {/* Active Companion Summary */}
+            <div className="border-2 border-border bg-muted/60 p-3">
+              {activeBonus ? (
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="grid size-14 shrink-0 place-items-center border-2 border-[#0e0f1a] bg-[#0b1024]/90">
+                      <SpriteModelCanvas
+                        mode="pet"
+                        id={activeBonus.petId}
+                        action="auto"
+                        dir="down"
+                        size={52}
+                        label={`พรีวิว ${activeBonus.def.name}`}
+                      />
                     </div>
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">{pet.description}</p>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] tabular-nums text-foreground/90">
-                      <span className="inline-flex items-center gap-1">
-                        <Swords className="size-3 text-primary" aria-hidden /> ยิง {formatNum(previewAtk)}
-                      </span>
-                      <span className="inline-flex items-center gap-1">
-                        <Shield className="size-3 text-accent" aria-hidden /> +{formatNum(Math.round(pet.atkBuff * scale))} ATK / +{formatNum(Math.round(pet.hpBonus * scale))} HP
-                      </span>
-                    </div>
-                    {owned && lv < MAX_PET_LEVEL && (
-                      <p className="mt-1 text-[10px] text-muted-foreground tabular-nums">
-                        EXP คู่หู: {formatNum(owned.exp)} / {formatNum(needExp)} · ผลึกวิวัฒนาการที่มี: {essenceOwned}
+                    <div>
+                      <p className="text-sm font-bold text-primary">
+                        กำลังใช้งาน: {activeBonus.def.name} (Lv.{activeBonus.level} · {'★'.repeat(activeBonus.stars)})
                       </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center justify-between gap-1.5 border-t border-border/60 pt-2">
-                  {owned ? (
-                    <>
-                      <PxButton
-                        variant={isActive ? 'secondary' : 'accent'}
-                        onClick={() => {
-                          equipCombatPet(isActive ? null : pet.id)
-                          playQuestClaimSfx(false)
-                          setNotice(isActive ? `เก็บ ${pet.name} แล้ว` : `เรียกคู่หู ${pet.name} ออกช่วยสู้แล้ว`)
-                        }}
-                      >
-                        {isActive ? 'กำลังใช้งาน' : 'เรียกใช้งาน'}
-                      </PxButton>
-                      <PxButton
-                        variant="primary"
-                        disabled={lv >= MAX_PET_LEVEL || p.gold < feedCost}
-                        onClick={() => {
-                          const res = feedCombatPet(pet.id)
-                          playEnhanceSfx(res.ok, false)
-                          setNotice(res.message)
-                        }}
-                      >
-                        <span className="inline-flex items-center gap-1 tabular-nums">
-                          <Sparkles className="size-3" aria-hidden />
-                          {lv >= MAX_PET_LEVEL ? 'เลเวลเต็ม' : `อัปเลเวล (${formatNum(feedCost)} G)`}
-                        </span>
-                      </PxButton>
-                      <PxButton
-                        variant="secondary"
-                        disabled={stars >= MAX_PET_STARS || p.gold < evolveCost.gold || essenceOwned < evolveCost.essence}
-                        onClick={() => {
-                          const res = evolveCombatPetAction(pet.id)
-                          playEnhanceSfx(res.ok, false)
-                          setNotice(res.message)
-                        }}
-                      >
-                        <span className="inline-flex items-center gap-1 tabular-nums">
-                          <Star className="size-3 text-amber-300" aria-hidden />
-                          {stars >= MAX_PET_STARS
-                            ? '5★ สูงสุด'
-                            : `ดาวถัดไป (ผลึก ${evolveCost.essence} + ${formatNum(evolveCost.gold)} G)`}
-                        </span>
-                      </PxButton>
-                    </>
-                  ) : pet.linkedGemItemId ? (
-                    <div className="flex w-full items-center justify-between gap-2">
-                      <span className="inline-flex items-center gap-1 text-[11px] text-cyan-200">
-                        <Gem className="size-3.5" aria-hidden /> ปลดล็อกในร้านค้าเพชร
-                      </span>
-                      <PxButton variant="secondary" onClick={() => openPanel('gem-shop')}>
-                        ไปร้านเพชร
-                      </PxButton>
+                      <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
+                        พลังช่วยยิง {formatNum(activeBonus.companionAtk)} · ยิงทุก {activeBonus.attackInterval.toFixed(1)} วินาที
+                        {activeBonus.autoLootMagnet ? ' · ดูดไอเทมตกอัตโนมัติ (2★+)' : ''}
+                      </p>
+                      <p className="mt-0.5 text-xs text-accent tabular-nums">
+                        บัฟตัวละคร: +{formatNum(activeBonus.atkBonus)} ATK · +{formatNum(activeBonus.defBonus)} DEF · +{formatNum(activeBonus.hpBonus)} HP
+                        {activeBonus.def.expBonusPct > 0 ? ` · EXP +${Math.round((activeBonus.expMul - 1) * 100)}%` : ''}
+                        {activeBonus.def.goldBonusPct > 0 ? ` · ทอง +${Math.round((activeBonus.goldMul - 1) * 100)}%` : ''}
+                      </p>
                     </div>
-                  ) : (
+                  </div>
+                  <PxButton variant="secondary" onClick={() => equipCombatPet(null)}>
+                    เก็บคู่หู
+                  </PxButton>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  ยังไม่ได้เรียกสัตว์เลี้ยงหรือผอบคู่หู — ปลดล็อกหรือเลือกคู่หูด้านล่างเพื่อช่วยยิงสู้และรับบัฟสเตตัสทันที
+                </p>
+              )}
+            </div>
+
+            {/* Pet Category Filter */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label="กรองประเภทสัตว์เลี้ยงและผอบ">
+                {(
+                  [
+                    ['all', 'ทั้งหมด'],
+                    ['phao', 'ผอบ (Phao-ob)'],
+                    ['companion', 'คู่หูสัตว์'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-pressed={petFilter === key}
+                    onClick={() => setPetFilter(key)}
+                    className={`pixel-btn px-2.5 py-1 text-[11px] font-semibold ${
+                      petFilter === key
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-secondary text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => openPanel('models')}
+                className="pixel-btn bg-secondary px-2.5 py-1 text-[11px] text-gold hover:brightness-110"
+              >
+                ดูคลังโมเดล 2D 4 ทิศทาง
+              </button>
+            </div>
+
+            {/* Pet & Phao-ob Roster */}
+            <div className="grid gap-3 sm:grid-cols-2">
+              {filteredPets.map((pet) => {
+                const owned = petState.ownedPets[pet.id]
+                const isActive = petState.activePetId === pet.id
+                const isPhao = (pet.category ?? (pet.id.startsWith('phao_') ? 'phao' : 'companion')) === 'phao'
+                const lv = owned?.level ?? 1
+                const stars = owned?.stars ?? 1
+                const scale = (1 + (lv - 1) * 0.14) * getPetStarMultiplier(stars)
+                const previewAtk = Math.round((pet.baseAtk + (lv - 1) * pet.atkPerLevel) * getPetStarMultiplier(stars))
+                const feedCost = petFeedCost(lv)
+                const evolveCost = petEvolveCost(stars)
+                const needExp = petExpToNext(lv)
+                const essenceOwned = countItem('pet_essence')
+
+                return (
+                  <div
+                    key={pet.id}
+                    className={`flex flex-col justify-between gap-3 border-2 p-3 ${
+                      isActive
+                        ? 'border-accent bg-accent/10'
+                        : isPhao
+                          ? 'border-amber-500/35 bg-background/60'
+                          : 'border-border bg-background/50'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="grid size-16 shrink-0 place-items-center border-2 border-[#0e0f1a] bg-[#0b1024]/90">
+                        <SpriteModelCanvas
+                          mode="pet"
+                          id={pet.id}
+                          action={isActive ? 'auto' : 'idle'}
+                          dir="down"
+                          size={58}
+                          label={`โมเดล ${pet.name}`}
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <h3 className="truncate text-sm font-bold text-foreground">{pet.name}</h3>
+                          <span className="shrink-0 text-[11px] font-semibold text-amber-300 tabular-nums">
+                            {isPhao ? 'ผอบ · ' : ''}
+                            {owned ? `Lv.${lv} · ${'★'.repeat(stars)}` : pet.rarity}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">{pet.description}</p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] tabular-nums text-foreground/90">
+                          <span className="inline-flex items-center gap-1">
+                            <Swords className="size-3 text-primary" aria-hidden /> ยิง {formatNum(previewAtk)}
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <Shield className="size-3 text-accent" aria-hidden /> +{formatNum(Math.round(pet.atkBuff * scale))} ATK / +{formatNum(Math.round(pet.hpBonus * scale))} HP
+                          </span>
+                        </div>
+                        {owned && lv < MAX_PET_LEVEL && (
+                          <p className="mt-1 text-[10px] text-muted-foreground tabular-nums">
+                            EXP คู่หู: {formatNum(owned.exp)} / {formatNum(needExp)} · ผลึกวิวัฒนาการที่มี: {essenceOwned}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-1.5 border-t border-border/60 pt-2">
+                      {owned ? (
+                        <>
+                          <PxButton
+                            variant={isActive ? 'secondary' : 'accent'}
+                            onClick={() => {
+                              equipCombatPet(isActive ? null : pet.id)
+                              playQuestClaimSfx(false)
+                              setNotice(isActive ? `เก็บ ${pet.name} แล้ว` : `เรียกคู่หู ${pet.name} ออกช่วยสู้แล้ว`)
+                            }}
+                          >
+                            {isActive ? 'กำลังใช้งาน' : 'เรียกใช้งาน'}
+                          </PxButton>
+                          <PxButton
+                            variant="primary"
+                            disabled={lv >= MAX_PET_LEVEL || p.gold < feedCost}
+                            onClick={() => {
+                              const res = feedCombatPet(pet.id)
+                              playEnhanceSfx(res.ok, false)
+                              setNotice(res.message)
+                            }}
+                          >
+                            <span className="inline-flex items-center gap-1 tabular-nums">
+                              <Sparkles className="size-3" aria-hidden />
+                              {lv >= MAX_PET_LEVEL ? 'เลเวลเต็ม' : `อัปเลเวล (${formatNum(feedCost)} G)`}
+                            </span>
+                          </PxButton>
+                          <PxButton
+                            variant="secondary"
+                            disabled={stars >= MAX_PET_STARS || p.gold < evolveCost.gold || essenceOwned < evolveCost.essence}
+                            onClick={() => {
+                              const res = evolveCombatPetAction(pet.id)
+                              playEnhanceSfx(res.ok, false)
+                              setNotice(res.message)
+                            }}
+                          >
+                            <span className="inline-flex items-center gap-1 tabular-nums">
+                              <Star className="size-3 text-amber-300" aria-hidden />
+                              {stars >= MAX_PET_STARS
+                                ? '5★ สูงสุด'
+                                : `ดาวถัดไป (ผลึก ${evolveCost.essence} + ${formatNum(evolveCost.gold)} G)`}
+                            </span>
+                          </PxButton>
+                        </>
+                      ) : pet.linkedGemItemId ? (
+                        <div className="flex w-full items-center justify-between gap-2">
+                          <span className="inline-flex items-center gap-1 text-[11px] text-cyan-200">
+                            <Gem className="size-3.5" aria-hidden /> ปลดล็อกในร้านค้าเพชร
+                          </span>
+                          <PxButton variant="secondary" onClick={() => openPanel('gem-shop')}>
+                            ไปร้านเพชร
+                          </PxButton>
+                        </div>
+                      ) : (
+                        <PxButton
+                          variant="primary"
+                          className="w-full"
+                          disabled={p.gold < (pet.unlockGold ?? 0)}
+                          onClick={() => {
+                            const res = unlockCombatPet(pet.id)
+                            playQuestClaimSfx(false)
+                            setNotice(res.message)
+                          }}
+                        >
+                          <span className="inline-flex items-center justify-center gap-1.5 tabular-nums">
+                            <Coins className="size-3.5" aria-hidden />
+                            ปลดล็อก{isPhao ? 'ผอบ' : 'คู่หู'} ({formatNum(pet.unlockGold ?? 0)} G)
+                          </span>
+                        </PxButton>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Active Mount Summary */}
+            <div className="border-2 border-amber-500/40 bg-muted/60 p-3">
+              {activeMountBonus ? (
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="grid size-16 shrink-0 place-items-center border-2 border-[#0e0f1a] bg-[#0b1024]/90">
+                      <SpriteModelCanvas
+                        mode="mount"
+                        id={activeMountBonus.mountId}
+                        action="walk"
+                        dir="right"
+                        size={60}
+                        label={`พรีวิว ${activeMountBonus.def.name}`}
+                      />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-amber-300">
+                        สัตว์ขี่ที่เลือก: {activeMountBonus.def.name} (Lv.{activeMountBonus.level}) •{' '}
+                        {activeMountBonus.mounted ? 'กำลังขี่อยู่' : 'ลงพักอยู่'}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
+                        ความเร็วขณะขี่ +{activeMountBonus.speedBonusPct}% · โบนัสติดตัว +{formatNum(activeMountBonus.hpBonus)} HP · +
+                        {formatNum(activeMountBonus.atkBonus)} ATK · +{formatNum(activeMountBonus.defBonus)} DEF
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-cyan-300">กดปุ่ม [M] ในฉากเกมเพื่อขึ้นขี่หรือลงจากสัตว์ขี่ได้ทันที</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
                     <PxButton
-                      variant="primary"
-                      className="w-full"
-                      disabled={p.gold < (pet.unlockGold ?? 0)}
+                      variant={activeMountBonus.mounted ? 'secondary' : 'accent'}
                       onClick={() => {
-                        const res = unlockCombatPet(pet.id)
+                        const res = toggleMountRiding()
                         playQuestClaimSfx(false)
                         setNotice(res.message)
                       }}
                     >
-                      <span className="inline-flex items-center justify-center gap-1.5 tabular-nums">
-                        <Coins className="size-3.5" aria-hidden />
-                        ปลดล็อกคู่หู ({formatNum(pet.unlockGold ?? 0)} G)
-                      </span>
+                      {activeMountBonus.mounted ? 'ลงจากสัตว์ขี่ [M]' : 'ขึ้นขี่เลย [M]'}
                     </PxButton>
-                  )}
+                    <PxButton
+                      variant="secondary"
+                      onClick={() => {
+                        equipMount(null)
+                        setNotice('เก็บสัตว์ขี่เข้าคอกแล้ว')
+                      }}
+                    >
+                      เก็บเข้าคอก
+                    </PxButton>
+                  </div>
                 </div>
-              </div>
-            )
-          })}
-        </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  ยังไม่ได้เลือกสัตว์ขี่ — ปลดล็อกสัตว์ขี่ด้านล่างเพื่อเพิ่มความเร็วเดินทางและสเตตัสต่อสู้ (กด [M] ขึ้น/ลงได้ทันที)
+                </p>
+              )}
+            </div>
+
+            {/* Mount Roster */}
+            <div className="grid gap-3 sm:grid-cols-2">
+              {MOUNT_DEFS.map((mount) => {
+                const owned = mountState.ownedMounts[mount.id]
+                const isSelected = mountState.activeMountId === mount.id
+                const isRiding = isSelected && mountState.mounted
+                const lv = owned?.level ?? 1
+                const lvScale = 1 + (lv - 1) * 0.16
+                const speedPct = mount.speedBonusPct + (lv - 1) * 3
+                const upgCost = mountUpgradeCost(lv)
+
+                return (
+                  <div
+                    key={mount.id}
+                    className={`flex flex-col justify-between gap-3 border-2 p-3 ${
+                      isRiding
+                        ? 'border-amber-400 bg-amber-500/10'
+                        : isSelected
+                          ? 'border-accent bg-accent/10'
+                          : 'border-border bg-background/50'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="grid size-16 shrink-0 place-items-center border-2 border-[#0e0f1a] bg-[#0b1024]/90">
+                        <SpriteModelCanvas
+                          mode="mount"
+                          id={mount.id}
+                          action={isRiding ? 'walk' : 'idle'}
+                          dir="right"
+                          size={62}
+                          label={`โมเดลสัตว์ขี่ ${mount.name}`}
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <h3 className="truncate text-sm font-bold text-foreground">{mount.name}</h3>
+                          <span className="shrink-0 text-[11px] font-semibold text-amber-300 tabular-nums">
+                            {owned ? `Lv.${lv}/${MAX_MOUNT_LEVEL}` : mount.rarity}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">{mount.description}</p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] tabular-nums text-foreground/90">
+                          <span className="inline-flex items-center gap-1 text-cyan-300">
+                            <Wind className="size-3" aria-hidden /> วิ่งเร็ว +{speedPct}%
+                          </span>
+                          <span className="inline-flex items-center gap-1 text-accent">
+                            <Shield className="size-3" aria-hidden /> +{formatNum(Math.round(mount.hpBonus * lvScale))} HP / +
+                            {formatNum(Math.round(mount.atkBonus * lvScale))} ATK
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-1.5 border-t border-border/60 pt-2">
+                      {owned ? (
+                        <>
+                          <PxButton
+                            variant={isRiding ? 'secondary' : 'accent'}
+                            onClick={() => {
+                              if (isRiding) {
+                                const res = toggleMountRiding()
+                                setNotice(res.message)
+                              } else {
+                                equipMount(mount.id)
+                                playQuestClaimSfx(false)
+                                setNotice(`เรียกและขึ้นขี่ ${mount.name} แล้ว`)
+                              }
+                            }}
+                          >
+                            {isRiding ? 'ลงจากสัตว์ขี่' : 'ขึ้นขี่'}
+                          </PxButton>
+                          <PxButton
+                            variant="primary"
+                            disabled={lv >= MAX_MOUNT_LEVEL || p.gold < upgCost}
+                            onClick={() => {
+                              const res = upgradeMount(mount.id)
+                              playEnhanceSfx(res.ok, false)
+                              setNotice(res.message)
+                            }}
+                          >
+                            <span className="inline-flex items-center gap-1 tabular-nums">
+                              <Sparkles className="size-3" aria-hidden />
+                              {lv >= MAX_MOUNT_LEVEL ? 'เลเวลเต็ม' : `ฝึกสัตว์ขี่ (${formatNum(upgCost)} G)`}
+                            </span>
+                          </PxButton>
+                        </>
+                      ) : mount.linkedGemItemId ? (
+                        <div className="flex w-full items-center justify-between gap-2">
+                          <span className="inline-flex items-center gap-1 text-[11px] text-cyan-200">
+                            <Gem className="size-3.5" aria-hidden /> ปลดล็อกในร้านค้าเพชร
+                          </span>
+                          <PxButton variant="secondary" onClick={() => openPanel('gem-shop')}>
+                            ไปร้านเพชร
+                          </PxButton>
+                        </div>
+                      ) : (
+                        <PxButton
+                          variant="primary"
+                          className="w-full"
+                          disabled={p.gold < (mount.unlockGold ?? 0)}
+                          onClick={() => {
+                            const res = unlockMount(mount.id)
+                            playQuestClaimSfx(false)
+                            setNotice(res.message)
+                          }}
+                        >
+                          <span className="inline-flex items-center justify-center gap-1.5 tabular-nums">
+                            <Coins className="size-3.5" aria-hidden />
+                            ปลดล็อกสัตว์ขี่ ({formatNum(mount.unlockGold ?? 0)} G)
+                          </span>
+                        </PxButton>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        )}
       </div>
     </PanelFrame>
   )
