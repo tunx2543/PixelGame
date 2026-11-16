@@ -4,11 +4,27 @@ import type { EncounterBiome, EncounterEnemy } from './encounter'
 export interface PetProgress {
   level: number
   exp: number
+  stars?: number
 }
 
 export interface PetState {
   activePetId: string | null
   ownedPets: Record<string, PetProgress>
+}
+
+export const MAX_PET_STARS = 5
+
+export function petEvolveCost(currentStars: number): { gold: number; essence: number } {
+  const s = Math.max(1, Math.min(MAX_PET_STARS, Math.floor(currentStars)))
+  return {
+    gold: 600 * s * s,
+    essence: s * 2,
+  }
+}
+
+export function getPetStarMultiplier(stars: number): number {
+  const clamped = Math.max(1, Math.min(MAX_PET_STARS, Math.floor(stars || 1)))
+  return 1 + (clamped - 1) * 0.25
 }
 
 export interface QuestState {
@@ -183,7 +199,7 @@ export function createDefaultPetState(ownedGemItems: string[] = [], equippedGemC
   const ownedPets: Record<string, PetProgress> = {}
   for (const gemId of ownedGemItems) {
     if (COMBAT_PETS.some((p) => p.linkedGemItemId === gemId)) {
-      ownedPets[gemId] = { level: 1, exp: 0 }
+      ownedPets[gemId] = { level: 1, exp: 0, stars: 1 }
     }
   }
   const activePetId =
@@ -206,13 +222,14 @@ export function sanitizePetState(
       if (!getCombatPetDef(id)) continue
       const lv = Math.max(1, Math.min(MAX_PET_LEVEL, Math.floor(Number(entry?.level ?? 1) || 1)))
       const exp = Math.max(0, Math.floor(Number(entry?.exp ?? 0) || 0))
-      ownedPets[id] = { level: lv, exp }
+      const stars = Math.max(1, Math.min(MAX_PET_STARS, Math.floor(Number(entry?.stars ?? 1) || 1)))
+      ownedPets[id] = { level: lv, exp, stars }
     }
   }
 
   for (const gemId of ownedGemItems) {
     if (COMBAT_PETS.some((p) => p.linkedGemItemId === gemId) && !ownedPets[gemId]) {
-      ownedPets[gemId] = { level: 1, exp: 0 }
+      ownedPets[gemId] = { level: 1, exp: 0, stars: 1 }
     }
   }
 
@@ -238,6 +255,7 @@ export interface ActivePetBonuses {
   petId: string
   def: CombatPetDef
   level: number
+  stars: number
   exp: number
   nextExp: number
   hpBonus: number
@@ -248,6 +266,7 @@ export interface ActivePetBonuses {
   goldMul: number
   companionAtk: number
   attackInterval: number
+  autoLootMagnet: boolean
 }
 
 export function getActivePetBonuses(
@@ -263,21 +282,24 @@ export function getActivePetBonuses(
   if (!def || !progress) return null
 
   const lv = progress.level
-  const lvScale = 1 + (lv - 1) * 0.14
+  const stars = Math.max(1, Math.min(MAX_PET_STARS, progress.stars ?? 1))
+  const lvScale = (1 + (lv - 1) * 0.14) * getPetStarMultiplier(stars)
   return {
     petId: resolvedId,
     def,
     level: lv,
+    stars,
     exp: progress.exp,
     nextExp: petExpToNext(lv),
     hpBonus: Math.round(def.hpBonus * lvScale),
     mpBonus: Math.round(def.mpBonus * lvScale),
     atkBonus: Math.round(def.atkBuff * lvScale),
     defBonus: Math.round(def.defBuff * lvScale),
-    expMul: 1 + def.expBonusPct / 100 + (lv - 1) * 0.005,
-    goldMul: 1 + def.goldBonusPct / 100 + (lv - 1) * 0.005,
-    companionAtk: Math.round(def.baseAtk + (lv - 1) * def.atkPerLevel),
-    attackInterval: Math.max(1.15, def.attackInterval - (lv - 1) * 0.025),
+    expMul: 1 + def.expBonusPct / 100 + (lv - 1) * 0.005 + (stars - 1) * 0.03,
+    goldMul: 1 + def.goldBonusPct / 100 + (lv - 1) * 0.005 + (stars - 1) * 0.03,
+    companionAtk: Math.round((def.baseAtk + (lv - 1) * def.atkPerLevel) * getPetStarMultiplier(stars)),
+    attackInterval: Math.max(1.0, def.attackInterval - (lv - 1) * 0.025 - (stars - 1) * 0.06),
+    autoLootMagnet: stars >= 2,
   }
 }
 
@@ -289,7 +311,7 @@ export function grantActivePetExp(petState: PetState, amount: number): { nextPet
   if (!next.activePetId || !next.ownedPets[next.activePetId] || amount <= 0) {
     return { nextPetState: next, leveledUp: false, newLevel: 1 }
   }
-  const cur = { ...next.ownedPets[next.activePetId] }
+  const cur = { ...next.ownedPets[next.activePetId], stars: next.ownedPets[next.activePetId].stars ?? 1 }
   let leveledUp = false
   if (cur.level < MAX_PET_LEVEL) {
     cur.exp += Math.max(1, Math.round(amount))

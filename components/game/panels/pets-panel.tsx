@@ -1,13 +1,16 @@
 'use client'
 
 import { useState } from 'react'
-import { Coins, Gem, Shield, Sparkles, Swords } from 'lucide-react'
-import { equipCombatPet, feedCombatPet, openPanel, unlockCombatPet } from '@/lib/game/engine'
+import { Coins, Gem, Shield, Sparkles, Star, Swords } from 'lucide-react'
+import { countItem, equipCombatPet, evolveCombatPetAction, feedCombatPet, openPanel, unlockCombatPet } from '@/lib/game/engine'
 import { playEnhanceSfx, playQuestClaimSfx } from '@/lib/game/sfx'
 import {
   COMBAT_PETS,
   MAX_PET_LEVEL,
+  MAX_PET_STARS,
   getActivePetBonuses,
+  getPetStarMultiplier,
+  petEvolveCost,
   petExpToNext,
   petFeedCost,
   sanitizePetState,
@@ -61,10 +64,11 @@ export function PetsPanel() {
                 <PetPixelPreview pet={activeBonus.def} />
                 <div>
                   <p className="text-sm font-bold text-primary">
-                    กำลังใช้งาน: {activeBonus.def.name} (Lv.{activeBonus.level})
+                    กำลังใช้งาน: {activeBonus.def.name} (Lv.{activeBonus.level} · {'★'.repeat(activeBonus.stars)})
                   </p>
                   <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
                     พลังช่วยยิง {formatNum(activeBonus.companionAtk)} · ยิงทุก {activeBonus.attackInterval.toFixed(1)} วินาที
+                    {activeBonus.autoLootMagnet ? ' · ดูดไอเทมตกอัตโนมัติ (2★+)' : ''}
                   </p>
                   <p className="mt-0.5 text-xs text-accent tabular-nums">
                     บัฟตัวละคร: +{formatNum(activeBonus.atkBonus)} ATK · +{formatNum(activeBonus.defBonus)} DEF · +{formatNum(activeBonus.hpBonus)} HP
@@ -96,10 +100,13 @@ export function PetsPanel() {
             const owned = petState.ownedPets[pet.id]
             const isActive = petState.activePetId === pet.id
             const lv = owned?.level ?? 1
-            const scale = 1 + (lv - 1) * 0.14
-            const previewAtk = Math.round(pet.baseAtk + (lv - 1) * pet.atkPerLevel)
+            const stars = owned?.stars ?? 1
+            const scale = (1 + (lv - 1) * 0.14) * getPetStarMultiplier(stars)
+            const previewAtk = Math.round((pet.baseAtk + (lv - 1) * pet.atkPerLevel) * getPetStarMultiplier(stars))
             const feedCost = petFeedCost(lv)
+            const evolveCost = petEvolveCost(stars)
             const needExp = petExpToNext(lv)
+            const essenceOwned = countItem('pet_essence')
 
             return (
               <div
@@ -113,8 +120,8 @@ export function PetsPanel() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-2">
                       <h3 className="truncate text-sm font-bold text-foreground">{pet.name}</h3>
-                      <span className="shrink-0 text-[11px] font-semibold text-primary">
-                        {owned ? `Lv.${lv}` : pet.rarity}
+                      <span className="shrink-0 text-[11px] font-semibold text-amber-300 tabular-nums">
+                        {owned ? `Lv.${lv} · ${'★'.repeat(stars)}` : pet.rarity}
                       </span>
                     </div>
                     <p className="mt-0.5 text-[11px] text-muted-foreground">{pet.description}</p>
@@ -128,13 +135,13 @@ export function PetsPanel() {
                     </div>
                     {owned && lv < MAX_PET_LEVEL && (
                       <p className="mt-1 text-[10px] text-muted-foreground tabular-nums">
-                        EXP คู่หู: {formatNum(owned.exp)} / {formatNum(needExp)}
+                        EXP คู่หู: {formatNum(owned.exp)} / {formatNum(needExp)} · ผลึกวิวัฒนาการที่มี: {essenceOwned}
                       </p>
                     )}
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-2">
+                <div className="flex flex-wrap items-center justify-between gap-1.5 border-t border-border/60 pt-2">
                   {owned ? (
                     <>
                       <PxButton
@@ -158,7 +165,23 @@ export function PetsPanel() {
                       >
                         <span className="inline-flex items-center gap-1 tabular-nums">
                           <Sparkles className="size-3" aria-hidden />
-                          {lv >= MAX_PET_LEVEL ? 'เลเวลเต็ม' : `อัปเกรด (${formatNum(feedCost)} G)`}
+                          {lv >= MAX_PET_LEVEL ? 'เลเวลเต็ม' : `อัปเลเวล (${formatNum(feedCost)} G)`}
+                        </span>
+                      </PxButton>
+                      <PxButton
+                        variant="secondary"
+                        disabled={stars >= MAX_PET_STARS || p.gold < evolveCost.gold || essenceOwned < evolveCost.essence}
+                        onClick={() => {
+                          const res = evolveCombatPetAction(pet.id)
+                          playEnhanceSfx(res.ok, false)
+                          setNotice(res.message)
+                        }}
+                      >
+                        <span className="inline-flex items-center gap-1 tabular-nums">
+                          <Star className="size-3 text-amber-300" aria-hidden />
+                          {stars >= MAX_PET_STARS
+                            ? '5★ สูงสุด'
+                            : `ดาวถัดไป (ผลึก ${evolveCost.essence} + ${formatNum(evolveCost.gold)} G)`}
                         </span>
                       </PxButton>
                     </>

@@ -32,6 +32,18 @@ export function CheckinModal({ onClose }: { onClose: () => void }) {
   const [result, setResult] = useState('')
 
   useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [onClose])
+
+  useEffect(() => {
     try {
       setClaimed(window.localStorage.getItem(CHECKIN_KEY) === localDateKey())
     } catch {
@@ -59,7 +71,13 @@ export function CheckinModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="pointer-events-auto absolute inset-0 z-[80] grid place-items-center overflow-y-auto bg-black/75 p-3 backdrop-blur-sm sm:p-5" role="presentation">
+    <div
+      className="pointer-events-auto absolute inset-0 z-[80] grid place-items-center overflow-y-auto bg-black/75 p-3 backdrop-blur-sm sm:p-5"
+      role="presentation"
+      onPointerDown={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
       <section className="pixel-panel w-full max-w-2xl border border-amber-300/40 bg-[#171522] p-4 shadow-[0_24px_80px_rgba(0,0,0,.65)] sm:p-6" role="dialog" aria-modal="true" aria-labelledby="checkin-title">
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>

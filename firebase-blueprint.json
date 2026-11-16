@@ -681,6 +681,105 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "name", "jobId", "level", "damage", "updatedAt"]
+    },
+    "GuildMessage": {
+      "title": "GuildMessage",
+      "description": "Real-time guild chat message restricted to members of the parent guild.",
+      "type": "object",
+      "properties": {
+        "messageId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "senderUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "senderName": { "type": "string", "minLength": 1, "maxLength": 24 },
+        "senderGameUid": { "type": "string", "minLength": 4, "maxLength": 8, "pattern": "^[0-9]{4,8}$" },
+        "jobId": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "text": { "type": "string", "minLength": 1, "maxLength": 180 },
+        "createdAtMs": { "type": "integer", "minimum": 0 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["messageId", "senderUid", "senderName", "senderGameUid", "jobId", "text", "createdAtMs", "createdAt"]
+    },
+    "GuildRaid": {
+      "title": "GuildRaid",
+      "description": "Shared cooperative Guild Raid Boss instance owned by a guild.",
+      "type": "object",
+      "properties": {
+        "raidId": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "guildId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "bossName": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "level": { "type": "integer", "minimum": 1, "maximum": 999 },
+        "maxHp": { "type": "integer", "minimum": 1000 },
+        "currentHp": { "type": "integer", "minimum": 0 },
+        "clears": { "type": "integer", "minimum": 0 },
+        "lastHitter": { "type": "string", "maxLength": 24 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["raidId", "guildId", "bossName", "level", "maxHp", "currentHp", "clears", "lastHitter", "updatedAt"]
+    },
+    "MarketListing": {
+      "title": "MarketListing",
+      "description": "Public auction house item listing posted by verified players.",
+      "type": "object",
+      "properties": {
+        "listingId": { "type": "string", "minLength": 4, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "sellerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "sellerName": { "type": "string", "minLength": 1, "maxLength": 24 },
+        "sellerGameUid": { "type": "string", "minLength": 4, "maxLength": 8, "pattern": "^[0-9]{4,8}$" },
+        "itemId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "itemName": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "kind": { "type": "string", "minLength": 1, "maxLength": 24 },
+        "qty": { "type": "integer", "minimum": 1, "maximum": 999 },
+        "plus": { "type": "integer", "minimum": 0, "maximum": 20 },
+        "priceGold": { "type": "integer", "minimum": 1, "maximum": 100000000 },
+        "status": { "type": "string", "enum": ["open", "sold", "cancelled"] },
+        "buyerUid": { "type": "string", "maxLength": 128 },
+        "buyerName": { "type": "string", "maxLength": 24 },
+        "createdAtMs": { "type": "integer", "minimum": 0 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["listingId", "sellerUid", "sellerName", "sellerGameUid", "itemId", "itemName", "kind", "qty", "plus", "priceGold", "status", "createdAtMs", "createdAt", "updatedAt"]
+    },
+    "MailMessage": {
+      "title": "MailMessage",
+      "description": "In-game mailbox message and friend gift attachment stored under the recipient user.",
+      "type": "object",
+      "properties": {
+        "mailId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "senderUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "senderName": { "type": "string", "minLength": 1, "maxLength": 24 },
+        "senderGameUid": { "type": "string", "minLength": 4, "maxLength": 8, "pattern": "^[0-9]{4,8}$" },
+        "subject": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "body": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "gold": { "type": "integer", "minimum": 0, "maximum": 10000000 },
+        "diamonds": { "type": "integer", "minimum": 0, "maximum": 100000 },
+        "itemId": { "type": "string", "maxLength": 64 },
+        "qty": { "type": "integer", "minimum": 0, "maximum": 999 },
+        "plus": { "type": "integer", "minimum": 0, "maximum": 20 },
+        "claimed": { "type": "boolean" },
+        "createdAtMs": { "type": "integer", "minimum": 0 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["mailId", "senderUid", "senderName", "senderGameUid", "subject", "body", "gold", "diamonds", "qty", "plus", "claimed", "createdAtMs", "createdAt", "updatedAt"]
+    },
+    "PartyCoop": {
+      "title": "PartyCoop",
+      "description": "Shared cooperative dungeon boss instance restricted to members of the parent party.",
+      "type": "object",
+      "properties": {
+        "coopId": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "partyId": { "type": "string", "minLength": 4, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "dungeonName": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "bossName": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "level": { "type": "integer", "minimum": 1, "maximum": 999 },
+        "maxHp": { "type": "integer", "minimum": 1000 },
+        "currentHp": { "type": "integer", "minimum": 0 },
+        "clears": { "type": "integer", "minimum": 0 },
+        "participants": { "type": "array", "maxItems": 8, "items": { "type": "string" } },
+        "lastHitter": { "type": "string", "maxLength": 24 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["coopId", "partyId", "dungeonName", "bossName", "level", "maxHp", "currentHp", "clears", "participants", "lastHitter", "updatedAt"]
     }
   },
   "firestore": {
@@ -731,6 +830,26 @@
     "/worldBoss/{cycleKey}/contributions/{userId}": {
       "schema": { "$ref": "#/entities/WorldBossContribution" },
       "description": "Per-player damage ranking inside a World Boss raid cycle."
+    },
+    "/guilds/{guildId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/GuildMessage" },
+      "description": "Real-time guild chat messages restricted to guild members."
+    },
+    "/guilds/{guildId}/raids/{raidId}": {
+      "schema": { "$ref": "#/entities/GuildRaid" },
+      "description": "Shared cooperative Guild Raid Boss encounters."
+    },
+    "/marketListings/{listingId}": {
+      "schema": { "$ref": "#/entities/MarketListing" },
+      "description": "Public player Auction House marketplace listings."
+    },
+    "/users/{userId}/mailbox/{mailId}": {
+      "schema": { "$ref": "#/entities/MailMessage" },
+      "description": "Player mailbox messages and friend gifts."
+    },
+    "/parties/{partyId}/coops/{coopId}": {
+      "schema": { "$ref": "#/entities/PartyCoop" },
+      "description": "Shared Co-op Party Dungeon boss instances."
     }
   }
 }

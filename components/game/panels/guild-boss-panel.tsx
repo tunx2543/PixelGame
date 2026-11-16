@@ -1,22 +1,30 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Coins, Crown, Flame, Shield, Swords, Users } from 'lucide-react'
+import { Coins, Crown, Flame, MessageSquare, Send, Shield, Swords, Users } from 'lucide-react'
 import { JOBS } from '@/lib/game/data'
 import {
+  addItem,
   claimWorldBossMilestoneAction,
   getStats,
   recordWorldBossDamageAction,
+  saveGame,
   syncGuildStateAction,
 } from '@/lib/game/engine'
 import {
+  attackGuildRaid,
   attackWorldBossOnline,
   createGuildOnline,
   donateGuildOnline,
+  fetchGuildRaidState,
   fetchWorldBossState,
   joinGuildOnline,
   leaveGuildOnline,
   listGuildsOnline,
+  sendGuildMessage,
+  subscribeGuildMessages,
+  type GuildChatMessage,
+  type GuildRaidState,
   type GuildRecord,
   type WorldBossRaidState,
 } from '@/lib/firebase/rpg-online'
@@ -41,19 +49,37 @@ export function GuildBossPanel() {
   const [worldBoss, setWorldBoss] = useState<WorldBossRaidState | null>(null)
   const [guildNameInput, setGuildNameInput] = useState('')
   const [guildTagInput, setGuildTagInput] = useState('')
+  const [guildChatMessages, setGuildChatMessages] = useState<GuildChatMessage[]>([])
+  const [guildChatInput, setGuildChatInput] = useState('')
+  const [guildRaid, setGuildRaid] = useState<GuildRaidState | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [attackCdMs, setAttackCdMs] = useState(0)
   const [busy, setBusy] = useState(false)
+
+  const currentGuildId = p ? sanitizeRpgExt(p.rpgExt).guildId : null
 
   const refreshData = useCallback(async () => {
     const [gList, wb] = await Promise.all([listGuildsOnline(), fetchWorldBossState()])
     setGuilds(gList)
     setWorldBoss(wb)
-  }, [])
+    if (currentGuildId) {
+      const raid = await fetchGuildRaidState(currentGuildId)
+      setGuildRaid(raid)
+    }
+  }, [currentGuildId])
 
   useEffect(() => {
     void refreshData()
   }, [refreshData])
+
+  useEffect(() => {
+    if (!currentGuildId) {
+      setGuildChatMessages([])
+      return
+    }
+    const unsub = subscribeGuildMessages(currentGuildId, setGuildChatMessages)
+    return () => unsub()
+  }, [currentGuildId])
 
   useEffect(() => {
     if (attackCdMs <= 0) return
@@ -362,6 +388,120 @@ export function GuildBossPanel() {
                       <Shield className="size-3.5" aria-hidden /> บริจาค 1,000 G
                     </span>
                   </PxButton>
+                </div>
+              </div>
+
+              {/* Co-op Guild Raid Boss + Real-Time Guild Chat */}
+              <div className="grid gap-3 border-t border-border/70 pt-3 md:grid-cols-2">
+                <div className="space-y-2 border border-rose-400/40 bg-background/70 p-2.5 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="flex items-center gap-1.5 font-bold text-rose-300">
+                      <Flame className="size-3.5" aria-hidden /> เรดบอสกิลด์ (Co-op)
+                    </h4>
+                    <span className="text-[10px] text-muted-foreground tabular-nums">
+                      พิชิตแล้ว {guildRaid?.clears ?? 0} รอบ
+                    </span>
+                  </div>
+                  {guildRaid && (
+                    <>
+                      <p className="font-bold text-foreground">
+                        {guildRaid.bossName} · Lv.{guildRaid.level}
+                      </p>
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[11px] tabular-nums">
+                          <span>HP บอสกิลด์</span>
+                          <span>
+                            {formatNum(guildRaid.currentHp)} / {formatNum(guildRaid.maxHp)}
+                          </span>
+                        </div>
+                        <div className="h-2.5 w-full overflow-hidden border border-border bg-muted">
+                          <div
+                            className="h-full bg-rose-500 transition-[width]"
+                            style={{
+                              width: `${Math.max(0, Math.round((guildRaid.currentHp / Math.max(1, guildRaid.maxHp)) * 100))}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 pt-1">
+                        <span className="text-[10px] text-muted-foreground">โจมตีล่าสุด: {guildRaid.lastHitter}</span>
+                        <PxButton
+                          variant="danger"
+                          disabled={busy || !ext.guildId}
+                          onClick={async () => {
+                            if (!ext.guildId || busy) return
+                            setBusy(true)
+                            const s = getStats(p)
+                            const dmg = Math.max(60, Math.round(s.atk * 2.8 + (Math.random() < s.crit ? s.atk : 0)))
+                            const res = await attackGuildRaid(ext.guildId, { playerName: p.name, damage: dmg })
+                            setGuildRaid(res.state)
+                            if (res.defeated) {
+                              p.gold += res.bonusGold
+                              addItem('enhance_stone', res.bonusStones)
+                              saveGame()
+                              setNotice(
+                                `ปราบบอสกิลด์สำเร็จ! ได้รับ +${formatNum(res.bonusGold)} G และหินตีบวก x${res.bonusStones}`,
+                              )
+                            } else {
+                              setNotice(`โจมตีเรดบอสกิลด์ ทำดาเมจ ${formatNum(dmg)}!`)
+                            }
+                            setBusy(false)
+                          }}
+                        >
+                          <span className="flex items-center gap-1">
+                            <Swords className="size-3" aria-hidden /> ตีบอสกิลด์
+                          </span>
+                        </PxButton>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div className="flex flex-col justify-between gap-2 border border-border/70 bg-background/70 p-2.5 text-xs">
+                  <h4 className="flex items-center gap-1.5 font-bold text-primary">
+                    <MessageSquare className="size-3.5" aria-hidden /> แชทกิลด์แบบเรียลไทม์
+                  </h4>
+                  <div className="max-h-28 min-h-[4.5rem] space-y-1 overflow-y-auto border border-border/50 bg-background/60 p-2 text-[11px]">
+                    {guildChatMessages.length === 0 ? (
+                      <p className="text-muted-foreground">ยังไม่มีข้อความในกิลด์ — ทักทายเพื่อนร่วมกิลด์เลย!</p>
+                    ) : (
+                      guildChatMessages.map((msg) => (
+                        <p key={msg.messageId} className="leading-snug">
+                          <strong className="text-amber-300">{msg.senderName}</strong>:{' '}
+                          <span className="text-foreground">{msg.text}</span>
+                        </p>
+                      ))
+                    )}
+                  </div>
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault()
+                      if (!ext.guildId || !guildChatInput.trim()) return
+                      const text = guildChatInput.trim()
+                      setGuildChatInput('')
+                      const res = await sendGuildMessage(ext.guildId, {
+                        senderName: p.name,
+                        senderGameUid: p.gameUid ?? '1000',
+                        jobId: p.jobId,
+                        text,
+                      })
+                      if (res.ok && res.message && ext.guildId.startsWith('guild_')) {
+                        setGuildChatMessages((prev) => [...prev, res.message!].slice(-40))
+                      }
+                    }}
+                    className="flex gap-1.5"
+                  >
+                    <input
+                      value={guildChatInput}
+                      onChange={(e) => setGuildChatInput(e.target.value)}
+                      maxLength={140}
+                      placeholder="พิมพ์ข้อความคุยกับกิลด์..."
+                      className="pixel-input min-w-0 flex-1 px-2 py-1 text-xs"
+                    />
+                    <PxButton type="submit" disabled={!guildChatInput.trim()}>
+                      <Send className="size-3.5" aria-hidden />
+                    </PxButton>
+                  </form>
                 </div>
               </div>
             </div>

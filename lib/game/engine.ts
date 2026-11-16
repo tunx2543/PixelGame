@@ -81,6 +81,39 @@ import {
   type DailyDungeonId,
   type RpgExtensionState,
 } from './rpg-systems'
+import {
+  BATTLE_PASS_TIERS,
+  BEGINNER_GUIDE_STEPS,
+  BP_EXP_PER_LEVEL,
+  BP_MAX_LEVEL,
+  BP_PREMIUM_DIAMOND_COST,
+  COSMETIC_DEFS,
+  FOOD_BUFF_DEFS,
+  GATHERING_NODES,
+  LIFE_SKILL_META,
+  MAX_LOADOUTS,
+  MAX_SKILL_UPGRADE,
+  TALENT_NODES,
+  calculateOfflineAfkRewards,
+  computeTalentBonuses,
+  createDefaultExtV2,
+  findNearbyGatheringNode,
+  getActiveFoodBuffBonuses,
+  getCosmeticDef,
+  getFoodBuffForItem,
+  getWorldTimePhase,
+  grantBattlePassExpToState,
+  isItemListableOnMarket,
+  lifeSkillExpToNext,
+  rollGatheringDrops,
+  sanitizeExtV2,
+  skillUpgradeCost,
+  type CosmeticSlot,
+  type OfflineAfkSummary,
+  type PlayerExtensionV2,
+} from './extended-systems'
+import { MAX_PET_STARS, petEvolveCost } from './systems'
+import { stopBgm, syncBgmForMap } from './bgm'
 
 if (typeof window !== 'undefined') {
   onDailyMissionCompleted((mission) => {
@@ -281,6 +314,7 @@ export interface SaveData {
   questState?: QuestState
   towerState?: TowerState
   rpgExt?: RpgExtensionState
+  extV2?: PlayerExtensionV2
 }
 
 export interface RemotePlayer {
@@ -378,7 +412,7 @@ interface Projectile {
   skillId?: string
 }
 
-export type PanelId = 'shop' | 'gem-shop' | 'enhance' | 'job' | 'storage' | 'character' | 'gacha' | 'rebirth' | 'friends' | 'trade' | 'inventory' | 'gm-summon' | 'dev-tools' | 'pets' | 'quests' | 'models' | 'craft' | 'codex' | 'guild' | 'arena' | 'dungeon'
+export type PanelId = 'shop' | 'gem-shop' | 'enhance' | 'job' | 'storage' | 'character' | 'gacha' | 'rebirth' | 'friends' | 'trade' | 'inventory' | 'gm-summon' | 'dev-tools' | 'pets' | 'quests' | 'models' | 'craft' | 'codex' | 'guild' | 'arena' | 'dungeon' | 'market' | 'mail' | 'pass' | 'lifeskills' | 'talents' | 'wardrobe' | 'guide'
 export type ChatType = 'system' | 'player' | 'gm' | 'loot' | 'error' | 'npc'
 export interface ChatMsg {
   id: number
@@ -445,6 +479,14 @@ export const game = {
   lastWarnAt: 0,
   guardCd: 0,
   guardUntil: 0,
+  dashCd: 0,
+  invulnUntil: 0,
+  gatherCd: 0,
+  comboCount: 0,
+  comboUntil: 0,
+  ultimateCharge: 0,
+  offlineAfkReward: null as OfflineAfkSummary | null,
+  invasion: null as null | { active: boolean; wave: number; maxWaves: number; rewardDiamonds: number },
   zenHud: false,
   version: 0,
 }
@@ -529,22 +571,25 @@ export function getStats(p: SaveData = game.p!) {
   const runeBonus = computeRuneBonuses(ext)
   const setBonus = computeEquipmentSetBonuses(p.equipment)
   const guildBuff = ext.guildId ? getGuildBuffs(ext.guildLevel) : null
+  const extV2 = sanitizeExtV2(p.extV2)
+  const talentBonus = computeTalentBonuses(extV2.talents)
+  const foodBuff = getActiveFoodBuffBonuses(extV2.activeFoodBuff)
 
-  const rawHp =
+  const baseHp =
     Math.floor((80 + L * 22) * job.hpMul + aDef * 2) +
     (p.rebirthBonus?.maxHp ?? 0) +
     (petBonus?.hpBonus ?? 0) +
     codexBonus.hpBonus +
     runeBonus.hpBonus +
     setBonus.hpBonus
-  const rawAtk =
+  const baseAtk =
     Math.floor((8 + L * 2.6 + wAtk) * job.atkMul) +
     (p.rebirthBonus?.atk ?? 0) +
     (petBonus?.atkBonus ?? 0) +
     codexBonus.atkBonus +
     runeBonus.atkBonus +
     setBonus.atkBonus
-  const rawDef =
+  const baseDef =
     Math.floor((3 + L * 1.4) * job.defMul + aDef) +
     (p.rebirthBonus?.def ?? 0) +
     (petBonus?.defBonus ?? 0) +
@@ -552,15 +597,27 @@ export function getStats(p: SaveData = game.p!) {
     runeBonus.defBonus +
     setBonus.defBonus
 
+  const rawHp = Math.round(baseHp * (1 + talentBonus.hpPct / 100))
+  const rawAtk = Math.round(baseAtk * (1 + (talentBonus.atkPct + foodBuff.atkPct) / 100))
+  const rawDef = Math.round(baseDef * (1 + (talentBonus.defPct + foodBuff.defPct) / 100))
+
   return {
     maxHp: rawHp,
     maxMp: Math.floor((30 + L * 7) * job.mpMul) + (p.rebirthBonus?.maxMp ?? 0) + (petBonus?.mpBonus ?? 0),
     atk: guildBuff ? Math.round(rawAtk * (1 + guildBuff.atkPct / 100)) : rawAtk,
     def: guildBuff ? Math.round(rawDef * (1 + guildBuff.defPct / 100)) : rawDef,
-    speed: 72 * job.speedMul * (p.speed || 1) * (p.equippedGemCompanion === 'aurora_cloud_dragon' ? 1.2 : 1),
-    crit: Math.min(0.75, job.crit + codexBonus.critBonus + runeBonus.critBonus + setBonus.critBonus),
+    speed:
+      72 *
+      job.speedMul *
+      (p.speed || 1) *
+      (p.equippedGemCompanion === 'aurora_cloud_dragon' ? 1.2 : 1) *
+      (1 + talentBonus.speedPct / 100),
+    crit: Math.min(
+      0.85,
+      job.crit + codexBonus.critBonus + runeBonus.critBonus + setBonus.critBonus + talentBonus.critBonus + foodBuff.critBonus,
+    ),
     attackSpeed: job.attackSpeed,
-    lifestealPct: runeBonus.lifestealPct,
+    lifestealPct: runeBonus.lifestealPct + talentBonus.lifestealPct,
   }
 }
 
@@ -732,6 +789,27 @@ export function consumeItem(id: string) {
     return
   }
 
+  const foodDef = getFoodBuffForItem(def.id)
+  if (foodDef) {
+    const extV2 = sanitizeExtV2(p.extV2)
+    extV2.activeFoodBuff = {
+      itemId: foodDef.itemId,
+      name: foodDef.name,
+      expiresAtMs: Date.now() + foodDef.durationSec * 1000,
+      atkPct: foodDef.atkPct,
+      defPct: foodDef.defPct,
+      critBonus: foodDef.critBonus,
+      expMul: foodDef.expMul,
+    }
+    p.extV2 = extV2
+    removeUid(p.inventory, id, 1)
+    addFloat(p.x, p.y - 28, `${foodDef.name}!`, '#fbbf24', 10)
+    say('system', `รับประทาน ${foodDef.name} (ATK +${foodDef.atkPct}% · DEF +${foodDef.defPct}% นาน ${Math.round(foodDef.durationSec / 60)} นาที)`)
+    saveGame()
+    notify()
+    return
+  }
+
   const s = getStats()
   if (def.heal) {
     p.hp = Math.min(s.maxHp, p.hp + def.heal)
@@ -870,7 +948,9 @@ export function changeMap(mapId: string, tx: number, ty: number) {
   game.floats = []
   game.panel = null
   game.remotePlayers = game.onlinePlayers.filter((other) => !other.invisible && other.mapId === mapId)
+  if (mapId !== 'town') game.invasion = null
   populateMap()
+  syncBgmForMap(mapId, game.monsters.some((m) => !m.dead && Boolean(MONSTERS[m.defId]?.boss)))
   say('system', `เข้าสู่ ${map.name} (${map.levelLabel})`)
   saveGame()
   notify()
@@ -973,6 +1053,9 @@ function damageMonster(m: Monster, mult: number, skillId?: string) {
   m.provoked = true
   m.hitFlash = 0.15
   game.combatT = 0
+  game.comboCount += 1
+  game.comboUntil = game.time + 5
+  game.ultimateCharge = Math.min(100, game.ultimateCharge + (skillId ? 14 : 8))
   if (s.lifestealPct > 0 && p.hp < s.maxHp) {
     const heal = Math.max(1, Math.round((amount * s.lifestealPct) / 100))
     p.hp = Math.min(s.maxHp, p.hp + heal)
@@ -991,13 +1074,16 @@ function dropItem(itemId: string, qty: number, x: number, y: number) {
 function collectGroundDrops() {
   const p = player()
   const ownerId = String(p.uid ?? p.name)
+  const petBonus = getActivePetBonuses(p.petState, p.equippedGemCompanion, p.ownedGemItems)
   for (let i = game.groundDrops.length - 1; i >= 0; i--) {
     const drop = game.groundDrops[i]
     if (drop.expiresAt <= game.time) {
       game.groundDrops.splice(i, 1)
       continue
     }
-    const petRange = p.equippedGemCompanion === 'moonlight_firefly' ? 34 : p.equippedGemCompanion === 'gem_raccoon' ? 52 : p.equippedGemCompanion === 'aurora_cloud_dragon' ? 68 : 22
+    const gemPetRange = p.equippedGemCompanion === 'moonlight_firefly' ? 34 : p.equippedGemCompanion === 'gem_raccoon' ? 52 : p.equippedGemCompanion === 'aurora_cloud_dragon' ? 68 : 22
+    const evolvePetRange = petBonus?.autoLootMagnet ? 96 : 22
+    const petRange = Math.max(gemPetRange, evolvePetRange)
     const magnetRange = p.lootMagnetUntil > Date.now() ? 120 : 22
     if (drop.ownerId !== ownerId || Math.hypot(drop.x - p.x, drop.y - p.y) > Math.max(petRange, magnetRange)) continue
     if (!addItem(drop.itemId, drop.qty)) {
@@ -1030,7 +1116,7 @@ function killMonster(m: Monster) {
   }
   m.dead = true
   m.hp = 0
-  m.respawnAt = game.time + (def.boss ? 90 : 10)
+  m.respawnAt = game.invasion?.active && p.mapId === 'town' ? Infinity : game.time + (def.boss ? 90 : 10)
   p.kills++
   p.questState = recordQuestProgress(p.questState, { kills: 1, bossKills: def.boss ? 1 : 0 }, p.kills)
   p.rpgExt = recordBestiaryKillInState(p.rpgExt, m.defId, p)
@@ -1038,10 +1124,21 @@ function killMonster(m: Monster) {
   const guildBuff = p.rpgExt?.guildId ? getGuildBuffs(p.rpgExt.guildLevel) : null
   const guildGoldMul = guildBuff ? 1 + guildBuff.goldPct / 100 : 1
   const guildExpMul = guildBuff ? 1 + guildBuff.expPct / 100 : 1
+  const extV2 = sanitizeExtV2(p.extV2)
+  const talentBonus = computeTalentBonuses(extV2.talents)
+  const foodBuff = getActiveFoodBuffBonuses(extV2.activeFoodBuff)
+  const worldPhase = getWorldTimePhase()
+  const timeExpMul = 1 + worldPhase.expBonusPct / 100
+  const bpRes = grantBattlePassExpToState(extV2.battlePass, def.boss ? 45 : 12)
+  extV2.battlePass = bpRes.next
+  p.extV2 = extV2
+  if (bpRes.leveledUp) {
+    say('loot', `★ Battle Pass เลื่อนเป็น Lv.${bpRes.next.level}! เปิดดูรางวัลได้เลย`)
+  }
   addEffect({ type: 'burst', x: m.x, y: m.y - 6, r: def.boss ? 30 : 14, color: def.color, max: 0.4 })
   const baseGold = randInt(def.gold[0], def.gold[1])
-  const gold = Math.round(baseGold * (petBonus?.goldMul ?? 1) * (game.partyGoldMul || 1) * guildGoldMul)
-  const expGain = Math.round(def.exp * (petBonus?.expMul ?? 1) * (game.partyExpMul || 1) * guildExpMul)
+  const gold = Math.round(baseGold * (petBonus?.goldMul ?? 1) * (game.partyGoldMul || 1) * guildGoldMul * talentBonus.goldMul)
+  const expGain = Math.round(def.exp * (petBonus?.expMul ?? 1) * (game.partyExpMul || 1) * guildExpMul * talentBonus.expMul * foodBuff.expMul * timeExpMul)
   p.gold += gold
   recordDailyMissionProgress({
     kills: 1,
@@ -1188,7 +1285,7 @@ export function castSkill(index: number) {
     const recovered = Math.min(Math.floor(stats.maxHp * skillMult), stats.maxHp - p.hp)
     p.hp += recovered
     p.mp -= skill.mp
-    game.skillCd[skill.id] = skill.cooldown
+    game.skillCd[skill.id] = skill.cooldown * Math.max(0.65, 1 - (skillLevel - 1) * 0.05)
     game.attackAnim = 0.32
     addEffect({
       type: 'ring',
@@ -1299,7 +1396,7 @@ export function castSkill(index: number) {
     }
   }
   p.mp -= skill.mp
-  game.skillCd[skill.id] = skill.cooldown
+  game.skillCd[skill.id] = skill.cooldown * Math.max(0.65, 1 - (skillLevel - 1) * 0.05)
   game.attackAnim = 0.32
   addFloat(p.x, p.y - 30, skill.name, vfx.primaryColor, 9)
   recordDailyMissionProgress({ skillsUsed: 1 })
@@ -1317,6 +1414,55 @@ export function triggerOpenWorldGuard() {
   return true
 }
 
+export function triggerDodgeDash() {
+  const p = game.p
+  if (!p || game.panel) return false
+  if (game.dashCd > 0) return false
+  const map = currentMap()
+  const dirVec =
+    game.facing === 'left' ? [-1, 0] : game.facing === 'right' ? [1, 0] : game.facing === 'up' ? [0, -1] : [0, 1]
+  let moved = 0
+  for (let step = 0; step < 6; step++) {
+    const nx = p.x + dirVec[0] * 6
+    const ny = p.y + dirVec[1] * 6
+    if (!boxBlocked(map, nx, ny, 4, 3)) {
+      p.x = nx
+      p.y = ny
+      moved += 6
+    }
+  }
+  game.dashCd = 2.4
+  game.invulnUntil = game.time + 0.55
+  addEffect({ type: 'ring', x: p.x, y: p.y - 6, r: 18, color: '#22d3ee', max: 0.35 })
+  addFloat(p.x, p.y - 28, moved > 0 ? 'DASH!' : 'EVADE!', '#22d3ee', 10)
+  notify()
+  return true
+}
+
+export function triggerUltimateSkill() {
+  const p = game.p
+  if (!p || game.panel) return false
+  if (game.ultimateCharge < 100) {
+    warn(`เกจท่าไม้ตายยังไม่เต็ม (${Math.round(game.ultimateCharge)}%)`)
+    return false
+  }
+  const r = 110
+  let hitCount = 0
+  for (const m of game.monsters) {
+    if (!m.dead && Math.hypot(m.x - p.x, m.y - p.y) <= r) {
+      damageMonster(m, 5.2, 'ultimate_burst')
+      hitCount += 1
+    }
+  }
+  game.ultimateCharge = 0
+  game.attackAnim = 0.45
+  addEffect({ type: 'burst', x: p.x, y: p.y - 8, r, color: '#fbbf24', secondaryColor: '#f43f5e', vfxStyle: 'light_judgment', max: 0.9 })
+  addFloat(p.x, p.y - 36, 'ULTIMATE!', '#fbbf24', 15)
+  say('system', hitCount > 0 ? `★ ปลดปล่อยท่าไม้ตาย! โดนมอนสเตอร์ ${hitCount} ตัว` : '★ ปลดปล่อยท่าไม้ตายแห่งแสง!')
+  notify()
+  return true
+}
+
 export function toggleZenHud(force?: boolean) {
   game.zenHud = typeof force === 'boolean' ? force : !game.zenHud
   notify()
@@ -1325,6 +1471,10 @@ export function toggleZenHud(force?: boolean) {
 function hurtPlayer(rawAtk: number) {
   const p = player()
   game.combatT = 0
+  if (game.invulnUntil > game.time) {
+    addFloat(p.x, p.y - 24, 'DODGE!', '#22d3ee', 10)
+    return
+  }
   if (p.god) {
     addFloat(p.x, p.y - 22, 'GOD', '#ffd60a', 9)
     return
@@ -1354,13 +1504,22 @@ function die() {
 const ROLE_PANEL: Record<NpcRole, PanelId> = { shop: 'shop', enhance: 'enhance', job: 'job', storage: 'storage', gacha: 'gacha', rebirth: 'rebirth' }
 
 export function interact() {
+  if (!game.p) return false
   const npc = game.nearNpc
-  if (!npc || !game.p) return false
-  game.keys.clear()
-  game.panel = ROLE_PANEL[npc.role]
-  say('npc', npc.greeting, npc.name)
-  notify()
-  return true
+  if (npc) {
+    game.keys.clear()
+    game.panel = ROLE_PANEL[npc.role]
+    say('npc', npc.greeting, npc.name)
+    notify()
+    return true
+  }
+  const node = findNearbyGatheringNode(game.p.mapId, game.p.x, game.p.y)
+  if (node) {
+    const res = gatherNearbyNodeAction(node.id)
+    if (!res.ok) warn(res.message)
+    return true
+  }
+  return false
 }
 
 export function rebirth() {
@@ -2289,6 +2448,477 @@ export function claimWorldBossMilestoneAction(milestoneId: string): { ok: boolea
   }
 }
 
+/* ---------------- Extended RPG Systems Actions ---------------- */
+
+export function gatherNearbyNodeAction(nodeId?: string): { ok: boolean; message: string } {
+  const p = player()
+  if (game.gatherCd > 0) {
+    return { ok: false, message: `กรุณารอสักครู่ (${game.gatherCd.toFixed(1)}s)` }
+  }
+  const node = nodeId
+    ? GATHERING_NODES.find((n) => n.id === nodeId) ?? null
+    : findNearbyGatheringNode(p.mapId, p.x, p.y)
+  if (!node) {
+    return { ok: false, message: 'ไม่มีแหล่งวัตถุดิบในระยะ (เดินเข้าใกล้จุดเก็บเกี่ยว)' }
+  }
+  const extV2 = sanitizeExtV2(p.extV2)
+  const prog = extV2.lifeSkills[node.skill]
+  const drop = rollGatheringDrops(node, prog.level)
+  const addedNames: string[] = []
+  for (const item of drop.items) {
+    if (addItem(item.itemId, item.qty)) {
+      addedNames.push(`${ITEMS[item.itemId]?.name ?? item.itemId} x${item.qty}`)
+    }
+  }
+  if (addedNames.length === 0) {
+    return { ok: false, message: 'กระเป๋าเต็ม กรุณาเคลียร์ช่องก่อนเก็บเกี่ยว' }
+  }
+  prog.exp += drop.expGain
+  let leveledUp = false
+  while (prog.level < 50 && prog.exp >= lifeSkillExpToNext(prog.level)) {
+    prog.exp -= lifeSkillExpToNext(prog.level)
+    prog.level += 1
+    leveledUp = true
+  }
+  extV2.gatherCount += 1
+  const bpRes = grantBattlePassExpToState(extV2.battlePass, 15)
+  extV2.battlePass = bpRes.next
+  p.extV2 = extV2
+  game.gatherCd = 1.6
+  addFloat(p.x, p.y - 26, `+${addedNames[0]}`, node.color, 9)
+  const meta = LIFE_SKILL_META[node.skill]
+  const msg = `${meta.actionLabel}สำเร็จ: ได้ ${addedNames.join(', ')}${leveledUp ? ` · ${meta.label} Lv.${prog.level}!` : ''}`
+  say('loot', msg)
+  saveGame()
+  notify()
+  return { ok: true, message: msg }
+}
+
+export function cookFoodAction(itemId: string): { ok: boolean; message: string } {
+  const p = player()
+  const recipe = FOOD_BUFF_DEFS.find((f) => f.itemId === itemId)
+  if (!recipe) return { ok: false, message: 'ไม่พบสูตรอาหาร' }
+  if (p.gold < recipe.goldCost) return { ok: false, message: `ทองไม่พอ (ต้องการ ${recipe.goldCost.toLocaleString()} G)` }
+  for (const ing of recipe.ingredients) {
+    if (countItem(ing.itemId) < ing.qty) {
+      return { ok: false, message: `วัตถุดิบ ${ITEMS[ing.itemId]?.name ?? ing.itemId} ไม่พอ (ต้องการ ${ing.qty})` }
+    }
+  }
+  if (!addItem(recipe.itemId, 1)) {
+    return { ok: false, message: 'กระเป๋าเต็ม' }
+  }
+  for (const ing of recipe.ingredients) {
+    removeItemId(ing.itemId, ing.qty)
+  }
+  p.gold -= recipe.goldCost
+  const extV2 = sanitizeExtV2(p.extV2)
+  extV2.battlePass = grantBattlePassExpToState(extV2.battlePass, 20).next
+  p.extV2 = extV2
+  say('loot', `ปรุงอาหาร ${recipe.name} สำเร็จ! (เก็บไว้ในกระเป๋าและกดใช้เมื่อต้องการบัฟ)`)
+  saveGame()
+  notify()
+  return { ok: true, message: `ปรุง ${recipe.name} สำเร็จ! (กดใช้ในหน้านี้หรือกระเป๋าได้ทันที)` }
+}
+
+export function upgradeSkillAction(skillId: string): { ok: boolean; message: string } {
+  const p = player()
+  const skill = currentJob().skills.find((s) => s.id === skillId)
+  if (!skill) return { ok: false, message: 'ไม่พบสกิลของอาชีพปัจจุบัน' }
+  p.skillLevels ??= {}
+  const curLv = p.skillLevels[skillId] ?? 1
+  if (curLv >= MAX_SKILL_UPGRADE) return { ok: false, message: `สกิล ${skill.name} ถึงระดับสูงสุด (Lv.${MAX_SKILL_UPGRADE}) แล้ว` }
+  const cost = skillUpgradeCost(curLv)
+  if ((p.skillPoints ?? 0) < cost.skillPoints) return { ok: false, message: 'แต้มสกิล (Skill Points) ไม่พอ — ได้รับเมื่อเลเวลอัป' }
+  if (p.gold < cost.gold) return { ok: false, message: `ทองไม่พอ (ต้องการ ${cost.gold.toLocaleString()} G)` }
+  p.skillPoints = Math.max(0, (p.skillPoints ?? 0) - cost.skillPoints)
+  p.gold -= cost.gold
+  p.skillLevels[skillId] = curLv + 1
+  say('system', `อัปเกรดสกิล ${skill.name} เป็น Lv.${curLv + 1}!`)
+  saveGame()
+  notify()
+  return { ok: true, message: `อัปเกรด ${skill.name} เป็น Lv.${curLv + 1} สำเร็จ!` }
+}
+
+export function upgradeTalentAction(talentId: string): { ok: boolean; message: string } {
+  const p = player()
+  const node = TALENT_NODES.find((t) => t.id === talentId)
+  if (!node) return { ok: false, message: 'ไม่พบ Talent ที่เลือก' }
+  const extV2 = sanitizeExtV2(p.extV2)
+  const curRank = extV2.talents[talentId] ?? 0
+  if (curRank >= node.maxRank) return { ok: false, message: `${node.name} ถึงขั้นสูงสุดแล้ว` }
+  const costGold = 200 * (curRank + 1)
+  if ((p.skillPoints ?? 0) < 1) return { ok: false, message: 'แต้มสกิลไม่พอ (ต้องการ 1 แต้ม)' }
+  if (p.gold < costGold) return { ok: false, message: `ทองไม่พอ (ต้องการ ${costGold.toLocaleString()} G)` }
+  p.skillPoints = Math.max(0, (p.skillPoints ?? 0) - 1)
+  p.gold -= costGold
+  extV2.talents[talentId] = curRank + 1
+  p.extV2 = extV2
+  clampVitals()
+  say('system', `อัปเกรด Talent "${node.name}" เป็นระดับ ${curRank + 1}/${node.maxRank}`)
+  saveGame()
+  notify()
+  return { ok: true, message: `อัปเกรด ${node.name} เป็น ${curRank + 1}/${node.maxRank} สำเร็จ!` }
+}
+
+export function resetTalentsAction(): { ok: boolean; message: string } {
+  const p = player()
+  const extV2 = sanitizeExtV2(p.extV2)
+  const spent = Object.values(extV2.talents).reduce((s, r) => s + r, 0)
+  if (spent === 0) return { ok: false, message: 'ยังไม่มี Talent ที่อัปไว้' }
+  if (p.gold < 500) return { ok: false, message: 'ต้องใช้ 500 G เพื่อรีเซ็ตสาย Talent' }
+  p.gold -= 500
+  p.skillPoints = (p.skillPoints ?? 0) + spent
+  extV2.talents = {}
+  p.extV2 = extV2
+  clampVitals()
+  saveGame()
+  notify()
+  return { ok: true, message: `รีเซ็ตสาย Talent สำเร็จ คืน ${spent} แต้มสกิล` }
+}
+
+export function evolveCombatPetAction(petId: string): { ok: boolean; message: string } {
+  const p = player()
+  p.petState = sanitizePetState(p.petState, p.ownedGemItems, p.equippedGemCompanion)
+  const entry = p.petState.ownedPets[petId]
+  const def = getCombatPetDef(petId)
+  if (!entry || !def) return { ok: false, message: 'ไม่พบสัตว์เลี้ยง' }
+  const curStars = entry.stars ?? 1
+  if (curStars >= MAX_PET_STARS) return { ok: false, message: 'วิวัฒนาการครบ 5★ สูงสุดแล้ว' }
+  const cost = petEvolveCost(curStars)
+  if (p.gold < cost.gold) return { ok: false, message: `ทองไม่พอ (ต้องการ ${cost.gold.toLocaleString()} G)` }
+  if (countItem('pet_essence') < cost.essence) {
+    return { ok: false, message: `ผลึกวิวัฒนาการคู่หูไม่พอ (ต้องการ ${cost.essence} ชิ้น — หาได้จากเก็บเกี่ยว/Battle Pass)` }
+  }
+  p.gold -= cost.gold
+  removeItemId('pet_essence', cost.essence)
+  entry.stars = curStars + 1
+  clampVitals()
+  saveGame()
+  notify()
+  say('loot', `★ วิวัฒนาการ ${def.name} เป็น ${entry.stars} ดาวสำเร็จ!`)
+  return { ok: true, message: `${def.name} วิวัฒนาการเป็น ${entry.stars}★ สำเร็จ! (2★+ ปลดล็อกเก็บของอัตโนมัติ)` }
+}
+
+export function unlockBattlePassPremiumAction(): { ok: boolean; message: string } {
+  const p = player()
+  const extV2 = sanitizeExtV2(p.extV2)
+  if (extV2.battlePass.premiumUnlocked) return { ok: false, message: 'เปิดใช้งาน Premium Pass แล้ว' }
+  if (p.diamonds < BP_PREMIUM_DIAMOND_COST) {
+    return { ok: false, message: `เพชรไม่พอ (ต้องการ ${BP_PREMIUM_DIAMOND_COST} เพชร)` }
+  }
+  p.diamonds -= BP_PREMIUM_DIAMOND_COST
+  extV2.battlePass.premiumUnlocked = true
+  p.extV2 = extV2
+  saveGame()
+  notify()
+  return { ok: true, message: 'ปลดล็อก Aurora Premium Battle Pass สำเร็จ!' }
+}
+
+export function claimBattlePassTierAction(level: number, track: 'free' | 'prem'): { ok: boolean; message: string } {
+  const p = player()
+  const extV2 = sanitizeExtV2(p.extV2)
+  const bp = extV2.battlePass
+  const tier = BATTLE_PASS_TIERS.find((t) => t.level === level)
+  if (!tier) return { ok: false, message: 'ไม่พบระดับรางวัล' }
+  if (bp.level < level) return { ok: false, message: `ต้องมี Battle Pass Lv.${level} ก่อน` }
+  if (track === 'prem' && !bp.premiumUnlocked) return { ok: false, message: 'ต้องปลดล็อก Premium Pass ก่อน' }
+  const list = track === 'free' ? bp.claimedFree : bp.claimedPrem
+  if (list.includes(level)) return { ok: false, message: 'รับรางวัลขั้นนี้ไปแล้ว' }
+
+  const reward = track === 'free' ? tier.freeReward : tier.premReward
+  list.push(level)
+  if (reward.gold) p.gold += reward.gold
+  if (reward.diamonds) p.diamonds = (p.diamonds ?? 0) + reward.diamonds
+  if (reward.stones) addItem('enhance_stone', reward.stones)
+  if (reward.itemId) addItem(reward.itemId, reward.qty ?? 1)
+  if ('cosmeticId' in reward && reward.cosmeticId && !extV2.unlockedCosmetics.includes(reward.cosmeticId)) {
+    extV2.unlockedCosmetics.push(reward.cosmeticId)
+  }
+  p.extV2 = extV2
+  saveGame()
+  notify()
+  say('loot', `รับรางวัล Battle Pass Lv.${level}: ${reward.label}`)
+  return { ok: true, message: `รับ ${reward.label} สำเร็จ!` }
+}
+
+export function grantBattlePassExpAction(amount: number) {
+  const p = player()
+  const extV2 = sanitizeExtV2(p.extV2)
+  const res = grantBattlePassExpToState(extV2.battlePass, amount)
+  extV2.battlePass = res.next
+  p.extV2 = extV2
+  saveGame()
+  notify()
+}
+
+export function unlockCosmeticAction(cosmeticId: string): { ok: boolean; message: string } {
+  const p = player()
+  const def = getCosmeticDef(cosmeticId)
+  if (!def) return { ok: false, message: 'ไม่พบชุดแฟชั่น/ปีก' }
+  const extV2 = sanitizeExtV2(p.extV2)
+  if (extV2.unlockedCosmetics.includes(cosmeticId)) return { ok: false, message: 'คุณเป็นเจ้าของไอเทมนี้แล้ว' }
+  if (def.goldCost && p.gold < def.goldCost) return { ok: false, message: `ทองไม่พอ (ต้องการ ${def.goldCost.toLocaleString()} G)` }
+  if (def.diamondCost > 0 && p.diamonds < def.diamondCost) return { ok: false, message: `เพชรไม่พอ (ต้องการ ${def.diamondCost} เพชร)` }
+  if (def.goldCost) p.gold -= def.goldCost
+  if (def.diamondCost > 0) p.diamonds -= def.diamondCost
+  extV2.unlockedCosmetics.push(cosmeticId)
+  if (def.slot === 'wing') extV2.equippedWing = cosmeticId
+  else if (def.slot === 'weaponSkin') extV2.equippedWeaponSkin = cosmeticId
+  else extV2.equippedFrame = cosmeticId
+  p.extV2 = extV2
+  saveGame()
+  notify()
+  return { ok: true, message: `ปลดล็อกและสวมใส่ ${def.name} แล้ว!` }
+}
+
+export function equipCosmeticAction(slot: CosmeticSlot, cosmeticId: string | null): { ok: boolean; message: string } {
+  const p = player()
+  const extV2 = sanitizeExtV2(p.extV2)
+  if (cosmeticId && !extV2.unlockedCosmetics.includes(cosmeticId)) {
+    return { ok: false, message: 'ยังไม่ได้ปลดล็อกแฟชั่นชิ้นนี้' }
+  }
+  if (slot === 'wing') extV2.equippedWing = cosmeticId
+  else if (slot === 'weaponSkin') extV2.equippedWeaponSkin = cosmeticId
+  else extV2.equippedFrame = cosmeticId
+  p.extV2 = extV2
+  saveGame()
+  notify()
+  return { ok: true, message: cosmeticId ? `สวมใส่ ${getCosmeticDef(cosmeticId)?.name ?? cosmeticId} แล้ว` : 'ถอดเครื่องประดับแล้ว' }
+}
+
+export function saveLoadoutAction(index: number, customName?: string): { ok: boolean; message: string } {
+  const p = player()
+  if (index < 0 || index >= MAX_LOADOUTS) return { ok: false, message: 'ไม่พบสล็อตพรีเซ็ต' }
+  const extV2 = sanitizeExtV2(p.extV2)
+  const slots: EquipmentSlot[] = ['weapon', 'armor', 'shoes', 'cloak', 'accessory']
+  const equipmentUids: Partial<Record<EquipmentSlot, string | null>> = {}
+  for (const s of slots) equipmentUids[s] = p.equipment[s]?.uid ?? null
+  extV2.loadouts[index] = {
+    id: extV2.loadouts[index]?.id ?? `preset_${index + 1}`,
+    name: customName?.trim() ? customName.trim().slice(0, 20) : extV2.loadouts[index]?.name ?? `พรีเซ็ต ${index + 1}`,
+    equipmentUids,
+    wingId: extV2.equippedWing,
+    weaponSkinId: extV2.equippedWeaponSkin,
+  }
+  p.extV2 = extV2
+  saveGame()
+  notify()
+  return { ok: true, message: `บันทึกเซ็ตอุปกรณ์ "${extV2.loadouts[index].name}" แล้ว!` }
+}
+
+export function applyLoadoutAction(index: number): { ok: boolean; message: string } {
+  const p = player()
+  const extV2 = sanitizeExtV2(p.extV2)
+  const preset = extV2.loadouts[index]
+  if (!preset) return { ok: false, message: 'ไม่พบสล็อตพรีเซ็ต' }
+  const slots: EquipmentSlot[] = ['weapon', 'armor', 'shoes', 'cloak', 'accessory']
+  let swapped = 0
+  for (const slot of slots) {
+    const targetUid = preset.equipmentUids[slot]
+    if (!targetUid || p.equipment[slot]?.uid === targetUid) continue
+    const invItem = p.inventory.find((i) => i.uid === targetUid)
+    if (invItem && !canEquip(invItem)) {
+      equip(invItem.uid)
+      swapped += 1
+    }
+  }
+  if (preset.wingId && extV2.unlockedCosmetics.includes(preset.wingId)) extV2.equippedWing = preset.wingId
+  if (preset.weaponSkinId && extV2.unlockedCosmetics.includes(preset.weaponSkinId)) extV2.equippedWeaponSkin = preset.weaponSkinId
+  p.extV2 = extV2
+  saveGame()
+  notify()
+  return { ok: true, message: `สลับเป็นเซ็ต "${preset.name}" สำเร็จ (เปลี่ยนอุปกรณ์ ${swapped} ชิ้น)` }
+}
+
+export function isBeginnerGuideStepReady(stepId: string, p: SaveData): boolean {
+  const ext = sanitizeRpgExt(p.rpgExt)
+  const extV2 = sanitizeExtV2(p.extV2)
+  switch (stepId) {
+    case 'guide_kill_5':
+      return p.kills >= 5
+    case 'guide_gather_1':
+      return extV2.gatherCount >= 1
+    case 'guide_enhance_1': {
+      const eqPlus = Object.values(p.equipment).some((it) => (it?.plus ?? 0) >= 1)
+      const invPlus = p.inventory.some((it) => it.plus >= 1)
+      return eqPlus || invPlus || (p.questState?.totalEnhances ?? 0) >= 1
+    }
+    case 'guide_talent_1': {
+      const spentTalents = Object.values(extV2.talents).reduce((s, v) => s + v, 0)
+      const upgradedSkill = Object.values(p.skillLevels ?? {}).some((lv) => lv > 1)
+      return spentTalents >= 1 || upgradedSkill
+    }
+    case 'guide_pet_1':
+      return Object.keys(p.petState?.ownedPets ?? {}).length >= 1
+    case 'guide_dungeon_1': {
+      const dungeonRuns = Object.values(ext.dailyDungeonRuns).reduce((s, v) => s + v, 0)
+      return (p.towerState?.totalClears ?? 0) >= 1 || dungeonRuns >= 1
+    }
+    default:
+      return false
+  }
+}
+
+export function claimBeginnerGuideStepAction(stepId: string): { ok: boolean; message: string } {
+  const p = player()
+  const step = BEGINNER_GUIDE_STEPS.find((s) => s.id === stepId)
+  if (!step) return { ok: false, message: 'ไม่พบภารกิจคู่มือ' }
+  const extV2 = sanitizeExtV2(p.extV2)
+  if (extV2.claimedGuideSteps.includes(stepId)) return { ok: false, message: 'รับรางวัลขั้นนี้ไปแล้ว' }
+  if (!isBeginnerGuideStepReady(stepId, p)) return { ok: false, message: 'เงื่อนไขยังไม่ครบ' }
+
+  extV2.claimedGuideSteps.push(stepId)
+  p.gold += step.rewardGold
+  p.diamonds = (p.diamonds ?? 0) + step.rewardDiamonds
+  if (step.rewardStones > 0) addItem('enhance_stone', step.rewardStones)
+  extV2.battlePass = grantBattlePassExpToState(extV2.battlePass, 30).next
+  p.extV2 = extV2
+  saveGame()
+  notify()
+  return {
+    ok: true,
+    message: `สำเร็จบทเรียน "${step.title}" (+${step.rewardGold} G, +${step.rewardDiamonds} เพชร, หิน x${step.rewardStones})`,
+  }
+}
+
+export function claimOfflineAfkAction(): { ok: boolean; message: string } {
+  const p = player()
+  const summary = game.offlineAfkReward
+  if (!summary) return { ok: false, message: 'ไม่มีรางวัลออฟไลน์ค้างรับ' }
+  game.offlineAfkReward = null
+  p.gold += summary.gold
+  if (summary.stones > 0) addItem('enhance_stone', summary.stones)
+  gainExp(summary.exp)
+  saveGame()
+  notify()
+  say('loot', `รับรางวัลฟาร์มออฟไลน์ ${summary.elapsedMinutes} นาที: +${summary.gold} G, +${summary.exp} EXP`)
+  return { ok: true, message: 'รับรางวัลออฟไลน์สำเร็จ!' }
+}
+
+function spawnTownInvasionWave(wave: number) {
+  const map = MAPS.town
+  const pool = wave === 1 ? ['slime', 'pink_slime', 'goblin'] : wave === 2 ? ['wolf', 'goblin', 'skeleton'] : ['goblin_chief', 'ghost', 'goblin']
+  const count = wave === 3 ? 5 : 4
+  for (let i = 0; i < count; i++) {
+    const defId = pool[i % pool.length]
+    const tx = 18 + (i % 3) * 4
+    const ty = 12 + Math.floor(i / 3) * 6
+    const m = makeMonster(defId, (tx + 0.5) * TILE, (ty + 0.5) * TILE)
+    m.respawnAt = Infinity
+    m.provoked = true
+    game.monsters.push(m)
+  }
+}
+
+export function startTownInvasionAction(): { ok: boolean; message: string } {
+  const p = player()
+  if (p.mapId !== 'town') {
+    const town = MAPS.town
+    changeMap('town', town.spawn.x, town.spawn.y)
+  }
+  if (game.invasion?.active) return { ok: false, message: 'กิจกรรมป้องกันเมืองกำลังดำเนินอยู่แล้ว!' }
+  game.invasion = { active: true, wave: 1, maxWaves: 3, rewardDiamonds: 15 }
+  game.monsters = []
+  spawnTownInvasionWave(1)
+  game.panel = null
+  say('gm', '★ สัญญาณเตือนภัย! กองทัพมอนสเตอร์บุกเมือง Wave 1/3 — ช่วยกันปราบให้หมด!')
+  notify()
+  return { ok: true, message: 'เริ่มภารกิจป้องกันเมือง Wave 1/3 แล้ว!' }
+}
+
+export function listInventoryItemForMarketAction(
+  itemUid: string,
+  qty: number,
+): { ok: boolean; message: string; item?: { itemId: string; itemName: string; qty: number; plus: number; kind: string } } {
+  const p = player()
+  const it = p.inventory.find((i) => i.uid === itemUid)
+  if (!it) return { ok: false, message: 'ไม่พบไอเทมในกระเป๋า' }
+  const def = ITEMS[it.itemId]
+  if (!isItemListableOnMarket(def)) return { ok: false, message: 'ไอเทมนี้ไม่สามารถลงตลาดได้' }
+  const safeQty = Math.max(1, Math.min(it.qty, Math.floor(qty)))
+  const removed = removeUid(p.inventory, itemUid, safeQty)
+  if (!removed) return { ok: false, message: 'ไม่สามารถย้ายไอเทมลงตลาดได้' }
+  saveGame()
+  notify()
+  return {
+    ok: true,
+    message: `ลงขาย ${def?.name ?? removed.itemId} x${removed.qty}`,
+    item: {
+      itemId: removed.itemId,
+      itemName: def?.name ?? removed.itemId,
+      qty: removed.qty,
+      plus: removed.plus,
+      kind: def?.kind ?? 'material',
+    },
+  }
+}
+
+export function completeMarketPurchaseAction(
+  costGold: number,
+  item: { itemId: string; qty: number; plus: number },
+): { ok: boolean; message: string } {
+  const p = player()
+  if (p.gold < costGold) return { ok: false, message: `ทองไม่พอ (ต้องการ ${costGold.toLocaleString()} G)` }
+  if (!addItem(item.itemId, item.qty, item.plus)) {
+    return { ok: false, message: 'กระเป๋าเต็ม กรุณาเคลียร์ช่องก่อนซื้อ' }
+  }
+  p.gold -= costGold
+  saveGame()
+  notify()
+  return { ok: true, message: `ซื้อ ${ITEMS[item.itemId]?.name ?? item.itemId} x${item.qty} สำเร็จ!` }
+}
+
+export function receiveMarketProceedsAction(gold: number) {
+  const p = player()
+  p.gold += Math.max(0, Math.floor(gold))
+  saveGame()
+  notify()
+}
+
+export function deductGoldForMailGiftAction(gold: number): boolean {
+  const p = player()
+  const safe = Math.max(0, Math.floor(gold))
+  if (p.gold < safe) return false
+  p.gold -= safe
+  saveGame()
+  notify()
+  return true
+}
+
+export function claimMailboxRewardAction(reward: {
+  gold?: number
+  diamonds?: number
+  itemId?: string
+  qty?: number
+  plus?: number
+}): { ok: boolean; message: string } {
+  const p = player()
+  if (reward.itemId && ITEMS[reward.itemId]) {
+    if (!addItem(reward.itemId, reward.qty ?? 1, reward.plus ?? 0)) {
+      return { ok: false, message: 'กระเป๋าเต็ม กรุณาเคลียร์ช่องก่อนรับของขวัญ' }
+    }
+  }
+  if (reward.gold) p.gold += reward.gold
+  if (reward.diamonds) p.diamonds = (p.diamonds ?? 0) + reward.diamonds
+  saveGame()
+  notify()
+  return { ok: true, message: 'รับไอเทมจากจดหมายเข้ากระเป๋าแล้ว!' }
+}
+
+export function recordCoopDungeonClearAction(gold: number, diamonds: number, exp: number, stones: number) {
+  const p = player()
+  p.gold += Math.max(0, gold)
+  p.diamonds = (p.diamonds ?? 0) + Math.max(0, diamonds)
+  if (stones > 0) addItem('enhance_stone', stones)
+  const extV2 = sanitizeExtV2(p.extV2)
+  extV2.coopClears += 1
+  extV2.battlePass = grantBattlePassExpToState(extV2.battlePass, 35).next
+  p.extV2 = extV2
+  gainExp(exp)
+  saveGame()
+  notify()
+}
+
 /* ---------------- chat & commands ---------------- */
 
 export function submitChat(raw: string) {
@@ -2801,6 +3431,14 @@ function resetRuntime() {
   game.time = 0
   game.saveT = 0
   game.combatT = 99
+  game.dashCd = 0
+  game.invulnUntil = 0
+  game.gatherCd = 0
+  game.comboCount = 0
+  game.comboUntil = 0
+  game.ultimateCharge = 0
+  game.offlineAfkReward = null
+  game.invasion = null
 }
 
 function startSession(p: SaveData, welcome: string, persist = false) {
@@ -2814,8 +3452,9 @@ function startSession(p: SaveData, welcome: string, persist = false) {
   }
   populateMap()
   clampVitals()
+  syncBgmForMap(map.id, game.monsters.some((m) => !m.dead && Boolean(MONSTERS[m.defId]?.boss)))
   say('system', welcome)
-  say('system', 'WASD/ลูกศร เดิน • Space โจมตี • 1-3 สกิล • Q/R ยา • E คุยกับ NPC • I ตัวละคร • Enter แชท')
+  say('system', 'WASD/ลูกศร เดิน • Space โจมตี • 1-3 สกิล • X แดชหลบ • U ท่าไม้ตาย • E คุย/เก็บเกี่ยว • H ซ่อนUI')
   saveGame()
   notify()
 }
@@ -2906,9 +3545,13 @@ export function loadGame(d: SaveData) {
     questState: sanitizeQuestState(d.questState, finiteInt(d.kills, 0, Number.MAX_SAFE_INTEGER, 0)),
     towerState: sanitizeTowerState(d.towerState),
     rpgExt: sanitizeRpgExt(d.rpgExt),
+    extV2: sanitizeExtV2(d.extV2),
   }
   if (p.hp <= 0) p.hp = getStats(p).maxHp
+  const prevSavedAt = p.savedAt
   startSession(p, `ยินดีต้อนรับกลับ ${p.name}! โหลดความคืบหน้าล่าสุดแล้ว`, true)
+  game.offlineAfkReward = calculateOfflineAfkRewards(Date.now() - prevSavedAt, p.level, p.mapId)
+  if (game.offlineAfkReward) notify()
 }
 
 export function newGame(name: string) {
@@ -2957,6 +3600,7 @@ export function newGame(name: string) {
     questState: createDefaultQuestState(0),
     towerState: createDefaultTowerState(),
     rpgExt: createDefaultRpgExt(),
+    extV2: createDefaultExtV2(),
   }
   const s = getStats(p)
   p.hp = s.maxHp
@@ -2970,6 +3614,7 @@ export function newGame(name: string) {
 
 export function quitToTitle() {
   saveGame()
+  stopBgm()
   game.p = null
   resetRuntime()
   notify()
@@ -3003,8 +3648,13 @@ export function update(dt: number) {
   game.attackAnim = Math.max(0, game.attackAnim - dt)
   game.petAttackCd = Math.max(0, game.petAttackCd - dt)
   game.guardCd = Math.max(0, game.guardCd - dt)
+  game.dashCd = Math.max(0, game.dashCd - dt)
+  game.gatherCd = Math.max(0, game.gatherCd - dt)
   for (const k in game.skillCd) game.skillCd[k] -= dt
   game.combatT += dt
+  if (game.comboCount > 0 && game.time > game.comboUntil) {
+    game.comboCount = 0
+  }
   const prevNearNpcId = game.nearNpc?.id ?? null
   let uiDirty = false
   if (game.killToasts.some((t) => t.until <= game.time)) {
@@ -3128,6 +3778,29 @@ export function update(dt: number) {
 
   if (uiDirty) notify()
 
+  if (game.invasion?.active && map.id === 'town' && game.monsters.every((m) => m.dead)) {
+    if (game.invasion.wave < game.invasion.maxWaves) {
+      game.invasion.wave += 1
+      game.monsters = []
+      spawnTownInvasionWave(game.invasion.wave)
+      say('gm', `★ กองทัพบุกเมือง Wave ${game.invasion.wave}/${game.invasion.maxWaves} มาถึงแล้ว!`)
+    } else {
+      const rewardD = game.invasion.rewardDiamonds
+      game.invasion = null
+      game.monsters = []
+      p.gold += 800
+      p.diamonds = (p.diamonds ?? 0) + rewardD
+      const extV2 = sanitizeExtV2(p.extV2)
+      extV2.invasionWavesCleared += 1
+      extV2.battlePass = grantBattlePassExpToState(extV2.battlePass, 50).next
+      p.extV2 = extV2
+      gainExp(350)
+      say('loot', `★ ป้องกันเมืองสำเร็จ! รับ +800 G · +${rewardD} เพชร · +350 EXP`)
+      saveGame()
+    }
+    notify()
+  }
+
   game.saveT += dt
   if (game.saveT >= 10) saveGame()
 }
@@ -3149,7 +3822,7 @@ function updateMonsters(dt: number, map: MapDef) {
     m.attackCd -= dt
     m.lunge = Math.max(0, m.lunge - dt)
     m.moving = false
-    if (map.safe) continue
+    if (map.safe && !(game.invasion?.active && map.id === 'town')) continue
     const previousX = m.x
     const previousY = m.y
     const def = MONSTERS[m.defId]

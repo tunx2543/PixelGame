@@ -1,9 +1,19 @@
 'use client'
 
-import { useState } from 'react'
-import { Coins, Gem, Hammer, Swords } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { Coins, Gem, Hammer, Swords, Users } from 'lucide-react'
 import { ITEMS } from '@/lib/game/data'
-import { completeDailyDungeonAction, getStats } from '@/lib/game/engine'
+import {
+  attackPartyCoopBoss,
+  fetchPartyCoopState,
+  type PartyCoopState,
+} from '@/lib/firebase/rpg-online'
+import {
+  completeDailyDungeonAction,
+  game,
+  getStats,
+  recordCoopDungeonClearAction,
+} from '@/lib/game/engine'
 import {
   DAILY_DUNGEONS,
   ELEMENT_META,
@@ -14,6 +24,7 @@ import {
   todayIsoDate,
   type DailyDungeonDef,
 } from '@/lib/game/rpg-systems'
+import { playQuestClaimSfx } from '@/lib/game/sfx'
 import { useGame } from '@/lib/game/use-game'
 import { formatNum } from '../format'
 import { PanelFrame, PxButton } from './panels'
@@ -22,6 +33,20 @@ export function DungeonPanel() {
   const g = useGame()
   const p = g.p
   const [notice, setNotice] = useState<string | null>(null)
+  const [coopState, setCoopState] = useState<PartyCoopState | null>(null)
+  const [busyCoop, setBusyCoop] = useState(false)
+
+  const activePartyId = game.party?.partyId ?? 'local_solo_party'
+  const playerName = p?.name ?? 'ผู้กล้า'
+
+  const refreshCoop = useCallback(async () => {
+    const state = await fetchPartyCoopState(activePartyId, playerName)
+    setCoopState(state)
+  }, [activePartyId, playerName])
+
+  useEffect(() => {
+    void refreshCoop()
+  }, [refreshCoop])
 
   if (!p) return null
   const ext = sanitizeRpgExt(p.rpgExt)
@@ -44,10 +69,29 @@ export function DungeonPanel() {
     setNotice(`${res.message}${extraParts.length ? ` · โบนัส: ${extraParts.join(', ')}` : ''}`)
   }
 
+  const handleCoopAttack = async () => {
+    if (busyCoop) return
+    setBusyCoop(true)
+    const partyMult = 1 + Math.max(0, (game.party?.memberIds.length ?? 1) - 1) * 0.25
+    const dmg = Math.max(85, Math.round(stats.atk * 3.1 * partyMult))
+    const res = await attackPartyCoopBoss(activePartyId, { playerName: p.name, damage: dmg })
+    setCoopState(res.state)
+    if (res.defeated) {
+      recordCoopDungeonClearAction(res.rewards.gold, res.rewards.diamonds, res.rewards.exp, res.rewards.stones)
+      playQuestClaimSfx(true)
+      setNotice(
+        `พิชิตบอสปาร์ตี้สำเร็จ! +${formatNum(res.rewards.gold)} G · +${res.rewards.diamonds} เพชร · หิน x${res.rewards.stones}`,
+      )
+    } else {
+      setNotice(`โจมตีบอส Co-op ทำดาเมจ ${formatNum(dmg)}!`)
+    }
+    setBusyCoop(false)
+  }
+
   return (
     <PanelFrame
-      title="ดันเจี้ยนทรัพยากรรายวัน"
-      subtitle={`โควต้าประจำวัน (${today}) · สูงสุดโหมดละ 3 รอบ/วัน · ปรับรางวัลตามเลเวลและธาตุอาวุธของคุณ`}
+      title="ดันเจี้ยนทรัพยากร & Co-op ปาร์ตี้เรด"
+      subtitle={`โควต้าประจำวัน (${today}) · สูงสุดโหมดละ 3 รอบ/วัน + โถงบอส Co-op ไม่จำกัดรอบ`}
     >
       {notice && (
         <div className="mb-3 border border-emerald-400/60 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-300">
@@ -107,6 +151,44 @@ export function DungeonPanel() {
           )
         })}
       </div>
+
+      {/* Co-op Party Raid Section */}
+      {coopState && (
+        <div className="mt-4 border border-purple-400/50 bg-purple-500/10 p-3 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="flex items-center gap-1.5 text-sm font-bold text-purple-200">
+                <Users className="size-4" aria-hidden /> โถงเรดปาร์ตี้ Co-op: {coopState.bossName} (Lv.{coopState.level})
+              </h3>
+              <p className="text-[11px] text-muted-foreground tabular-nums">
+                โหมด: {game.party ? `ปาร์ตี้ "${game.party.name}" (${game.party.memberIds.length} คน)` : 'โหมดซ้อมเดี่ยว (สร้างปาร์ตี้เพื่อเพิ่มดาเมจทีม)'} · พิชิตแล้ว {coopState.clears} ครั้ง
+              </p>
+            </div>
+            <PxButton variant="accent" disabled={busyCoop} onClick={handleCoopAttack}>
+              <span className="flex items-center gap-1.5">
+                <Swords className="size-3.5" aria-hidden /> ช่วยกันตีบอส Co-op!
+              </span>
+            </PxButton>
+          </div>
+          <div className="mt-2 space-y-1">
+            <div className="flex justify-between text-[11px] tabular-nums">
+              <span className="text-purple-200">HP บอส Co-op</span>
+              <span>
+                {formatNum(coopState.currentHp)} / {formatNum(coopState.maxHp)}
+              </span>
+            </div>
+            <div className="h-2.5 w-full overflow-hidden border border-border bg-muted">
+              <div
+                className="h-full bg-purple-400 transition-[width]"
+                style={{
+                  width: `${Math.max(0, Math.round((coopState.currentHp / Math.max(1, coopState.maxHp)) * 100))}%`,
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </PanelFrame>
   )
 }
+

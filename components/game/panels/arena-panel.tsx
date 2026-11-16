@@ -22,6 +22,7 @@ export function ArenaPanel() {
   const g = useGame()
   const p = g.p
   const [tab, setTab] = useState<'arena' | 'leaderboard'>('arena')
+  const [sortMetric, setSortMetric] = useState<'cp' | 'tower' | 'arena'>('cp')
   const [heroes, setHeroes] = useState<LeaderboardHeroEntry[]>([])
   const [battleReport, setBattleReport] = useState<{
     opponent: LeaderboardHeroEntry
@@ -162,38 +163,72 @@ export function ArenaPanel() {
       )}
 
       {tab === 'leaderboard' && (
-        <div className="space-y-1.5">
-          {heroes.map((h, idx) => {
-            const isSelf = h.userId === myUid
-            const job = JOBS[h.jobId] ?? JOBS.novice
-            return (
-              <div
-                key={h.userId}
-                className={`flex items-center justify-between gap-2 border p-2.5 text-xs tabular-nums ${
-                  isSelf ? 'border-primary bg-primary/10' : 'border-border/70 bg-background/60'
-                }`}
+        <div className="space-y-2">
+          <div className="flex flex-wrap gap-1.5">
+            {(
+              [
+                ['cp', 'พลังรบ (CP)'],
+                ['tower', 'หอคอยสูงสุด'],
+                ['arena', 'คะแนนอารีน่า'],
+              ] as const
+            ).map(([key, label]) => (
+              <PxButton
+                key={key}
+                variant={sortMetric === key ? 'accent' : 'secondary'}
+                onClick={() => setSortMetric(key)}
+                className="px-2.5 py-1 text-[11px]"
               >
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="flex w-6 shrink-0 items-center justify-center font-bold text-amber-300">
-                    {idx === 0 ? <Crown className="size-4" aria-hidden /> : `#${idx + 1}`}
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate font-bold text-foreground">
-                      {h.name} {isSelf ? '(คุณ)' : ''} {h.guildName ? `[${h.guildName}]` : ''}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      Lv.{h.level} {job.name} · หอคอยชั้น {h.highestTowerFloor} · Arena {formatNum(h.arenaRating)}
-                    </p>
+                {label}
+              </PxButton>
+            ))}
+          </div>
+          <div className="space-y-1.5">
+            {[...heroes]
+              .sort((a, b) =>
+                sortMetric === 'tower'
+                  ? b.highestTowerFloor - a.highestTowerFloor
+                  : sortMetric === 'arena'
+                    ? b.arenaRating - a.arenaRating
+                    : b.combatPower - a.combatPower,
+              )
+              .map((h, idx) => {
+                const isSelf = h.userId === myUid
+                const job = JOBS[h.jobId] ?? JOBS.novice
+                const metricDisplay =
+                  sortMetric === 'tower'
+                    ? `ชั้น ${h.highestTowerFloor}`
+                    : sortMetric === 'arena'
+                      ? `${formatNum(h.arenaRating)} PT`
+                      : `${formatNum(h.combatPower)} CP`
+                return (
+                  <div
+                    key={h.userId}
+                    className={`flex items-center justify-between gap-2 border p-2.5 text-xs tabular-nums ${
+                      isSelf ? 'border-primary bg-primary/10' : 'border-border/70 bg-background/60'
+                    }`}
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="flex w-6 shrink-0 items-center justify-center font-bold text-amber-300">
+                        {idx === 0 ? <Crown className="size-4" aria-hidden /> : `#${idx + 1}`}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate font-bold text-foreground">
+                          {h.name} {isSelf ? '(คุณ)' : ''} {h.guildName ? `[${h.guildName}]` : ''}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          Lv.{h.level} {job.name} · หอคอยชั้น {h.highestTowerFloor} · Arena {formatNum(h.arenaRating)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <span className="flex items-center gap-1 font-bold text-primary">
+                        <Shield className="size-3.5" aria-hidden /> {metricDisplay}
+                      </span>
+                    </div>
                   </div>
-                </div>
-                <div className="shrink-0 text-right">
-                  <span className="flex items-center gap-1 font-bold text-primary">
-                    <Shield className="size-3.5" aria-hidden /> {formatNum(h.combatPower)} CP
-                  </span>
-                </div>
-              </div>
-            )
-          })}
+                )
+              })}
+          </div>
         </div>
       )}
     </PanelFrame>

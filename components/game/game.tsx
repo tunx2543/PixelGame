@@ -24,6 +24,7 @@ import { SocialNotifications } from './social-notifications'
 import { SocialPopover } from './social-popover'
 import { ITEMS } from '@/lib/game/data'
 import { CheckinModal } from './checkin-modal'
+import { OfflineAfkModal } from './offline-afk-modal'
 import { KillRewardToast } from './kill-reward-toast'
 import { ItemIcon } from './item-icon'
 
@@ -82,7 +83,7 @@ export function Game() {
         {showTouch && <TouchControls />}
 
         {/* มุมบนซ้าย: โปรไฟล์ + พลังชีวิต + ภารกิจย่อ */}
-        <div className="pointer-events-none absolute left-2 top-2 z-20 flex w-[13.25rem] flex-col gap-1 sm:w-[14.5rem]">
+        <div className="pointer-events-none absolute left-2 top-12 z-20 flex w-[11rem] flex-col gap-1 sm:top-2 sm:w-[14.5rem]">
           <CharacterBar compact={g.zenHud} />
           <Hud compact={g.zenHud} />
           {!g.zenHud && (
@@ -129,6 +130,7 @@ export function Game() {
         <PresenceSync />
         <Panels />
         {showCheckin && <CheckinModal onClose={() => setShowCheckin(false)} />}
+        <OfflineAfkModal />
 
         {narrowPortrait && !portraitDismissed && (
           <div className="pointer-events-auto absolute inset-x-3 top-1/2 z-50 -translate-y-1/2 pixel-panel p-4 text-center shadow-2xl">

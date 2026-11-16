@@ -9,7 +9,9 @@ import {
   openPanel,
   saveGame,
   toggleZenHud,
+  triggerDodgeDash,
   triggerOpenWorldGuard,
+  triggerUltimateSkill,
   update,
   drinkPotion,
   castSkill,
@@ -63,7 +65,7 @@ export function GameCanvas() {
             break
           }
         }
-        if (hasActiveSkillCd || game.guardCd > 0) notify()
+        if (hasActiveSkillCd || game.guardCd > 0 || game.dashCd > 0 || game.comboCount > 0) notify()
       }
       raf = requestAnimationFrame(loop)
     }
@@ -96,6 +98,12 @@ export function GameCanvas() {
       } else if (e.key === 'Shift') {
         e.preventDefault()
         triggerOpenWorldGuard()
+      } else if (k === 'x') {
+        e.preventDefault()
+        triggerDodgeDash()
+      } else if (k === 'u') {
+        e.preventDefault()
+        triggerUltimateSkill()
       } else if (k === 'h') {
         e.preventDefault()
         toggleZenHud()

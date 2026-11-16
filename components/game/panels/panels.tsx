@@ -25,6 +25,13 @@ import { CodexPanel } from './codex-panel'
 import { GuildBossPanel } from './guild-boss-panel'
 import { ArenaPanel } from './arena-panel'
 import { DungeonPanel } from './dungeon-panel'
+import { MarketPanel } from './market-panel'
+import { MailPanel } from './mail-panel'
+import { PassPanel } from './pass-panel'
+import { LifeSkillsPanel } from './lifeskills-panel'
+import { TalentsPanel } from './talents-panel'
+import { WardrobePanel } from './wardrobe-panel'
+import { GuidePanel } from './guide-panel'
 import { ModelGalleryView } from '../model-gallery-view'
 
 export function Panels() {
@@ -70,6 +77,20 @@ export function Panels() {
       return <ArenaPanel />
     case 'dungeon':
       return <DungeonPanel />
+    case 'market':
+      return <MarketPanel />
+    case 'mail':
+      return <MailPanel />
+    case 'pass':
+      return <PassPanel />
+    case 'lifeskills':
+      return <LifeSkillsPanel />
+    case 'talents':
+      return <TalentsPanel />
+    case 'wardrobe':
+      return <WardrobePanel />
+    case 'guide':
+      return <GuidePanel />
     case 'models':
       return (
         <PanelFrame title="คลังโมเดล 2D & แอนิเมชั่น" subtitle="พรีวิวโมเดลครบ 12 อาชีพ และ 17 มอนสเตอร์ พร้อมแอนิเมชั่น Idle / Walk / Attack">

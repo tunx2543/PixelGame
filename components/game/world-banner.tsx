@@ -1,18 +1,22 @@
 'use client'
 
-import { Users } from 'lucide-react'
+import { Moon, Sun, Users, Utensils } from 'lucide-react'
 import { currentMap, game, notify } from '@/lib/game/engine'
+import { getActiveFoodBuffBonuses, getWorldTimePhase, sanitizeExtV2 } from '@/lib/game/extended-systems'
 import { useGame } from '@/lib/game/use-game'
 import { MapMinimap } from './map-minimap'
 import { OnlinePlayersPopover } from './online-players-popover'
 import { SocialBar } from './social-bar'
 
 export function WorldBanner() {
-  useGame()
+  const { p } = useGame()
   const map = currentMap()
   const announcement = game.announcement && game.announcement.until > Date.now() ? game.announcement : null
   const totalOnline = game.onlinePlayers.filter((other) => !other.invisible).length
   const sameMapOnline = game.remotePlayers.filter((other) => !other.invisible && other.mapId === map.id).length
+  const worldPhase = getWorldTimePhase()
+  const extV2 = p ? sanitizeExtV2(p.extV2) : null
+  const foodBuff = extV2 ? getActiveFoodBuffBonuses(extV2.activeFoodBuff) : null
 
   return (
     <>
@@ -24,7 +28,7 @@ export function WorldBanner() {
       )}
       <div className={`pointer-events-none flex flex-col items-end gap-1 ${game.onlinePanelOpen ? 'z-40' : 'z-20'}`}>
         <MapMinimap />
-        <div className="flex flex-wrap items-center justify-end gap-1">
+        <div className="flex max-w-[11.25rem] flex-wrap items-center justify-end gap-1 sm:max-w-none">
           <button
             type="button"
             onClick={() => {
@@ -51,8 +55,27 @@ export function WorldBanner() {
           </button>
           <SocialBar />
         </div>
+        <div className="flex flex-wrap items-center justify-end gap-1 text-[10px]">
+          <span className="pixel-panel flex items-center gap-1 px-2 py-0.5 font-semibold text-amber-100/90 shadow">
+            {worldPhase.phase === 'night' ? (
+              <Moon className="size-3 text-indigo-300" aria-hidden />
+            ) : (
+              <Sun className="size-3 text-amber-300" aria-hidden />
+            )}
+            <span>{worldPhase.label}</span>
+          </span>
+          {foodBuff?.active && extV2?.activeFoodBuff && (
+            <span className="pixel-panel flex items-center gap-1 border-amber-400/50 px-2 py-0.5 font-semibold text-amber-200 shadow tabular-nums">
+              <Utensils className="size-3" aria-hidden />
+              <span>
+                {extV2.activeFoodBuff.name} ({foodBuff.remainingSec}s)
+              </span>
+            </span>
+          )}
+        </div>
         <OnlinePlayersPopover />
       </div>
     </>
   )
 }
+

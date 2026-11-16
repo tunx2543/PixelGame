@@ -704,6 +704,220 @@ service cloud.firestore {
         data.updatedAt is timestamp;
     }
 
+    function isValidGuildMessage(data, messageId) {
+      return data.keys().hasAll(['messageId', 'senderUid', 'senderName', 'senderGameUid', 'jobId', 'text', 'createdAtMs', 'createdAt']) &&
+        data.keys().hasOnly(['messageId', 'senderUid', 'senderName', 'senderGameUid', 'jobId', 'text', 'createdAtMs', 'createdAt']) &&
+        isValidId(data.messageId) &&
+        data.messageId == messageId &&
+        isValidId(data.senderUid) &&
+        data.senderName is string &&
+        data.senderName.size() >= 1 &&
+        data.senderName.size() <= 24 &&
+        isValidGameUid(data.senderGameUid) &&
+        data.jobId is string &&
+        data.jobId.size() >= 1 &&
+        data.jobId.size() <= 32 &&
+        data.jobId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.text is string &&
+        data.text.size() >= 1 &&
+        data.text.size() <= 180 &&
+        data.createdAtMs is int &&
+        data.createdAtMs >= 0 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidGuildRaid(data, guildId, raidId) {
+      return data.keys().hasAll(['raidId', 'guildId', 'bossName', 'level', 'maxHp', 'currentHp', 'clears', 'lastHitter', 'updatedAt']) &&
+        data.keys().hasOnly(['raidId', 'guildId', 'bossName', 'level', 'maxHp', 'currentHp', 'clears', 'lastHitter', 'updatedAt']) &&
+        isValidId(data.raidId) &&
+        data.raidId == raidId &&
+        isValidId(data.guildId) &&
+        data.guildId == guildId &&
+        data.bossName is string &&
+        data.bossName.size() >= 1 &&
+        data.bossName.size() <= 64 &&
+        data.level is int &&
+        data.level >= 1 &&
+        data.level <= 999 &&
+        data.maxHp is int &&
+        data.maxHp >= 1000 &&
+        data.currentHp is int &&
+        data.currentHp >= 0 &&
+        data.currentHp <= data.maxHp &&
+        data.clears is int &&
+        data.clears >= 0 &&
+        data.lastHitter is string &&
+        data.lastHitter.size() <= 24 &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidMarketListing(data, listingId) {
+      return data.keys().hasAll([
+          'listingId',
+          'sellerUid',
+          'sellerName',
+          'sellerGameUid',
+          'itemId',
+          'itemName',
+          'kind',
+          'qty',
+          'plus',
+          'priceGold',
+          'status',
+          'buyerUid',
+          'buyerName',
+          'createdAtMs',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'listingId',
+          'sellerUid',
+          'sellerName',
+          'sellerGameUid',
+          'itemId',
+          'itemName',
+          'kind',
+          'qty',
+          'plus',
+          'priceGold',
+          'status',
+          'buyerUid',
+          'buyerName',
+          'createdAtMs',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.listingId) &&
+        data.listingId == listingId &&
+        isValidId(data.sellerUid) &&
+        data.sellerName is string &&
+        data.sellerName.size() >= 1 &&
+        data.sellerName.size() <= 24 &&
+        isValidGameUid(data.sellerGameUid) &&
+        isValidId(data.itemId) &&
+        data.itemName is string &&
+        data.itemName.size() >= 1 &&
+        data.itemName.size() <= 64 &&
+        data.kind is string &&
+        data.kind.size() >= 1 &&
+        data.kind.size() <= 24 &&
+        data.qty is int &&
+        data.qty >= 1 &&
+        data.qty <= 999 &&
+        data.plus is int &&
+        data.plus >= 0 &&
+        data.plus <= 20 &&
+        data.priceGold is int &&
+        data.priceGold >= 1 &&
+        data.priceGold <= 100000000 &&
+        data.status in ['open', 'sold', 'cancelled'] &&
+        (data.buyerUid == null || isValidId(data.buyerUid)) &&
+        (data.buyerName == null || (data.buyerName is string && data.buyerName.size() >= 1 && data.buyerName.size() <= 24)) &&
+        data.createdAtMs is int &&
+        data.createdAtMs >= 0 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidMailMessage(data, mailId) {
+      return data.keys().hasAll([
+          'mailId',
+          'senderUid',
+          'senderName',
+          'senderGameUid',
+          'subject',
+          'body',
+          'gold',
+          'diamonds',
+          'itemId',
+          'qty',
+          'plus',
+          'claimed',
+          'createdAtMs',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'mailId',
+          'senderUid',
+          'senderName',
+          'senderGameUid',
+          'subject',
+          'body',
+          'gold',
+          'diamonds',
+          'itemId',
+          'qty',
+          'plus',
+          'claimed',
+          'createdAtMs',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.mailId) &&
+        data.mailId == mailId &&
+        isValidId(data.senderUid) &&
+        data.senderName is string &&
+        data.senderName.size() >= 1 &&
+        data.senderName.size() <= 24 &&
+        isValidGameUid(data.senderGameUid) &&
+        data.subject is string &&
+        data.subject.size() >= 1 &&
+        data.subject.size() <= 64 &&
+        data.body is string &&
+        data.body.size() >= 1 &&
+        data.body.size() <= 240 &&
+        data.gold is int &&
+        data.gold >= 0 &&
+        data.gold <= 10000000 &&
+        data.diamonds is int &&
+        data.diamonds >= 0 &&
+        data.diamonds <= 100000 &&
+        (data.itemId == null || isValidId(data.itemId)) &&
+        data.qty is int &&
+        data.qty >= 0 &&
+        data.qty <= 999 &&
+        data.plus is int &&
+        data.plus >= 0 &&
+        data.plus <= 20 &&
+        data.claimed is bool &&
+        data.createdAtMs is int &&
+        data.createdAtMs >= 0 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidPartyCoop(data, partyId, coopId) {
+      return data.keys().hasAll(['coopId', 'partyId', 'dungeonName', 'bossName', 'level', 'maxHp', 'currentHp', 'clears', 'participants', 'lastHitter', 'updatedAt']) &&
+        data.keys().hasOnly(['coopId', 'partyId', 'dungeonName', 'bossName', 'level', 'maxHp', 'currentHp', 'clears', 'participants', 'lastHitter', 'updatedAt']) &&
+        isValidId(data.coopId) &&
+        data.coopId == coopId &&
+        isValidId(data.partyId) &&
+        data.partyId == partyId &&
+        data.dungeonName is string &&
+        data.dungeonName.size() >= 1 &&
+        data.dungeonName.size() <= 64 &&
+        data.bossName is string &&
+        data.bossName.size() >= 1 &&
+        data.bossName.size() <= 64 &&
+        data.level is int &&
+        data.level >= 1 &&
+        data.level <= 999 &&
+        data.maxHp is int &&
+        data.maxHp >= 1000 &&
+        data.currentHp is int &&
+        data.currentHp >= 0 &&
+        data.currentHp <= data.maxHp &&
+        data.clears is int &&
+        data.clears >= 0 &&
+        data.participants is list &&
+        data.participants.size() <= 8 &&
+        data.lastHitter is string &&
+        data.lastHitter.size() <= 24 &&
+        data.updatedAt is timestamp;
+    }
+
     match /playerUids/{gameUid} {
       allow get: if isSignedIn() && isEmailVerified() && isValidGameUid(gameUid);
       allow list: if false;
@@ -921,6 +1135,46 @@ service cloud.firestore {
           existing().leaderId == request.auth.uid ||
           (existing().memberIds.size() == 1 && request.auth.uid in existing().memberIds)
         );
+
+      match /coops/{coopId} {
+        allow get: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(partyId) &&
+          isValidId(coopId) &&
+          exists(/databases/$(database)/documents/parties/$(partyId)) &&
+          request.auth.uid in get(/databases/$(database)/documents/parties/$(partyId)).data.memberIds;
+
+        allow list: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(partyId) &&
+          exists(/databases/$(database)/documents/parties/$(partyId)) &&
+          request.auth.uid in get(/databases/$(database)/documents/parties/$(partyId)).data.memberIds &&
+          request.query.limit != null &&
+          request.query.limit <= 5;
+
+        allow create: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(partyId) &&
+          isValidId(coopId) &&
+          exists(/databases/$(database)/documents/parties/$(partyId)) &&
+          request.auth.uid in get(/databases/$(database)/documents/parties/$(partyId)).data.memberIds &&
+          isValidPartyCoop(incoming(), partyId, coopId) &&
+          incoming().updatedAt == request.time;
+
+        allow update: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(partyId) &&
+          isValidId(coopId) &&
+          exists(/databases/$(database)/documents/parties/$(partyId)) &&
+          request.auth.uid in get(/databases/$(database)/documents/parties/$(partyId)).data.memberIds &&
+          isValidPartyCoop(incoming(), partyId, coopId) &&
+          incoming().coopId == existing().coopId &&
+          incoming().partyId == existing().partyId &&
+          incoming().clears >= existing().clears &&
+          incoming().updatedAt == request.time;
+
+        allow delete: if false;
+      }
     }
 
     match /partyInvites/{inviteId} {
@@ -1121,6 +1375,62 @@ service cloud.firestore {
           dateKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
           existing().ownerId == request.auth.uid;
       }
+
+      match /mailbox/{mailId} {
+        allow get: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(userId) &&
+          isValidId(mailId) &&
+          userId == request.auth.uid;
+
+        allow list: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(userId) &&
+          userId == request.auth.uid &&
+          request.query.limit != null &&
+          request.query.limit <= 40;
+
+        allow create: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(userId) &&
+          isValidId(mailId) &&
+          isValidMailMessage(incoming(), mailId) &&
+          incoming().claimed == false &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          isUserAccountOwner(request.auth.uid) &&
+          (
+            userId == request.auth.uid ||
+            (
+              incoming().senderUid == request.auth.uid &&
+              exists(/databases/$(database)/documents/users/$(userId))
+            )
+          );
+
+        allow update: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(userId) &&
+          isValidId(mailId) &&
+          userId == request.auth.uid &&
+          isValidMailMessage(incoming(), mailId) &&
+          !existing().claimed &&
+          incoming().claimed == true &&
+          incoming().mailId == existing().mailId &&
+          incoming().senderUid == existing().senderUid &&
+          incoming().gold == existing().gold &&
+          incoming().diamonds == existing().diamonds &&
+          incoming().itemId == existing().itemId &&
+          incoming().qty == existing().qty &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['claimed', 'updatedAt']);
+
+        allow delete: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(userId) &&
+          isValidId(mailId) &&
+          userId == request.auth.uid;
+      }
     }
 
     match /guilds/{guildId} {
@@ -1194,6 +1504,75 @@ service cloud.firestore {
         isValidId(guildId) &&
         existing().leaderId == request.auth.uid &&
         existing().memberCount <= 1;
+
+      match /messages/{messageId} {
+        allow get: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(guildId) &&
+          isValidId(messageId) &&
+          exists(/databases/$(database)/documents/guilds/$(guildId)) &&
+          request.auth.uid in get(/databases/$(database)/documents/guilds/$(guildId)).data.memberIds;
+
+        allow list: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(guildId) &&
+          exists(/databases/$(database)/documents/guilds/$(guildId)) &&
+          request.auth.uid in get(/databases/$(database)/documents/guilds/$(guildId)).data.memberIds &&
+          request.query.limit != null &&
+          request.query.limit <= 50;
+
+        allow create: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(guildId) &&
+          isValidId(messageId) &&
+          exists(/databases/$(database)/documents/guilds/$(guildId)) &&
+          request.auth.uid in get(/databases/$(database)/documents/guilds/$(guildId)).data.memberIds &&
+          isValidGuildMessage(incoming(), messageId) &&
+          incoming().senderUid == request.auth.uid &&
+          incoming().createdAt == request.time;
+
+        allow update, delete: if false;
+      }
+
+      match /raids/{raidId} {
+        allow get: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(guildId) &&
+          isValidId(raidId) &&
+          exists(/databases/$(database)/documents/guilds/$(guildId)) &&
+          request.auth.uid in get(/databases/$(database)/documents/guilds/$(guildId)).data.memberIds;
+
+        allow list: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(guildId) &&
+          exists(/databases/$(database)/documents/guilds/$(guildId)) &&
+          request.auth.uid in get(/databases/$(database)/documents/guilds/$(guildId)).data.memberIds &&
+          request.query.limit != null &&
+          request.query.limit <= 5;
+
+        allow create: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(guildId) &&
+          isValidId(raidId) &&
+          exists(/databases/$(database)/documents/guilds/$(guildId)) &&
+          request.auth.uid in get(/databases/$(database)/documents/guilds/$(guildId)).data.memberIds &&
+          isValidGuildRaid(incoming(), guildId, raidId) &&
+          incoming().updatedAt == request.time;
+
+        allow update: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(guildId) &&
+          isValidId(raidId) &&
+          exists(/databases/$(database)/documents/guilds/$(guildId)) &&
+          request.auth.uid in get(/databases/$(database)/documents/guilds/$(guildId)).data.memberIds &&
+          isValidGuildRaid(incoming(), guildId, raidId) &&
+          incoming().raidId == existing().raidId &&
+          incoming().guildId == existing().guildId &&
+          incoming().clears >= existing().clears &&
+          incoming().updatedAt == request.time;
+
+        allow delete: if false;
+      }
     }
 
     match /leaderboard/{userId} {
@@ -1311,6 +1690,72 @@ service cloud.firestore {
 
         allow delete: if false;
       }
+    }
+
+    match /marketListings/{listingId} {
+      allow get: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(listingId);
+
+      allow list: if isSignedIn() &&
+        isEmailVerified() &&
+        resource.data.status == 'open' &&
+        request.query.limit != null &&
+        request.query.limit <= 50;
+
+      allow create: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(listingId) &&
+        isValidMarketListing(incoming(), listingId) &&
+        incoming().sellerUid == request.auth.uid &&
+        incoming().status == 'open' &&
+        incoming().buyerUid == null &&
+        incoming().buyerName == null &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isUserAccountOwner(request.auth.uid);
+
+      allow update: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(listingId) &&
+        isValidMarketListing(incoming(), listingId) &&
+        existing().status == 'open' &&
+        incoming().listingId == existing().listingId &&
+        incoming().sellerUid == existing().sellerUid &&
+        incoming().sellerName == existing().sellerName &&
+        incoming().sellerGameUid == existing().sellerGameUid &&
+        incoming().itemId == existing().itemId &&
+        incoming().itemName == existing().itemName &&
+        incoming().kind == existing().kind &&
+        incoming().qty == existing().qty &&
+        incoming().plus == existing().plus &&
+        incoming().priceGold == existing().priceGold &&
+        incoming().createdAtMs == existing().createdAtMs &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'buyerUid', 'buyerName', 'updatedAt']) &&
+        (
+          (
+            request.auth.uid == existing().sellerUid &&
+            incoming().status == 'cancelled' &&
+            incoming().buyerUid == null &&
+            incoming().buyerName == null
+          ) ||
+          (
+            request.auth.uid != existing().sellerUid &&
+            incoming().status == 'sold' &&
+            incoming().buyerUid == request.auth.uid &&
+            incoming().buyerName is string &&
+            incoming().buyerName.size() >= 1 &&
+            incoming().buyerName.size() <= 24
+          )
+        );
+
+      allow delete: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(listingId) &&
+        existing().sellerUid == request.auth.uid &&
+        existing().status != 'open';
     }
   }
 }

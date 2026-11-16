@@ -15,6 +15,7 @@ import {
 } from './sprites'
 import { getActivePetBonuses } from './systems'
 import { TITLE_DEFS } from './rpg-systems'
+import { GATHERING_NODES, getCosmeticDef, getWorldTimePhase, sanitizeExtV2 } from './extended-systems'
 import { drawOverworldSkillEffect, drawRebirthAura } from './vfx-canvas'
 
 const THEME_BG: Record<string, string> = {
@@ -284,6 +285,31 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     ctx.textAlign = 'start'
   }
 
+  for (const node of GATHERING_NODES) {
+    if (node.mapId !== map.id) continue
+    const nx = (node.tx + 0.5) * TILE
+    const ny = (node.ty + 0.5) * TILE
+    const pulse = 0.55 + Math.sin(t * 4 + node.tx) * 0.3
+    ctx.save()
+    ctx.fillStyle = node.color
+    ctx.globalAlpha = 0.22 * pulse
+    ctx.beginPath()
+    ctx.ellipse(nx, ny + 2, 10, 6, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.globalAlpha = 0.9
+    ctx.strokeStyle = '#ffffff'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(nx, ny - 7)
+    ctx.lineTo(nx + 4, ny - 2)
+    ctx.lineTo(nx, ny + 3)
+    ctx.lineTo(nx - 4, ny - 2)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    ctx.restore()
+  }
+
   type Ent = { y: number; draw: () => void }
   const ents: Ent[] = []
 
@@ -469,6 +495,10 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   const weapon = p.equipment.weapon ? ITEMS[p.equipment.weapon.itemId] : null
   const gemFashion = GEM_SHOP_ITEMS.find((item) => item.id === p.equippedGemFashion)
   const activePet = getActivePetBonuses(p.petState, p.equippedGemCompanion, p.ownedGemItems)
+  const extV2 = sanitizeExtV2(p.extV2)
+  const equippedWing = getCosmeticDef(extV2.equippedWing)
+  const equippedWeaponSkin = getCosmeticDef(extV2.equippedWeaponSkin)
+  const equippedFrame = getCosmeticDef(extV2.equippedFrame)
   ents.push({
     y: p.y,
     draw: () => {
@@ -488,7 +518,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         game.facing,
         frame,
         weaponType,
-        weapon?.color ?? job.colors.accent,
+        equippedWeaponSkin?.primaryColor ?? weapon?.color ?? job.colors.accent,
         attacking,
         action,
         atkFrame,
@@ -508,6 +538,16 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       }
 
       shadow(ctx, p.x, p.y, 6)
+      if (game.invulnUntil > t) {
+        ctx.save()
+        ctx.strokeStyle = '#22d3ee'
+        ctx.lineWidth = 1.6
+        ctx.globalAlpha = 0.75
+        ctx.beginPath()
+        ctx.ellipse(p.x, p.y - 6, 13, 8, 0, 0, Math.PI * 2)
+        ctx.stroke()
+        ctx.restore()
+      }
       if (game.moving && !p.invisible) {
         ctx.save()
         ctx.fillStyle = 'rgba(255,255,255,0.28)'
@@ -536,6 +576,29 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           layer: 'back',
         })
       }
+      if (equippedWing) {
+        ctx.save()
+        ctx.globalAlpha = p.invisible ? 0.15 : 0.9
+        const flap = Math.sin(t * 6) * 2.5
+        ctx.fillStyle = equippedWing.primaryColor
+        ctx.strokeStyle = equippedWing.secondaryColor
+        ctx.lineWidth = 1
+        ctx.beginPath()
+        ctx.moveTo(p.x - 2, p.y - 15)
+        ctx.lineTo(p.x - 14, p.y - 23 - flap)
+        ctx.lineTo(p.x - 10, p.y - 11 - flap * 0.4)
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.moveTo(p.x + 2, p.y - 15)
+        ctx.lineTo(p.x + 14, p.y - 23 - flap)
+        ctx.lineTo(p.x + 10, p.y - 11 - flap * 0.4)
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+        ctx.restore()
+      }
       if (gemFashion?.id === 'nebula_dragon_wings') {
         ctx.save()
         ctx.globalAlpha = p.invisible ? 0.14 : 0.86
@@ -547,7 +610,13 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       ctx.translate(Math.round(p.x + ox), Math.round(p.y + oy))
       ctx.drawImage(img, Math.round(-drawW / 2), Math.round(-drawH + 2), drawW, drawH)
       if (attacking) {
-        drawWeaponAttackOverlay(ctx, game.facing, weaponType, atkProgress, weapon?.color ?? job.colors.accent)
+        drawWeaponAttackOverlay(
+          ctx,
+          game.facing,
+          weaponType,
+          atkProgress,
+          equippedWeaponSkin?.primaryColor ?? weapon?.color ?? job.colors.accent,
+        )
       }
       ctx.restore()
       if ((p.rebirthCount ?? 0) > 0) {
@@ -748,6 +817,13 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     ctx.fillRect(0, 0, cw, ch)
   }
 
+  // Day / Dusk / Night atmospheric tint
+  const worldPhase = getWorldTimePhase()
+  if (worldPhase.phase !== 'day') {
+    ctx.fillStyle = worldPhase.tintCss
+    ctx.fillRect(0, 0, cw, ch)
+  }
+
   const toS = (wx: number, wy: number) => [(wx - camX) * s, (wy - camY) * s] as const
   const text = (str: string, x: number, y: number, color: string, size = 10, align: CanvasTextAlign = 'center') => {
     ctx.font = `${Math.round(size * dpr * (zoom / 3) * 1.2)}px ${font}`
@@ -759,6 +835,19 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     ctx.strokeText(str, x, y)
     ctx.fillStyle = color
     ctx.fillText(str, x, y)
+  }
+
+  for (const node of GATHERING_NODES) {
+    if (node.mapId !== map.id) continue
+    const nx = (node.tx + 0.5) * TILE
+    const ny = (node.ty + 0.5) * TILE
+    const dist = Math.hypot(p.x - nx, p.y - ny)
+    const [lx, ly] = toS(nx, ny - 16)
+    text(node.label, lx, ly, node.color, 7.5)
+    if (dist <= 42 && !game.panel) {
+      const [hx, hy] = toS(nx, ny + 12)
+      text('กด E เก็บเกี่ยว', hx, hy, '#7ae582', 8.5)
+    }
   }
 
   for (const obj of visibleObjects) {
@@ -885,8 +974,21 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     }
     const activeTitleDef = p.rpgExt?.activeTitle ? TITLE_DEFS.find((item) => item.id === p.rpgExt?.activeTitle) : null
     const guildTagPrefix = p.rpgExt?.guildTag ? `[${p.rpgExt.guildTag}] ` : ''
+    const displayNameLine = `${guildTagPrefix}${p.name} [${p.uid === undefined ? 'Guest' : String(p.uid).padStart(5, '0')}]`
+    if (equippedFrame) {
+      ctx.save()
+      ctx.strokeStyle = equippedFrame.primaryColor
+      ctx.fillStyle = equippedFrame.secondaryColor
+      ctx.globalAlpha = 0.72
+      const fw = Math.max(76, displayNameLine.length * 4.8) * dpr
+      const fh = 12 * dpr
+      ctx.fillRect(Math.round(x - fw / 2), Math.round(y - 5 * dpr - fh / 2), Math.round(fw), Math.round(fh))
+      ctx.lineWidth = 1.2 * dpr
+      ctx.strokeRect(Math.round(x - fw / 2), Math.round(y - 5 * dpr - fh / 2), Math.round(fw), Math.round(fh))
+      ctx.restore()
+    }
     text(`✦ ${job.name} ✦`, x, y - 18 * dpr, p.gm ? '#ffd60a' : '#72efdd', 8)
-    text(`${guildTagPrefix}${p.name} [${p.uid === undefined ? 'Guest' : String(p.uid).padStart(5, '0')}]`, x, y - 5 * dpr, p.gm ? '#ffd60a' : '#ffffff', 9.5)
+    text(displayNameLine, x, y - 5 * dpr, p.gm ? '#ffd60a' : equippedFrame?.primaryColor ?? '#ffffff', 9.5)
     if (activeTitleDef) {
       text(`«${activeTitleDef.name}»`, x, y - 31 * dpr, activeTitleDef.color, 7.8)
     }
