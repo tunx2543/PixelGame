@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { onAuthStateChanged, type User } from 'firebase/auth'
 import { Plus, Trash2, UploadCloud, UserCheck } from 'lucide-react'
 import { auth } from '@/lib/firebase/client'
@@ -134,6 +134,8 @@ export function TitleScreen() {
     }
   }, [refreshCharacters])
 
+  const hasAutoStartedRef = useRef(false)
+
   const handleAuthSuccess = useCallback(
     (signedInUser: User) => {
       void refreshCharacters(signedInUser)
@@ -146,19 +148,22 @@ export function TitleScreen() {
     return CHARACTER_SLOTS.find((slot) => !used.has(slot)) ?? 'slot_1'
   }
 
-  const applyAccountIdentityToEngine = (targetUser: User) => {
-    if (accountIdentity && accountIdentity.uid === targetUser.uid) {
-      const parsedUid = Number(accountIdentity.gameUid)
-      const numericUid = accountIdentity.isGm
-        ? PERMANENT_GM_UID
-        : Number.isSafeInteger(parsedUid)
-          ? parsedUid
-          : undefined
-      setGameAccountIdentity(targetUser.uid, numericUid, accountIdentity.gameUid, accountIdentity.isGm)
-    } else {
-      setGameAccountIdentity(targetUser.uid)
-    }
-  }
+  const applyAccountIdentityToEngine = useCallback(
+    (targetUser: User) => {
+      if (accountIdentity && accountIdentity.uid === targetUser.uid) {
+        const parsedUid = Number(accountIdentity.gameUid)
+        const numericUid = accountIdentity.isGm
+          ? PERMANENT_GM_UID
+          : Number.isSafeInteger(parsedUid)
+            ? parsedUid
+            : undefined
+        setGameAccountIdentity(targetUser.uid, numericUid, accountIdentity.gameUid, accountIdentity.isGm)
+      } else {
+        setGameAccountIdentity(targetUser.uid)
+      }
+    },
+    [accountIdentity],
+  )
 
   const startNewCharacter = () => {
     if (isLoadingSave) return
@@ -174,12 +179,37 @@ export function TitleScreen() {
     setName('')
   }
 
-  const loginWithCloudCharacter = (char: CloudCharacterRecord) => {
-    if (!user || isLoadingSave) return
-    applyAccountIdentityToEngine(user)
-    setActiveCharacterSlot(char.id)
-    loadGame(char.saveData)
-  }
+  const loginWithCloudCharacter = useCallback(
+    (char: CloudCharacterRecord) => {
+      if (!user || isLoadingSave) return
+      applyAccountIdentityToEngine(user)
+      setActiveCharacterSlot(char.id)
+      loadGame(char.saveData)
+    },
+    [applyAccountIdentityToEngine, isLoadingSave, user],
+  )
+
+  useEffect(() => {
+    if (isLoadingSave || hasAutoStartedRef.current || typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('autostart') !== '1') return
+    hasAutoStartedRef.current = true
+    if (user && cloudChars.length > 0) {
+      loginWithCloudCharacter(cloudChars[0])
+      return
+    }
+    if (!user && guestSave) {
+      setGameAccountIdentity(null)
+      setActiveCharacterSlot('slot_1')
+      loadGame(guestSave)
+      return
+    }
+    if (!user && !guestSave) {
+      setGameAccountIdentity(null)
+      setActiveCharacterSlot('slot_1')
+      newGame('นักผจญภัย')
+    }
+  }, [cloudChars, guestSave, isLoadingSave, loginWithCloudCharacter, user])
 
   const handleImportRecoverableSave = async (entry: RecoverableLocalSave) => {
     if (!user || importingKey || cloudChars.length >= CHARACTER_SLOTS.length) return

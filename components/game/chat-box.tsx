@@ -33,9 +33,14 @@ export function ChatBox() {
   const listRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.innerWidth < 768) {
-      setIsOpen(false)
+    if (typeof window === 'undefined') return
+    const mq = window.matchMedia('(max-width: 767px)')
+    if (mq.matches) setIsOpen(false)
+    const onChange = (e: MediaQueryListEvent) => {
+      if (e.matches) setIsOpen(false)
     }
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
   }, [])
 
   useEffect(() => {
@@ -77,7 +82,7 @@ export function ChatBox() {
     <div
       onPointerDown={(event) => event.stopPropagation()}
       className={cn(
-        'pointer-events-auto pixel-panel absolute z-20 flex w-[min(16rem,calc(100vw-1rem))] touch-none flex-col bg-card/90 shadow-lg',
+        'pointer-events-auto pixel-panel absolute z-20 flex w-[min(11.5rem,calc(100vw-12rem))] touch-none flex-col bg-card/90 shadow-lg sm:w-[16rem]',
         !position && 'bottom-[10.75rem] left-2 md:bottom-3 md:left-[11rem]',
       )}
       style={position ? { left: position.x, top: position.y } : undefined}

@@ -1,6 +1,6 @@
 import { ITEMS, JOBS, MONSTERS, type MonsterSprite } from './data'
 import { GEM_SHOP_ITEMS } from './gem-shop'
-import { currentMap, game } from './engine'
+import { currentMap, game, getStats } from './engine'
 import { T, TILE } from './maps'
 import { getMonsterModelSpec } from './models-2d'
 import {
@@ -313,11 +313,12 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         const idleF = Math.sin(t * 1.1 + fx) > 0.96 ? -1 : Math.floor(t * 2 + fx) % 4
         const rawNpc = npcSprite(n.id)
         const img = rawNpc ?? humanSprite(n.colors, 'down', idleF, null, '#ced4da', false, 'idle')
-        const baseScale = rawNpc ? 1.15 : 1
+        const targetNpcH = 33
+        const baseScale = targetNpcH / Math.max(1, img.height)
         const drawW = img.width * baseScale
         const drawH = img.height * baseScale
         const nearHop = near ? -Math.abs(Math.sin(t * 5)) * 1.6 : 0
-        shadow(ctx, fx, fy, 6 - breath * 0.3)
+        shadow(ctx, fx, fy, 6.5 - breath * 0.3)
         ctx.save()
         ctx.translate(fx, fy + nearHop)
         ctx.scale(scaleX, scaleY)
@@ -351,7 +352,8 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         const frame = attacking ? attackFrame : walking ? walkFrame : idleFrame
 
         const img = monsterSprite(def.sprite, def.color, frame, attacking, action, dir, attackFrame, def.id)
-        const scale = def.boss ? 1.65 : 1.05
+        const isHumanRigMob = mSpec.archetype === 'goblin' || mSpec.archetype === 'skeleton'
+        const scale = isHumanRigMob ? 31 / Math.max(1, img.height) : def.boss ? 1.65 : 1.05
         const w = img.width * scale
         const h = img.height * scale
 
@@ -434,15 +436,16 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       remoteAction,
       remoteAtkFrame,
     )
-    const remoteW = remoteImg.width
-    const remoteH = remoteImg.height
+    const remoteScale = 33 / Math.max(1, remoteImg.height)
+    const remoteW = remoteImg.width * remoteScale
+    const remoteH = remoteImg.height * remoteScale
     ents.push({
       y: remoteY,
       draw: () => {
         const lungeDist = remoteAttacking ? Math.sin(atkProgress * Math.PI) * 3 : 0
         const ox = other.facing === 'left' ? -lungeDist : other.facing === 'right' ? lungeDist : 0
         const oy = other.facing === 'up' ? -lungeDist : other.facing === 'down' ? lungeDist : 0
-        shadow(ctx, remoteX, remoteY, 6)
+        shadow(ctx, remoteX, remoteY, 6.5)
         if (other.gm) {
           ctx.fillStyle = `rgba(255, 214, 10, ${0.18 + Math.sin(t * 5) * 0.08})`
           ctx.beginPath()
@@ -488,8 +491,9 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         action,
         atkFrame,
       )
-      const drawW = img.width
-      const drawH = img.height
+      const drawScale = 33 / Math.max(1, img.height)
+      const drawW = img.width * drawScale
+      const drawH = img.height * drawScale
       const stride = game.moving ? Math.sin(game.walkT * 11 * Math.PI / 3) : 0
       const lungeDist = attacking ? Math.sin(atkProgress * Math.PI) * 3.5 : 0
       let ox = 0
@@ -549,7 +553,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         ctx.save()
         ctx.globalAlpha = p.invisible ? 0.14 : 0.86
         const wingBob = Math.sin(t * 5) * 0.7
-        drawGemItemPixels(ctx, gemFashion, p.x - 8, p.y - drawH + 4 + wingBob, 2)
+        drawGemItemPixels(ctx, gemFashion, p.x - 8, p.y - drawH + 5 + wingBob, 2)
         ctx.restore()
       }
       ctx.save()
@@ -560,7 +564,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       }
       ctx.restore()
       if (gemFashion?.id === 'aurora_cat_hood') {
-        drawGemItemPixels(ctx, gemFashion, p.x - 5, p.y - drawH - 2, 1.25)
+        drawGemItemPixels(ctx, gemFashion, p.x - 5, p.y - drawH - 1, 1.25)
       }
       if (gemFashion?.id === 'sunfire_aura') {
         ctx.save()
@@ -758,12 +762,53 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   }
 
   for (const n of map.npcs) {
-    const npcOffset = npcSprite(n.id) ? 33 : 26
-    const [x, y] = toS(n.x * TILE, n.y * TILE + 8 - npcOffset)
-    text(`[${n.title}]`, x, y - 13 * dpr, '#f2c94c', 9)
-    text(n.name, x, y, '#ffffff', 10)
+    const npcOffset = 35
+    const npcWorldX = n.x * TILE
+    const npcWorldY = n.y * TILE + 8
+    const [x, y] = toS(npcWorldX, npcWorldY - npcOffset)
+    const distToPlayer = Math.hypot(p.x - npcWorldX, p.y - npcWorldY)
+    const showBubble = (distToPlayer < 88 || game.nearNpc?.id === n.id) && !game.panel
+
+    if (showBubble && n.greeting) {
+      const bubbleFontSize = Math.round(9.5 * dpr * (zoom / 3) * 1.2)
+      ctx.font = `${bubbleFontSize}px ${font}`
+      const maxBubbleW = 165 * dpr
+      const label = n.greeting.length > 34 ? `${n.greeting.slice(0, 32)}…` : n.greeting
+      const tw = Math.min(ctx.measureText(label).width, maxBubbleW)
+      const bw = tw + 14 * dpr
+      const bh = 18 * dpr
+      const bx = x - bw / 2
+      const by = y - 42 * dpr
+      ctx.save()
+      ctx.fillStyle = '#120e1a'
+      ctx.fillRect(Math.round(bx - 1.5 * dpr), Math.round(by - 1.5 * dpr), Math.round(bw + 3 * dpr), Math.round(bh + 3 * dpr))
+      ctx.fillStyle = 'rgba(255, 252, 244, 0.96)'
+      ctx.fillRect(Math.round(bx), Math.round(by), Math.round(bw), Math.round(bh))
+      ctx.fillStyle = '#120e1a'
+      ctx.beginPath()
+      ctx.moveTo(x - 4 * dpr, by + bh)
+      ctx.lineTo(x + 4 * dpr, by + bh)
+      ctx.lineTo(x, by + bh + 5 * dpr)
+      ctx.closePath()
+      ctx.fill()
+      ctx.fillStyle = 'rgba(255, 252, 244, 0.96)'
+      ctx.beginPath()
+      ctx.moveTo(x - 2.5 * dpr, by + bh - 0.5 * dpr)
+      ctx.lineTo(x + 2.5 * dpr, by + bh - 0.5 * dpr)
+      ctx.lineTo(x, by + bh + 3.5 * dpr)
+      ctx.closePath()
+      ctx.fill()
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillStyle = '#181424'
+      ctx.fillText(label, x, by + bh / 2, maxBubbleW)
+      ctx.restore()
+    }
+
+    text(`[${n.title}]`, x, y - 12 * dpr, '#f2c94c', 8.5)
+    text(n.name, x, y, '#ffffff', 9.5)
     if (game.nearNpc?.id === n.id && !game.panel) {
-      const [bx, by] = toS(n.x * TILE, n.y * TILE + 14)
+      const [bx, by] = toS(npcWorldX, npcWorldY + 6)
       text('กด E เพื่อคุย', bx, by + 8 * dpr, '#7ae582', 9)
     }
   }
@@ -773,8 +818,11 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     const def = MONSTERS[m.defId]
     if (!def) continue
     const mSpec = getMonsterModelSpec(def.id, def.sprite, def.color)
+    const isHumanRigMob = mSpec.archetype === 'goblin' || mSpec.archetype === 'skeleton'
     const mScale = def.boss ? 1.65 : 1.05
-    const h = Math.round(mSpec.canvasSize.height * mScale * 0.78) + (mSpec.flying ? 5 : 0)
+    const h = isHumanRigMob
+      ? 31
+      : Math.round(mSpec.canvasSize.height * mScale * 0.78) + (mSpec.flying ? 5 : 0)
     const [x, y] = toS(m.x, m.y - h)
     const color = def.boss ? '#ff6b6b' : def.level > p.level + 5 ? '#ff8fa3' : def.level < p.level - 5 ? '#a0a0a0' : '#ffffff'
     text(`${def.boss ? '★ ' : ''}${def.name} Lv.${def.level}`, x, y - 8 * dpr, color, def.boss ? 10 : 8)
@@ -795,19 +843,38 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     const networkBlend = other.receivedAt ? Math.min(1, (Date.now() - other.receivedAt) / 100) : 1
     const remoteX = (other.previousX ?? other.x) + (other.x - (other.previousX ?? other.x)) * networkBlend
     const remoteY = (other.previousY ?? other.y) + (other.y - (other.previousY ?? other.y)) * networkBlend
-    const [x, y] = toS(remoteX, remoteY - 28)
+    const [x, y] = toS(remoteX, remoteY - 35)
     if (other.gm) text('[GM]', x, y - 12 * dpr, '#ffd60a', 8)
     text(`${other.displayName} [${String(other.uid).padStart(5, '0')}] Lv.${other.level}`, x, y, other.gm ? '#ffd60a' : '#8be9fd', 9)
   }
 
   {
-    const [x, y] = toS(p.x, p.y - 28)
-    text(`${p.name} [${p.uid === undefined ? 'Guest' : String(p.uid).padStart(5, '0')}]`, x, y, p.gm ? '#ffd60a' : '#ffffff', 10)
-    if (p.gm) text('[GM]', x, y - 12 * dpr, '#ffd60a', 8)
+    const [x, y] = toS(p.x, p.y - 38)
+    // Overhead micro HP/MP bar matching 2D MMORPG reference
+    const stats = getStats(p)
+    if (stats) {
+      const bw = 22 * s
+      const hpH = 1.9 * s
+      const mpH = 1.2 * s
+      const barY = y + 6 * dpr
+      ctx.fillStyle = 'rgba(10, 8, 20, 0.92)'
+      ctx.fillRect(Math.round(x - bw / 2 - dpr), Math.round(barY - dpr), Math.round(bw + 2 * dpr), Math.round(hpH + mpH + 2.5 * dpr))
+      ctx.fillStyle = '#3a0d12'
+      ctx.fillRect(Math.round(x - bw / 2), Math.round(barY), Math.round(bw), Math.round(hpH))
+      ctx.fillStyle = '#e5484d'
+      ctx.fillRect(Math.round(x - bw / 2), Math.round(barY), Math.round(bw * Math.max(0, Math.min(1, p.hp / Math.max(1, stats.maxHp)))), Math.round(hpH))
+      ctx.fillStyle = '#132445'
+      ctx.fillRect(Math.round(x - bw / 2), Math.round(barY + hpH + 0.5 * dpr), Math.round(bw), Math.round(mpH))
+      ctx.fillStyle = '#4c8bf5'
+      ctx.fillRect(Math.round(x - bw / 2), Math.round(barY + hpH + 0.5 * dpr), Math.round(bw * Math.max(0, Math.min(1, p.mp / Math.max(1, stats.maxMp)))), Math.round(mpH))
+    }
+    text(`✦ ${job.name} ✦`, x, y - 16 * dpr, p.gm ? '#ffd60a' : '#72efdd', 8)
+    text(`${p.name} [${p.uid === undefined ? 'Guest' : String(p.uid).padStart(5, '0')}]`, x, y - 4 * dpr, p.gm ? '#ffd60a' : '#ffffff', 9.5)
+    if (p.gm) text('[GM]', x, y - 27 * dpr, '#ffd60a', 8)
     if (game.bubble) {
       ctx.font = `${Math.round(11 * dpr * (zoom / 3) * 1.2)}px ${font}`
       const tw = Math.min(ctx.measureText(game.bubble.text).width, 260 * dpr)
-      const by = y - (p.gm ? 34 : 24) * dpr
+      const by = y - (p.gm ? 47 : 37) * dpr
       ctx.fillStyle = 'rgba(255,250,235,0.95)'
       ctx.fillRect(x - tw / 2 - 6 * dpr, by - 10 * dpr, tw + 12 * dpr, 20 * dpr)
       ctx.fillStyle = 'rgba(10,8,20,0.9)'

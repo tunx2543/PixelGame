@@ -48,15 +48,16 @@ import {
   type EncounterEnemy,
 } from '@/lib/game/encounter'
 import {
-  playAttackSfx,
-  playCritSfx,
-  playEnemyHitSfx,
-  playLevelUpSfx,
-  playPetAttackSfx,
   playQuestClaimSfx,
-  playSkillSfx,
-  playVictorySfx,
-} from '@/lib/game/sfx'
+  triggerAttackSound,
+  triggerCritSound,
+  triggerDefeatSound,
+  triggerHitSound,
+  triggerLevelUpSound,
+  triggerPetAttackSound,
+  triggerSkillSound,
+  triggerVictorySound,
+} from '@/lib/game/combat-audio'
 import {
   COMBAT_PETS,
   applyLevelAndRewards,
@@ -71,6 +72,12 @@ import {
 } from '@/lib/game/systems'
 import { formatNum } from './format'
 import { EncounterStageCanvas, type StagePopup } from './encounter-stage-canvas'
+import {
+  createFloatingPopup,
+  pruneExpiredPopups,
+  type FloatingPopupKind,
+} from '@/lib/game/floating-damage'
+import { evaluateAttackShake, type ScreenShakeEvent } from '@/lib/game/screen-shake'
 import { pickNewerSave } from '@/lib/game/save-sync'
 
 type TowerPhase = 'LOADING' | 'READY' | 'FIGHTING' | 'VICTORY' | 'DEFEAT'
@@ -155,6 +162,7 @@ export function TowerArena() {
   const [enemyHitPulse, setEnemyHitPulse] = useState(0)
   const [petAttackPulse, setPetAttackPulse] = useState(0)
   const [popups, setPopups] = useState<StagePopup[]>([])
+  const [shakeEvent, setShakeEvent] = useState<ScreenShakeEvent | null>(null)
 
   const saveRef = useRef<SaveData | null>(null)
   const floorSpecRef = useRef<TowerFloorEncounter | null>(null)
@@ -168,6 +176,7 @@ export function TowerArena() {
   const skillCdsRef = useRef<Record<string, number>>({})
   const logSeqRef = useRef(0)
   const popupSeqRef = useRef(0)
+  const shakeSeqRef = useRef(0)
 
   saveRef.current = save
   floorSpecRef.current = floorSpec
@@ -182,11 +191,52 @@ export function TowerArena() {
     setLogs((prev) => [{ id, text, tone }, ...prev].slice(0, 12))
   }, [])
 
-  const pushPopup = useCallback((target: 'player' | 'enemy', text: string, color: string, crit = false) => {
-    const id = ++popupSeqRef.current
-    const createdAt = performance.now()
-    setPopups((prev) => [...prev.filter((p) => createdAt - p.createdAt < 900), { id, target, text, color, crit, createdAt }])
+  const popupTimersRef = useRef<number[]>([])
+
+  useEffect(() => {
+    return () => {
+      for (const timer of popupTimersRef.current) {
+        window.clearTimeout(timer)
+      }
+      popupTimersRef.current = []
+    }
   }, [])
+
+  const pushPopup = useCallback(
+    (
+      target: 'player' | 'enemy',
+      amount: number,
+      kind: FloatingPopupKind,
+      color: string,
+      options?: { badge?: string; prefix?: string; suffix?: string },
+    ) => {
+      const id = ++popupSeqRef.current
+      const now = performance.now()
+      let createdDuration = 950
+      setPopups((prev) => {
+        const active = pruneExpiredPopups(prev, now)
+        const nextPopup = createFloatingPopup({
+          id,
+          target,
+          kind,
+          amount,
+          color,
+          now,
+          activePopups: active,
+          badge: options?.badge,
+          prefix: options?.prefix,
+          suffix: options?.suffix,
+        })
+        createdDuration = nextPopup.durationMs
+        return [...active, nextPopup]
+      })
+      const timer = window.setTimeout(() => {
+        setPopups((prev) => prev.filter((p) => p.id !== id))
+      }, createdDuration + 60)
+      popupTimersRef.current.push(timer)
+    },
+    [],
+  )
 
   const syncSave = useCallback(async (nextSave: SaveData, activeUser: User | null, activeSlot: string) => {
     const cloudUid = activeUser && activeUser.emailVerified ? activeUser.uid : null
@@ -207,6 +257,7 @@ export function TowerArena() {
       timeLeftRef.current = spec.timeLimitSec
       setTimeLeft(spec.timeLimitSec)
       setVictoryOutcome(null)
+      setShakeEvent(null)
       attackCdRef.current = 0
       skillCdsRef.current = {}
       setAttackCd(0)
@@ -368,10 +419,10 @@ export function TowerArena() {
       })
 
       if (applied.leveledTo > applied.leveledFrom) {
-        playLevelUpSfx(mutedRef.current)
+        triggerLevelUpSound({ muted: mutedRef.current, source: 'tower', detail: { floor: spec.floor, level: applied.leveledTo } })
         appendLog(`เลเวลอัป! เลื่อนระดับเป็น Lv.${applied.leveledTo}`, 'crit')
       } else {
-        playVictorySfx(mutedRef.current)
+        triggerVictorySound({ muted: mutedRef.current, source: 'tower', detail: { floor: spec.floor } })
       }
 
       appendLog(
@@ -433,8 +484,8 @@ export function TowerArena() {
         setSave(nextSave)
         setPlayerAttackPulse(performance.now())
         setPlayerSkillColor(skill.color)
-        playSkillSfx(mutedRef.current)
-        pushPopup('player', `+${formatNum(recovered)} HP`, '#4fc3a1')
+        triggerSkillSound({ muted: mutedRef.current, source: 'tower', detail: { skillId: skill.id, kind: 'heal' } })
+        pushPopup('player', recovered, 'heal', '#4fc3a1', { prefix: '+', suffix: ' HP' })
         appendLog(`${skill.name} ฟื้นฟู ${formatNum(recovered)} HP`, 'hero')
         return
       }
@@ -447,16 +498,80 @@ export function TowerArena() {
       setPlayerSkillColor(skill ? skill.color : null)
       setEnemyHitPulse(performance.now())
 
-      if (breakdown.isCrit) playCritSfx(mutedRef.current)
-      else if (skill) playSkillSfx(mutedRef.current)
-      else playAttackSfx(mutedRef.current)
+      if (breakdown.isCrit) {
+        triggerAttackSound({
+          muted: mutedRef.current,
+          source: 'tower',
+          playSynthFallback: false,
+          detail: { actor: 'player', isSkill: Boolean(skill), skillId: skill?.id },
+        })
+        triggerCritSound({
+          muted: mutedRef.current,
+          source: 'tower',
+          detail: { target: 'enemy', damage: breakdown.damage, skillId: skill?.id },
+        })
+        triggerHitSound({
+          muted: mutedRef.current,
+          source: 'tower',
+          playSynthFallback: false,
+          detail: { target: 'enemy', damage: breakdown.damage, isCrit: true },
+        })
+      } else if (skill) {
+        triggerAttackSound({
+          muted: mutedRef.current,
+          source: 'tower',
+          playSynthFallback: false,
+          detail: { actor: 'player', isSkill: true, skillId: skill.id },
+        })
+        triggerSkillSound({
+          muted: mutedRef.current,
+          source: 'tower',
+          detail: { skillId: skill.id, damage: breakdown.damage },
+        })
+        triggerHitSound({
+          muted: mutedRef.current,
+          source: 'tower',
+          playSynthFallback: false,
+          detail: { target: 'enemy', damage: breakdown.damage, isCrit: false },
+        })
+      } else {
+        triggerAttackSound({
+          muted: mutedRef.current,
+          source: 'tower',
+          detail: { actor: 'player', isSkill: false },
+        })
+        triggerHitSound({
+          muted: mutedRef.current,
+          source: 'tower',
+          playSynthFallback: false,
+          detail: { target: 'enemy', damage: breakdown.damage, isCrit: false },
+        })
+      }
 
       pushPopup(
         'enemy',
-        breakdown.isCrit ? `${formatNum(breakdown.damage)}! คริติคอล` : `${formatNum(breakdown.damage)}`,
+        breakdown.damage,
+        breakdown.isCrit ? 'crit' : 'damage',
         breakdown.isCrit ? '#ffd60a' : '#ffffff',
-        breakdown.isCrit,
+        breakdown.isCrit ? { badge: 'CRIT!' } : undefined,
       )
+
+      const shakeDecision = evaluateAttackShake({
+        damage: breakdown.damage,
+        enemyMaxHp: currentEnemy.maxHp,
+        isCrit: breakdown.isCrit,
+        skillMultiplier: mult,
+      })
+      if (shakeDecision.shouldShake && shakeDecision.reason !== 'none') {
+        setShakeEvent({
+          id: ++shakeSeqRef.current,
+          intensity: shakeDecision.intensity,
+          durationMs: shakeDecision.durationMs,
+          isCrit: breakdown.isCrit,
+          reason: shakeDecision.reason,
+          startedAt: performance.now(),
+        })
+      }
       appendLog(
         `${breakdown.label} ทำความเสียหาย ${formatNum(breakdown.damage)}${breakdown.isCrit ? ' (คริติคอล!)' : ''}`,
         breakdown.isCrit ? 'crit' : 'hero',
@@ -487,8 +602,14 @@ export function TowerArena() {
       }
       saveRef.current = res.nextSave
       setSave(res.nextSave)
-      playSkillSfx(mutedRef.current)
-      pushPopup('player', `+${formatNum(res.restored)} ${kind.toUpperCase()}`, kind === 'hp' ? '#4fc3a1' : '#7fb0ff')
+      triggerSkillSound({ muted: mutedRef.current, source: 'tower', detail: { potion: kind } })
+      pushPopup(
+        'player',
+        res.restored,
+        'heal',
+        kind === 'hp' ? '#4fc3a1' : '#7fb0ff',
+        { prefix: '+', suffix: ` ${kind.toUpperCase()}` },
+      )
       appendLog(`ใช้ ${res.itemName} ฟื้นฟู ${formatNum(res.restored)} ${kind.toUpperCase()}`, 'hero')
       void syncSave(res.nextSave, userRef.current, slotRef.current)
     },
@@ -582,6 +703,7 @@ export function TowerArena() {
         phaseRef.current = 'DEFEAT'
         setDefeatReason('timeout')
         setPhase('DEFEAT')
+        triggerDefeatSound({ muted: mutedRef.current, source: 'tower', detail: { reason: 'timeout' } })
         appendLog(`หมดเวลาท้าทายชั้นที่ ${currentSpec.floor}! ลองอัปเกรดอาวุธหรือคู่หูแล้วสู้ใหม่`, 'enemy')
         void syncSave(workingSave, userRef.current, slotRef.current)
         return
@@ -617,8 +739,9 @@ export function TowerArena() {
           setEnemy(workingEnemy)
           setPetAttackPulse(performance.now())
           setEnemyHitPulse(performance.now())
-          playPetAttackSfx(mutedRef.current)
-          pushPopup('enemy', `${formatNum(petDmg)}`, activePet.def.colors.accent)
+          triggerPetAttackSound({ muted: mutedRef.current, source: 'tower', detail: { petId: activePet.def.id, damage: petDmg } })
+          triggerHitSound({ muted: mutedRef.current, source: 'tower', playSynthFallback: false, detail: { actor: 'pet', target: 'enemy', damage: petDmg } })
+          pushPopup('enemy', petDmg, 'pet', activePet.def.colors.accent, { badge: 'PET' })
           appendLog(`${activePet.def.name} ช่วยโจมตี ${formatNum(petDmg)} ดาเมจ`, 'pet')
           if (nextEnemyHp <= 0) {
             handleVictory(workingSave, currentSpec)
@@ -636,8 +759,9 @@ export function TowerArena() {
         const incomingDmg = calculateEnemyAttack(workingEnemy, workingSave)
         setEnemyAttackPulse(performance.now())
         setPlayerHitPulse(performance.now())
-        playEnemyHitSfx(mutedRef.current)
-        pushPopup('player', `-${formatNum(incomingDmg)}`, '#ff4d4d')
+        triggerAttackSound({ muted: mutedRef.current, source: 'tower', playSynthFallback: false, detail: { actor: 'enemy' } })
+        triggerHitSound({ muted: mutedRef.current, source: 'tower', detail: { actor: 'enemy', target: 'player', damage: incomingDmg } })
+        pushPopup('player', incomingDmg, 'incoming', '#ff4d4d', { prefix: '-' })
         appendLog(`${workingEnemy.def.name} โจมตีกลับ ${formatNum(incomingDmg)} ดาเมจ`, 'enemy')
 
         const nextHp = Math.max(0, workingSave.hp - incomingDmg)
@@ -648,6 +772,7 @@ export function TowerArena() {
           phaseRef.current = 'DEFEAT'
           setDefeatReason('hp')
           setPhase('DEFEAT')
+          triggerDefeatSound({ muted: mutedRef.current, source: 'tower', playSynthFallback: false, detail: { reason: 'hp' } })
           appendLog('คุณพ่ายแพ้ในการไต่หอคอย กด "ฟื้นฟูและสู้ใหม่" เพื่อเริ่มชั้นนี้ต่อได้ทันที', 'enemy')
           void syncSave(updated, userRef.current, slotRef.current)
         }
@@ -871,6 +996,7 @@ export function TowerArena() {
                 enemyHitPulse={enemyHitPulse}
                 petAttackPulse={petAttackPulse}
                 popups={popups}
+                shakeEvent={shakeEvent}
               />
 
               <AnimatePresence>
@@ -879,8 +1005,8 @@ export function TowerArena() {
                     initial={{ opacity: 0, scale: 0.96 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0 }}
-                    transition={{ duration: 0.18 }}
-                    className="absolute inset-0 flex flex-col items-center justify-center bg-[#0e0f1a]/90 p-4 text-center"
+                    transition={{ duration: 0.2, delay: 0.42 }}
+                    className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[#0e0f1a]/90 p-4 text-center"
                   >
                     <p className="text-xs font-semibold text-accent">
                       {victoryOutcome.isFirstClear ? 'พิชิตชั้นใหม่สำเร็จครั้งแรก!' : 'ผ่านด่านหอคอยสำเร็จ'} · ซิงค์เซฟแล้ว

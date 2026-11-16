@@ -1,21 +1,18 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
 import { ITEMS, JOBS, type WeaponType } from '@/lib/game/data'
 import type { SaveData } from '@/lib/game/engine'
 import type { EncounterBiome, EncounterEnemy } from '@/lib/game/encounter'
+import type { FloatingDamagePopup } from '@/lib/game/floating-damage'
+import { registerCombatAudioHandler } from '@/lib/game/combat-audio'
+import { computeShakeFrame, type ScreenShakeEvent } from '@/lib/game/screen-shake'
 import { getMonsterModelSpec } from '@/lib/game/models-2d'
 import { humanSprite, jobHumanColors, monsterSprite, type SpriteAction } from '@/lib/game/sprites'
 import { getActivePetBonuses } from '@/lib/game/systems'
 
-export interface StagePopup {
-  id: number
-  target: 'player' | 'enemy'
-  text: string
-  color: string
-  crit?: boolean
-  createdAt: number
-}
+export type StagePopup = FloatingDamagePopup
 
 interface EncounterStageCanvasProps {
   save: SaveData
@@ -28,6 +25,7 @@ interface EncounterStageCanvasProps {
   enemyHitPulse: number
   petAttackPulse?: number
   popups: StagePopup[]
+  shakeEvent?: ScreenShakeEvent | null
 }
 
 const BIOME_PALETTE: Record<
@@ -124,8 +122,11 @@ export function EncounterStageCanvas({
   enemyHitPulse,
   petAttackPulse = 0,
   popups,
+  shakeEvent = null,
 }: EncounterStageCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const stageWrapperRef = useRef<HTMLDivElement | null>(null)
+  const lastShakingStateRef = useRef(false)
   const latestRef = useRef({
     save,
     enemy,
@@ -137,6 +138,7 @@ export function EncounterStageCanvas({
     enemyHitPulse,
     petAttackPulse,
     popups,
+    shakeEvent,
   })
   latestRef.current = {
     save,
@@ -149,35 +151,89 @@ export function EncounterStageCanvas({
     enemyHitPulse,
     petAttackPulse,
     popups,
+    shakeEvent,
   }
+
+  useEffect(() => {
+    const stageEl = stageWrapperRef.current
+    if (!stageEl) return
+    if (!shakeEvent) {
+      if (lastShakingStateRef.current) {
+        lastShakingStateRef.current = false
+        stageEl.style.transform = ''
+        stageEl.dataset.shaking = 'false'
+      }
+      return
+    }
+    const shake = computeShakeFrame(shakeEvent, Math.max(performance.now(), shakeEvent.startedAt))
+    if (shake.active) {
+      stageEl.style.transform = `translate3d(${shake.dx}px, ${shake.dy}px, 0) rotate(${shake.rotDeg}deg)`
+      lastShakingStateRef.current = true
+      stageEl.dataset.shaking = 'true'
+    }
+  }, [shakeEvent])
+
+  useEffect(() => {
+    const recent: string[] = []
+    return registerCombatAudioHandler((event) => {
+      const stageEl = stageWrapperRef.current
+      if (!stageEl) return
+      recent.push(event.cue)
+      if (recent.length > 8) recent.shift()
+      stageEl.dataset.lastAudioCue = event.cue
+      stageEl.dataset.audioCues = recent.join(',')
+    })
+  }, [])
 
   useEffect(() => {
     let rafId = 0
     const start = performance.now()
 
     const draw = (now: number) => {
+      const frameNow = performance.now()
       const canvas = canvasRef.current
+      const {
+        save: s,
+        enemy: mon,
+        phase: ph,
+        playerAttackPulse: pAtk,
+        playerSkillColor: pSkillCol,
+        playerHitPulse: pHit,
+        enemyAttackPulse: eAtk,
+        enemyHitPulse: eHit,
+        petAttackPulse: petAtk,
+        shakeEvent: activeShake,
+      } = latestRef.current
+
+      const shake = computeShakeFrame(activeShake, frameNow)
+      const stageEl = stageWrapperRef.current
+      if (stageEl) {
+        if (shake.active) {
+          stageEl.style.transform = `translate3d(${shake.dx}px, ${shake.dy}px, 0) rotate(${shake.rotDeg}deg)`
+          if (!lastShakingStateRef.current) {
+            lastShakingStateRef.current = true
+            stageEl.dataset.shaking = 'true'
+          }
+        } else if (lastShakingStateRef.current) {
+          lastShakingStateRef.current = false
+          stageEl.style.transform = ''
+          stageEl.dataset.shaking = 'false'
+        }
+      }
+
       if (canvas) {
         const ctx = canvas.getContext('2d')
         if (ctx) {
-          const {
-            save: s,
-            enemy: mon,
-            phase: ph,
-            playerAttackPulse: pAtk,
-            playerSkillColor: pSkillCol,
-            playerHitPulse: pHit,
-            enemyAttackPulse: eAtk,
-            enemyHitPulse: eHit,
-            petAttackPulse: petAtk,
-            popups: activePopups,
-          } = latestRef.current
-
           const w = canvas.width
           const h = canvas.height
           const t = (now - start) / 1000
           const biome: EncounterBiome = mon?.biome ?? 'meadow'
           const pal = BIOME_PALETTE[biome]
+
+          ctx.save()
+          if (shake.active) {
+            ctx.translate(shake.dx * 0.55, shake.dy * 0.55)
+          }
 
           ctx.imageSmoothingEnabled = false
 
@@ -253,7 +309,8 @@ export function EncounterStageCanvas({
             heroAction,
             heroAttackFrame,
           )
-          const heroScale = 2.75
+          const heroTargetHeight = 82
+          const heroScale = Math.max(1.5, Math.min(3.0, heroTargetHeight / Math.max(1, heroSprite.height)))
           const hw = heroSprite.width * heroScale
           const hh = heroSprite.height * heroScale
 
@@ -423,23 +480,37 @@ export function EncounterStageCanvas({
             }
           }
 
-          // Floating damage popups
-          for (const pop of activePopups) {
-            const age = (now - pop.createdAt) / 850
-            if (age < 0 || age > 1) continue
-            const px = pop.target === 'enemy' ? enemyX : heroX
-            const py = floorY - 68 - age * 28
+          // Impact particle burst & flash for critical hits / high-damage strikes
+          if (shake.active && activeShake) {
+            const burstAge = Math.min(
+              1,
+              Math.max(0, (frameNow - activeShake.startedAt) / Math.max(1, activeShake.durationMs)),
+            )
+            const burstOriginX = enemyX - 6
+            const burstOriginY = floorY - 38
             ctx.save()
-            ctx.globalAlpha = Math.max(0, 1 - Math.pow(age, 1.8))
-            ctx.font = `bold ${pop.crit ? 19 : 15}px var(--font-pixel), sans-serif`
-            ctx.textAlign = 'center'
-            ctx.lineWidth = 4
-            ctx.strokeStyle = '#0e0f1a'
-            ctx.strokeText(pop.text, px, py)
-            ctx.fillStyle = pop.color
-            ctx.fillText(pop.text, px, py)
+            ctx.globalAlpha = Math.max(0, 1 - burstAge)
+            for (let i = 0; i < 12; i++) {
+              const angle = (i / 12) * Math.PI * 2 + (activeShake.id % 5) * 0.4
+              const dist = (10 + (i % 3) * 8) * burstAge * (0.8 + activeShake.intensity * 0.6)
+              const px = Math.round(burstOriginX + Math.cos(angle) * dist)
+              const py = Math.round(burstOriginY + Math.sin(angle) * dist * 0.75)
+              ctx.fillStyle = activeShake.isCrit ? (i % 2 === 0 ? '#ffd60a' : '#ffffff') : (i % 2 === 0 ? '#ff9f1c' : '#ffffff')
+              const size = activeShake.isCrit && i % 3 === 0 ? 4 : 3
+              ctx.fillRect(px, py, size, size)
+            }
             ctx.restore()
+
+            if (shake.flashAlpha > 0) {
+              ctx.save()
+              ctx.globalAlpha = shake.flashAlpha
+              ctx.fillStyle = activeShake.isCrit ? '#ffd60a' : '#ffffff'
+              ctx.fillRect(-16, -16, w + 32, h + 32)
+              ctx.restore()
+            }
           }
+
+          ctx.restore()
         }
       }
       rafId = requestAnimationFrame(draw)
@@ -450,7 +521,14 @@ export function EncounterStageCanvas({
   }, [])
 
   return (
-    <div className="relative w-full overflow-hidden border-2 border-[#0e0f1a] bg-[#0e0f1a]">
+    <div
+      ref={stageWrapperRef}
+      data-testid="arena-stage"
+      data-shaking="false"
+      data-shake-count={shakeEvent?.id ?? 0}
+      data-shake-reason={shakeEvent?.reason ?? 'none'}
+      className="relative w-full overflow-hidden border-2 border-[#0e0f1a] bg-[#0e0f1a] will-change-transform"
+    >
       <canvas
         ref={canvasRef}
         width={560}
@@ -458,6 +536,82 @@ export function EncounterStageCanvas({
         aria-label="เวทีต่อสู้ Pixel Quest"
         className="pixelated block h-48 w-full object-cover sm:h-56"
       />
+
+      {/* Crisp floating damage & combat text overlay */}
+      <div
+        aria-live="off"
+        className="pointer-events-none absolute inset-0 z-20 overflow-hidden select-none"
+      >
+        <AnimatePresence>
+          {popups.map((pop) => {
+            const isEnemyTarget = pop.target === 'enemy'
+            const durationSec = pop.durationMs / 1000
+            const riseY = pop.crit ? -58 : -46
+            return (
+              <motion.div
+                key={pop.id}
+                data-testid="arena-floating-damage"
+                data-target={pop.target}
+                data-kind={pop.kind}
+                data-amount={pop.amount}
+                initial={{
+                  opacity: 0,
+                  x: pop.offsetX,
+                  y: pop.offsetY + 10,
+                  scale: pop.crit ? 0.55 : 0.75,
+                }}
+                animate={{
+                  opacity: [0, 1, 1, 0],
+                  x: [
+                    pop.offsetX,
+                    pop.offsetX + pop.arcX * 0.45,
+                    pop.offsetX + pop.arcX * 0.8,
+                    pop.offsetX + pop.arcX,
+                  ],
+                  y: [
+                    pop.offsetY + 8,
+                    pop.offsetY + riseY * 0.45,
+                    pop.offsetY + riseY * 0.82,
+                    pop.offsetY + riseY,
+                  ],
+                  scale: pop.crit ? [0.6, 1.38, 1.06, 0.96] : [0.78, 1.2, 1.0, 0.94],
+                }}
+                exit={{ opacity: 0 }}
+                transition={{
+                  duration: durationSec,
+                  times: [0, 0.16, 0.68, 1],
+                  ease: 'easeOut',
+                }}
+                style={{
+                  left: isEnemyTarget ? '73%' : '25%',
+                  top: isEnemyTarget ? '42%' : '45%',
+                  color: pop.color,
+                  textShadow:
+                    '-2px -2px 0 #0e0f1a, 2px -2px 0 #0e0f1a, -2px 2px 0 #0e0f1a, 2px 2px 0 #0e0f1a, 0 -2px 0 #0e0f1a, 0 2px 0 #0e0f1a, -2px 0 0 #0e0f1a, 2px 0 0 #0e0f1a, 0 4px 0 rgba(0,0,0,0.65)',
+                }}
+                className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center whitespace-nowrap font-bold leading-none"
+              >
+                {pop.badge && (
+                  <span className="mb-0.5 text-[10px] tracking-wider uppercase sm:text-[11px]">
+                    {pop.badge}
+                  </span>
+                )}
+                <span
+                  className={
+                    pop.crit
+                      ? 'text-2xl tabular-nums sm:text-3xl'
+                      : pop.kind === 'pet'
+                        ? 'text-base tabular-nums sm:text-lg'
+                        : 'text-lg tabular-nums sm:text-2xl'
+                  }
+                >
+                  {pop.text}
+                </span>
+              </motion.div>
+            )
+          })}
+        </AnimatePresence>
+      </div>
     </div>
   )
 }

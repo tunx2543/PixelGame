@@ -227,6 +227,7 @@ export interface HumanColors {
   hat?: string
   hatStyle?: HatStyle
   armorStyle?: ArmorStyle
+  hairStyle?: 'spiky' | 'swept' | 'long' | 'ponytail' | 'braid' | 'parted' | 'royal'
   cape?: string
   scarf?: string
   shieldColor?: string
@@ -258,6 +259,7 @@ export function jobHumanColors(
     hat: spec.hatColor ?? base.hat,
     hatStyle: spec.hatStyle,
     armorStyle: spec.armorStyle,
+    hairStyle: spec.hairStyle,
     cape: spec.capeColor,
     scarf: spec.scarfColor,
     shieldColor: spec.shieldColor,
@@ -294,41 +296,67 @@ function drawWeaponInHand(
   const sin = Math.sin(angleRad)
   const perpX = -sin
   const perpY = cos
-  const hilt = '#7f5539'
+  const hilt = '#6b4226'
+  const hiltDark = '#4a2c18'
   const guard = jobId === 'paladin' || jobId === 'gm' ? '#ffd60a' : '#e9c46a'
-  const bladeHi = shade(weaponColor, 0.38)
-  const bladeDark = shade(weaponColor, -0.25)
+  const guardDark = shade(guard, -0.3)
+  const bladeHi = shade(weaponColor, 0.45)
+  const bladeDark = shade(weaponColor, -0.28)
 
   if (weapon === 'sword') {
     const isHeavy = jobId === 'knight' || jobId === 'paladin'
-    const bladeLen = isHeavy ? 9 : 8
-    s.px(hand.x - cos, hand.y - sin, hilt)
-    s.px(hand.x + cos + perpX, hand.y + sin + perpY, guard)
-    s.px(hand.x + cos, hand.y + sin, guard)
-    s.px(hand.x + cos - perpX, hand.y + sin - perpY, guard)
+    const bladeLen = isHeavy ? 13 : 11
+    s.px(hand.x - cos * 2, hand.y - sin * 2, guard)
+    s.line(hand.x - cos, hand.y - sin, hand.x + cos, hand.y + sin, hilt, 1)
+    // Ornate crossguard
+    s.line(
+      hand.x + cos * 1.5 - perpX * 2,
+      hand.y + sin * 1.5 - perpY * 2,
+      hand.x + cos * 1.5 + perpX * 2,
+      hand.y + sin * 1.5 + perpY * 2,
+      guard,
+      1,
+    )
+    s.px(hand.x + cos * 1.5 + perpX * 2, hand.y + sin * 1.5 + perpY * 2, guardDark)
     const tipX = hand.x + cos * bladeLen
     const tipY = hand.y + sin * bladeLen
-    s.line(hand.x + cos * 2, hand.y + sin * 2, tipX, tipY, weaponColor, isHeavy ? 2 : 1)
-    if (isHeavy) {
-      s.line(hand.x + cos * 2, hand.y + sin * 2, hand.x + cos * (bladeLen - 1), hand.y + sin * (bladeLen - 1), bladeHi, 1)
-    }
+    s.line(hand.x + cos * 2.5, hand.y + sin * 2.5, tipX, tipY, bladeDark, isHeavy ? 2 : 1)
+    s.line(
+      hand.x + cos * 2.5 + perpX * 0.6,
+      hand.y + sin * 2.5 + perpY * 0.6,
+      tipX - cos + perpX * 0.5,
+      tipY - sin + perpY * 0.5,
+      weaponColor,
+      1,
+    )
+    s.line(
+      hand.x + cos * 3 + perpX * 0.8,
+      hand.y + sin * 3 + perpY * 0.8,
+      tipX - cos * 1.5 + perpX * 0.8,
+      tipY - sin * 1.5 + perpY * 0.8,
+      bladeHi,
+      1,
+    )
     s.px(tipX, tipY, '#ffffff')
+    if (jobId === 'paladin') {
+      s.px(hand.x + cos * 4, hand.y + sin * 4, '#ffd60a')
+    }
     if (action === 'attack' && (atkF === 1 || atkF === 2)) {
       s.px(tipX + cos, tipY + sin, '#ffffff')
-      s.px(hand.x + cos * (bladeLen - 2) + perpX, hand.y + sin * (bladeLen - 2) + perpY, bladeHi)
+      s.px(tipX + perpX * 1.5, tipY + perpY * 1.5, bladeHi)
     }
     return
   }
 
   if (weapon === 'dagger') {
+    s.px(hand.x - cos * 1.5, hand.y - sin * 1.5, hiltDark)
     s.px(hand.x - cos, hand.y - sin, hilt)
-    s.px(hand.x + perpX, hand.y + perpY, guard)
-    s.px(hand.x - perpX, hand.y - perpY, guard)
-    const tipX = hand.x + cos * 5
-    const tipY = hand.y + sin * 5
-    s.line(hand.x + cos, hand.y + sin, tipX, tipY, weaponColor, 1)
-    s.px(hand.x + cos * 3 + perpX * 0.5, hand.y + sin * 3 + perpY * 0.5, bladeDark)
-    s.px(tipX, tipY, bladeHi)
+    s.line(hand.x + perpX * 1.5, hand.y + perpY * 1.5, hand.x - perpX * 1.5, hand.y - perpY * 1.5, guard, 1)
+    const tipX = hand.x + cos * 7
+    const tipY = hand.y + sin * 7
+    s.line(hand.x + cos, hand.y + sin, tipX, tipY, bladeDark, 1)
+    s.line(hand.x + cos * 1.5 + perpX * 0.7, hand.y + sin * 1.5 + perpY * 0.7, tipX - cos, tipY - sin, bladeHi, 1)
+    s.px(tipX, tipY, '#ffffff')
     if (action === 'attack' && (atkF === 1 || atkF === 2)) {
       s.px(tipX + cos, tipY + sin, '#ffffff')
     }
@@ -336,45 +364,56 @@ function drawWeaponInHand(
   }
 
   if (weapon === 'stick') {
-    const tipX = hand.x + cos * 7
-    const tipY = hand.y + sin * 7
-    s.line(hand.x - cos * 2, hand.y - sin * 2, tipX, tipY, weaponColor, 1)
-    s.px(tipX, tipY, shade(weaponColor, -0.25))
+    const tipX = hand.x + cos * 10
+    const tipY = hand.y + sin * 10
+    s.line(hand.x - cos * 3, hand.y - sin * 3, tipX, tipY, shade(weaponColor, -0.2), 1)
+    s.line(hand.x - cos * 2, hand.y - sin * 2, tipX - cos, tipY - sin, weaponColor, 1)
+    s.px(tipX, tipY, shade(weaponColor, 0.25))
     s.px(tipX + perpX, tipY + perpY, '#80ed99')
     return
   }
 
   if (weapon === 'staff') {
-    const len = jobId === 'wizard' || jobId === 'gm' || jobId === 'cleric' ? 8 : 7
-    const shaftStart = { x: hand.x - cos * 3, y: hand.y - sin * 3 }
+    const len = jobId === 'wizard' || jobId === 'gm' || jobId === 'cleric' ? 11 : 10
+    const shaftStart = { x: hand.x - cos * 5, y: hand.y - sin * 5 }
     const orbCenter = { x: hand.x + cos * len, y: hand.y + sin * len }
-    s.line(shaftStart.x, shaftStart.y, orbCenter.x - cos, orbCenter.y - sin, jobId === 'cleric' || jobId === 'gm' ? '#e9c46a' : hilt, 1)
-    // Ornate staff head by job
+    const isGoldShaft = jobId === 'cleric' || jobId === 'gm'
+    s.line(shaftStart.x, shaftStart.y, orbCenter.x - cos, orbCenter.y - sin, isGoldShaft ? '#d4a038' : hilt, 1)
+    s.px(shaftStart.x, shaftStart.y, guardDark)
+    s.px(orbCenter.x - cos * 2, orbCenter.y - sin * 2, '#ffd60a')
     if (jobId === 'cleric') {
-      s.line(orbCenter.x - perpX * 2, orbCenter.y - perpY * 2, orbCenter.x + perpX * 2, orbCenter.y + perpY * 2, '#ffd60a', 1)
-      s.line(orbCenter.x - cos, orbCenter.y - sin, orbCenter.x + cos * 2, orbCenter.y + sin * 2, '#ffd60a', 1)
+      s.line(orbCenter.x - perpX * 2.5, orbCenter.y - perpY * 2.5, orbCenter.x + perpX * 2.5, orbCenter.y + perpY * 2.5, '#ffd60a', 1)
+      s.line(orbCenter.x - cos * 1.5, orbCenter.y - sin * 1.5, orbCenter.x + cos * 2.5, orbCenter.y + sin * 2.5, '#ffd60a', 1)
       s.px(orbCenter.x, orbCenter.y, '#80ed99')
+      s.px(orbCenter.x + cos * 2.5, orbCenter.y + sin * 2.5, '#fff3b0')
     } else {
-      s.px(orbCenter.x, orbCenter.y, '#ffffff')
+      // Crystal orb cradle + gem specular
       s.px(orbCenter.x + cos, orbCenter.y + sin, weaponColor)
-      s.px(orbCenter.x + perpX, orbCenter.y + perpY, bladeHi)
-      s.px(orbCenter.x - perpX, orbCenter.y - perpY, weaponColor)
+      s.px(orbCenter.x + cos * 2, orbCenter.y + sin * 2, bladeHi)
+      s.px(orbCenter.x + perpX * 1.4, orbCenter.y + perpY * 1.4, bladeHi)
+      s.px(orbCenter.x - perpX * 1.4, orbCenter.y - perpY * 1.4, bladeDark)
+      s.px(orbCenter.x, orbCenter.y, '#ffffff')
     }
     if (action === 'attack' && (atkF === 1 || atkF === 2)) {
-      s.px(orbCenter.x + cos * 2, orbCenter.y + sin * 2, '#fff3b0')
-      s.px(orbCenter.x + perpX * 2, orbCenter.y + perpY * 2, bladeHi)
+      s.px(orbCenter.x + cos * 3, orbCenter.y + sin * 3, '#fff3b0')
+      s.px(orbCenter.x + perpX * 2.5, orbCenter.y + perpY * 2.5, '#ffffff')
     }
     return
   }
 
   if (weapon === 'bow') {
-    const limbSpan = jobId === 'hunter' ? 5 : 4
-    const topTip = { x: hand.x - cos * 1 + perpX * limbSpan, y: hand.y - sin * 1 + perpY * limbSpan }
-    const botTip = { x: hand.x - cos * 1 - perpX * limbSpan, y: hand.y - sin * 1 - perpY * limbSpan }
-    const midOuter = { x: hand.x + cos * 2, y: hand.y + sin * 2 }
-    s.line(topTip.x, topTip.y, midOuter.x + perpX * 2, midOuter.y + perpY * 2, weaponColor, 1)
-    s.line(midOuter.x + perpX * 2, midOuter.y + perpY * 2, midOuter.x - perpX * 2, midOuter.y - perpY * 2, weaponColor, 1)
-    s.line(midOuter.x - perpX * 2, midOuter.y - perpY * 2, botTip.x, botTip.y, weaponColor, 1)
+    const limbSpan = jobId === 'hunter' ? 7 : 6
+    const topTip = { x: hand.x - cos * 2 + perpX * limbSpan, y: hand.y - sin * 2 + perpY * limbSpan }
+    const botTip = { x: hand.x - cos * 2 - perpX * limbSpan, y: hand.y - sin * 2 - perpY * limbSpan }
+    const topMid = { x: hand.x + cos * 2 + perpX * (limbSpan - 2), y: hand.y + sin * 2 + perpY * (limbSpan - 2) }
+    const botMid = { x: hand.x + cos * 2 - perpX * (limbSpan - 2), y: hand.y + sin * 2 - perpY * (limbSpan - 2) }
+    const grip = { x: hand.x + cos * 2.5, y: hand.y + sin * 2.5 }
+
+    s.line(topTip.x, topTip.y, topMid.x, topMid.y, weaponColor, 1)
+    s.line(topMid.x, topMid.y, grip.x, grip.y, bladeHi, 1)
+    s.line(grip.x, grip.y, botMid.x, botMid.y, weaponColor, 1)
+    s.line(botMid.x, botMid.y, botTip.x, botTip.y, bladeDark, 1)
+    s.px(grip.x, grip.y, hilt)
     if (jobId === 'hunter') {
       s.px(topTip.x, topTip.y, '#ffd60a')
       s.px(botTip.x, botTip.y, '#ffd60a')
@@ -384,13 +423,13 @@ function drawWeaponInHand(
     if (action === 'attack' && atkF === 1) {
       s.line(topTip.x, topTip.y, pull.x, pull.y, '#e2e8f0', 1)
       s.line(botTip.x, botTip.y, pull.x, pull.y, '#e2e8f0', 1)
-      s.line(pull.x, pull.y, hand.x + cos * 5, hand.y + sin * 5, '#f8fafc', 1)
-      s.px(hand.x + cos * 5, hand.y + sin * 5, '#ffd60a')
+      s.line(pull.x, pull.y, hand.x + cos * 7, hand.y + sin * 7, '#f8fafc', 1)
+      s.px(hand.x + cos * 7, hand.y + sin * 7, '#ffd60a')
     } else {
       s.line(topTip.x, topTip.y, botTip.x, botTip.y, '#e2e8f0', 1)
       if (action === 'attack' && atkF === 2) {
-        s.line(hand.x + cos * 2, hand.y + sin * 2, hand.x + cos * 8, hand.y + sin * 8, '#f8fafc', 1)
-        s.px(hand.x + cos * 8, hand.y + sin * 8, '#ffd60a')
+        s.line(hand.x + cos * 3, hand.y + sin * 3, hand.x + cos * 11, hand.y + sin * 11, '#f8fafc', 1)
+        s.px(hand.x + cos * 11, hand.y + sin * 11, '#ffd60a')
       }
     }
   }
@@ -405,11 +444,25 @@ function drawLeg(
   bootCol: string,
   footDirX = 1,
 ) {
+  const legHi = shade(legCol, 0.16)
+  const legDark = shade(legCol, -0.24)
+  const bootHi = shade(bootCol, 0.28)
+  const bootDark = shade(bootCol, -0.3)
+
+  // Thigh & shin (3px thick trousers/greaves with cel highlight)
   s.line(hip.x, hip.y, knee.x, knee.y, legCol, 2)
-  s.line(knee.x, knee.y, foot.x, foot.y, legCol, 2)
-  s.px(foot.x, foot.y, bootCol)
-  s.px(foot.x + footDirX, foot.y, bootCol)
-  s.px(foot.x, foot.y - 1, shade(bootCol, 0.22))
+  s.line(hip.x - 1, hip.y, knee.x - 1, knee.y, legDark, 1)
+  s.px(hip.x + (footDirX > 0 ? 1 : 0), hip.y + 1, legHi)
+  s.line(knee.x, knee.y, foot.x, foot.y - 2, legCol, 2)
+
+  // Detailed cuffed boot (4px tall, grounded sole)
+  const bx = Math.round(foot.x)
+  const by = Math.round(foot.y)
+  s.rect(bx - 1, by - 3, 3, 1, bootHi) // boot cuff fold
+  s.rect(bx - 1, by - 2, 3, 2, bootCol)
+  s.px(bx + footDirX, by - 1, bootCol) // toe cap
+  s.px(bx + footDirX, by, bootDark) // sole toe
+  s.rect(bx - 1, by, 3, 1, bootDark) // boot sole
 }
 
 function drawArm(
@@ -419,11 +472,62 @@ function drawArm(
   hand: Pt,
   sleeveCol: string,
   handCol: string,
+  cuffCol?: string,
 ) {
+  const sleeveHi = shade(sleeveCol, 0.22)
+  const sleeveDark = shade(sleeveCol, -0.24)
+  const handDark = shade(handCol, -0.2)
   s.line(shoulder.x, shoulder.y, elbow.x, elbow.y, sleeveCol, 2)
-  s.line(elbow.x, elbow.y, hand.x, hand.y, sleeveCol, 1)
-  s.px(hand.x, hand.y, handCol)
-  s.px(hand.x, hand.y + 1, shade(handCol, -0.15))
+  s.px(shoulder.x, shoulder.y, sleeveHi)
+  s.line(elbow.x, elbow.y, hand.x, hand.y, sleeveDark, 2)
+  if (cuffCol) {
+    s.px(hand.x - (hand.x - elbow.x >= 0 ? 1 : -1), hand.y - 1, cuffCol)
+  }
+  s.rect(Math.round(hand.x), Math.round(hand.y), 2, 2, handCol)
+  s.px(Math.round(hand.x), Math.round(hand.y) + 1, handDark)
+}
+
+function drawHairBackLayer(
+  s: PixelSurface,
+  cx: number,
+  headTopY: number,
+  dir: 'down' | 'up' | 'side',
+  colors: HumanColors,
+) {
+  if (colors.skeleton) return
+  const hairCol = colors.hair
+  const hairDark = shade(hairCol, -0.28)
+  const style = colors.hairStyle ?? 'spiky'
+
+  // Long hair, ponytail, braid, or royal locks flowing behind neck/shoulders on front/side
+  if (dir === 'down') {
+    if (style === 'long' || style === 'royal') {
+      s.rect(cx - 6, headTopY + 5, 2, 7, hairDark)
+      s.rect(cx + 5, headTopY + 5, 2, 7, hairDark)
+      s.px(cx - 5, headTopY + 12, hairCol)
+      s.px(cx + 5, headTopY + 12, hairCol)
+    } else if (style === 'braid') {
+      s.rect(cx - 6, headTopY + 6, 2, 6, hairCol)
+      s.rect(cx + 5, headTopY + 6, 2, 6, hairCol)
+      s.px(cx - 5, headTopY + 9, colors.accent)
+      s.px(cx + 5, headTopY + 9, colors.accent)
+    }
+    return
+  }
+
+  if (dir === 'side') {
+    if (style === 'ponytail') {
+      s.rect(cx - 6, headTopY + 2, 3, 3, hairCol)
+      s.line(cx - 6, headTopY + 4, cx - 8, headTopY + 9, hairDark, 2)
+      s.px(cx - 5, headTopY + 3, colors.accent)
+    } else if (style === 'long' || style === 'royal' || style === 'braid') {
+      s.rect(cx - 6, headTopY + 2, 3, 9, hairDark)
+      s.rect(cx - 5, headTopY + 3, 2, 7, hairCol)
+      s.px(cx - 6, headTopY + 11, hairDark)
+    } else {
+      s.rect(cx - 5, headTopY + 3, 2, 5, hairDark)
+    }
+  }
 }
 
 function drawHatOrHair(
@@ -433,128 +537,237 @@ function drawHatOrHair(
   dir: 'down' | 'up' | 'side',
   colors: HumanColors,
 ) {
+  if (colors.skeleton) return
   const hairCol = colors.hair
-  const hairDark = shade(hairCol, -0.25)
-  const hairHi = shade(hairCol, 0.2)
+  const hairDark = shade(hairCol, -0.28)
+  const hairHi = shade(hairCol, 0.25)
+  const hairStyle = colors.hairStyle ?? 'spiky'
   const hatCol = colors.hat ?? colors.accent
   const hatDark = shade(hatCol, -0.3)
-  const hatHi = shade(hatCol, 0.24)
+  const hatHi = shade(hatCol, 0.26)
   const style = colors.hatStyle ?? (colors.hat ? 'wizard' : 'none')
 
-  if (style === 'none') {
-    if (dir === 'side') {
-      s.rect(cx - 3, headTopY - 1, 6, 2, hairCol)
-      s.px(cx, headTopY - 2, hairHi)
-      s.rect(cx - 4, headTopY, 2, 4, hairDark)
-      s.px(cx + 2, headTopY, hairCol)
-    } else if (dir === 'down') {
-      s.rect(cx - 3, headTopY - 1, 7, 2, hairCol)
-      s.px(cx, headTopY - 2, hairHi)
-      s.px(cx - 4, headTopY + 1, hairDark)
-      s.px(cx + 4, headTopY + 1, hairDark)
+  // Base sculpted hair crown & bangs visible underneath/around headgear
+  const drawBaseHair = (includeTopCrown: boolean) => {
+    if (dir === 'down') {
+      if (includeTopCrown) {
+        s.rect(cx - 5, headTopY - 2, 11, 4, hairCol)
+        s.rect(cx - 3, headTopY - 3, 7, 2, hairCol)
+        s.rect(cx - 2, headTopY - 2, 5, 1, hairHi)
+        s.px(cx - 4, headTopY - 1, hairHi)
+        s.px(cx + 3, headTopY - 1, hairHi)
+      }
+      // Side temple hair locks framing face
+      s.rect(cx - 5, headTopY + 1, 2, 6, hairCol)
+      s.rect(cx + 4, headTopY + 1, 2, 6, hairCol)
+      s.px(cx - 5, headTopY + 6, hairDark)
+      s.px(cx + 5, headTopY + 6, hairDark)
+      // Stylish parted/spiky forehead bangs
+      if (hairStyle === 'spiky') {
+        s.rect(cx - 4, headTopY + 1, 9, 2, hairCol)
+        s.px(cx - 3, headTopY + 3, hairDark)
+        s.px(cx, headTopY + 3, hairCol)
+        s.px(cx + 3, headTopY + 3, hairDark)
+        if (includeTopCrown) {
+          s.px(cx - 4, headTopY - 3, hairHi)
+          s.px(cx + 1, headTopY - 4, hairHi)
+          s.px(cx + 4, headTopY - 3, hairCol)
+        }
+      } else if (hairStyle === 'swept') {
+        s.rect(cx - 4, headTopY + 1, 8, 2, hairCol)
+        s.line(cx - 2, headTopY + 2, cx + 2, headTopY + 4, hairDark, 1)
+        s.px(cx - 4, headTopY + 3, hairCol)
+      } else {
+        // Parted / long / royal bangs
+        s.rect(cx - 4, headTopY + 1, 4, 2, hairCol)
+        s.rect(cx + 1, headTopY + 1, 4, 2, hairCol)
+        s.px(cx - 2, headTopY + 3, hairDark)
+        s.px(cx + 2, headTopY + 3, hairDark)
+      }
+    } else if (dir === 'side') {
+      if (includeTopCrown) {
+        s.rect(cx - 4, headTopY - 2, 9, 4, hairCol)
+        s.rect(cx - 3, headTopY - 3, 6, 1, hairCol)
+        s.rect(cx - 1, headTopY - 2, 4, 1, hairHi)
+        if (hairStyle === 'spiky') {
+          s.px(cx - 4, headTopY - 3, hairHi)
+          s.px(cx + 3, headTopY - 1, hairHi)
+        }
+      }
+      // Front swept bangs + sideburn
+      s.rect(cx - 4, headTopY + 1, 4, 5, hairDark)
+      s.rect(cx, headTopY + 1, 5, 2, hairCol)
+      s.px(cx + 4, headTopY + 3, hairDark)
     } else {
-      s.rect(cx - 3, headTopY - 1, 7, 5, hairCol)
-      s.rect(cx - 3, headTopY + 3, 7, 1, hairDark)
+      // dir === 'up': full lush back hair
+      s.rect(cx - 5, headTopY - 2, 11, 10, hairCol)
+      if (includeTopCrown) {
+        s.rect(cx - 3, headTopY - 3, 7, 2, hairCol)
+        s.rect(cx - 3, headTopY - 1, 7, 1, hairHi)
+      }
+      s.rect(cx - 4, headTopY + 7, 9, 2, hairDark)
+      if (hairStyle === 'long' || hairStyle === 'royal') {
+        s.rect(cx - 4, headTopY + 9, 9, 3, hairCol)
+        s.rect(cx - 3, headTopY + 11, 7, 1, hairDark)
+      } else if (hairStyle === 'ponytail') {
+        s.rect(cx - 1, headTopY + 4, 3, 2, colors.accent)
+        s.rect(cx - 2, headTopY + 6, 5, 5, hairDark)
+        s.rect(cx - 1, headTopY + 6, 3, 4, hairCol)
+      } else if (hairStyle === 'braid') {
+        s.rect(cx - 5, headTopY + 7, 2, 5, hairDark)
+        s.rect(cx + 4, headTopY + 7, 2, 5, hairDark)
+      }
+    }
+  }
+
+  if (style === 'none') {
+    drawBaseHair(true)
+    return
+  }
+
+  if (style === 'bandana') {
+    drawBaseHair(true)
+    s.rect(cx - 5, headTopY, 11, 2, hatCol)
+    s.rect(cx - 4, headTopY, 9, 1, hatHi)
+    if (dir === 'side') {
+      s.line(cx - 5, headTopY + 1, cx - 8, headTopY + 4, hatCol, 1)
+      s.line(cx - 5, headTopY, cx - 8, headTopY + 2, hatDark, 1)
+    } else if (dir === 'up') {
+      s.rect(cx - 1, headTopY + 1, 3, 2, hatDark)
+      s.line(cx - 1, headTopY + 2, cx - 3, headTopY + 5, hatCol, 1)
+      s.line(cx + 1, headTopY + 2, cx + 3, headTopY + 5, hatCol, 1)
+    } else {
+      s.px(cx, headTopY, '#ffd60a')
     }
     return
   }
 
   if (style === 'wizard' || style === 'archmage') {
-    const brimW = style === 'archmage' ? 12 : 10
-    s.rect(cx - Math.floor(brimW / 2), headTopY + 1, brimW, 1, hatDark)
-    s.rect(cx - 3, headTopY - 1, 7, 2, hatCol)
-    s.rect(cx - 2, headTopY - 3, 5, 2, hatCol)
-    s.rect(cx - 1, headTopY - 5, 3, 2, hatHi)
-    s.px(dir === 'side' ? cx - 2 : cx, headTopY - 6, style === 'archmage' ? '#67e8f9' : hatCol)
-    s.rect(cx - 3, headTopY, 7, 1, colors.accent)
-    if (style === 'archmage') {
-      s.px(cx, headTopY - 2, '#fff3b0')
+    drawBaseHair(false)
+    const brimW = style === 'archmage' ? 15 : 13
+    const brimLeft = cx - Math.floor(brimW / 2)
+    // Shaded curved brim
+    s.rect(brimLeft, headTopY + 1, brimW, 2, hatDark)
+    s.rect(brimLeft + 1, headTopY + 1, brimW - 2, 1, hatCol)
+    // Tall pointed cone with crooked wizard tip
+    s.rect(cx - 4, headTopY - 2, 9, 3, hatCol)
+    s.rect(cx - 3, headTopY - 4, 7, 2, hatCol)
+    s.rect(cx - 2, headTopY - 6, 5, 2, hatHi)
+    s.rect(dir === 'side' ? cx - 3 : cx - 1, headTopY - 8, 3, 2, hatCol)
+    s.px(dir === 'side' ? cx - 4 : cx + 1, headTopY - 9, style === 'archmage' ? '#67e8f9' : hatHi)
+    // Gold hatband & arcane buckle
+    s.rect(cx - 4, headTopY, 9, 1, colors.accent)
+    if (dir !== 'up') {
+      s.px(cx, headTopY, '#ffd60a')
+      if (style === 'archmage') {
+        s.px(cx, headTopY - 3, '#fff3b0')
+        s.px(cx - 2, headTopY - 5, '#67e8f9')
+      }
     }
     return
   }
 
   if (style === 'hood' || style === 'ranger_hood') {
-    s.rect(cx - 4, headTopY - 1, 9, 2, hatCol)
-    s.px(cx, headTopY - 2, hatHi)
+    drawBaseHair(false)
+    s.rect(cx - 6, headTopY - 2, 13, 3, hatCol)
+    s.rect(cx - 4, headTopY - 3, 9, 2, hatHi)
     if (dir === 'side') {
-      s.rect(cx - 4, headTopY, 3, 5, hatDark)
+      s.rect(cx - 6, headTopY, 5, 9, hatDark)
+      s.rect(cx - 5, headTopY, 3, 7, hatCol)
     } else if (dir === 'up') {
-      s.rect(cx - 4, headTopY, 9, 5, hatCol)
+      s.rect(cx - 6, headTopY, 13, 9, hatCol)
+      s.rect(cx - 4, headTopY + 2, 9, 6, hatDark)
     } else {
-      s.px(cx - 4, headTopY + 1, hatDark)
-      s.px(cx + 4, headTopY + 1, hatDark)
+      s.rect(cx - 6, headTopY + 1, 2, 7, hatDark)
+      s.rect(cx + 5, headTopY + 1, 2, 7, hatDark)
+      s.rect(cx - 4, headTopY, 9, 1, colors.accent)
     }
-    // Feather on archer/hunter hood
+    // Curved ranger feather
     const featherCol = style === 'ranger_hood' ? '#ffb703' : '#e9f5db'
-    s.line(cx - 2, headTopY - 1, cx - 4, headTopY - 4, featherCol, 1)
-    if (style === 'ranger_hood') {
-      s.px(cx - 4, headTopY - 5, '#fb8500')
-    }
+    s.line(cx - 3, headTopY - 2, cx - 7, headTopY - 6, featherCol, 1)
+    s.px(cx - 7, headTopY - 7, style === 'ranger_hood' ? '#fb8500' : '#ffffff')
     return
   }
 
   if (style === 'cowl') {
-    // Ninja Assassin cowl + headband crest
-    s.rect(cx - 3, headTopY - 1, 7, 2, hatCol)
-    s.rect(cx - 3, headTopY, 7, 1, colors.accent)
+    drawBaseHair(false)
+    // Dark tactical ninja/corsair hood + lower face mask
+    s.rect(cx - 5, headTopY - 2, 11, 3, hatCol)
+    s.rect(cx - 3, headTopY - 3, 7, 1, hatHi)
+    s.rect(cx - 5, headTopY, 11, 1, colors.accent)
     if (dir === 'side') {
-      s.rect(cx - 4, headTopY, 3, 5, hatDark)
-      s.rect(cx - 1, headTopY + 4, 4, 2, colors.scarf ?? '#e63946')
+      s.rect(cx - 5, headTopY, 5, 9, hatDark)
+      s.rect(cx - 1, headTopY + 7, 6, 3, colors.scarf ?? '#e63946')
+      s.rect(cx + 1, headTopY + 7, 4, 2, hatCol)
     } else if (dir === 'up') {
-      s.rect(cx - 3, headTopY, 7, 6, hatCol)
+      s.rect(cx - 5, headTopY, 11, 10, hatCol)
+      s.rect(cx - 3, headTopY + 2, 7, 6, hatDark)
     } else {
-      s.rect(cx - 3, headTopY + 4, 7, 2, colors.scarf ?? '#e63946')
+      s.rect(cx - 5, headTopY + 1, 2, 7, hatDark)
+      s.rect(cx + 4, headTopY + 1, 2, 7, hatDark)
+      // Face mask over nose & mouth (leaving sharp eyes + bangs visible!)
+      s.rect(cx - 4, headTopY + 7, 9, 3, hatDark)
+      s.rect(cx - 3, headTopY + 7, 7, 2, hatCol)
     }
     s.px(cx, headTopY, '#ffd60a')
     return
   }
 
   if (style === 'helm' || style === 'paladin_helm') {
-    s.rect(cx - 4, headTopY - 1, 9, 3, hatCol)
-    s.rect(cx - 3, headTopY - 2, 7, 1, hatHi)
-    const plumeCol = style === 'paladin_helm' ? '#3a86ff' : colors.accent
-    s.rect(cx - 1, headTopY - 4, 3, 2, plumeCol)
-    s.px(dir === 'side' ? cx - 2 : cx, headTopY - 5, shade(plumeCol, 0.25))
+    drawBaseHair(false)
+    const plumeCol = style === 'paladin_helm' ? '#3a86ff' : '#e63946'
+    const plumeHi = shade(plumeCol, 0.3)
+    const trimCol = style === 'paladin_helm' ? '#ffd60a' : '#e9c46a'
+    // Flowing knight plume crest
+    s.rect(cx - 2, headTopY - 5, 5, 3, plumeCol)
+    s.rect(cx - 1, headTopY - 6, 3, 2, plumeHi)
+    if (dir === 'side' || dir === 'up') {
+      s.rect(cx - 5, headTopY - 4, 4, 3, plumeCol)
+      s.px(cx - 6, headTopY - 2, shade(plumeCol, -0.25))
+    }
+    // Steel helmet dome + cheekguards
+    s.rect(cx - 5, headTopY - 2, 11, 4, hatCol)
+    s.rect(cx - 4, headTopY - 3, 9, 2, hatHi)
+    s.rect(cx - 5, headTopY + 1, 11, 1, trimCol)
     if (dir === 'side') {
-      s.rect(cx - 4, headTopY + 1, 2, 4, hatDark)
-      if (style === 'paladin_helm') s.px(cx + 3, headTopY + 2, '#ffd60a')
+      s.rect(cx - 5, headTopY + 1, 4, 8, hatDark)
+      s.rect(cx - 3, headTopY + 2, 2, 6, hatCol)
+      s.px(cx + 4, headTopY + 2, trimCol)
     } else if (dir === 'up') {
-      s.rect(cx - 4, headTopY + 1, 9, 4, hatDark)
+      s.rect(cx - 5, headTopY + 1, 11, 8, hatDark)
+      s.rect(cx - 3, headTopY + 2, 7, 6, hatCol)
     } else {
-      s.px(cx - 3, headTopY + 2, hatDark)
-      s.px(cx + 3, headTopY + 2, hatDark)
-      if (style === 'paladin_helm') s.px(cx, headTopY + 1, '#ffd60a')
+      s.rect(cx - 5, headTopY + 2, 2, 6, hatDark)
+      s.rect(cx + 4, headTopY + 2, 2, 6, hatDark)
+      s.px(cx, headTopY + 2, trimCol) // noseguard
+      s.px(cx, headTopY + 3, hatHi)
     }
     return
   }
 
   if (style === 'crown') {
-    s.rect(cx - 3, headTopY, 7, dir === 'up' ? 5 : 2, hairCol)
-    s.rect(cx - 3, headTopY - 1, 7, 1, '#ffd60a')
-    s.px(cx - 3, headTopY - 2, '#ffd60a')
-    s.px(cx - 1, headTopY - 2, '#fff3b0')
-    s.px(cx + 1, headTopY - 2, '#fff3b0')
-    s.px(cx + 3, headTopY - 2, '#ffd60a')
+    drawBaseHair(true)
+    s.rect(cx - 5, headTopY - 2, 11, 2, '#d4a017')
+    s.rect(cx - 4, headTopY - 2, 9, 1, '#ffd60a')
+    s.px(cx - 4, headTopY - 4, '#ffd60a')
+    s.px(cx - 2, headTopY - 3, '#fff3b0')
+    s.px(cx, headTopY - 5, '#ffd60a')
+    s.px(cx + 2, headTopY - 3, '#fff3b0')
+    s.px(cx + 4, headTopY - 4, '#ffd60a')
     s.px(cx, headTopY - 3, '#ff4d6d')
     return
   }
 
   if (style === 'mitre') {
-    s.rect(cx - 3, headTopY - 1, 7, 2, hatCol)
-    s.rect(cx - 2, headTopY - 4, 5, 3, hatCol)
-    s.line(cx, headTopY - 3, cx, headTopY, '#ffd60a', 1)
-    s.line(cx - 1, headTopY - 2, cx + 1, headTopY - 2, '#ffd60a', 1)
+    drawBaseHair(false)
+    s.rect(cx - 5, headTopY - 1, 11, 3, hatCol)
+    s.rect(cx - 4, headTopY - 4, 9, 3, hatCol)
+    s.rect(cx - 3, headTopY - 6, 7, 2, hatHi)
+    s.rect(cx - 1, headTopY - 7, 3, 1, hatHi)
+    s.rect(cx - 5, headTopY + 1, 11, 1, '#ffd60a')
+    s.line(cx, headTopY - 5, cx, headTopY + 1, '#ffd60a', 1)
+    s.line(cx - 2, headTopY - 3, cx + 2, headTopY - 3, '#ffd60a', 1)
     return
-  }
-
-  // bandana (Swordsman / Thief)
-  s.rect(cx - 3, headTopY - 1, 7, 2, hairCol)
-  s.rect(cx - 4, headTopY, 9, 1, hatCol)
-  if (dir === 'side') {
-    s.line(cx - 4, headTopY, cx - 6, headTopY + 2, hatCol, 1)
-  } else if (dir === 'up') {
-    s.line(cx, headTopY + 1, cx - 2, headTopY + 3, hatCol, 1)
-    s.line(cx + 1, headTopY + 1, cx + 3, headTopY + 3, hatCol, 1)
   }
 }
 
@@ -577,57 +790,61 @@ export function humanSprite(
         ? -1
         : Math.abs(frame) % 4
 
-  const key = `ha32|${JSON.stringify(colors)}|${dir}|${action}|${f}|${weapon ?? 'none'}|${weaponColor}`
+  const key = `ha48|${JSON.stringify(colors)}|${dir}|${action}|${f}|${weapon ?? 'none'}|${weaponColor}`
   return cached(key, () => {
-    const W = 32
-    const H = 30
+    const W = 42
+    const H = 48
     const s = new PixelSurface(W, H)
 
-    const skin = colors.skin ?? '#f1c27d'
+    const skin = colors.skin ?? '#f4c794'
+    const skinHi = shade(skin, 0.16)
     const skinDark = shade(skin, -0.22)
+    const skinDeep = shade(skin, -0.35)
     const body = colors.body
-    const bodyDark = shade(body, -0.26)
-    const bodyHi = shade(body, 0.2)
+    const bodyDark = shade(body, -0.28)
+    const bodyHi = shade(body, 0.24)
     const legCol = colors.legs
-    const legDark = shade(legCol, -0.26)
-    const bootCol = colors.armorStyle === 'plate' || colors.armorStyle === 'paladin_plate' ? '#64748b' : '#3b281c'
-    const bootDark = shade(bootCol, -0.28)
+    const legDark = shade(legCol, -0.28)
+    const bootCol = colors.armorStyle === 'plate' || colors.armorStyle === 'paladin_plate' ? '#64748b' : '#4a2e1f'
+    const bootDark = shade(bootCol, -0.3)
     const eyeCol = colors.eye ?? '#1a1423'
     const blink = !attacking && f === -1
 
-    const cx = 15
-    const footY = 27
-    const hipY = 20
+    const cx = 20
+    const footY = 44
+    const hipY = 34
+    const torsoBaseY = 23
+    const headBaseY = 12
 
     if (dir === 'left' || dir === 'right') {
       let bob = 0
       let lean = 0
       let backHip: Pt = { x: cx - 1, y: hipY }
-      let backKnee: Pt = { x: cx - 1, y: 23 }
-      let backFoot: Pt = { x: cx - 1, y: footY }
-      let frontHip: Pt = { x: cx, y: hipY }
-      let frontKnee: Pt = { x: cx, y: 23 }
-      let frontFoot: Pt = { x: cx, y: footY }
+      let backKnee: Pt = { x: cx - 2, y: 39 }
+      let backFoot: Pt = { x: cx - 2, y: footY }
+      let frontHip: Pt = { x: cx + 1, y: hipY }
+      let frontKnee: Pt = { x: cx + 1, y: 39 }
+      let frontFoot: Pt = { x: cx + 1, y: footY }
 
-      let backElbow: Pt = { x: cx + 1, y: 17 }
-      let backHand: Pt = { x: cx + 2, y: 19 }
-      let frontElbow: Pt = { x: cx - 1, y: 17 }
-      let frontHand: Pt = { x: cx, y: 19 }
+      let backElbow: Pt = { x: cx + 2, y: 27 }
+      let backHand: Pt = { x: cx + 4, y: 30 }
+      let frontElbow: Pt = { x: cx - 2, y: 27 }
+      let frontHand: Pt = { x: cx + 1, y: 30 }
       let weaponAngle = -0.35
 
       if (action === 'idle') {
-        const breath = f === 1 ? 1 : f === 3 ? 0 : 0
+        const breath = f === 1 ? 1 : 0
         bob = breath
         backHip = { x: cx - 1, y: hipY + breath }
-        backKnee = { x: cx - 2, y: 23 }
+        backKnee = { x: cx - 2, y: 39 }
         backFoot = { x: cx - 2, y: footY }
         frontHip = { x: cx + 1, y: hipY + breath }
-        frontKnee = { x: cx + 1, y: 23 }
-        frontFoot = { x: cx + 1, y: footY }
-        backElbow = { x: cx + 2, y: 16 + breath }
-        backHand = { x: cx + 3, y: 18 + breath }
-        frontElbow = { x: cx - 1, y: 17 + breath }
-        frontHand = { x: cx + 1, y: 19 + breath }
+        frontKnee = { x: cx + 2, y: 39 }
+        frontFoot = { x: cx + 2, y: footY }
+        backElbow = { x: cx + 3, y: 27 + breath }
+        backHand = { x: cx + 5, y: 29 + breath }
+        frontElbow = { x: cx - 1, y: 27 + breath }
+        frontHand = { x: cx + 2, y: 30 + breath }
         weaponAngle = weapon === 'staff' ? -1.4 : weapon === 'bow' ? 0 : -0.6
       } else if (action === 'walk') {
         const walkFrames: Array<{
@@ -635,12 +852,12 @@ export function humanSprite(
           bk: Pt; bf: Pt; fk: Pt; ff: Pt
           be: Pt; bh: Pt; fe: Pt; fh: Pt; wa: number
         }> = [
-          { bob: 0, lean: 1, bk: { x: cx - 2, y: 24 }, bf: { x: cx - 4, y: footY }, fk: { x: cx + 2, y: 24 }, ff: { x: cx + 3, y: footY }, be: { x: cx + 2, y: 17 }, bh: { x: cx + 4, y: 18 }, fe: { x: cx - 2, y: 17 }, fh: { x: cx - 4, y: 19 }, wa: 0.35 },
-          { bob: -1, lean: 1, bk: { x: cx, y: 22 }, bf: { x: cx - 2, y: footY - 2 }, fk: { x: cx, y: 24 }, ff: { x: cx, y: footY }, be: { x: cx + 1, y: 16 }, bh: { x: cx + 2, y: 18 }, fe: { x: cx - 1, y: 16 }, fh: { x: cx - 1, y: 18 }, wa: -0.1 },
-          { bob: 0, lean: 1, bk: { x: cx + 3, y: 23 }, bf: { x: cx + 2, y: footY - 1 }, fk: { x: cx - 1, y: 24 }, ff: { x: cx - 3, y: footY }, be: { x: cx - 2, y: 17 }, bh: { x: cx - 4, y: 19 }, fe: { x: cx + 2, y: 17 }, fh: { x: cx + 4, y: 18 }, wa: -0.6 },
-          { bob: 0, lean: 1, bk: { x: cx + 2, y: 24 }, bf: { x: cx + 3, y: footY }, fk: { x: cx - 2, y: 24 }, ff: { x: cx - 4, y: footY }, be: { x: cx - 2, y: 17 }, bh: { x: cx - 4, y: 19 }, fe: { x: cx + 2, y: 17 }, fh: { x: cx + 4, y: 18 }, wa: -0.8 },
-          { bob: -1, lean: 1, bk: { x: cx, y: 24 }, bf: { x: cx, y: footY }, fk: { x: cx, y: 22 }, ff: { x: cx - 2, y: footY - 2 }, be: { x: cx + 1, y: 16 }, bh: { x: cx + 1, y: 18 }, fe: { x: cx, y: 16 }, fh: { x: cx, y: 18 }, wa: -0.35 },
-          { bob: 0, lean: 1, bk: { x: cx - 1, y: 24 }, bf: { x: cx - 3, y: footY }, fk: { x: cx + 3, y: 23 }, ff: { x: cx + 2, y: footY - 1 }, be: { x: cx + 2, y: 17 }, bh: { x: cx + 4, y: 18 }, fe: { x: cx - 2, y: 17 }, fh: { x: cx - 4, y: 19 }, wa: 0.2 },
+          { bob: 0, lean: 1, bk: { x: cx - 3, y: 39 }, bf: { x: cx - 5, y: footY }, fk: { x: cx + 3, y: 39 }, ff: { x: cx + 4, y: footY }, be: { x: cx + 3, y: 27 }, bh: { x: cx + 6, y: 29 }, fe: { x: cx - 2, y: 27 }, fh: { x: cx - 5, y: 30 }, wa: 0.35 },
+          { bob: -1, lean: 1, bk: { x: cx, y: 37 }, bf: { x: cx - 2, y: footY - 2 }, fk: { x: cx + 1, y: 39 }, ff: { x: cx + 1, y: footY }, be: { x: cx + 2, y: 26 }, bh: { x: cx + 4, y: 28 }, fe: { x: cx - 1, y: 26 }, fh: { x: cx - 1, y: 29 }, wa: -0.1 },
+          { bob: 0, lean: 1, bk: { x: cx + 4, y: 38 }, bf: { x: cx + 3, y: footY - 1 }, fk: { x: cx - 2, y: 39 }, ff: { x: cx - 4, y: footY }, be: { x: cx - 2, y: 27 }, bh: { x: cx - 5, y: 30 }, fe: { x: cx + 3, y: 27 }, fh: { x: cx + 6, y: 29 }, wa: -0.6 },
+          { bob: 0, lean: 1, bk: { x: cx + 3, y: 39 }, bf: { x: cx + 4, y: footY }, fk: { x: cx - 3, y: 39 }, ff: { x: cx - 5, y: footY }, be: { x: cx - 2, y: 27 }, bh: { x: cx - 5, y: 30 }, fe: { x: cx + 3, y: 27 }, fh: { x: cx + 6, y: 29 }, wa: -0.8 },
+          { bob: -1, lean: 1, bk: { x: cx + 1, y: 39 }, bf: { x: cx + 1, y: footY }, fk: { x: cx, y: 37 }, ff: { x: cx - 2, y: footY - 2 }, be: { x: cx + 2, y: 26 }, bh: { x: cx + 3, y: 28 }, fe: { x: cx, y: 26 }, fh: { x: cx + 1, y: 29 }, wa: -0.35 },
+          { bob: 0, lean: 1, bk: { x: cx - 2, y: 39 }, bf: { x: cx - 4, y: footY }, fk: { x: cx + 4, y: 38 }, ff: { x: cx + 3, y: footY - 1 }, be: { x: cx + 3, y: 27 }, bh: { x: cx + 6, y: 29 }, fe: { x: cx - 2, y: 27 }, fh: { x: cx - 5, y: 30 }, wa: 0.2 },
         ]
         const wf = walkFrames[f]
         bob = wf.bob; lean = wf.lean
@@ -652,10 +869,10 @@ export function humanSprite(
       } else {
         if (weapon === 'bow') {
           const bowAtk = [
-            { bob: 0, lean: 0, bk: { x: cx - 2, y: 24 }, bf: { x: cx - 3, y: footY }, fk: { x: cx + 2, y: 24 }, ff: { x: cx + 3, y: footY }, be: { x: cx + 3, y: 15 }, bh: { x: cx + 5, y: 15 }, fe: { x: cx + 1, y: 15 }, fh: { x: cx + 3, y: 15 }, wa: 0 },
-            { bob: 1, lean: -1, bk: { x: cx - 3, y: 24 }, bf: { x: cx - 4, y: footY }, fk: { x: cx + 2, y: 24 }, ff: { x: cx + 3, y: footY }, be: { x: cx + 3, y: 15 }, bh: { x: cx + 6, y: 15 }, fe: { x: cx - 2, y: 15 }, fh: { x: cx - 3, y: 15 }, wa: 0 },
-            { bob: 0, lean: 1, bk: { x: cx - 3, y: 24 }, bf: { x: cx - 4, y: footY }, fk: { x: cx + 3, y: 24 }, ff: { x: cx + 4, y: footY }, be: { x: cx + 3, y: 15 }, bh: { x: cx + 7, y: 15 }, fe: { x: cx - 3, y: 15 }, fh: { x: cx - 4, y: 15 }, wa: 0 },
-            { bob: 0, lean: 0, bk: { x: cx - 2, y: 24 }, bf: { x: cx - 3, y: footY }, fk: { x: cx + 2, y: 24 }, ff: { x: cx + 3, y: footY }, be: { x: cx + 2, y: 16 }, bh: { x: cx + 4, y: 17 }, fe: { x: cx - 1, y: 16 }, fh: { x: cx + 1, y: 17 }, wa: 0.1 },
+            { bob: 0, lean: 0, bk: { x: cx - 3, y: 39 }, bf: { x: cx - 4, y: footY }, fk: { x: cx + 3, y: 39 }, ff: { x: cx + 4, y: footY }, be: { x: cx + 4, y: 25 }, bh: { x: cx + 7, y: 25 }, fe: { x: cx + 1, y: 25 }, fh: { x: cx + 4, y: 25 }, wa: 0 },
+            { bob: 1, lean: -1, bk: { x: cx - 4, y: 39 }, bf: { x: cx - 5, y: footY }, fk: { x: cx + 3, y: 39 }, ff: { x: cx + 4, y: footY }, be: { x: cx + 4, y: 25 }, bh: { x: cx + 8, y: 25 }, fe: { x: cx - 3, y: 25 }, fh: { x: cx - 4, y: 25 }, wa: 0 },
+            { bob: 0, lean: 1, bk: { x: cx - 4, y: 39 }, bf: { x: cx - 5, y: footY }, fk: { x: cx + 4, y: 39 }, ff: { x: cx + 5, y: footY }, be: { x: cx + 4, y: 25 }, bh: { x: cx + 9, y: 25 }, fe: { x: cx - 4, y: 25 }, fh: { x: cx - 5, y: 25 }, wa: 0 },
+            { bob: 0, lean: 0, bk: { x: cx - 3, y: 39 }, bf: { x: cx - 4, y: footY }, fk: { x: cx + 3, y: 39 }, ff: { x: cx + 4, y: footY }, be: { x: cx + 3, y: 26 }, bh: { x: cx + 6, y: 28 }, fe: { x: cx - 1, y: 26 }, fh: { x: cx + 2, y: 28 }, wa: 0.1 },
           ][f]
           bob = bowAtk.bob; lean = bowAtk.lean
           backHip = { x: cx - 1 + lean, y: hipY + bob }; backKnee = bowAtk.bk; backFoot = bowAtk.bf
@@ -665,10 +882,10 @@ export function humanSprite(
           weaponAngle = bowAtk.wa
         } else if (weapon === 'staff') {
           const staffAtk = [
-            { bob: 1, lean: -1, bk: { x: cx - 2, y: 24 }, bf: { x: cx - 3, y: footY }, fk: { x: cx + 2, y: 24 }, ff: { x: cx + 3, y: footY }, be: { x: cx + 1, y: 13 }, bh: { x: cx + 1, y: 10 }, fe: { x: cx - 1, y: 13 }, fh: { x: cx, y: 11 }, wa: -1.6 },
-            { bob: 0, lean: 1, bk: { x: cx - 3, y: 24 }, bf: { x: cx - 4, y: footY }, fk: { x: cx + 3, y: 24 }, ff: { x: cx + 4, y: footY }, be: { x: cx + 3, y: 14 }, bh: { x: cx + 5, y: 13 }, fe: { x: cx + 2, y: 14 }, fh: { x: cx + 4, y: 14 }, wa: -0.7 },
-            { bob: 1, lean: 2, bk: { x: cx - 3, y: 24 }, bf: { x: cx - 5, y: footY }, fk: { x: cx + 4, y: 24 }, ff: { x: cx + 5, y: footY }, be: { x: cx + 4, y: 16 }, bh: { x: cx + 7, y: 15 }, fe: { x: cx + 4, y: 15 }, fh: { x: cx + 7, y: 15 }, wa: -0.1 },
-            { bob: 0, lean: 1, bk: { x: cx - 2, y: 24 }, bf: { x: cx - 4, y: footY }, fk: { x: cx + 3, y: 24 }, ff: { x: cx + 4, y: footY }, be: { x: cx + 3, y: 17 }, bh: { x: cx + 4, y: 18 }, fe: { x: cx + 2, y: 17 }, fh: { x: cx + 4, y: 18 }, wa: -0.9 },
+            { bob: 1, lean: -1, bk: { x: cx - 3, y: 39 }, bf: { x: cx - 4, y: footY }, fk: { x: cx + 3, y: 39 }, ff: { x: cx + 4, y: footY }, be: { x: cx + 2, y: 22 }, bh: { x: cx + 2, y: 18 }, fe: { x: cx - 1, y: 22 }, fh: { x: cx + 1, y: 19 }, wa: -1.6 },
+            { bob: 0, lean: 1, bk: { x: cx - 4, y: 39 }, bf: { x: cx - 5, y: footY }, fk: { x: cx + 4, y: 39 }, ff: { x: cx + 5, y: footY }, be: { x: cx + 4, y: 24 }, bh: { x: cx + 7, y: 22 }, fe: { x: cx + 3, y: 24 }, fh: { x: cx + 6, y: 24 }, wa: -0.7 },
+            { bob: 1, lean: 2, bk: { x: cx - 4, y: 39 }, bf: { x: cx - 6, y: footY }, fk: { x: cx + 5, y: 39 }, ff: { x: cx + 7, y: footY }, be: { x: cx + 5, y: 26 }, bh: { x: cx + 9, y: 25 }, fe: { x: cx + 5, y: 25 }, fh: { x: cx + 9, y: 25 }, wa: -0.1 },
+            { bob: 0, lean: 1, bk: { x: cx - 3, y: 39 }, bf: { x: cx - 5, y: footY }, fk: { x: cx + 4, y: 39 }, ff: { x: cx + 5, y: footY }, be: { x: cx + 4, y: 27 }, bh: { x: cx + 6, y: 29 }, fe: { x: cx + 2, y: 27 }, fh: { x: cx + 5, y: 29 }, wa: -0.9 },
           ][f]
           bob = staffAtk.bob; lean = staffAtk.lean
           backHip = { x: cx - 1 + lean, y: hipY + bob }; backKnee = staffAtk.bk; backFoot = staffAtk.bf
@@ -678,10 +895,10 @@ export function humanSprite(
           weaponAngle = staffAtk.wa
         } else {
           const meleeAtk = [
-            { bob: 1, lean: -1, bk: { x: cx - 2, y: 24 }, bf: { x: cx - 3, y: footY }, fk: { x: cx + 2, y: 24 }, ff: { x: cx + 3, y: footY }, be: { x: cx + 3, y: 16 }, bh: { x: cx + 5, y: 17 }, fe: { x: cx - 2, y: 13 }, fh: { x: cx - 4, y: 10 }, wa: -2.2 },
-            { bob: 0, lean: 1, bk: { x: cx - 3, y: 24 }, bf: { x: cx - 4, y: footY }, fk: { x: cx + 3, y: 24 }, ff: { x: cx + 5, y: footY }, be: { x: cx + 1, y: 17 }, bh: { x: cx - 1, y: 18 }, fe: { x: cx + 3, y: 13 }, fh: { x: cx + 6, y: 13 }, wa: -0.45 },
-            { bob: 1, lean: 2, bk: { x: cx - 3, y: 24 }, bf: { x: cx - 5, y: footY }, fk: { x: cx + 4, y: 24 }, ff: { x: cx + 6, y: footY }, be: { x: cx + (weapon === 'dagger' ? 5 : -1), y: 17 }, bh: { x: cx + (weapon === 'dagger' ? 7 : -3), y: 17 }, fe: { x: cx + 4, y: 16 }, fh: { x: cx + 8, y: 16 }, wa: 0.25 },
-            { bob: 0, lean: 1, bk: { x: cx - 2, y: 24 }, bf: { x: cx - 3, y: footY }, fk: { x: cx + 3, y: 24 }, ff: { x: cx + 4, y: footY }, be: { x: cx + 2, y: 17 }, bh: { x: cx + 3, y: 19 }, fe: { x: cx + 3, y: 17 }, fh: { x: cx + 5, y: 19 }, wa: 0.75 },
+            { bob: 1, lean: -1, bk: { x: cx - 3, y: 39 }, bf: { x: cx - 4, y: footY }, fk: { x: cx + 3, y: 39 }, ff: { x: cx + 4, y: footY }, be: { x: cx + 4, y: 27 }, bh: { x: cx + 7, y: 28 }, fe: { x: cx - 3, y: 22 }, fh: { x: cx - 5, y: 18 }, wa: -2.2 },
+            { bob: 0, lean: 1, bk: { x: cx - 4, y: 39 }, bf: { x: cx - 5, y: footY }, fk: { x: cx + 4, y: 39 }, ff: { x: cx + 6, y: footY }, be: { x: cx + 2, y: 27 }, bh: { x: cx - 1, y: 29 }, fe: { x: cx + 4, y: 22 }, fh: { x: cx + 8, y: 23 }, wa: -0.45 },
+            { bob: 1, lean: 2, bk: { x: cx - 4, y: 39 }, bf: { x: cx - 6, y: footY }, fk: { x: cx + 5, y: 39 }, ff: { x: cx + 8, y: footY }, be: { x: cx + (weapon === 'dagger' ? 6 : -1), y: 27 }, bh: { x: cx + (weapon === 'dagger' ? 9 : -4), y: 27 }, fe: { x: cx + 5, y: 26 }, fh: { x: cx + 10, y: 26 }, wa: 0.25 },
+            { bob: 0, lean: 1, bk: { x: cx - 3, y: 39 }, bf: { x: cx - 4, y: footY }, fk: { x: cx + 4, y: 39 }, ff: { x: cx + 5, y: footY }, be: { x: cx + 3, y: 27 }, bh: { x: cx + 5, y: 30 }, fe: { x: cx + 4, y: 27 }, fh: { x: cx + 7, y: 30 }, wa: 0.75 },
           ][f]
           bob = meleeAtk.bob; lean = meleeAtk.lean
           backHip = { x: cx - 1 + lean, y: hipY + bob }; backKnee = meleeAtk.bk; backFoot = meleeAtk.bf
@@ -693,101 +910,129 @@ export function humanSprite(
       }
 
       const bx = cx + lean
-      const by = 14 + bob
+      const by = torsoBaseY + bob
+      const headY = headBaseY + bob
 
-      // Quiver on back for Archer/Hunter
+      // Quiver on back
       if (colors.quiver) {
-        s.line(bx - 3, by - 1, bx - 5, by + 5, '#7f5539', 2)
-        s.px(bx - 4, by - 2, '#f8fafc')
-        s.px(bx - 2, by - 2, '#ffd60a')
+        s.line(bx - 4, by - 2, bx - 7, by + 6, '#7f5539', 2)
+        s.px(bx - 5, by - 3, '#f8fafc')
+        s.px(bx - 3, by - 3, '#ffd60a')
+        s.px(bx - 4, by - 4, '#e63946')
       }
 
       // Backpack for Novice
       if (colors.backpack) {
-        s.rect(bx - 5, by + 1, 3, 5, '#9c6644')
-        s.rect(bx - 5, by + 1, 3, 1, '#c9b27c')
+        s.rect(bx - 7, by + 1, 4, 8, '#7f5539')
+        s.rect(bx - 7, by + 1, 4, 2, '#c9b27c')
+        s.px(bx - 6, by + 5, '#ffd60a')
       }
 
-      // Wings behind torso (Demon / Cleric / GM)
+      // Wings behind torso
       if (colors.wings) {
         const flap = action === 'walk' ? (f % 3) - 1 : action === 'attack' ? (f === 0 ? -2 : 1) : (f === 1 ? 1 : 0)
         const wCol = colors.wingStyle === 'angel' || colors.wingStyle === 'seraph' ? '#f8fafc' : shade(body, -0.3)
-        const wTip = colors.wingStyle === 'seraph' ? '#ffd60a' : colors.wingStyle === 'angel' ? '#e2e8f0' : colors.accent
-        s.line(bx - 2, by + 2, bx - 8, by - 2 + flap, wCol, 2)
-        s.line(bx - 8, by - 2 + flap, bx - 10, by + 2 + flap, wTip, 1)
-        s.line(bx - 6, by + 2 + flap, bx - 9, by + 5 + flap, shade(wCol, -0.2), 1)
+        const wTip = colors.wingStyle === 'seraph' ? '#ffd60a' : colors.wingStyle === 'angel' ? '#cbd5e1' : colors.accent
+        s.line(bx - 3, by + 2, bx - 10, by - 4 + flap, wCol, 2)
+        s.line(bx - 10, by - 4 + flap, bx - 13, by + 1 + flap, wTip, 2)
+        s.line(bx - 7, by + 3 + flap, bx - 11, by + 7 + flap, shade(wCol, -0.18), 1)
       }
 
-      // Cape / Scarf behind torso
+      // Flowing Hero Cape / Scarf behind torso
       if (colors.cape) {
-        const sway = action === 'walk' ? (f % 2 === 0 ? -2 : -1) : action === 'attack' ? -3 : 0
-        s.line(bx - 2, by + 1, bx - 6 + sway, by + 8, colors.cape, 2)
-        s.line(bx - 3, by + 2, bx - 5 + sway, by + 9, shade(colors.cape, -0.25), 1)
+        const sway = action === 'walk' ? (f % 2 === 0 ? -3 : -1) : action === 'attack' ? -4 : 0
+        s.line(bx - 3, by + 1, bx - 8 + sway, by + 12, colors.cape, 3)
+        s.line(bx - 4, by + 2, bx - 7 + sway, by + 13, shade(colors.cape, -0.25), 2)
       }
       if (colors.scarf) {
-        const scarfSway = action === 'walk' ? (f % 2 === 0 ? -2 : -1) : action === 'attack' ? -2 : 0
-        s.line(bx - 2, by, bx - 5 + scarfSway, by + 3, colors.scarf, 1)
+        const scarfSway = action === 'walk' ? (f % 2 === 0 ? -3 : -1) : action === 'attack' ? -3 : 0
+        s.line(bx - 2, by, bx - 7 + scarfSway, by + 4, colors.scarf, 2)
       }
 
       drawLeg(s, backHip, backKnee, backFoot, legDark, bootDark, 1)
       if (weapon === 'bow') {
         drawWeaponInHand(s, backHand, 'bow', weaponColor, weaponAngle, action, f, frontHand, colors.jobId)
       }
-      drawArm(s, { x: bx + 1, y: by + 1 }, backElbow, backHand, bodyDark, skinDark)
+      drawArm(s, { x: bx + 2, y: by + 2 }, backElbow, backHand, bodyDark, skinDark, colors.accent)
       if ((weapon === 'dagger' || colors.dualDaggers) && (action === 'attack' || colors.jobId === 'assassin')) {
         drawWeaponInHand(s, backHand, 'dagger', weaponColor, action === 'attack' && f === 2 ? -0.1 : 0.4, action, f, undefined, colors.jobId)
       }
 
       if (colors.shieldColor) {
-        s.rect(backHand.x - 1, backHand.y - 2, 4, 5, colors.shieldColor)
-        s.rect(backHand.x, backHand.y - 1, 2, 3, colors.shieldCrest ?? colors.accent)
+        s.rect(backHand.x - 1, backHand.y - 3, 5, 7, shade(colors.shieldColor, -0.2))
+        s.rect(backHand.x, backHand.y - 2, 3, 5, colors.shieldColor)
+        s.rect(backHand.x + 1, backHand.y - 1, 2, 3, colors.shieldCrest ?? colors.accent)
       }
 
-      // Torso (with class armor accents)
-      s.rect(bx - 2, by, 5, 7, body)
-      s.rect(bx - 2, by + 4, 5, 1, colors.accent)
-      s.px(bx + 1, by + 1, bodyHi)
-      if (colors.armorStyle === 'plate' || colors.armorStyle === 'paladin_plate') {
-        s.rect(bx - 1, by + 1, 3, 2, bodyHi)
-      }
+      // Torso (layered tunic/armor + belt + skirt/coat hem)
+      s.rect(bx - 3, by, 7, 10, body)
+      s.rect(bx - 3, by, 2, 10, bodyDark) // rear shading
+      s.rect(bx + 1, by + 1, 3, 4, bodyHi) // chest highlight
+      // Collar / neck sash
+      s.rect(bx - 2, by, 5, 2, colors.scarf ?? bodyHi)
+      // Leather/gold belt & buckle
+      s.rect(bx - 3, by + 7, 7, 1, shade(colors.accent, -0.2))
+      s.rect(bx + 1, by + 7, 2, 1, '#ffd60a')
+      // Lower coat/tunic skirt
       if (colors.armorStyle === 'robe' || colors.armorStyle === 'arch_robe' || colors.armorStyle === 'vestment') {
-        s.rect(bx - 2, by + 5, 5, 3, bodyDark)
+        s.rect(bx - 4, by + 8, 8, 6, bodyDark)
+        s.rect(bx - 2, by + 8, 5, 6, body)
+        s.rect(bx + 1, by + 8, 2, 6, colors.accent)
+      } else {
+        s.rect(bx - 3, by + 8, 7, 3, bodyDark)
       }
       if (colors.skeleton) {
-        s.px(bx, by + 1, bodyDark); s.px(bx, by + 3, bodyDark)
+        s.px(bx, by + 2, bodyDark); s.px(bx, by + 4, bodyDark); s.px(bx, by + 6, bodyDark)
       }
 
       drawLeg(s, frontHip, frontKnee, frontFoot, legCol, bootCol, 1)
 
-      // Head
-      const headY = 8 + bob
-      s.rect(bx - 3, headY, 6, 6, skin)
+      // Back hair locks (if long/ponytail)
+      drawHairBackLayer(s, bx, headY, 'side', colors)
+
+      // Head (sculpted rounded profile)
+      s.rect(bx - 4, headY, 8, 2, skinHi)
+      s.rect(bx - 4, headY + 2, 9, 5, skin)
+      s.rect(bx - 3, headY + 7, 8, 2, skin)
+      s.rect(bx - 2, headY + 9, 6, 1, skinDark)
+      s.rect(bx - 1, headY + 10, 3, 1, skinDeep) // neck
+      s.px(bx - 3, headY + 5, skinDark) // ear
+
       if (colors.goblinEars) {
-        s.line(bx - 3, headY + 2, bx - 6, headY + 1, skin, 1)
+        s.line(bx - 4, headY + 4, bx - 8, headY + 2, skin, 2)
+        s.px(bx - 8, headY + 2, skinDark)
       }
       if (!blink) {
-        s.px(bx + 2, headY + 3, eyeCol)
+        s.px(bx + 3, headY + 5, eyeCol)
+        s.px(bx + 2, headY + 5, '#ffffff')
+        s.px(bx + 2, headY + 6, eyeCol)
+        s.px(bx + 3, headY + 6, eyeCol)
       } else {
-        s.px(bx + 2, headY + 3, skinDark)
+        s.rect(bx + 2, headY + 6, 2, 1, skinDark)
       }
-      s.px(bx + 2, headY + 5, skinDark)
+      if (!colors.skeleton) {
+        s.px(bx + 1, headY + 7, shade(skin, -0.08))
+      }
+      s.px(bx + 3, headY + 8, skinDark)
+
       drawHatOrHair(s, bx, headY, 'side', colors)
       if (colors.halo) {
-        s.rect(bx - 2, headY - 4, 5, 1, '#ffd60a')
-        s.px(bx, headY - 4, '#ffffff')
+        s.rect(bx - 3, headY - 6, 7, 1, '#ffd60a')
+        s.px(cx + lean, headY - 6, '#ffffff')
       }
       if (colors.horns) {
-        s.px(bx - 2, headY - 1, '#f1e9d2'); s.px(bx - 3, headY - 2, '#f1e9d2')
-        s.px(bx + 1, headY - 1, '#f1e9d2'); s.px(bx + 2, headTopOffset(headY), '#f1e9d2')
+        s.px(bx - 3, headY - 1, '#f1e9d2'); s.px(bx - 4, headY - 3, '#f1e9d2')
+        s.px(bx + 2, headY - 1, '#f1e9d2'); s.px(bx + 3, headY - 3, '#f1e9d2')
       }
 
-      // Shoulder pauldron
+      // Sculpted shoulder pauldron
       if (colors.shoulderPads) {
-        s.rect(bx - 1, by, 3, 2, bodyHi)
-        s.px(bx, by, colors.accent)
+        s.rect(bx - 2, by, 5, 3, bodyHi)
+        s.rect(bx - 1, by + 2, 4, 1, bodyDark)
+        s.rect(bx - 1, by, 3, 1, colors.accent)
       }
 
-      drawArm(s, { x: bx, y: by + 1 }, frontElbow, frontHand, body, skin)
+      drawArm(s, { x: bx, y: by + 2 }, frontElbow, frontHand, body, skin, colors.accent)
       if (weapon !== 'bow') {
         drawWeaponInHand(s, frontHand, weapon, weaponColor, weaponAngle, action, f, undefined, colors.jobId)
       }
@@ -799,16 +1044,16 @@ export function humanSprite(
     const isUp = dir === 'up'
     let bob = 0
     let leftHip: Pt = { x: cx - 2, y: hipY }
-    let leftKnee: Pt = { x: cx - 2, y: 24 }
+    let leftKnee: Pt = { x: cx - 2, y: 39 }
     let leftFoot: Pt = { x: cx - 2, y: footY }
     let rightHip: Pt = { x: cx + 2, y: hipY }
-    let rightKnee: Pt = { x: cx + 2, y: 24 }
+    let rightKnee: Pt = { x: cx + 2, y: 39 }
     let rightFoot: Pt = { x: cx + 2, y: footY }
 
-    let leftElbow: Pt = { x: cx - 4, y: 17 }
-    let leftHand: Pt = { x: cx - 4, y: 19 }
-    let rightElbow: Pt = { x: cx + 4, y: 17 }
-    let rightHand: Pt = { x: cx + 4, y: 19 }
+    let leftElbow: Pt = { x: cx - 6, y: 27 }
+    let leftHand: Pt = { x: cx - 6, y: 30 }
+    let rightElbow: Pt = { x: cx + 6, y: 27 }
+    let rightHand: Pt = { x: cx + 6, y: 30 }
     let weaponAngle = isUp ? -1.4 : 0.7
 
     if (action === 'idle') {
@@ -816,19 +1061,19 @@ export function humanSprite(
       bob = br
       leftHip = { x: cx - 2, y: hipY + br }
       rightHip = { x: cx + 2, y: hipY + br }
-      leftElbow = { x: cx - 4, y: 17 + br }
-      leftHand = { x: cx - 4, y: 19 + br }
-      rightElbow = { x: cx + 4, y: 17 + br }
-      rightHand = { x: cx + 4, y: 19 + br }
+      leftElbow = { x: cx - 6, y: 27 + br }
+      leftHand = { x: cx - 6, y: 30 + br }
+      rightElbow = { x: cx + 6, y: 27 + br }
+      rightHand = { x: cx + 6, y: 30 + br }
       weaponAngle = weapon === 'staff' ? -1.5 : isUp ? -1.4 : -0.9
     } else if (action === 'walk') {
       const fWalk = [
-        { bob: 0, lk: { x: cx - 2, y: 24 }, lf: { x: cx - 2, y: footY }, rk: { x: cx + 2, y: 23 }, rf: { x: cx + 2, y: footY - 1 }, le: { x: cx - 4, y: 16 }, lh: { x: cx - 5, y: 17 }, re: { x: cx + 4, y: 17 }, rh: { x: cx + 4, y: 20 }, wa: isUp ? -1.6 : 0.4 },
-        { bob: -1, lk: { x: cx - 2, y: 24 }, lf: { x: cx - 2, y: footY }, rk: { x: cx + 2, y: 22 }, rf: { x: cx + 2, y: footY - 3 }, le: { x: cx - 4, y: 16 }, lh: { x: cx - 4, y: 19 }, re: { x: cx + 4, y: 16 }, rh: { x: cx + 4, y: 18 }, wa: isUp ? -1.4 : -0.4 },
-        { bob: 0, lk: { x: cx - 2, y: 23 }, lf: { x: cx - 2, y: footY - 1 }, rk: { x: cx + 2, y: 24 }, rf: { x: cx + 2, y: footY }, le: { x: cx - 4, y: 17 }, lh: { x: cx - 4, y: 20 }, re: { x: cx + 4, y: 16 }, rh: { x: cx + 5, y: 17 }, wa: isUp ? -1.2 : -1.1 },
-        { bob: 0, lk: { x: cx - 2, y: 23 }, lf: { x: cx - 2, y: footY - 1 }, rk: { x: cx + 2, y: 24 }, rf: { x: cx + 2, y: footY }, le: { x: cx - 4, y: 17 }, lh: { x: cx - 4, y: 20 }, re: { x: cx + 4, y: 16 }, rh: { x: cx + 5, y: 17 }, wa: isUp ? -1.2 : -1.0 },
-        { bob: -1, lk: { x: cx - 2, y: 22 }, lf: { x: cx - 2, y: footY - 3 }, rk: { x: cx + 2, y: 24 }, rf: { x: cx + 2, y: footY }, le: { x: cx - 4, y: 16 }, lh: { x: cx - 4, y: 18 }, re: { x: cx + 4, y: 16 }, rh: { x: cx + 4, y: 19 }, wa: isUp ? -1.4 : -0.3 },
-        { bob: 0, lk: { x: cx - 2, y: 24 }, lf: { x: cx - 2, y: footY }, rk: { x: cx + 2, y: 23 }, rf: { x: cx + 2, y: footY - 1 }, le: { x: cx - 4, y: 16 }, lh: { x: cx - 5, y: 17 }, re: { x: cx + 4, y: 17 }, rh: { x: cx + 4, y: 20 }, wa: isUp ? -1.6 : 0.4 },
+        { bob: 0, lk: { x: cx - 2, y: 39 }, lf: { x: cx - 2, y: footY }, rk: { x: cx + 2, y: 38 }, rf: { x: cx + 2, y: footY - 2 }, le: { x: cx - 6, y: 26 }, lh: { x: cx - 7, y: 28 }, re: { x: cx + 6, y: 27 }, rh: { x: cx + 6, y: 31 }, wa: isUp ? -1.6 : 0.4 },
+        { bob: -1, lk: { x: cx - 2, y: 39 }, lf: { x: cx - 2, y: footY }, rk: { x: cx + 2, y: 37 }, rf: { x: cx + 2, y: footY - 3 }, le: { x: cx - 6, y: 26 }, lh: { x: cx - 6, y: 30 }, re: { x: cx + 6, y: 26 }, rh: { x: cx + 6, y: 29 }, wa: isUp ? -1.4 : -0.4 },
+        { bob: 0, lk: { x: cx - 2, y: 38 }, lf: { x: cx - 2, y: footY - 2 }, rk: { x: cx + 2, y: 39 }, rf: { x: cx + 2, y: footY }, le: { x: cx - 6, y: 27 }, lh: { x: cx - 6, y: 31 }, re: { x: cx + 6, y: 26 }, rh: { x: cx + 7, y: 28 }, wa: isUp ? -1.2 : -1.1 },
+        { bob: 0, lk: { x: cx - 2, y: 38 }, lf: { x: cx - 2, y: footY - 2 }, rk: { x: cx + 2, y: 39 }, rf: { x: cx + 2, y: footY }, le: { x: cx - 6, y: 27 }, lh: { x: cx - 6, y: 31 }, re: { x: cx + 6, y: 26 }, rh: { x: cx + 7, y: 28 }, wa: isUp ? -1.2 : -1.0 },
+        { bob: -1, lk: { x: cx - 2, y: 37 }, lf: { x: cx - 2, y: footY - 3 }, rk: { x: cx + 2, y: 39 }, rf: { x: cx + 2, y: footY }, le: { x: cx - 6, y: 26 }, lh: { x: cx - 6, y: 29 }, re: { x: cx + 6, y: 26 }, rh: { x: cx + 6, y: 30 }, wa: isUp ? -1.4 : -0.3 },
+        { bob: 0, lk: { x: cx - 2, y: 39 }, lf: { x: cx - 2, y: footY }, rk: { x: cx + 2, y: 38 }, rf: { x: cx + 2, y: footY - 2 }, le: { x: cx - 6, y: 26 }, lh: { x: cx - 7, y: 28 }, re: { x: cx + 6, y: 27 }, rh: { x: cx + 6, y: 31 }, wa: isUp ? -1.6 : 0.4 },
       ][f]
       bob = fWalk.bob
       leftHip = { x: cx - 2, y: hipY + bob }; leftKnee = fWalk.lk; leftFoot = fWalk.lf
@@ -838,35 +1083,38 @@ export function humanSprite(
       weaponAngle = weapon === 'staff' ? -1.5 : fWalk.wa
     } else {
       const fAtk = [
-        { bob: 1, lf: { x: cx - 3, y: footY }, rf: { x: cx + 3, y: footY }, le: { x: cx - 5, y: 16 }, lh: { x: cx - 5, y: 18 }, re: { x: cx + 4, y: 13 }, rh: { x: cx + 5, y: 11 }, wa: isUp ? -2.1 : -2.2 },
-        { bob: 0, lf: { x: cx - 3, y: footY }, rf: { x: cx + 3, y: footY }, le: { x: cx - 4, y: 17 }, lh: { x: cx - 5, y: 19 }, re: { x: cx + 5, y: 15 }, rh: { x: cx + 6, y: isUp ? 12 : 16 }, wa: isUp ? -1.6 : 0.3 },
-        { bob: 1, lf: { x: cx - 3, y: footY }, rf: { x: cx + 3, y: footY }, le: { x: cx - 5, y: 16 }, lh: { x: cx - 5, y: isUp ? 14 : 20 }, re: { x: cx + 3, y: isUp ? 12 : 18 }, rh: { x: cx + 2, y: isUp ? 9 : 22 }, wa: isUp ? -1.55 : 1.35 },
-        { bob: 0, lf: { x: cx - 2, y: footY }, rf: { x: cx + 2, y: footY }, le: { x: cx - 4, y: 17 }, lh: { x: cx - 4, y: 19 }, re: { x: cx + 4, y: 17 }, rh: { x: cx + 4, y: 20 }, wa: isUp ? -1.4 : 0.8 },
+        { bob: 1, lf: { x: cx - 3, y: footY }, rf: { x: cx + 3, y: footY }, le: { x: cx - 7, y: 26 }, lh: { x: cx - 7, y: 29 }, re: { x: cx + 6, y: 22 }, rh: { x: cx + 7, y: 18 }, wa: isUp ? -2.1 : -2.2 },
+        { bob: 0, lf: { x: cx - 3, y: footY }, rf: { x: cx + 3, y: footY }, le: { x: cx - 6, y: 27 }, lh: { x: cx - 7, y: 30 }, re: { x: cx + 7, y: 24 }, rh: { x: cx + 8, y: isUp ? 19 : 25 }, wa: isUp ? -1.6 : 0.3 },
+        { bob: 1, lf: { x: cx - 3, y: footY }, rf: { x: cx + 3, y: footY }, le: { x: cx - 7, y: 26 }, lh: { x: cx - 7, y: isUp ? 22 : 31 }, re: { x: cx + 5, y: isUp ? 20 : 28 }, rh: { x: cx + 4, y: isUp ? 15 : 33 }, wa: isUp ? -1.55 : 1.35 },
+        { bob: 0, lf: { x: cx - 2, y: footY }, rf: { x: cx + 2, y: footY }, le: { x: cx - 6, y: 27 }, lh: { x: cx - 6, y: 30 }, re: { x: cx + 6, y: 27 }, rh: { x: cx + 6, y: 31 }, wa: isUp ? -1.4 : 0.8 },
       ][f]
       bob = fAtk.bob
-      leftHip = { x: cx - 2, y: hipY + bob }; leftKnee = { x: cx - 3, y: 24 }; leftFoot = fAtk.lf
-      rightHip = { x: cx + 2, y: hipY + bob }; rightKnee = { x: cx + 3, y: 24 }; rightFoot = fAtk.rf
+      leftHip = { x: cx - 2, y: hipY + bob }; leftKnee = { x: cx - 3, y: 39 }; leftFoot = fAtk.lf
+      rightHip = { x: cx + 2, y: hipY + bob }; rightKnee = { x: cx + 3, y: 39 }; rightFoot = fAtk.rf
       leftElbow = fAtk.le; leftHand = fAtk.lh
       rightElbow = fAtk.re; rightHand = fAtk.rh
       weaponAngle = weapon === 'bow' ? (isUp ? -1.57 : 1.57) : fAtk.wa
     }
 
-    const by = 14 + bob
+    const by = torsoBaseY + bob
+    const headY = headBaseY + bob
 
     if (colors.wings) {
       const flap = action === 'walk' ? (f % 3) - 1 : action === 'attack' ? (f === 0 ? -2 : 1) : (f === 1 ? 1 : 0)
       const wCol = colors.wingStyle === 'angel' || colors.wingStyle === 'seraph' ? '#f8fafc' : shade(body, -0.3)
-      const wTip = colors.wingStyle === 'seraph' ? '#ffd60a' : colors.wingStyle === 'angel' ? '#e2e8f0' : colors.accent
-      s.line(cx - 3, by + 2, cx - 9, by - 2 + flap, wCol, 2)
-      s.line(cx + 3, by + 2, cx + 9, by - 2 + flap, wCol, 2)
-      s.px(cx - 10, by + flap, wTip)
-      s.px(cx + 10, by + flap, wTip)
+      const wTip = colors.wingStyle === 'seraph' ? '#ffd60a' : colors.wingStyle === 'angel' ? '#cbd5e1' : colors.accent
+      s.line(cx - 4, by + 2, cx - 12, by - 4 + flap, wCol, 2)
+      s.line(cx + 4, by + 2, cx + 12, by - 4 + flap, wCol, 2)
+      s.line(cx - 12, by - 4 + flap, cx - 14, by + 1 + flap, wTip, 2)
+      s.line(cx + 12, by - 4 + flap, cx + 14, by + 1 + flap, wTip, 2)
+      s.line(cx - 8, by + 3 + flap, cx - 12, by + 6 + flap, shade(wCol, -0.18), 1)
+      s.line(cx + 8, by + 3 + flap, cx + 12, by + 6 + flap, shade(wCol, -0.18), 1)
     }
 
     if (colors.cape && !isUp) {
       const sway = action === 'walk' && f % 2 === 1 ? 1 : 0
-      s.rect(cx - 4 - sway, by + 1, 1, 8, shade(colors.cape, -0.25))
-      s.rect(cx + 4 + sway, by + 1, 1, 8, shade(colors.cape, -0.25))
+      s.rect(cx - 6 - sway, by + 2, 2, 12, shade(colors.cape, -0.25))
+      s.rect(cx + 5 + sway, by + 2, 2, 12, shade(colors.cape, -0.25))
     }
 
     if (isUp && weapon) {
@@ -878,76 +1126,115 @@ export function humanSprite(
     drawLeg(s, leftHip, leftKnee, leftFoot, leftBack ? legDark : legCol, leftBack ? bootDark : bootCol, -1)
     drawLeg(s, rightHip, rightKnee, rightFoot, rightBack ? legDark : legCol, rightBack ? bootDark : bootCol, 1)
 
-    // Torso
-    s.rect(cx - 3, by, 7, 7, body)
-    s.rect(cx - 3, by + 4, 7, 1, colors.accent)
-    s.rect(cx - 1, by + 1, 3, 2, bodyHi)
+    // Layered Torso (9px wide chest, 3-tone shading, collar, belt + buckle, coat/robe skirt)
+    s.rect(cx - 4, by, 9, 10, body)
+    s.rect(cx - 4, by + 1, 1, 9, bodyDark)
+    s.rect(cx + 4, by + 1, 1, 9, bodyDark)
+    s.rect(cx - 2, by + 1, 5, 4, bodyHi)
+    // Collar / scarf
+    s.rect(cx - 3, by, 7, 2, colors.scarf ?? bodyHi)
+    s.px(cx, by + 2, colors.accent)
+    // Belt + gold buckle
+    s.rect(cx - 4, by + 7, 9, 1, shade(colors.accent, -0.25))
+    s.rect(cx - 1, by + 7, 3, 1, '#ffd60a')
+    // Lower tunic/robe/armor hem
     if (colors.armorStyle === 'robe' || colors.armorStyle === 'arch_robe' || colors.armorStyle === 'vestment') {
-      s.rect(cx - 3, by + 5, 7, 3, bodyDark)
-      s.px(cx, by + 6, colors.accent)
+      s.rect(cx - 4, by + 8, 9, 6, bodyDark)
+      s.rect(cx - 3, by + 8, 7, 5, body)
+      s.rect(cx - 1, by + 8, 3, 6, colors.accent)
+    } else {
+      s.rect(cx - 4, by + 8, 9, 3, bodyDark)
+      s.rect(cx - 2, by + 8, 5, 2, body)
     }
     if (colors.armorStyle === 'paladin_plate') {
-      s.line(cx, by + 1, cx, by + 3, '#ffd60a', 1)
-      s.line(cx - 1, by + 2, cx + 1, by + 2, '#ffd60a', 1)
+      s.line(cx, by + 2, cx, by + 5, '#ffd60a', 1)
+      s.line(cx - 1, by + 3, cx + 1, by + 3, '#ffd60a', 1)
     }
     if (colors.skeleton) {
-      s.px(cx - 1, by + 1, bodyDark); s.px(cx + 1, by + 1, bodyDark)
-      s.px(cx - 1, by + 3, bodyDark); s.px(cx + 1, by + 3, bodyDark)
+      s.px(cx - 1, by + 2, bodyDark); s.px(cx + 1, by + 2, bodyDark)
+      s.px(cx - 1, by + 4, bodyDark); s.px(cx + 1, by + 4, bodyDark)
+      s.px(cx - 1, by + 6, bodyDark); s.px(cx + 1, by + 6, bodyDark)
     }
     if (colors.backpack && isUp) {
-      s.rect(cx - 2, by + 1, 5, 5, '#9c6644')
-      s.rect(cx - 2, by + 1, 5, 1, '#c9b27c')
+      s.rect(cx - 3, by + 2, 7, 7, '#7f5539')
+      s.rect(cx - 3, by + 2, 7, 2, '#c9b27c')
+      s.px(cx, by + 5, '#ffd60a')
     }
     if (colors.quiver && isUp) {
-      s.line(cx + 2, by - 1, cx - 1, by + 5, '#7f5539', 2)
-      s.px(cx + 2, by - 2, '#f8fafc')
-      s.px(cx + 3, by - 2, '#ffd60a')
+      s.line(cx + 3, by - 2, cx - 2, by + 7, '#7f5539', 2)
+      s.px(cx + 3, by - 3, '#f8fafc')
+      s.px(cx + 4, by - 3, '#ffd60a')
+      s.px(cx + 2, by - 4, '#e63946')
     }
     if (colors.cape && isUp) {
       const sway = action === 'walk' && f % 2 === 1 ? 1 : 0
-      s.rect(cx - 3, by + 1, 7, 7 + sway, colors.cape)
-      s.rect(cx - 2, by + 2, 5, 5 + sway, shade(colors.cape, -0.2))
+      s.rect(cx - 4, by + 1, 9, 11 + sway, colors.cape)
+      s.rect(cx - 3, by + 2, 7, 9 + sway, shade(colors.cape, -0.22))
     }
 
-    // Head
-    const headY = 8 + bob
-    s.rect(cx - 3, headY, 7, 6, skin)
+    // Back hair flowing down behind shoulders
+    drawHairBackLayer(s, cx, headY, isUp ? 'up' : 'down', colors)
+
+    // Head (11px wide sculpted anime/MMORPG chibi face)
+    s.rect(cx - 4, headY, 9, 2, skinHi)
+    s.rect(cx - 5, headY + 2, 11, 5, skin)
+    s.rect(cx - 4, headY + 7, 9, 2, skin)
+    s.rect(cx - 3, headY + 9, 7, 1, skinDark)
+    s.rect(cx - 1, headY + 10, 3, 1, skinDeep) // neck
+    if (!isUp) {
+      s.px(cx - 6, headY + 4, skinDark); s.px(cx - 6, headY + 5, skinDark)
+      s.px(cx + 6, headY + 4, skinDark); s.px(cx + 6, headY + 5, skinDark)
+    }
     if (colors.goblinEars) {
-      s.line(cx - 3, headY + 2, cx - 6, headY + 1, skin, 1)
-      s.line(cx + 3, headY + 2, cx + 6, headY + 1, skin, 1)
+      s.line(cx - 5, headY + 4, cx - 9, headY + 2, skin, 2)
+      s.line(cx + 5, headY + 4, cx + 9, headY + 2, skin, 2)
     }
     if (!isUp) {
       if (!blink) {
-        s.px(cx - 2, headY + 3, eyeCol)
-        s.px(cx + 2, headY + 3, eyeCol)
+        // Expressive 2px-tall eyes with white highlight
+        s.px(cx - 3, headY + 5, '#ffffff')
+        s.px(cx - 2, headY + 5, eyeCol)
+        s.px(cx - 3, headY + 6, eyeCol)
+        s.px(cx - 2, headY + 6, eyeCol)
+
+        s.px(cx + 3, headY + 5, '#ffffff')
+        s.px(cx + 2, headY + 5, eyeCol)
+        s.px(cx + 2, headY + 6, eyeCol)
+        s.px(cx + 3, headY + 6, eyeCol)
       } else {
-        s.px(cx - 2, headY + 3, skinDark)
-        s.px(cx + 2, headY + 3, skinDark)
+        s.rect(cx - 3, headY + 6, 2, 1, skinDark)
+        s.rect(cx + 2, headY + 6, 2, 1, skinDark)
       }
-      s.px(cx, headY + 5, skinDark)
+      if (!colors.skeleton) {
+        s.px(cx - 4, headY + 7, shade(skin, -0.08))
+        s.px(cx + 4, headY + 7, shade(skin, -0.08))
+      }
+      s.px(cx, headY + 8, skinDark)
     }
+
     drawHatOrHair(s, cx, headY, isUp ? 'up' : 'down', colors)
     if (colors.halo) {
-      s.rect(cx - 2, headY - 4, 5, 1, '#ffd60a')
-      s.px(cx, headY - 4, '#ffffff')
+      s.rect(cx - 3, headY - 6, 7, 1, '#ffd60a')
+      s.px(cx, headY - 6, '#ffffff')
     }
     if (colors.horns) {
-      s.px(cx - 3, headY - 1, '#f1e9d2'); s.px(cx - 4, headY - 2, '#f1e9d2')
-      s.px(cx + 3, headY - 1, '#f1e9d2'); s.px(cx + 4, headY - 2, '#f1e9d2')
+      s.px(cx - 4, headY - 1, '#f1e9d2'); s.px(cx - 5, headY - 3, '#f1e9d2')
+      s.px(cx + 4, headY - 1, '#f1e9d2'); s.px(cx + 5, headY - 3, '#f1e9d2')
     }
 
     // Shoulder pauldrons
     if (colors.shoulderPads) {
-      s.rect(cx - 5, by, 3, 2, bodyHi)
-      s.rect(cx + 3, by, 3, 2, bodyHi)
-      s.px(cx - 4, by, colors.accent)
-      s.px(cx + 4, by, colors.accent)
+      s.rect(cx - 7, by, 4, 3, bodyHi)
+      s.rect(cx + 4, by, 4, 3, bodyHi)
+      s.rect(cx - 6, by, 3, 1, colors.accent)
+      s.rect(cx + 4, by, 3, 1, colors.accent)
     }
 
-    drawArm(s, { x: cx - 3, y: by + 1 }, leftElbow, leftHand, bodyDark, skinDark)
-    drawArm(s, { x: cx + 3, y: by + 1 }, rightElbow, rightHand, body, skin)
+    drawArm(s, { x: cx - 5, y: by + 2 }, leftElbow, leftHand, bodyDark, skinDark, colors.accent)
+    drawArm(s, { x: cx + 5, y: by + 2 }, rightElbow, rightHand, body, skin, colors.accent)
 
     if (colors.shieldColor) {
+      s.rect(leftHand.x - 2, leftHand.y - 3, 6, 7, shade(colors.shieldColor, -0.22))
       s.rect(leftHand.x - 1, leftHand.y - 2, 4, 5, colors.shieldColor)
       s.rect(leftHand.x, leftHand.y - 1, 2, 3, colors.shieldCrest ?? colors.accent)
     }
@@ -961,10 +1248,6 @@ export function humanSprite(
 
     return s.toCanvas(true, false)
   })
-}
-
-function headTopOffset(headY: number) {
-  return headY - 2
 }
 
 /* ---------------- Articulated Monsters (All 17 Monsters) ---------------- */
@@ -2035,12 +2318,15 @@ function drawBase(ctx: CanvasRenderingContext2D, tile: number, rng: () => number
       return
     }
     case T.COBBLESTONE: {
-      speckle(ctx, rng, '#9e9b93', ['#b0aca3', '#8c8980', '#bfbbb0'], 0.16)
-      ctx.fillStyle = '#6f6c64'
+      speckle(ctx, rng, '#8a92a6', ['#98a0b5', '#7b8396', '#a4adc2'], 0.16)
+      ctx.fillStyle = '#5e6578'
       ctx.fillRect(0, 7, TILE, 1)
       ctx.fillRect(0, 15, TILE, 1)
       ctx.fillRect(7, 0, 1, 7)
       ctx.fillRect(15, 8, 1, 7)
+      ctx.fillStyle = '#b4bdd1'
+      ctx.fillRect(1, 1, 5, 1)
+      ctx.fillRect(9, 9, 5, 1)
       return
     }
     case T.WOOD_FLOOR: {
@@ -2064,12 +2350,16 @@ function drawBase(ctx: CanvasRenderingContext2D, tile: number, rng: () => number
       return
     }
     case T.PLAZA: {
-      speckle(ctx, rng, '#b5b0a6', ['#a8a397', '#c4bfb4'], 0.15)
-      ctx.fillStyle = '#8f8a80'
+      speckle(ctx, rng, '#a6aec2', ['#98a0b5', '#b5bdd1'], 0.14)
+      ctx.fillStyle = '#6c748a'
       ctx.fillRect(0, 0, TILE, 1)
       ctx.fillRect(0, 8, TILE, 1)
       ctx.fillRect(0, 0, 1, 8)
       ctx.fillRect(8, 8, 1, 8)
+      ctx.fillStyle = '#cad2e6'
+      ctx.fillRect(1, 1, 14, 1)
+      ctx.fillRect(1, 9, 6, 1)
+      ctx.fillRect(9, 9, 6, 1)
       return
     }
     case T.SKY_TILE: {
@@ -2426,19 +2716,41 @@ export function mapObjectSprite(kind: MapObjectKind, frame = 0, variant = 0): HT
         return s.toCanvas(true)
       }
       case 'market_stall': {
-        const s = new PixelSurface(26, 26)
-        const clothA = variant % 2 === 0 ? '#d62828' : '#2a6f97'
-        const clothB = '#f8f9fa'
-        s.rect(3, 16, 20, 7, '#8a5a3b')
-        s.rect(3, 15, 20, 2, '#b07d4f')
-        s.rect(3, 9, 2, 8, '#5c3d2e')
-        s.rect(21, 9, 2, 8, '#5c3d2e')
-        for (let x = 2; x < 24; x += 2) {
-          s.rect(x, 4, 2, 5, (x / 2) % 2 === 0 ? clothA : clothB)
+        const s = new PixelSurface(34, 30)
+        const clothA = variant % 2 === 0 ? '#275dad' : '#b23a48'
+        const clothADark = shade(clothA, -0.25)
+        const clothB = '#f4efe6'
+        const clothBDark = '#d9d0c1'
+        // Wooden counter & crates
+        s.rect(4, 19, 26, 8, '#7f5539')
+        s.rect(5, 20, 24, 6, '#9c6644')
+        s.rect(3, 18, 28, 2, '#c8956b')
+        s.rect(4, 26, 26, 1, '#4a2e1b')
+        // Corner timber posts with gold finials
+        s.rect(4, 9, 2, 10, '#5c3d2e')
+        s.rect(28, 9, 2, 10, '#5c3d2e')
+        s.rect(3, 2, 2, 2, '#ffd60a')
+        s.rect(29, 2, 2, 2, '#ffd60a')
+        // Peaked striped awning canopy
+        for (let row = 0; row < 7; row++) {
+          const left = 5 - Math.floor(row * 0.45)
+          const right = 29 + Math.floor(row * 0.45)
+          for (let x = left; x <= right; x++) {
+            const stripe = Math.floor((x - 2) / 3) % 2 === 0
+            const isRim = row >= 5
+            s.px(x, 3 + row, stripe ? (isRim ? clothADark : clothA) : (isRim ? clothBDark : clothB))
+          }
         }
-        s.rect(5, 13, 4, 2, '#f4a261')
-        s.rect(11, 13, 3, 2, '#7ae582')
-        s.rect(16, 13, 4, 2, '#e63946')
+        // Gold awning trim
+        s.rect(2, 9, 30, 1, '#e9c46a')
+        // Stocked wares: potions, apples, herbs, gems on counter
+        s.rect(6, 15, 4, 3, '#e63946')
+        s.px(7, 14, '#ffffff')
+        s.rect(12, 15, 3, 3, '#4cc9f0')
+        s.px(13, 14, '#caf0f8')
+        s.rect(17, 15, 4, 3, '#7ae582')
+        s.rect(23, 14, 5, 4, '#f4a261')
+        s.px(24, 14, '#ffd60a')
         return s.toCanvas(true)
       }
       case 'anvil_forge': {

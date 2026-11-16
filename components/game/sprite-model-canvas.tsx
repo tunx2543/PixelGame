@@ -25,6 +25,7 @@ export interface SpriteModelCanvasProps {
   isGm?: boolean
   showShadow?: boolean
   showAura?: boolean
+  variant?: 'full' | 'portrait'
   className?: string
   label?: string
   onAutoPhaseChange?: (phase: SpriteAction) => void
@@ -42,6 +43,7 @@ export function SpriteModelCanvas({
   isGm,
   showShadow = true,
   showAura = true,
+  variant = 'full',
   className = '',
   label,
   onAutoPhaseChange,
@@ -183,68 +185,76 @@ export function SpriteModelCanvas({
         ctx.clearRect(0, 0, canvas.width, canvas.height)
         ctx.imageSmoothingEnabled = false
 
-        const padW = canvas.width * 0.84
-        const padH = canvas.height * 0.78
-        const computedScale =
-          scale ??
-          Math.max(1.25, Math.min(padW / spriteImg.width, padH / spriteImg.height))
-        const drawW = Math.round(spriteImg.width * computedScale)
-        const drawH = Math.round(spriteImg.height * computedScale)
+        if (variant === 'portrait' && mode === 'job') {
+          const cropW = Math.min(spriteImg.width, 30)
+          const cropH = Math.min(spriteImg.height, 26)
+          const sx = Math.max(0, Math.round((spriteImg.width - cropW) / 2))
+          const sy = 3
+          ctx.drawImage(spriteImg, sx, sy, cropW, cropH, 0, 0, canvas.width, canvas.height)
+        } else {
+          const padW = canvas.width * 0.9
+          const padH = canvas.height * 0.86
+          const computedScale =
+            scale ??
+            Math.max(0.4, Math.min(padW / spriteImg.width, padH / spriteImg.height))
+          const drawW = Math.round(spriteImg.width * computedScale)
+          const drawH = Math.round(spriteImg.height * computedScale)
 
-        const centerX = Math.round(canvas.width / 2)
-        const baseFloorY = Math.round(canvas.height * 0.84)
+          const centerX = Math.round(canvas.width / 2)
+          const baseFloorY = Math.round(canvas.height * 0.89)
 
-        if (showShadow) {
+          if (showShadow) {
+            ctx.save()
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.38)'
+            const shadowRx = Math.max(8, Math.round(drawW * 0.3))
+            const shadowRy = Math.max(3, Math.round(shadowRx * 0.34))
+            ctx.beginPath()
+            ctx.ellipse(centerX + lungeOffset, baseFloorY, shadowRx, shadowRy, 0, 0, Math.PI * 2)
+            ctx.fill()
+            ctx.restore()
+          }
+
+          if (showAura && auraColor) {
+            ctx.save()
+            ctx.strokeStyle = auraColor
+            ctx.lineWidth = isBoss ? 2 : 1.5
+            ctx.globalAlpha = 0.34 + (reducedMotion ? 0 : Math.sin(elapsed * 4.2) * 0.14)
+            const auraRx = Math.max(11, Math.round(drawW * 0.38))
+            const auraRy = Math.max(4, Math.round(auraRx * 0.34))
+            ctx.beginPath()
+            ctx.ellipse(centerX + lungeOffset, baseFloorY - 1, auraRx, auraRy, 0, 0, Math.PI * 2)
+            ctx.stroke()
+            ctx.restore()
+          }
+
           ctx.save()
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.38)'
-          const shadowRx = Math.max(8, Math.round(drawW * 0.3))
-          const shadowRy = Math.max(3, Math.round(shadowRx * 0.34))
-          ctx.beginPath()
-          ctx.ellipse(centerX + lungeOffset, baseFloorY, shadowRx, shadowRy, 0, 0, Math.PI * 2)
-          ctx.fill()
+          if (isGhost) {
+            ctx.globalAlpha = 0.84 + (reducedMotion ? 0 : Math.sin(elapsed * 4) * 0.08)
+          }
+          ctx.drawImage(
+            spriteImg,
+            Math.round(centerX + lungeOffset - drawW / 2),
+            Math.round(baseFloorY + hoverY - drawH + Math.round(2 * computedScale)),
+            drawW,
+            drawH,
+          )
+
+          if (isAttack && attackProgress > 0.2 && attackProgress < 0.85) {
+            const slashAlpha = Math.max(0, 1 - Math.abs(attackProgress - 0.5) * 2.4)
+            ctx.globalAlpha = slashAlpha
+            ctx.strokeStyle = auraColor ?? '#ffd60a'
+            ctx.lineWidth = 2
+            const arcCenterX =
+              centerX + lungeOffset + (dir === 'left' ? -drawW * 0.14 : dir === 'right' ? drawW * 0.14 : 0)
+            const arcCenterY = baseFloorY + hoverY - drawH * 0.45
+            const arcRadius = Math.min(Math.round(canvas.width * 0.24), Math.max(9, Math.round(drawW * 0.28)))
+            const baseA = dir === 'left' ? Math.PI : dir === 'up' ? -Math.PI / 2 : dir === 'down' ? Math.PI / 2 : 0
+            ctx.beginPath()
+            ctx.arc(arcCenterX, arcCenterY, arcRadius, baseA - 0.85, baseA + 0.85)
+            ctx.stroke()
+          }
           ctx.restore()
         }
-
-        if (showAura && auraColor) {
-          ctx.save()
-          ctx.strokeStyle = auraColor
-          ctx.lineWidth = isBoss ? 2 : 1.5
-          ctx.globalAlpha = 0.34 + (reducedMotion ? 0 : Math.sin(elapsed * 4.2) * 0.14)
-          const auraRx = Math.max(11, Math.round(drawW * 0.38))
-          const auraRy = Math.max(4, Math.round(auraRx * 0.34))
-          ctx.beginPath()
-          ctx.ellipse(centerX + lungeOffset, baseFloorY - 1, auraRx, auraRy, 0, 0, Math.PI * 2)
-          ctx.stroke()
-          ctx.restore()
-        }
-
-        ctx.save()
-        if (isGhost) {
-          ctx.globalAlpha = 0.84 + (reducedMotion ? 0 : Math.sin(elapsed * 4) * 0.08)
-        }
-        ctx.drawImage(
-          spriteImg,
-          Math.round(centerX + lungeOffset - drawW / 2),
-          Math.round(baseFloorY + hoverY - drawH + Math.round(2 * computedScale)),
-          drawW,
-          drawH,
-        )
-
-        if (isAttack && attackProgress > 0.2 && attackProgress < 0.85) {
-          const slashAlpha = Math.max(0, 1 - Math.abs(attackProgress - 0.5) * 2.4)
-          ctx.globalAlpha = slashAlpha
-          ctx.strokeStyle = auraColor ?? '#ffd60a'
-          ctx.lineWidth = 2
-          const arcCenterX =
-            centerX + lungeOffset + (dir === 'left' ? -drawW * 0.14 : dir === 'right' ? drawW * 0.14 : 0)
-          const arcCenterY = baseFloorY + hoverY - drawH * 0.45
-          const arcRadius = Math.min(Math.round(canvas.width * 0.24), Math.max(9, Math.round(drawW * 0.28)))
-          const baseA = dir === 'left' ? Math.PI : dir === 'up' ? -Math.PI / 2 : dir === 'down' ? Math.PI / 2 : 0
-          ctx.beginPath()
-          ctx.arc(arcCenterX, arcCenterY, arcRadius, baseA - 0.85, baseA + 0.85)
-          ctx.stroke()
-        }
-        ctx.restore()
       }
 
       if (!reducedMotion && isVisible) {
@@ -257,7 +267,7 @@ export function SpriteModelCanvas({
       if (rafId) cancelAnimationFrame(rafId)
       observer?.disconnect()
     }
-  }, [mode, id, action, dir, weaponOverride, weaponColorOverride, size, scale, isGm, showShadow, showAura])
+  }, [mode, id, action, dir, weaponOverride, weaponColorOverride, size, scale, isGm, showShadow, showAura, variant])
 
   return (
     <canvas

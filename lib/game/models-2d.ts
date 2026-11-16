@@ -28,12 +28,23 @@ export type ArmorStyle =
   | 'shadow'
   | 'sovereign'
 
+export type HairStyle =
+  | 'spiky'
+  | 'swept'
+  | 'long'
+  | 'ponytail'
+  | 'braid'
+  | 'parted'
+  | 'royal'
+
 export interface JobModelSpec {
   jobId: string
   name: string
   tier: 0 | 1 | 2
   hatStyle: HatStyle
   armorStyle: ArmorStyle
+  hairStyle?: HairStyle
+  canvasSize?: { width: number; height: number }
   weapon: WeaponType
   hatColor: string
   capeColor?: string
@@ -97,6 +108,8 @@ export interface MonsterModelSpec {
 export const MODEL_DIRS: readonly ModelDir[] = ['down', 'right', 'up', 'left'] as const
 export const MODEL_ACTIONS: readonly ModelAction[] = ['idle', 'walk', 'attack'] as const
 
+export const HUMAN_MODEL_CANVAS_SIZE = { width: 42, height: 48 } as const
+
 export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
   novice: {
     jobId: 'novice',
@@ -104,6 +117,8 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     tier: 0,
     hatStyle: 'none',
     armorStyle: 'tunic',
+    hairStyle: 'spiky',
+    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
     weapon: 'stick',
     hatColor: '#c9b27c',
     scarfColor: '#e9c46a',
@@ -117,6 +132,8 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     tier: 1,
     hatStyle: 'bandana',
     armorStyle: 'brigandine',
+    hairStyle: 'spiky',
+    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
     weapon: 'sword',
     hatColor: '#e63946',
     scarfColor: '#d62828',
@@ -132,6 +149,8 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     tier: 1,
     hatStyle: 'wizard',
     armorStyle: 'robe',
+    hairStyle: 'long',
+    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
     weapon: 'staff',
     hatColor: '#5b3f8c',
     capeColor: '#3a2a5c',
@@ -145,6 +164,8 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     tier: 1,
     hatStyle: 'hood',
     armorStyle: 'leather',
+    hairStyle: 'ponytail',
+    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
     weapon: 'bow',
     hatColor: '#3f7d4e',
     capeColor: '#2d6a4f',
@@ -159,6 +180,8 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     tier: 1,
     hatStyle: 'bandana',
     armorStyle: 'shadow',
+    hairStyle: 'swept',
+    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
     weapon: 'dagger',
     hatColor: '#b23a48',
     scarfColor: '#e63946',
@@ -173,6 +196,8 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     tier: 2,
     hatStyle: 'helm',
     armorStyle: 'plate',
+    hairStyle: 'parted',
+    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
     weapon: 'sword',
     hatColor: '#9aa5b1',
     capeColor: '#e63946',
@@ -188,6 +213,8 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     tier: 2,
     hatStyle: 'paladin_helm',
     armorStyle: 'paladin_plate',
+    hairStyle: 'royal',
+    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
     weapon: 'sword',
     hatColor: '#e2e8f0',
     capeColor: '#2563eb',
@@ -205,6 +232,8 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     tier: 2,
     hatStyle: 'archmage',
     armorStyle: 'arch_robe',
+    hairStyle: 'long',
+    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
     weapon: 'staff',
     hatColor: '#1d3557',
     capeColor: '#457b9d',
@@ -219,6 +248,8 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     tier: 2,
     hatStyle: 'mitre',
     armorStyle: 'vestment',
+    hairStyle: 'braid',
+    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
     weapon: 'staff',
     hatColor: '#f8fafc',
     capeColor: '#f4d35e',
@@ -234,6 +265,8 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     tier: 2,
     hatStyle: 'ranger_hood',
     armorStyle: 'leather',
+    hairStyle: 'ponytail',
+    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
     weapon: 'bow',
     hatColor: '#1b4332',
     capeColor: '#40916c',
@@ -249,6 +282,8 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     tier: 2,
     hatStyle: 'cowl',
     armorStyle: 'shadow',
+    hairStyle: 'swept',
+    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
     weapon: 'dagger',
     hatColor: '#1b1b2f',
     capeColor: '#5a189a',
@@ -265,6 +300,8 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     tier: 2,
     hatStyle: 'crown',
     armorStyle: 'sovereign',
+    hairStyle: 'royal',
+    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
     weapon: 'staff',
     hatColor: '#ffd60a',
     capeColor: '#b5179e',

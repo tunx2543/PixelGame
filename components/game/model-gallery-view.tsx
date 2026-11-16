@@ -184,7 +184,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
           aria-label={`ตัวอย่างโมเดล ${selectedJobEntry.job.name}`}
           className="grid gap-3 border-2 border-primary/50 bg-muted p-3 md:grid-cols-[11.5rem_1fr]"
         >
-          <div className="flex flex-col items-center justify-between border-2 border-[#0e0f1a] bg-[#131726] p-2.5">
+          <div className="mmorpg-showcase-card flex flex-col items-center justify-between p-2.5">
             <div className="flex w-full items-center justify-between text-[10px]">
               <span className="border border-primary/40 bg-primary/15 px-1.5 py-0.5 font-semibold text-primary">
                 {selectedJobEntry.job.id === 'gm'
@@ -198,7 +198,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
               </span>
             </div>
 
-            <div className="relative my-1 flex items-center justify-center">
+            <div className="relative my-1.5 flex items-center justify-center rounded-sm border border-[#c9993f]/40 bg-[#0b0f21]/85 p-2 shadow-inner">
               <SpriteModelCanvas
                 mode="job"
                 id={selectedJobEntry.job.id}
@@ -402,7 +402,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
 
       {/* Grid of All Models */}
       {tab === 'jobs' ? (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
           {jobModels.map(({ job }) => {
             const selected = job.id === selectedJobEntry.job.id
             return (
@@ -411,10 +411,10 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                 type="button"
                 onClick={() => setSelectedJobId(job.id)}
                 aria-pressed={selected}
-                className={`pixel-btn flex flex-col items-center gap-1.5 p-2.5 text-center transition-colors ${
+                className={`flex flex-col items-center gap-1.5 p-2 text-center transition-all hover:brightness-110 ${
                   selected
-                    ? 'border-primary bg-primary/15 ring-2 ring-primary/70'
-                    : 'bg-muted/80 hover:bg-secondary'
+                    ? 'mmorpg-showcase-card-active'
+                    : 'mmorpg-showcase-card'
                 }`}
               >
                 <div className="flex w-full items-center justify-between text-[10px]">
@@ -423,19 +423,19 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                   </span>
                   <span className="font-mono text-muted-foreground">Lv.{job.reqLevel}</span>
                 </div>
-                <div className="grid size-20 place-items-center border border-[#0e0f1a] bg-[#131726]">
+                <div className="grid size-24 place-items-center border border-[#c9993f]/35 bg-[#0b1024]/90 shadow-[inset_0_0_16px_rgba(65,105,225,0.16)]">
                   <SpriteModelCanvas
                     mode="job"
                     id={job.id}
                     action={compact && !selected && action === 'auto' ? 'idle' : action}
                     dir={dir}
-                    size={76}
+                    size={88}
                     isGm={job.id === 'gm'}
                     label={`พรีวิวอาชีพ ${job.name}`}
                   />
                 </div>
-                <div className="w-full">
-                  <p className="truncate text-xs font-bold text-foreground">{job.name}</p>
+                <div className="mmorpg-ribbon w-full px-2 py-1">
+                  <p className="truncate text-xs font-bold text-[#ffeaa7]">{job.name}</p>
                   <p className="truncate text-[10px] text-muted-foreground">
                     {job.ranged ? 'ระยะไกล' : 'ระยะประชิด'} • {job.weaponTypes[0]}
                   </p>
@@ -445,7 +445,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
           })}
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
           {monsterModels.map(({ monster, model }) => {
             const selected = monster.id === selectedMonsterEntry.monster.id
             return (
@@ -454,10 +454,10 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                 type="button"
                 onClick={() => setSelectedMonsterId(monster.id)}
                 aria-pressed={selected}
-                className={`pixel-btn flex flex-col items-center gap-1.5 p-2.5 text-center transition-colors ${
+                className={`flex flex-col items-center gap-1.5 p-2 text-center transition-all hover:brightness-110 ${
                   selected
-                    ? 'border-destructive bg-destructive/15 ring-2 ring-destructive/70'
-                    : 'bg-muted/80 hover:bg-secondary'
+                    ? 'mmorpg-showcase-card-active border-destructive'
+                    : 'mmorpg-showcase-card'
                 }`}
               >
                 <div className="flex w-full items-center justify-between text-[10px]">
@@ -466,17 +466,17 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                   </span>
                   <span className="font-mono text-muted-foreground tabular-nums">Lv.{monster.level}</span>
                 </div>
-                <div className="grid size-20 place-items-center border border-[#0e0f1a] bg-[#131726]">
+                <div className="grid size-24 place-items-center border border-[#c9993f]/35 bg-[#0b1024]/90 shadow-[inset_0_0_16px_rgba(65,105,225,0.14)]">
                   <SpriteModelCanvas
                     mode="monster"
                     id={monster.id}
                     action={compact && !selected && action === 'auto' ? 'idle' : action}
                     dir={dir}
-                    size={76}
+                    size={88}
                     label={`พรีวิวมอนสเตอร์ ${monster.name}`}
                   />
                 </div>
-                <div className="w-full">
+                <div className="mmorpg-ribbon w-full px-2 py-1">
                   <p className="truncate text-xs font-bold text-foreground">{monster.name}</p>
                   <p className="truncate text-[10px] text-muted-foreground">
                     HP {formatNum(monster.hp)} • {model.flying ? 'บิน' : 'พื้นดิน'}

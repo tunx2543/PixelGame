@@ -50,18 +50,25 @@ import {
   type EncounterVictoryResult,
 } from '@/lib/game/encounter'
 import {
-  playAttackSfx,
-  playCritSfx,
-  playEnemyHitSfx,
-  playEnhanceSfx,
-  playLevelUpSfx,
-  playPetAttackSfx,
-  playSkillSfx,
-  playVictorySfx,
-} from '@/lib/game/sfx'
+  triggerAttackSound,
+  triggerCritSound,
+  triggerDefeatSound,
+  triggerEnhanceSound,
+  triggerHitSound,
+  triggerLevelUpSound,
+  triggerPetAttackSound,
+  triggerSkillSound,
+  triggerVictorySound,
+} from '@/lib/game/combat-audio'
 import { getActivePetBonuses } from '@/lib/game/systems'
 import { formatNum } from './format'
 import { EncounterStageCanvas, type StagePopup } from './encounter-stage-canvas'
+import {
+  createFloatingPopup,
+  pruneExpiredPopups,
+  type FloatingPopupKind,
+} from '@/lib/game/floating-damage'
+import { evaluateAttackShake, type ScreenShakeEvent } from '@/lib/game/screen-shake'
 import { pickNewerSave } from '@/lib/game/save-sync'
 
 type ArenaPhase = 'LOADING' | 'READY' | 'FIGHTING' | 'VICTORY' | 'DEFEAT'
@@ -149,6 +156,7 @@ export function MonsterEncounterArena() {
   const [enemyHitPulse, setEnemyHitPulse] = useState(0)
   const [petAttackPulse, setPetAttackPulse] = useState(0)
   const [popups, setPopups] = useState<StagePopup[]>([])
+  const [shakeEvent, setShakeEvent] = useState<ScreenShakeEvent | null>(null)
 
   const saveRef = useRef<SaveData | null>(null)
   const enemyRef = useRef<EncounterEnemy | null>(null)
@@ -160,6 +168,7 @@ export function MonsterEncounterArena() {
   const skillCdsRef = useRef<Record<string, number>>({})
   const logSeqRef = useRef(0)
   const popupSeqRef = useRef(0)
+  const shakeSeqRef = useRef(0)
 
   saveRef.current = save
   enemyRef.current = enemy
@@ -173,11 +182,52 @@ export function MonsterEncounterArena() {
     setLogs((prev) => [{ id, text, tone }, ...prev].slice(0, 12))
   }, [])
 
-  const pushPopup = useCallback((target: 'player' | 'enemy', text: string, color: string, crit = false) => {
-    const id = ++popupSeqRef.current
-    const createdAt = performance.now()
-    setPopups((prev) => [...prev.filter((p) => createdAt - p.createdAt < 900), { id, target, text, color, crit, createdAt }])
+  const popupTimersRef = useRef<number[]>([])
+
+  useEffect(() => {
+    return () => {
+      for (const timer of popupTimersRef.current) {
+        window.clearTimeout(timer)
+      }
+      popupTimersRef.current = []
+    }
   }, [])
+
+  const pushPopup = useCallback(
+    (
+      target: 'player' | 'enemy',
+      amount: number,
+      kind: FloatingPopupKind,
+      color: string,
+      options?: { badge?: string; prefix?: string; suffix?: string },
+    ) => {
+      const id = ++popupSeqRef.current
+      const now = performance.now()
+      let createdDuration = 950
+      setPopups((prev) => {
+        const active = pruneExpiredPopups(prev, now)
+        const nextPopup = createFloatingPopup({
+          id,
+          target,
+          kind,
+          amount,
+          color,
+          now,
+          activePopups: active,
+          badge: options?.badge,
+          prefix: options?.prefix,
+          suffix: options?.suffix,
+        })
+        createdDuration = nextPopup.durationMs
+        return [...active, nextPopup]
+      })
+      const timer = window.setTimeout(() => {
+        setPopups((prev) => prev.filter((p) => p.id !== id))
+      }, createdDuration + 60)
+      popupTimersRef.current.push(timer)
+    },
+    [],
+  )
 
   const syncSaveToStorageAndCloud = useCallback(async (nextSave: SaveData, activeUser: User | null, activeSlot: string) => {
     const cloudUid = activeUser && activeUser.emailVerified ? activeUser.uid : null
@@ -283,6 +333,7 @@ export function MonsterEncounterArena() {
       setEnemy(nextEnemy)
       setVictoryResult(null)
       setLastBreakdown(null)
+      setShakeEvent(null)
       attackCdRef.current = 0
       skillCdsRef.current = {}
       setAttackCd(0)
@@ -315,13 +366,13 @@ export function MonsterEncounterArena() {
       })
 
       if (outcome.leveledUpTo > outcome.leveledUpFrom) {
-        playLevelUpSfx(mutedRef.current)
+        triggerLevelUpSound({ muted: mutedRef.current, source: 'encounter', detail: { level: outcome.leveledUpTo } })
         appendLog(
           `เลเวลอัป! เลื่อนระดับเป็น Lv.${outcome.leveledUpTo} (HP/MP ฟื้นฟูเต็มหลอด)`,
           'crit',
         )
       } else {
-        playVictorySfx(mutedRef.current)
+        triggerVictorySound({ muted: mutedRef.current, source: 'encounter', detail: { enemyId: defeatedEnemy.def.id } })
       }
 
       const dropSummary =
@@ -387,8 +438,8 @@ export function MonsterEncounterArena() {
         setSave(nextSave)
         setPlayerAttackPulse(performance.now())
         setPlayerSkillColor(skill.color)
-        playSkillSfx(mutedRef.current)
-        pushPopup('player', `+${formatNum(recovered)} HP`, '#4fc3a1')
+        triggerSkillSound({ muted: mutedRef.current, source: 'encounter', detail: { skillId: skill.id, kind: 'heal' } })
+        pushPopup('player', recovered, 'heal', '#4fc3a1', { prefix: '+', suffix: ' HP' })
         appendLog(`${skill.name} ฟื้นฟู ${formatNum(recovered)} HP`, 'hero')
         return
       }
@@ -412,19 +463,79 @@ export function MonsterEncounterArena() {
       setEnemyHitPulse(performance.now())
 
       if (breakdown.isCrit) {
-        playCritSfx(mutedRef.current)
+        triggerAttackSound({
+          muted: mutedRef.current,
+          source: 'encounter',
+          playSynthFallback: false,
+          detail: { actor: 'player', isSkill: Boolean(skill), skillId: skill?.id },
+        })
+        triggerCritSound({
+          muted: mutedRef.current,
+          source: 'encounter',
+          detail: { target: 'enemy', damage: breakdown.damage, skillId: skill?.id },
+        })
+        triggerHitSound({
+          muted: mutedRef.current,
+          source: 'encounter',
+          playSynthFallback: false,
+          detail: { target: 'enemy', damage: breakdown.damage, isCrit: true },
+        })
       } else if (skill) {
-        playSkillSfx(mutedRef.current)
+        triggerAttackSound({
+          muted: mutedRef.current,
+          source: 'encounter',
+          playSynthFallback: false,
+          detail: { actor: 'player', isSkill: true, skillId: skill.id },
+        })
+        triggerSkillSound({
+          muted: mutedRef.current,
+          source: 'encounter',
+          detail: { skillId: skill.id, damage: breakdown.damage },
+        })
+        triggerHitSound({
+          muted: mutedRef.current,
+          source: 'encounter',
+          playSynthFallback: false,
+          detail: { target: 'enemy', damage: breakdown.damage, isCrit: false },
+        })
       } else {
-        playAttackSfx(mutedRef.current)
+        triggerAttackSound({
+          muted: mutedRef.current,
+          source: 'encounter',
+          detail: { actor: 'player', isSkill: false },
+        })
+        triggerHitSound({
+          muted: mutedRef.current,
+          source: 'encounter',
+          playSynthFallback: false,
+          detail: { target: 'enemy', damage: breakdown.damage, isCrit: false },
+        })
       }
 
       pushPopup(
         'enemy',
-        breakdown.isCrit ? `${formatNum(breakdown.damage)}! คริติคอล` : `${formatNum(breakdown.damage)}`,
+        breakdown.damage,
+        breakdown.isCrit ? 'crit' : 'damage',
         breakdown.isCrit ? '#ffd60a' : '#ffffff',
-        breakdown.isCrit,
+        breakdown.isCrit ? { badge: 'CRIT!' } : undefined,
       )
+
+      const shakeDecision = evaluateAttackShake({
+        damage: breakdown.damage,
+        enemyMaxHp: currentEnemy.maxHp,
+        isCrit: breakdown.isCrit,
+        skillMultiplier: mult,
+      })
+      if (shakeDecision.shouldShake && shakeDecision.reason !== 'none') {
+        setShakeEvent({
+          id: ++shakeSeqRef.current,
+          intensity: shakeDecision.intensity,
+          durationMs: shakeDecision.durationMs,
+          isCrit: breakdown.isCrit,
+          reason: shakeDecision.reason,
+          startedAt: performance.now(),
+        })
+      }
 
       appendLog(
         `${breakdown.label} ทำความเสียหาย ${formatNum(breakdown.damage)}${breakdown.isCrit ? ' (คริติคอล!)' : ''}`,
@@ -454,11 +565,13 @@ export function MonsterEncounterArena() {
         return
       }
       setSave(res.nextSave)
-      playSkillSfx(mutedRef.current)
+      triggerSkillSound({ muted: mutedRef.current, source: 'encounter', detail: { potion: kind } })
       pushPopup(
         'player',
-        `+${formatNum(res.restored)} ${kind.toUpperCase()}`,
+        res.restored,
+        'heal',
         kind === 'hp' ? '#4fc3a1' : '#7fb0ff',
+        { prefix: '+', suffix: ` ${kind.toUpperCase()}` },
       )
       appendLog(`ใช้ ${res.itemName} ฟื้นฟู ${formatNum(res.restored)} ${kind.toUpperCase()}`, 'hero')
       void syncSaveToStorageAndCloud(res.nextSave, userRef.current, slotRef.current)
@@ -517,7 +630,7 @@ export function MonsterEncounterArena() {
     if (res.outcome === 'error') return
     setSave(res.nextSave)
     recordDailyMissionProgress({ enhances: 1 })
-    playEnhanceSfx(res.outcome === 'success', mutedRef.current)
+    triggerEnhanceSound(res.outcome === 'success', { muted: mutedRef.current, source: 'encounter' })
     appendLog(res.message, res.outcome === 'success' ? 'crit' : 'system')
     void syncSaveToStorageAndCloud(res.nextSave, userRef.current, slotRef.current)
   }, [appendLog, syncSaveToStorageAndCloud])
@@ -595,8 +708,9 @@ export function MonsterEncounterArena() {
           setEnemy(workingEnemy)
           setPetAttackPulse(performance.now())
           setEnemyHitPulse(performance.now())
-          playPetAttackSfx(mutedRef.current)
-          pushPopup('enemy', `${formatNum(petDmg)}`, activePet.def.colors.accent)
+          triggerPetAttackSound({ muted: mutedRef.current, source: 'encounter', detail: { petId: activePet.def.id, damage: petDmg } })
+          triggerHitSound({ muted: mutedRef.current, source: 'encounter', playSynthFallback: false, detail: { actor: 'pet', target: 'enemy', damage: petDmg } })
+          pushPopup('enemy', petDmg, 'pet', activePet.def.colors.accent, { badge: 'PET' })
           appendLog(`${activePet.def.name} ช่วยโจมตี ${formatNum(petDmg)} ดาเมจ`, 'hero')
           if (nextEnemyHp <= 0) {
             handleVictory(workingSave, workingEnemy)
@@ -614,8 +728,9 @@ export function MonsterEncounterArena() {
         const incomingDmg = calculateEnemyAttack(workingEnemy, workingSave)
         setEnemyAttackPulse(performance.now())
         setPlayerHitPulse(performance.now())
-        playEnemyHitSfx(mutedRef.current)
-        pushPopup('player', `-${formatNum(incomingDmg)}`, '#ff4d4d')
+        triggerAttackSound({ muted: mutedRef.current, source: 'encounter', playSynthFallback: false, detail: { actor: 'enemy' } })
+        triggerHitSound({ muted: mutedRef.current, source: 'encounter', detail: { actor: 'enemy', target: 'player', damage: incomingDmg } })
+        pushPopup('player', incomingDmg, 'incoming', '#ff4d4d', { prefix: '-' })
         appendLog(`${workingEnemy.def.name} โจมตีสวนกลับ ${formatNum(incomingDmg)} ความเสียหาย`, 'enemy')
 
         const nextHp = Math.max(0, workingSave.hp - incomingDmg)
@@ -626,6 +741,7 @@ export function MonsterEncounterArena() {
           phaseRef.current = 'DEFEAT'
           setPhase('DEFEAT')
           setStreak(0)
+          triggerDefeatSound({ muted: mutedRef.current, source: 'encounter', playSynthFallback: false })
           appendLog('คุณพ่ายแพ้ในการปะทะ! กด "ฟื้นฟูและสู้ต่อ" เพื่อกลับมาท้าทายใหม่', 'enemy')
           void syncSaveToStorageAndCloud(updated, userRef.current, slotRef.current)
         }
@@ -848,6 +964,7 @@ export function MonsterEncounterArena() {
                 enemyHitPulse={enemyHitPulse}
                 petAttackPulse={petAttackPulse}
                 popups={popups}
+                shakeEvent={shakeEvent}
               />
 
               <AnimatePresence>
@@ -856,8 +973,8 @@ export function MonsterEncounterArena() {
                     initial={{ opacity: 0, scale: 0.96 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0 }}
-                    transition={{ duration: 0.18 }}
-                    className="absolute inset-0 flex flex-col items-center justify-center bg-[#0e0f1a]/90 p-4 text-center"
+                    transition={{ duration: 0.2, delay: 0.42 }}
+                    className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[#0e0f1a]/90 p-4 text-center"
                   >
                     <p className="text-xs font-semibold text-accent">
                       ชนะการต่อสู้ · บันทึกรางวัลเข้าเซฟตัวละครแล้ว

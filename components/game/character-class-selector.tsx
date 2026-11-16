@@ -265,9 +265,9 @@ export function CharacterClassSelector({
         </div>
 
         {/* Live 2D Animated Class Model Stage */}
-        <div className="mb-3 flex flex-col items-center justify-between gap-3 border-2 border-[#0e0f1a] bg-[#131726] p-2.5 sm:flex-row">
+        <div className="mmorpg-showcase-card mb-3 flex flex-col items-center justify-between gap-3 p-2.5 sm:flex-row">
           <div className="flex items-center gap-3">
-            <div className="grid size-24 place-items-center border border-border/50 bg-[#0d101c]">
+            <div className="grid size-24 place-items-center border border-[#c9993f]/45 bg-[#0b1024]/95 shadow-[inset_0_0_16px_rgba(65,105,225,0.18)]">
               <SpriteModelCanvas
                 mode="job"
                 id={activeRole.id}

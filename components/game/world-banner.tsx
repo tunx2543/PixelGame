@@ -5,6 +5,7 @@ import { currentMap, game, notify } from '@/lib/game/engine'
 import { useGame } from '@/lib/game/use-game'
 import { MapMinimap } from './map-minimap'
 import { OnlinePlayersPopover } from './online-players-popover'
+import { SocialBar } from './social-bar'
 
 export function WorldBanner() {
   useGame()
@@ -18,7 +19,7 @@ export function WorldBanner() {
   return (
     <>
       {announcement && (
-        <aside className="pointer-events-none absolute left-1/2 top-2 z-30 w-[min(92vw,34rem)] -translate-x-1/2 rounded-md border border-yellow-300/50 bg-black/80 px-3 py-2 text-center shadow-xl">
+        <aside className="pointer-events-none absolute left-1/2 top-[6.25rem] z-30 w-[min(92vw,34rem)] -translate-x-1/2 rounded-md border border-yellow-300/50 bg-black/80 px-3 py-2 text-center shadow-xl">
           <div className="text-[9px] font-bold tracking-[0.18em] text-yellow-300">ประกาศจาก GM</div>
           <div className="mt-0.5 truncate text-xs font-semibold text-white">{announcement.body}</div>
         </aside>
@@ -50,6 +51,7 @@ export function WorldBanner() {
           )}
         </button>
         <OnlinePlayersPopover />
+        <SocialBar />
         {showDungeonCard && (
           <aside className="pointer-events-none hidden w-44 overflow-hidden border-2 border-border bg-card/90 shadow-xl sm:block">
             <img

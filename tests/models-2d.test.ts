@@ -6,6 +6,7 @@ import {
   getAllMonsterModels,
   getJobModelSpec,
   getMonsterModelSpec,
+  HUMAN_MODEL_CANVAS_SIZE,
   JOB_MODEL_SPECS,
   MODEL_ACTIONS,
   MODEL_DIRS,
@@ -13,10 +14,11 @@ import {
 } from '../lib/game/models-2d'
 
 describe('2D character job models & animations', () => {
-  it('defines a 2D model spec for every job in JOBS (12/12)', () => {
+  it('defines a 42x48 2D model spec with hairStyle for every job in JOBS (12/12)', () => {
     const jobIds = Object.keys(JOBS)
     assert.equal(jobIds.length, 12)
     assert.equal(getAllJobModels().length, 12)
+    assert.deepEqual(HUMAN_MODEL_CANVAS_SIZE, { width: 42, height: 48 })
 
     for (const id of jobIds) {
       const spec = JOB_MODEL_SPECS[id]
@@ -26,6 +28,8 @@ describe('2D character job models & animations', () => {
       assert.equal(spec.animationFrames.idle, 4)
       assert.equal(spec.animationFrames.walk, 6)
       assert.equal(spec.animationFrames.attack, 4)
+      assert.ok(spec.hairStyle, `Job ${id} missing hairStyle`)
+      assert.deepEqual(spec.canvasSize, HUMAN_MODEL_CANVAS_SIZE)
       assert.ok(JOBS[id].weaponTypes.includes(spec.weapon), `Job ${id} weapon ${spec.weapon} mismatch`)
     }
   })

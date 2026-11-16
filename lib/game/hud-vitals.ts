@@ -1,0 +1,63 @@
+import { expToNext, MAX_LEVEL } from './data'
+
+export interface VitalsInput {
+  hp: number
+  maxHp: number
+  mp: number
+  maxMp: number
+  level: number
+  exp: number
+  gold: number
+  diamonds?: number
+}
+
+export interface VitalsBarDatum {
+  key: 'hp' | 'mp' | 'exp'
+  label: 'HP' | 'MP' | 'EXP'
+  current: number
+  max: number
+  percent: number
+}
+
+export interface VitalsSnapshot {
+  bars: [VitalsBarDatum, VitalsBarDatum, VitalsBarDatum]
+  gold: number
+  diamonds: number
+}
+
+function clampInt(value: number, min = 0): number {
+  if (!Number.isFinite(value)) return min
+  return Math.max(min, Math.floor(value))
+}
+
+function computePercent(current: number, max: number): number {
+  if (!Number.isFinite(current) || !Number.isFinite(max) || max <= 0) return 0
+  return Math.min(100, Math.max(0, (current / max) * 100))
+}
+
+/**
+ * Pure snapshot builder for the Vitals & Currency HUD bar.
+ * Exposes strictly the five core player meters/currencies:
+ * HP, MP, EXP, Gold, and Diamond.
+ */
+export function buildVitalsSnapshot(input: VitalsInput): VitalsSnapshot {
+  const maxHp = Math.max(1, clampInt(input.maxHp, 1))
+  const hp = Math.min(maxHp, clampInt(input.hp, 0))
+
+  const maxMp = Math.max(1, clampInt(input.maxMp, 1))
+  const mp = Math.min(maxMp, clampInt(input.mp, 0))
+
+  const needExp = Math.max(1, clampInt(expToNext(input.level), 1))
+  const isMaxLevel = input.level >= MAX_LEVEL
+  const exp = isMaxLevel ? needExp : Math.min(needExp, clampInt(input.exp, 0))
+
+  return {
+    bars: [
+      { key: 'hp', label: 'HP', current: hp, max: maxHp, percent: computePercent(hp, maxHp) },
+      { key: 'mp', label: 'MP', current: mp, max: maxMp, percent: computePercent(mp, maxMp) },
+      { key: 'exp', label: 'EXP', current: exp, max: needExp, percent: computePercent(exp, needExp) },
+    ],
+    gold: clampInt(input.gold, 0),
+    diamonds: clampInt(input.diamonds ?? 0, 0),
+  }
+}

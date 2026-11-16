@@ -159,7 +159,7 @@ export function PartyPopover() {
 
   return (
     <div
-      className="pointer-events-auto pixel-panel absolute left-2 top-12 z-50 w-[min(22rem,calc(100vw-1rem))] p-2.5 shadow-2xl md:left-[15.25rem] md:top-3"
+      className="pointer-events-auto pixel-panel absolute right-2 top-14 z-50 w-[min(22rem,calc(100vw-1rem))] p-2.5 shadow-2xl md:right-[12.25rem] md:top-3"
       role="dialog"
       aria-label="ระบบปาร์ตี้"
       onClick={(event) => event.stopPropagation()}

@@ -54,7 +54,7 @@ export function PWAInstallButton({ variant = 'title' }: { variant?: 'title' | 'h
         onClick={() => void handleClick()}
         className={
           variant === 'hud'
-            ? 'pixel-btn col-span-2 flex items-center justify-center gap-1.5 border border-emerald-400/50 bg-emerald-500/15 px-2 py-1 text-[10px] font-semibold text-emerald-200 hover:bg-emerald-500/25'
+            ? 'pixel-btn flex items-center justify-center gap-1 whitespace-nowrap border border-emerald-400/50 bg-emerald-500/15 px-2 py-1 text-[10px] font-semibold text-emerald-200 hover:bg-emerald-500/25'
             : 'pixel-btn flex items-center gap-1.5 border border-emerald-400/50 bg-emerald-500/20 px-3 py-1.5 text-xs font-semibold text-emerald-200 hover:brightness-110'
         }
       >
