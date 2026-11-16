@@ -97,16 +97,19 @@ export function SpriteModelCanvas({
       let attackProgress = 0
 
       if (action === 'auto' && !reducedMotion) {
-        const cycle = elapsed % 3.8
-        if (cycle < 1.45) {
+        const cycle = elapsed % 5.1
+        if (cycle < 1.35) {
           effectiveAction = 'idle'
-        } else if (cycle < 2.85) {
+        } else if (cycle < 2.7) {
           effectiveAction = 'walk'
-        } else {
+        } else if (cycle < 3.8) {
           effectiveAction = 'attack'
-          attackProgress = (cycle - 2.85) / 0.95
+          attackProgress = (cycle - 2.7) / 1.1
+        } else {
+          effectiveAction = 'skill'
+          attackProgress = (cycle - 3.8) / 1.3
         }
-      } else if (action === 'attack') {
+      } else if (action === 'attack' || action === 'skill') {
         attackProgress = reducedMotion ? 0.5 : (elapsed * 1.45) % 1
       }
 
@@ -123,14 +126,20 @@ export function SpriteModelCanvas({
       lastDrawAt = now
 
       const isAttack = effectiveAction === 'attack'
+      const isSkill = effectiveAction === 'skill'
       const attackFrame = isAttack ? Math.min(3, Math.floor(attackProgress * 4)) : 0
-      const frame = isAttack
-        ? attackFrame
-        : effectiveAction === 'walk'
-          ? Math.floor(elapsed * 9.5) % 6
-          : mode === 'job' && !reducedMotion && Math.sin(elapsed * 1.4) > 0.96
-            ? -1
-            : Math.floor(elapsed * 2.6) % 4
+      const skillFrame = isSkill ? Math.min(5, Math.floor(attackProgress * 6)) : 0
+      const isGmJob = mode === 'job' && (isGm || id === 'gm')
+      const walkMod = isGmJob && dir === 'down' ? 8 : 6
+      const frame = isSkill
+        ? skillFrame
+        : isAttack
+          ? attackFrame
+          : effectiveAction === 'walk'
+            ? Math.floor(elapsed * (walkMod === 8 ? 11.5 : 9.5)) % walkMod
+            : mode === 'job' && !reducedMotion && Math.sin(elapsed * 1.4) > 0.96
+              ? -1
+              : Math.floor(elapsed * 2.6) % 4
 
       let spriteImg: HTMLCanvasElement
       let auraColor: string | undefined
@@ -185,7 +194,8 @@ export function SpriteModelCanvas({
         showAura && (auraColor || hasRebirth) && !reducedMotion
           ? Math.round(elapsed * 8)
           : 0
-      const sig = `${effectiveAction}|${frame}|${hoverY}|${lungeOffset}|${slashBucket}|${auraBucket}|${rebirthCount}`
+      const gmReady = spriteImg.dataset?.gmReady === '1'
+      const sig = `${effectiveAction}|${frame}|${hoverY}|${lungeOffset}|${slashBucket}|${auraBucket}|${rebirthCount}|${gmReady ? '1' : '0'}`
 
       if (sig !== lastSig) {
         lastSig = sig
@@ -193,14 +203,14 @@ export function SpriteModelCanvas({
         ctx.imageSmoothingEnabled = false
 
         if (variant === 'portrait' && mode === 'job') {
-          const cropW = Math.min(spriteImg.width, 30)
-          const cropH = Math.min(spriteImg.height, 26)
+          const cropW = gmReady ? 30 : Math.min(spriteImg.width, 30)
+          const cropH = gmReady ? 26 : Math.min(spriteImg.height, 26)
           const sx = Math.max(0, Math.round((spriteImg.width - cropW) / 2))
-          const sy = 3
+          const sy = gmReady ? 7 : 3
           ctx.drawImage(spriteImg, sx, sy, cropW, cropH, 0, 0, canvas.width, canvas.height)
         } else {
-          const padW = canvas.width * 0.9
-          const padH = canvas.height * 0.86
+          const padW = canvas.width * (gmReady ? 0.98 : 0.9)
+          const padH = canvas.height * (gmReady ? 0.96 : 0.86)
           const computedScale =
             scale ??
             Math.max(0.4, Math.min(padW / spriteImg.width, padH / spriteImg.height))
@@ -209,6 +219,7 @@ export function SpriteModelCanvas({
 
           const centerX = Math.round(canvas.width / 2)
           const baseFloorY = Math.round(canvas.height * 0.89)
+          const footPad = gmReady ? Math.round(9 * computedScale) : Math.round(2 * computedScale)
 
           if (showShadow) {
             ctx.save()
@@ -251,12 +262,12 @@ export function SpriteModelCanvas({
           ctx.drawImage(
             spriteImg,
             Math.round(centerX + lungeOffset - drawW / 2),
-            Math.round(baseFloorY + hoverY - drawH + Math.round(2 * computedScale)),
+            Math.round(baseFloorY + hoverY - drawH + footPad),
             drawW,
             drawH,
           )
 
-          if (isAttack && attackProgress > 0.2 && attackProgress < 0.85) {
+          if (isAttack && !gmReady && attackProgress > 0.2 && attackProgress < 0.85) {
             const slashAlpha = Math.max(0, 1 - Math.abs(attackProgress - 0.5) * 2.4)
             ctx.globalAlpha = slashAlpha
             ctx.strokeStyle = auraColor ?? '#ffd60a'

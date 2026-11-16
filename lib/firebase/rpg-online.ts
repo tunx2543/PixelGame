@@ -746,6 +746,9 @@ export interface MarketListingRecord {
   status: 'open' | 'sold' | 'cancelled'
   buyerUid: string | null
   buyerName: string | null
+  sellerClaimed: boolean
+  rarity?: string | null
+  affixes?: Array<{ stat: string; value: number }>
   createdAtMs: number
 }
 
@@ -766,6 +769,9 @@ const SEED_MARKET_LISTINGS: MarketListingRecord[] = [
     status: 'open',
     buyerUid: null,
     buyerName: null,
+    sellerClaimed: false,
+    rarity: 'rare',
+    affixes: [{ stat: 'atk_flat', value: 6 }, { stat: 'crit_pct', value: 3 }],
     createdAtMs: 1700000000001,
   },
   {
@@ -782,6 +788,9 @@ const SEED_MARKET_LISTINGS: MarketListingRecord[] = [
     status: 'open',
     buyerUid: null,
     buyerName: null,
+    sellerClaimed: false,
+    rarity: null,
+    affixes: [],
     createdAtMs: 1700000000002,
   },
   {
@@ -798,6 +807,9 @@ const SEED_MARKET_LISTINGS: MarketListingRecord[] = [
     status: 'open',
     buyerUid: null,
     buyerName: null,
+    sellerClaimed: false,
+    rarity: null,
+    affixes: [],
     createdAtMs: 1700000000003,
   },
   {
@@ -814,6 +826,9 @@ const SEED_MARKET_LISTINGS: MarketListingRecord[] = [
     status: 'open',
     buyerUid: null,
     buyerName: null,
+    sellerClaimed: false,
+    rarity: null,
+    affixes: [],
     createdAtMs: 1700000000004,
   },
 ]
@@ -839,6 +854,35 @@ export async function listMarketListings(): Promise<MarketListingRecord[]> {
   }
 }
 
+export async function listMySoldListings(): Promise<MarketListingRecord[]> {
+  const user = auth.currentUser
+  const uid = user?.uid ?? 'guest_player'
+  const local = readLocalJson<MarketListingRecord[]>(LOCAL_MARKET_KEY, SEED_MARKET_LISTINGS)
+  const localMine = local.filter((l) => l.sellerUid === uid && l.status === 'sold' && !l.sellerClaimed)
+
+  if (!isSignedInVerified() || !user) {
+    return localMine
+  }
+
+  try {
+    const q = query(
+      collection(db, 'marketListings'),
+      where('sellerUid', '==', user.uid),
+      limit(30),
+    )
+    const snap = await getDocs(q)
+    const remote = snap.docs
+      .map((d) => d.data() as MarketListingRecord)
+      .filter((l) => l.status === 'sold' && !l.sellerClaimed)
+    const seen = new Set(remote.map((r) => r.listingId))
+    return [...remote, ...localMine.filter((l) => !seen.has(l.listingId))].sort(
+      (a, b) => b.createdAtMs - a.createdAtMs,
+    )
+  } catch {
+    return localMine
+  }
+}
+
 export async function createMarketListing(input: {
   sellerName: string
   sellerGameUid: string
@@ -848,10 +892,18 @@ export async function createMarketListing(input: {
   qty: number
   plus: number
   priceGold: number
+  rarity?: string | null
+  affixes?: Array<{ stat: string; value: number }>
 }): Promise<{ ok: boolean; listing?: MarketListingRecord; error?: string }> {
   const priceGold = Math.max(10, Math.min(100_000_000, Math.floor(input.priceGold)))
   const user = auth.currentUser
   const listingId = `mkt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
+  const cleanAffixes = Array.isArray(input.affixes)
+    ? input.affixes
+        .filter((a) => a && typeof a.stat === 'string' && Number.isFinite(a.value) && a.value > 0)
+        .slice(0, 4)
+        .map((a) => ({ stat: a.stat.slice(0, 24), value: Math.round(a.value) }))
+    : []
   const record: MarketListingRecord = {
     listingId,
     sellerUid: user?.uid ?? 'guest_player',
@@ -866,6 +918,9 @@ export async function createMarketListing(input: {
     status: 'open',
     buyerUid: null,
     buyerName: null,
+    sellerClaimed: false,
+    rarity: input.rarity ? String(input.rarity).slice(0, 16) : null,
+    affixes: cleanAffixes,
     createdAtMs: Date.now(),
   }
 
@@ -933,6 +988,54 @@ export async function buyMarketListing(
     local.map((l) => (l.listingId === listingId ? updated : l)),
   )
   return { ok: true, listing: updated }
+}
+
+export async function claimMarketListingProceeds(
+  listingId: string,
+): Promise<{ ok: boolean; claimedGold: number; listing?: MarketListingRecord; error?: string }> {
+  const user = auth.currentUser
+  const uid = user?.uid ?? 'guest_player'
+
+  if (isSignedInVerified() && user && !listingId.startsWith('seed_mkt_')) {
+    try {
+      const ref = doc(db, 'marketListings', listingId)
+      const claimed = await runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref)
+        if (!snap.exists()) throw new Error('ไม่พบรายการขายนี้')
+        const data = snap.data() as MarketListingRecord
+        if (data.sellerUid !== uid) throw new Error('เฉพาะผู้ขายเท่านั้นที่รับเงินได้')
+        if (data.status !== 'sold') throw new Error('สินค้านี้ยังไม่ถูกขาย')
+        if (data.sellerClaimed) throw new Error('รับเงินจากรายการนี้ไปแล้ว')
+        tx.update(ref, {
+          sellerClaimed: true,
+          updatedAt: serverTimestamp(),
+        })
+        return { ...data, sellerClaimed: true }
+      })
+      return { ok: true, claimedGold: claimed.priceGold, listing: claimed }
+    } catch (err) {
+      return {
+        ok: false,
+        claimedGold: 0,
+        error: err instanceof Error ? err.message : 'รับเงินค่าขายไม่สำเร็จ',
+      }
+    }
+  }
+
+  const local = readLocalJson<MarketListingRecord[]>(LOCAL_MARKET_KEY, SEED_MARKET_LISTINGS)
+  const target = local.find((l) => l.listingId === listingId)
+  if (!target || target.sellerUid !== uid || target.status !== 'sold') {
+    return { ok: false, claimedGold: 0, error: 'ไม่พบรายการที่ขายแล้ว' }
+  }
+  if (target.sellerClaimed) {
+    return { ok: false, claimedGold: 0, error: 'รับเงินจากรายการนี้ไปแล้ว' }
+  }
+  const updated: MarketListingRecord = { ...target, sellerClaimed: true }
+  writeLocalJson(
+    LOCAL_MARKET_KEY,
+    local.map((l) => (l.listingId === listingId ? updated : l)),
+  )
+  return { ok: true, claimedGold: target.priceGold, listing: updated }
 }
 
 export async function cancelMarketListing(

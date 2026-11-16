@@ -1,13 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   Check,
+  Compass,
   Crown,
   Edit3,
+  HeartHandshake,
   LogOut,
   MapPin,
   Navigation,
+  RefreshCw,
   Shield,
   Sparkles,
   Trash2,
@@ -17,6 +20,13 @@ import {
   X,
 } from 'lucide-react'
 import { auth as firebaseAuth } from '@/lib/firebase/client'
+import {
+  closePartyListing,
+  createPartyListing,
+  joinPartyViaListing,
+  listPartyListings,
+  type PartyListingRecord,
+} from '@/lib/firebase/mmo-online'
 import {
   createParty,
   disbandParty,
@@ -42,19 +52,36 @@ import {
   isCurrentAccountGm,
   notify,
   quitToTitle,
+  usePartyRoleSupportAction,
   warpToMapLocation,
 } from '@/lib/game/engine'
 import { MAPS, TILE } from '@/lib/game/maps'
+import { getJobRole, getJobRoleLabel } from '@/lib/game/mmo-systems'
 import { useGame } from '@/lib/game/use-game'
 
 export function PartyPopover() {
   useGame()
+  const [viewMode, setViewMode] = useState<'my-party' | 'finder'>('my-party')
   const [partyNameInput, setPartyNameInput] = useState('')
   const [inviteUidInput, setInviteUidInput] = useState('')
+  const [lfgActivityInput, setLfgActivityInput] = useState('ลุยเรด & เก็บเลเวล')
+  const [lfgMinLevelInput, setLfgMinLevelInput] = useState('1')
+  const [listings, setListings] = useState<PartyListingRecord[]>([])
   const [renameMode, setRenameMode] = useState(false)
   const [renameInput, setRenameInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [feedback, setFeedback] = useState<{ type: 'ok' | 'error'; text: string } | null>(null)
+
+  const refreshListings = useCallback(async () => {
+    const rows = await listPartyListings()
+    setListings(rows)
+  }, [])
+
+  useEffect(() => {
+    if (game.partyPanelOpen && viewMode === 'finder') {
+      void refreshListings()
+    }
+  }, [game.partyPanelOpen, viewMode, refreshListings])
 
   if (!game.partyPanelOpen || !game.p) return null
 
@@ -212,8 +239,147 @@ export function PartyPopover() {
         </div>
       </div>
 
+      <div className="mt-2 grid grid-cols-2 gap-1 border-b border-border pb-2">
+        <button
+          type="button"
+          onClick={() => setViewMode('my-party')}
+          className={`pixel-btn py-1 text-[10px] font-bold ${
+            viewMode === 'my-party'
+              ? 'bg-purple-600/80 text-white'
+              : 'bg-secondary text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          ปาร์ตี้ของฉัน
+        </button>
+        <button
+          type="button"
+          onClick={() => setViewMode('finder')}
+          className={`pixel-btn flex items-center justify-center gap-1 py-1 text-[10px] font-bold ${
+            viewMode === 'finder'
+              ? 'bg-cyan-600/80 text-white'
+              : 'bg-secondary text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <Compass className="size-3" aria-hidden />
+          Party Finder (LFG)
+        </button>
+      </div>
+
       <div className="mt-2 max-h-[min(26rem,68vh)] space-y-2.5 overflow-y-auto pr-0.5">
-        {!isSignedIn ? (
+        {viewMode === 'finder' ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] font-bold text-cyan-200">
+                ประกาศรับสมัครสมาชิก ({listings.length})
+              </p>
+              <button
+                type="button"
+                onClick={() => void refreshListings()}
+                className="pixel-btn flex items-center gap-1 bg-secondary px-2 py-1 text-[10px] text-foreground"
+              >
+                <RefreshCw className="size-3" aria-hidden /> รีเฟรช
+              </button>
+            </div>
+
+            {party && isLeader && (
+              <div className="space-y-1.5 border border-cyan-400/40 bg-cyan-500/10 p-2 text-xs">
+                <p className="font-bold text-cyan-200">ลงประกาศปาร์ตี้ของคุณ</p>
+                <input
+                  value={lfgActivityInput}
+                  onChange={(e) => setLfgActivityInput(e.target.value)}
+                  maxLength={50}
+                  placeholder="กิจกรรม (เช่น ล่าบอสป่าสน / ดันเจี้ยน)"
+                  className="pixel-input w-full px-2 py-1 text-xs"
+                />
+                <div className="flex items-center gap-1.5">
+                  <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                    Lv.ขั้นต่ำ
+                    <input
+                      type="number"
+                      min={1}
+                      max={999}
+                      value={lfgMinLevelInput}
+                      onChange={(e) => setLfgMinLevelInput(e.target.value)}
+                      className="pixel-input w-14 px-1.5 py-0.5 text-xs tabular-nums"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      void runAction(async () => {
+                        const res = await createPartyListing(party, {
+                          targetActivity: lfgActivityInput,
+                          minLevel: Number(lfgMinLevelInput) || 1,
+                          leaderGameUid: p.gameUid ?? '1000',
+                        })
+                        await refreshListings()
+                        return res
+                      })
+                    }
+                    className="pixel-btn flex-1 bg-cyan-600/80 py-1 text-[10px] font-bold text-white"
+                  >
+                    ลงประกาศ
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      void runAction(async () => {
+                        const res = await closePartyListing(party.partyId)
+                        await refreshListings()
+                        return res
+                      })
+                    }
+                    className="pixel-btn bg-secondary px-2 py-1 text-[10px] text-muted-foreground"
+                  >
+                    ปิดรับ
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {listings.length === 0 ? (
+              <p className="border border-border/70 bg-background/50 p-3 text-center text-[11px] text-muted-foreground">
+                ยังไม่มีประกาศหาสมาชิกในขณะนี้ — หัวหน้าปาร์ตี้สามารถลงประกาศได้!
+              </p>
+            ) : (
+              <div className="space-y-1.5">
+                {listings.map((item) => (
+                  <div
+                    key={item.listingId}
+                    className="flex items-center justify-between gap-2 border border-border bg-secondary/40 p-2 text-xs"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate font-bold text-foreground">
+                        {item.partyName}{' '}
+                        <span className="font-mono text-[10px] text-cyan-300">
+                          ({item.memberCount}/{item.maxMembers})
+                        </span>
+                      </p>
+                      <p className="truncate text-[10px] text-primary">
+                        {item.targetActivity} · ขั้นต่ำ Lv.{item.minLevel}
+                      </p>
+                      <p className="truncate text-[10px] text-muted-foreground">
+                        หัวหน้า: {item.leaderName} #{item.leaderGameUid}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={busy || party?.partyId === item.partyId}
+                      onClick={() =>
+                        void runAction(() => joinPartyViaListing(item, currentMemberInput(), party))
+                      }
+                      className="pixel-btn shrink-0 bg-emerald-600/80 px-2.5 py-1 text-[10px] font-bold text-white disabled:opacity-45"
+                    >
+                      {party?.partyId === item.partyId ? 'อยู่แล้ว' : 'เข้าร่วม'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : !isSignedIn ? (
           <div className="border border-amber-400/40 bg-amber-400/10 p-3 text-center">
             <p className="text-xs font-semibold text-amber-200">ต้องล็อคอิน Google ก่อนใช้งานปาร์ตี้</p>
             <p className="mt-1 text-[11px] text-muted-foreground">
@@ -337,11 +503,30 @@ export function PartyPopover() {
                         : 'EXP +15% / คน'}
                     </span>
                   </div>
+                  {game.partyRoleBuffs.labels.length > 0 && (
+                    <p className="mt-1 text-[10px] font-semibold text-cyan-200">
+                      ออร่าบทบาท: {game.partyRoleBuffs.labels.join(' · ')}
+                    </p>
+                  )}
                   <p className="mt-0.5 text-[10px] text-muted-foreground">
                     {game.partySameMapCount > 0
-                      ? 'กำลังได้รับโบนัสค่าประสบการณ์และทองพิเศษจากการล่ามอนสเตอร์ในแมพเดียวกัน'
-                      : 'วาร์ปไปฟาร์มแมพเดียวกับสมาชิกปาร์ตี้เพื่อเปิดใช้งานโบนัส EXP & Gold'}
+                      ? 'กำลังได้รับโบนัสค่าประสบการณ์ ทอง และพลังประสานสายอาชีพ'
+                      : 'วาร์ปไปฟาร์มแมพเดียวกับสมาชิกปาร์ตี้เพื่อเปิดใช้งานโบนัส EXP, Gold และออร่าสายอาชีพ'}
                   </p>
+                  <button
+                    type="button"
+                    disabled={game.partySupportCd > 0}
+                    onClick={() => {
+                      const res = usePartyRoleSupportAction()
+                      setFeedback({ type: res.ok ? 'ok' : 'error', text: res.message })
+                    }}
+                    className="pixel-btn mt-1.5 flex w-full items-center justify-center gap-1 bg-emerald-600/80 py-1 text-[10px] font-bold text-white hover:bg-emerald-600 disabled:opacity-50"
+                  >
+                    <HeartHandshake className="size-3" aria-hidden />
+                    {game.partySupportCd > 0
+                      ? `สกิลประสานทีม (คูลดาวน์ ${game.partySupportCd.toFixed(1)} วิ)`
+                      : `ใช้สกิลประสานทีม (${getJobRoleLabel(getJobRole(p.jobId))})`}
+                  </button>
                 </div>
 
                 {isLeader && party.memberIds.length < MAX_PARTY_SIZE && (
@@ -420,7 +605,7 @@ export function PartyPopover() {
                               )}
                             </div>
                             <p className="mt-0.5 text-[10px] text-primary">
-                              Lv.{liveLevel} {jobName}
+                              Lv.{liveLevel} {jobName} · <span className="text-cyan-300">{getJobRoleLabel(getJobRole(liveJobId))}</span>
                               {isMemberLeader && <span className="ml-1.5 text-amber-300">• หัวหน้า</span>}
                             </p>
                           </div>

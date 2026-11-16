@@ -8,6 +8,7 @@ import {
   ArrowUpRight,
   Backpack,
   Check,
+  Lock,
   Search,
   Shield,
   Skull,
@@ -58,6 +59,12 @@ import {
   type InventorySortMode,
   type ItemRarity,
 } from '@/lib/game/inventory-screen'
+import {
+  EQUIPMENT_RARITY_META,
+  formatAffixLabel,
+  resolveEffectiveRarity,
+} from '@/lib/game/mmo-systems'
+import { computeEquipmentSetBonuses } from '@/lib/game/rpg-systems'
 import { pickNewerSave } from '@/lib/game/save-sync'
 import { cn } from '@/lib/utils'
 
@@ -227,6 +234,10 @@ export function InventoryScreen() {
   const slotCards = useMemo(() => (save ? buildEquipmentSlotCards(save.equipment) : null), [save])
   const equipBonusSummary = useMemo(
     () => (save ? summarizeEquipmentBonuses(save.equipment) : null),
+    [save],
+  )
+  const setBonusSummary = useMemo(
+    () => (save ? computeEquipmentSetBonuses(save.equipment) : null),
     [save],
   )
   const summary = useMemo(() => (save ? getInventorySummary(save) : null), [save])
@@ -589,6 +600,25 @@ export function InventoryScreen() {
                 )
               })}
             </div>
+
+            {setBonusSummary && (
+              <div className="mt-3 border border-primary/40 bg-primary/5 p-2.5 text-xs">
+                <p className="flex items-center gap-1.5 font-bold text-primary">
+                  <Sparkles className="size-3.5" aria-hidden /> โบนัสเซ็ตอุปกรณ์
+                </p>
+                {setBonusSummary.activeLabels.length === 0 ? (
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    สวมใส่อุปกรณ์ 2 ชิ้นขึ้นไปเพื่อปลดล็อกโบนัสเซ็ตถาวร
+                  </p>
+                ) : (
+                  <ul className="mt-1 space-y-0.5 text-[11px] text-emerald-300">
+                    {setBonusSummary.activeLabels.map((lbl) => (
+                      <li key={lbl}>• {lbl}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </section>
         </aside>
 
@@ -611,9 +641,25 @@ export function InventoryScreen() {
                       <ItemIcon itemId={selectedBagEntry.item.itemId} size={42} />
                     </div>
                     <div>
-                      <h2 className="text-base font-bold text-foreground">
-                        {selectedBagEntry.def.name}
-                        {selectedBagEntry.item.plus > 0 ? ` +${selectedBagEntry.item.plus}` : ''}
+                      <h2 className="flex flex-wrap items-center gap-1.5 text-base font-bold text-foreground">
+                        <span>
+                          {selectedBagEntry.def.name}
+                          {selectedBagEntry.item.plus > 0 ? ` +${selectedBagEntry.item.plus}` : ''}
+                        </span>
+                        {(() => {
+                          const eff = resolveEffectiveRarity(selectedBagEntry.item, selectedBagEntry.def)
+                          const mmoMeta = EQUIPMENT_RARITY_META[eff]
+                          return (selectedBagEntry.def.kind === 'weapon' || selectedBagEntry.def.kind === 'armor') ? (
+                            <span className={cn('px-1.5 py-0.5 text-[10px] font-bold', mmoMeta.badgeBgClass, mmoMeta.textColorClass)}>
+                              {mmoMeta.thaiLabel}
+                            </span>
+                          ) : null
+                        })()}
+                        {selectedBagEntry.item.bound && (
+                          <span className="inline-flex items-center gap-0.5 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
+                            <Lock className="size-2.5" aria-hidden /> ผูกมัด
+                          </span>
+                        )}
                       </h2>
                       <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
                         <span className={cn('font-semibold', inspectorRarity.text)}>
@@ -623,6 +669,18 @@ export function InventoryScreen() {
                         {getItemKindThaiLabel(selectedBagEntry.def.kind, selectedBagEntry.targetSlot)} · ต้องการ Lv.{selectedBagEntry.def.reqLevel ?? 1} · อาชีพ: {formatAllowedJobsLabel(selectedBagEntry.def)}
                       </p>
                       <p className="mt-1 text-xs text-foreground/90">{selectedBagEntry.def.description}</p>
+                      {selectedBagEntry.item.affixes && selectedBagEntry.item.affixes.length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {selectedBagEntry.item.affixes.map((af, idx) => (
+                            <span
+                              key={`${af.stat}-${idx}`}
+                              className="border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary"
+                            >
+                              {formatAffixLabel(af)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -732,8 +790,22 @@ export function InventoryScreen() {
                       <ItemIcon itemId={inspectedEquippedItem.itemId} size={42} />
                     </div>
                     <div>
-                      <h2 className="text-base font-bold text-foreground">
-                        {formatEquippedItemName(inspectedEquippedItem)}
+                      <h2 className="flex flex-wrap items-center gap-1.5 text-base font-bold text-foreground">
+                        <span>{formatEquippedItemName(inspectedEquippedItem)}</span>
+                        {(() => {
+                          const eff = resolveEffectiveRarity(inspectedEquippedItem, inspectedEquippedDef)
+                          const mmoMeta = EQUIPMENT_RARITY_META[eff]
+                          return (
+                            <span className={cn('px-1.5 py-0.5 text-[10px] font-bold', mmoMeta.badgeBgClass, mmoMeta.textColorClass)}>
+                              {mmoMeta.thaiLabel}
+                            </span>
+                          )
+                        })()}
+                        {inspectedEquippedItem.bound && (
+                          <span className="inline-flex items-center gap-0.5 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
+                            <Lock className="size-2.5" aria-hidden /> ผูกมัด
+                          </span>
+                        )}
                       </h2>
                       <p className="mt-0.5 text-xs text-muted-foreground">
                         <span className={cn('font-semibold', eqRarityStyle.text)}>
@@ -742,6 +814,18 @@ export function InventoryScreen() {
                         {' · '}
                         กำลังสวมใส่ในช่อง {getSlotThaiLabel(inspectedEquippedSlot)} · {inspectedEquippedDef.description}
                       </p>
+                      {inspectedEquippedItem.affixes && inspectedEquippedItem.affixes.length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {inspectedEquippedItem.affixes.map((af, idx) => (
+                            <span
+                              key={`${af.stat}-${idx}`}
+                              className="border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary"
+                            >
+                              {formatAffixLabel(af)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -963,6 +1047,7 @@ export function InventoryScreen() {
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-xs font-bold text-foreground">
                             {nameWithPlus}
+                            {entry.item.bound ? ' 🔒' : ''}
                           </p>
                           <p className="mt-0.5 truncate text-[11px] text-muted-foreground tabular-nums">
                             <span className={cn('font-semibold', rarityStyle.text)}>{rarityMeta.label}</span>
@@ -971,22 +1056,28 @@ export function InventoryScreen() {
                               ? `${entry.statLabel} +${formatNum(entry.power)} · Lv.${entry.def.reqLevel ?? 1}`
                               : `${getItemKindThaiLabel(entry.def.kind)} · x${formatNum(entry.item.qty)}`}
                           </p>
-                          <p className="mt-0.5 truncate text-[11px] tabular-nums">
-                            {entry.isUpgradeForSlot ? (
-                              <span className="inline-flex items-center gap-0.5 font-semibold text-accent">
-                                <ArrowUpRight className="size-3" aria-hidden />
-                                แรงกว่าที่ใส่อยู่
-                              </span>
-                            ) : entry.equipError ? (
-                              <span className="text-[#ff8b8e]">{entry.equipError}</span>
-                            ) : entry.isMonsterDrop ? (
-                              <span className="text-primary/90">
-                                ดรอปจาก {entry.monsterSources[0].monsterName}
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground">ไอเทมทั่วไป</span>
-                            )}
-                          </p>
+                          {entry.item.affixes && entry.item.affixes.length > 0 ? (
+                            <p className="mt-0.5 truncate text-[10px] font-medium text-primary">
+                              {entry.item.affixes.map(formatAffixLabel).join(' · ')}
+                            </p>
+                          ) : (
+                            <p className="mt-0.5 truncate text-[11px] tabular-nums">
+                              {entry.isUpgradeForSlot ? (
+                                <span className="inline-flex items-center gap-0.5 font-semibold text-accent">
+                                  <ArrowUpRight className="size-3" aria-hidden />
+                                  แรงกว่าที่ใส่อยู่
+                                </span>
+                              ) : entry.equipError ? (
+                                <span className="text-[#ff8b8e]">{entry.equipError}</span>
+                              ) : entry.isMonsterDrop ? (
+                                <span className="text-primary/90">
+                                  ดรอปจาก {entry.monsterSources[0].monsterName}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">ไอเทมทั่วไป</span>
+                              )}
+                            </p>
+                          )}
                         </div>
                       </button>
 

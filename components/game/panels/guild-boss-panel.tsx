@@ -1,16 +1,23 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Coins, Crown, Flame, MessageSquare, Send, Shield, Swords, Users } from 'lucide-react'
+import { Clock, Coins, Crown, Flame, Gift, MapPin, MessageSquare, Send, Shield, Swords, Trophy, Users } from 'lucide-react'
 import { JOBS } from '@/lib/game/data'
 import {
   addItem,
+  applyFieldBossRewardAction,
   claimWorldBossMilestoneAction,
   getStats,
   recordWorldBossDamageAction,
   saveGame,
   syncGuildStateAction,
 } from '@/lib/game/engine'
+import {
+  attackFieldBossOnline,
+  claimFieldBossRewardOnline,
+  subscribeFieldBoss,
+  type FieldBossOnlineState,
+} from '@/lib/firebase/mmo-online'
 import {
   attackGuildRaid,
   attackWorldBossOnline,
@@ -29,6 +36,12 @@ import {
   type WorldBossRaidState,
 } from '@/lib/firebase/rpg-online'
 import {
+  FIELD_BOSS_SPECS,
+  getFieldBossForMap,
+  getWorldBossScheduleList,
+  type FieldBossSpec,
+} from '@/lib/game/mmo-systems'
+import {
   ELEMENT_META,
   getActiveWorldBoss,
   getAttackElement,
@@ -41,12 +54,25 @@ import { useGame } from '@/lib/game/use-game'
 import { formatNum } from '../format'
 import { PanelFrame, PxButton } from './panels'
 
+const FIELD_MAP_OPTIONS: Array<{ id: FieldBossSpec['mapId']; label: string }> = [
+  { id: 'meadow', label: 'ทุ่งหญ้า (Lv.10)' },
+  { id: 'forest', label: 'ป่าสน (Lv.20)' },
+  { id: 'cave', label: 'ถ้ำมืด (Lv.32)' },
+  { id: 'volcano', label: 'ภูเขาไฟ (Lv.45)' },
+]
+
 export function GuildBossPanel() {
   const g = useGame()
   const p = g.p
-  const [tab, setTab] = useState<'worldboss' | 'guild'>('worldboss')
+  const [tab, setTab] = useState<'worldboss' | 'guild' | 'ranking'>('worldboss')
   const [guilds, setGuilds] = useState<GuildRecord[]>([])
   const [worldBoss, setWorldBoss] = useState<WorldBossRaidState | null>(null)
+  const [selectedFieldMap, setSelectedFieldMap] = useState<FieldBossSpec['mapId']>(() => {
+    const mapId = g.p?.mapId
+    return mapId === 'meadow' || mapId === 'forest' || mapId === 'cave' || mapId === 'volcano' ? mapId : 'meadow'
+  })
+  const [fieldBoss, setFieldBoss] = useState<FieldBossOnlineState | null>(null)
+  const [fieldCdMs, setFieldCdMs] = useState(0)
   const [guildNameInput, setGuildNameInput] = useState('')
   const [guildTagInput, setGuildTagInput] = useState('')
   const [guildChatMessages, setGuildChatMessages] = useState<GuildChatMessage[]>([])
@@ -73,6 +99,11 @@ export function GuildBossPanel() {
   }, [refreshData])
 
   useEffect(() => {
+    const unsub = subscribeFieldBoss(selectedFieldMap, setFieldBoss)
+    return () => unsub()
+  }, [selectedFieldMap])
+
+  useEffect(() => {
     if (!currentGuildId) {
       setGuildChatMessages([])
       return
@@ -82,17 +113,24 @@ export function GuildBossPanel() {
   }, [currentGuildId])
 
   useEffect(() => {
-    if (attackCdMs <= 0) return
+    if (attackCdMs <= 0 && fieldCdMs <= 0) return
     const timer = window.setInterval(() => {
       setAttackCdMs((prev) => Math.max(0, prev - 250))
+      setFieldCdMs((prev) => Math.max(0, prev - 250))
     }, 250)
     return () => window.clearInterval(timer)
-  }, [attackCdMs])
+  }, [attackCdMs, fieldCdMs])
 
   if (!p) return null
   const ext = sanitizeRpgExt(p.rpgExt)
   const bossSpec = getActiveWorldBoss()
   const bossElem = ELEMENT_META[bossSpec.element]
+  const fieldBossSpec = getFieldBossForMap(selectedFieldMap) ?? FIELD_BOSS_SPECS.meadow
+  const fieldBossElem = ELEMENT_META[fieldBossSpec.element]
+  const wbSchedule = getWorldBossScheduleList(Date.now(), 4)
+  const sortedGuilds = [...guilds].sort(
+    (a, b) => b.level - a.level || b.totalDonatedGold - a.totalDonatedGold || b.memberCount - a.memberCount,
+  )
   const myGuild = guilds.find((item) => item.guildId === ext.guildId) ?? null
   const guildBuffs = ext.guildId ? getGuildBuffs(myGuild?.level ?? ext.guildLevel) : null
   const remainingSec = Math.max(0, Math.floor((bossSpec.endsAtMs - Date.now()) / 1000))
@@ -190,10 +228,61 @@ export function GuildBossPanel() {
     )
   }
 
+  const handleAttackFieldBoss = async () => {
+    if (fieldCdMs > 0 || busy) return
+    setBusy(true)
+    const s = getStats(p)
+    const atkElem = getAttackElement(null, ext.equippedRunes)
+    const elem = getElementMultiplier(atkElem, fieldBossSpec.element)
+    const crit = Math.random() < s.crit
+    const raw = ((s.atk * 2.0) ** 2) / Math.max(1, s.atk * 2.0 + fieldBossSpec.def)
+    const damage = Math.max(35, Math.round(raw * elem.multiplier * (crit ? 1.55 : 1) * (0.9 + Math.random() * 0.2)))
+
+    const res = await attackFieldBossOnline(selectedFieldMap, damage, p.name)
+    if (res.state) setFieldBoss(res.state)
+    setFieldCdMs(2000)
+    setBusy(false)
+    if (!res.ok && res.error) {
+      setNotice(res.error)
+      return
+    }
+    setNotice(
+      res.defeatedNow
+        ? `สังหาร ${fieldBossSpec.name} สำเร็จ! กดรับรางวัลฟิลด์บอสได้เลย`
+        : `โจมตี ${fieldBossSpec.name} ทำดาเมจ ${formatNum(damage)}${crit ? ' (คริติคอล!)' : ''}`,
+    )
+  }
+
+  const handleClaimFieldBoss = async () => {
+    if (busy) return
+    setBusy(true)
+    const res = await claimFieldBossRewardOnline(selectedFieldMap)
+    setBusy(false)
+    if (!res.ok) {
+      setNotice(res.error ?? 'รับรางวัลฟิลด์บอสไม่สำเร็จ')
+      return
+    }
+    applyFieldBossRewardAction({
+      gold: res.gold,
+      diamonds: res.diamonds,
+      stones: res.stones,
+      bossName: fieldBossSpec.name,
+    })
+    setNotice(`รับรางวัล ${fieldBossSpec.name} (+${formatNum(res.gold)} G, +${res.diamonds} เพชร, หิน x${res.stones}) แล้ว!`)
+  }
+
+  const fieldContributors = fieldBoss
+    ? Object.values(fieldBoss.contributors ?? {}).sort((a, b) => b.damage - a.damage).slice(0, 5)
+    : []
+  const fieldRespawnSec =
+    fieldBoss && fieldBoss.currentHp === 0 && fieldBoss.respawnAtMs > Date.now()
+      ? Math.ceil((fieldBoss.respawnAtMs - Date.now()) / 1000)
+      : 0
+
   return (
     <PanelFrame
-      title="เวิลด์บอส & สมาคมกิลด์"
-      subtitle="ร่วมมือพิชิตเวิลด์บอสหมุนเวียนรายชั่วโมง และสะสมบัฟกิลด์ถาวร"
+      title="เวิลด์บอส ฟิลด์บอส & สมาคมกิลด์"
+      subtitle="ร่วมมือพิชิตเวิลด์บอส ฟิลด์บอสประจำแมพแบบเรียลไทม์ และสะสมบัฟกิลด์ถาวร"
     >
       <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-border/70 pb-2.5">
         <PxButton
@@ -201,7 +290,7 @@ export function GuildBossPanel() {
           onClick={() => setTab('worldboss')}
         >
           <span className="flex items-center gap-1.5">
-            <Flame className="size-3.5" aria-hidden /> เวิลด์บอสประจำชั่วโมง
+            <Flame className="size-3.5" aria-hidden /> บอสโลก & ฟิลด์บอส
           </span>
         </PxButton>
         <PxButton
@@ -210,6 +299,14 @@ export function GuildBossPanel() {
         >
           <span className="flex items-center gap-1.5">
             <Users className="size-3.5" aria-hidden /> กิลด์ {ext.guildTag ? `[${ext.guildTag}]` : ''}
+          </span>
+        </PxButton>
+        <PxButton
+          variant={tab === 'ranking' ? 'primary' : 'secondary'}
+          onClick={() => setTab('ranking')}
+        >
+          <span className="flex items-center gap-1.5">
+            <Trophy className="size-3.5" aria-hidden /> อันดับกิลด์ ({sortedGuilds.length})
           </span>
         </PxButton>
       </div>
@@ -221,107 +318,298 @@ export function GuildBossPanel() {
       )}
 
       {tab === 'worldboss' && (
-        <div className="grid gap-3 md:grid-cols-[1.2fr_1fr]">
-          <div className="space-y-3 border border-border/80 bg-background/60 p-3">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-bold text-rose-300">{bossSpec.name}</h3>
-                  <span
-                    className="border border-border/60 px-1.5 py-0.5 text-[10px] font-bold"
-                    style={{ color: bossElem.color, background: bossElem.bg }}
-                  >
-                    {bossElem.label}
-                  </span>
+        <div className="space-y-3">
+          <div className="grid gap-3 md:grid-cols-[1.2fr_1fr]">
+            <div className="space-y-3 border border-border/80 bg-background/60 p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-rose-300">{bossSpec.name}</h3>
+                    <span
+                      className="border border-border/60 px-1.5 py-0.5 text-[10px] font-bold"
+                      style={{ color: bossElem.color, background: bossElem.bg }}
+                    >
+                      {bossElem.label}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground tabular-nums">
+                    รีเซ็ตบอสตัวถัดไปใน {String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')} · ดาเมจของคุณ: {formatNum(ext.worldBossDamage)}
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground tabular-nums">
-                  รีเซ็ตบอสตัวถัดไปใน {String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')} · ดาเมจของคุณ: {formatNum(ext.worldBossDamage)}
+                <PxButton disabled={attackCdMs > 0 || busy} onClick={handleAttackWorldBoss}>
+                  <span className="flex items-center gap-1.5">
+                    <Swords className="size-3.5" aria-hidden />
+                    {attackCdMs > 0 ? `รอ ${(attackCdMs / 1000).toFixed(1)}s` : 'โจมตีบอส!'}
+                  </span>
+                </PxButton>
+              </div>
+
+              {worldBoss && (
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs font-semibold tabular-nums">
+                    <span className="text-rose-300">HP เวิลด์บอส</span>
+                    <span>
+                      {formatNum(worldBoss.currentHp)} / {formatNum(worldBoss.maxHp)}
+                    </span>
+                  </div>
+                  <div className="h-3 w-full overflow-hidden border border-border bg-muted">
+                    <div
+                      className="h-full bg-rose-500 transition-[width]"
+                      style={{
+                        width: `${Math.max(0, Math.round((worldBoss.currentHp / Math.max(1, worldBoss.maxHp)) * 100))}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-1.5 border-t border-border/60 pt-2">
+                <p className="text-xs font-bold text-foreground">รางวัลตามยอดดาเมจสะสมรอบนี้</p>
+                <div className="grid gap-1.5 sm:grid-cols-2">
+                  {bossSpec.milestones.map((ms) => {
+                    const claimed = ext.claimedWorldBossMilestones.includes(ms.id)
+                    const reached = ext.worldBossDamage >= ms.damage
+                    return (
+                      <div
+                        key={ms.id}
+                        className="flex items-center justify-between gap-2 border border-border/70 bg-background/80 p-2 text-[11px] tabular-nums"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold text-amber-300">{formatNum(ms.damage)} DMG</p>
+                          <p className="truncate text-muted-foreground">
+                            +{formatNum(ms.gold)} G · +{ms.diamonds} เพชร · หิน x{ms.stones}
+                          </p>
+                        </div>
+                        <PxButton
+                          variant={claimed ? 'secondary' : 'primary'}
+                          disabled={claimed || !reached}
+                          className="shrink-0 whitespace-nowrap"
+                          onClick={() => {
+                            const res = claimWorldBossMilestoneAction(ms.id)
+                            setNotice(res.message)
+                          }}
+                        >
+                          {claimed ? 'รับแล้ว' : reached ? 'รับรางวัล' : 'ยังไม่ถึง'}
+                        </PxButton>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3 border border-border/80 bg-background/60 p-3">
+              <div>
+                <h3 className="flex items-center gap-1.5 text-xs font-bold text-primary">
+                  <Crown className="size-3.5" aria-hidden /> อันดับดาเมจสูงสุดรอบนี้
+                </h3>
+                {!worldBoss || worldBoss.contributions.length === 0 ? (
+                  <p className="mt-1 text-xs text-muted-foreground">ยังไม่มีผู้เปิดฉากโจมตี — เป็นคนแรกที่ได้ขึ้นตารางเลย!</p>
+                ) : (
+                  <div className="mt-1.5 space-y-1">
+                    {worldBoss.contributions.slice(0, 6).map((c, idx) => (
+                      <div
+                        key={c.userId}
+                        className="flex items-center justify-between border border-border/50 bg-background/80 px-2 py-1 text-xs tabular-nums"
+                      >
+                        <span className="truncate">
+                          #{idx + 1} {c.name} <span className="text-muted-foreground">({JOBS[c.jobId]?.name ?? c.jobId})</span>
+                        </span>
+                        <span className="font-bold text-amber-300">{formatNum(c.damage)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t border-border/60 pt-2">
+                <h4 className="flex items-center gap-1.5 text-xs font-bold text-amber-300">
+                  <Clock className="size-3.5" aria-hidden /> ตารางเวิลด์บอสล่วงหน้า
+                </h4>
+                <div className="mt-1.5 space-y-1">
+                  {wbSchedule.map((slot) => {
+                    const elem = ELEMENT_META[slot.boss.element]
+                    const startDate = new Date(slot.startsAtMs)
+                    const hhmm = `${String(startDate.getHours()).padStart(2, '0')}:00`
+                    const waitMins = Math.ceil(slot.startsInSec / 60)
+                    return (
+                      <div
+                        key={slot.cycleKey}
+                        className={`flex items-center justify-between gap-2 border px-2 py-1 text-[11px] tabular-nums ${
+                          slot.isCurrent ? 'border-rose-400/60 bg-rose-500/10' : 'border-border/50 bg-background/80'
+                        }`}
+                      >
+                        <span className="truncate">
+                          <strong className="text-foreground">{hhmm}</strong> · {slot.boss.name}
+                        </span>
+                        <span className="shrink-0 text-[10px]" style={{ color: elem.color }}>
+                          {slot.isCurrent ? 'กำลังเปิดศึก' : `อีก ${waitMins} นาที`}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Shared Field Boss Section */}
+          <div className="space-y-2.5 border border-amber-400/50 bg-amber-500/5 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="flex items-center gap-1.5 text-sm font-bold text-amber-300">
+                  <MapPin className="size-4" aria-hidden /> ฟิลด์บอสประจำแมพ (Shared Field Boss)
+                </h3>
+                <p className="text-[11px] text-muted-foreground">
+                  บอสประจำโซนที่ผู้เล่นทุกคนแชร์ HP ร่วมกัน (แมพปัจจุบันของคุณ: {p.mapId})
                 </p>
               </div>
-              <PxButton disabled={attackCdMs > 0 || busy} onClick={handleAttackWorldBoss}>
-                <span className="flex items-center gap-1.5">
-                  <Swords className="size-3.5" aria-hidden />
-                  {attackCdMs > 0 ? `รอ ${(attackCdMs / 1000).toFixed(1)}s` : 'โจมตีบอส!'}
-                </span>
-              </PxButton>
-            </div>
-
-            {worldBoss && (
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs font-semibold tabular-nums">
-                  <span className="text-rose-300">HP เวิลด์บอส</span>
-                  <span>
-                    {formatNum(worldBoss.currentHp)} / {formatNum(worldBoss.maxHp)}
-                  </span>
-                </div>
-                <div className="h-3 w-full overflow-hidden border border-border bg-muted">
-                  <div
-                    className="h-full bg-rose-500 transition-[width]"
-                    style={{
-                      width: `${Math.max(0, Math.round((worldBoss.currentHp / Math.max(1, worldBoss.maxHp)) * 100))}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-1.5 border-t border-border/60 pt-2">
-              <p className="text-xs font-bold text-foreground">รางวัลตามยอดดาเมจสะสมรอบนี้</p>
-              <div className="grid gap-1.5 sm:grid-cols-2">
-                {bossSpec.milestones.map((ms) => {
-                  const claimed = ext.claimedWorldBossMilestones.includes(ms.id)
-                  const reached = ext.worldBossDamage >= ms.damage
-                  return (
-                    <div
-                      key={ms.id}
-                      className="flex items-center justify-between gap-2 border border-border/70 bg-background/80 p-2 text-[11px] tabular-nums"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="font-bold text-amber-300">{formatNum(ms.damage)} DMG</p>
-                        <p className="truncate text-muted-foreground">
-                          +{formatNum(ms.gold)} G · +{ms.diamonds} เพชร · หิน x{ms.stones}
-                        </p>
-                      </div>
-                      <PxButton
-                        variant={claimed ? 'secondary' : 'primary'}
-                        disabled={claimed || !reached}
-                        className="shrink-0 whitespace-nowrap"
-                        onClick={() => {
-                          const res = claimWorldBossMilestoneAction(ms.id)
-                          setNotice(res.message)
-                        }}
-                      >
-                        {claimed ? 'รับแล้ว' : reached ? 'รับรางวัล' : 'ยังไม่ถึง'}
-                      </PxButton>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-2 border border-border/80 bg-background/60 p-3">
-            <h3 className="flex items-center gap-1.5 text-xs font-bold text-primary">
-              <Crown className="size-3.5" aria-hidden /> อันดับดาเมจสูงสุดรอบนี้
-            </h3>
-            {!worldBoss || worldBoss.contributions.length === 0 ? (
-              <p className="text-xs text-muted-foreground">ยังไม่มีผู้เปิดฉากโจมตี — เป็นคนแรกที่ได้ขึ้นตารางเลย!</p>
-            ) : (
-              <div className="space-y-1">
-                {worldBoss.contributions.slice(0, 8).map((c, idx) => (
-                  <div
-                    key={c.userId}
-                    className="flex items-center justify-between border border-border/50 bg-background/80 px-2 py-1.5 text-xs tabular-nums"
+              <div className="flex flex-wrap gap-1">
+                {FIELD_MAP_OPTIONS.map((opt) => (
+                  <PxButton
+                    key={opt.id}
+                    variant={selectedFieldMap === opt.id ? 'accent' : 'secondary'}
+                    className="px-2 py-1 text-[10px]"
+                    onClick={() => setSelectedFieldMap(opt.id)}
                   >
-                    <span className="truncate">
-                      #{idx + 1} {c.name} <span className="text-muted-foreground">({JOBS[c.jobId]?.name ?? c.jobId})</span>
-                    </span>
-                    <span className="font-bold text-amber-300">{formatNum(c.damage)}</span>
-                  </div>
+                    {opt.label}
+                  </PxButton>
                 ))}
               </div>
-            )}
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-[1.2fr_1fr]">
+              <div className="space-y-2 border border-border/70 bg-background/70 p-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-bold text-foreground">{fieldBossSpec.name}</p>
+                      <span
+                        className="border border-border/60 px-1.5 py-0.5 text-[10px] font-bold"
+                        style={{ color: fieldBossElem.color, background: fieldBossElem.bg }}
+                      >
+                        {fieldBossElem.label}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground tabular-nums">
+                      รางวัลโค่นล้ม: +{formatNum(fieldBossSpec.rewardGold)} G · +{fieldBossSpec.rewardDiamonds} เพชร · หิน x{fieldBossSpec.rewardStones}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <PxButton
+                      disabled={fieldCdMs > 0 || busy || fieldRespawnSec > 0}
+                      onClick={handleAttackFieldBoss}
+                    >
+                      <span className="flex items-center gap-1">
+                        <Swords className="size-3.5" aria-hidden />
+                        {fieldRespawnSec > 0
+                          ? `เกิดใหม่ ${fieldRespawnSec}s`
+                          : fieldCdMs > 0
+                            ? `รอ ${(fieldCdMs / 1000).toFixed(1)}s`
+                            : 'โจมตีฟิลด์บอส'}
+                      </span>
+                    </PxButton>
+                    {fieldBoss && fieldBoss.currentHp === 0 && (
+                      <PxButton variant="accent" disabled={busy} onClick={handleClaimFieldBoss}>
+                        <span className="flex items-center gap-1">
+                          <Gift className="size-3.5" aria-hidden /> รับรางวัล
+                        </span>
+                      </PxButton>
+                    )}
+                  </div>
+                </div>
+
+                {fieldBoss && (
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px] font-semibold tabular-nums">
+                      <span className="text-amber-300">
+                        HP ฟิลด์บอส · พิชิตแล้ว {fieldBoss.clearCount} รอบ
+                      </span>
+                      <span>
+                        {formatNum(fieldBoss.currentHp)} / {formatNum(fieldBoss.maxHp)}
+                      </span>
+                    </div>
+                    <div className="h-2.5 w-full overflow-hidden border border-border bg-muted">
+                      <div
+                        className="h-full bg-amber-400 transition-[width]"
+                        style={{
+                          width: `${Math.max(0, Math.round((fieldBoss.currentHp / Math.max(1, fieldBoss.maxHp)) * 100))}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1 border border-border/70 bg-background/70 p-2.5 text-xs">
+                <p className="font-bold text-foreground">ผู้ร่วมโจมตีฟิลด์บอส ({fieldContributors.length})</p>
+                {fieldContributors.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground">ยังไม่มีผู้โจมตีบอสในโซนนี้</p>
+                ) : (
+                  <div className="space-y-1 tabular-nums">
+                    {fieldContributors.map((c, idx) => (
+                      <div key={c.uid} className="flex justify-between border border-border/40 bg-background/80 px-2 py-1 text-[11px]">
+                        <span className="truncate">
+                          #{idx + 1} {c.name}
+                        </span>
+                        <span className="font-bold text-amber-300">{formatNum(c.damage)} DMG</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
+        </div>
+      )}
+
+      {tab === 'ranking' && (
+        <div className="space-y-2 border border-border/80 bg-background/60 p-3">
+          <div className="flex items-center justify-between gap-2 border-b border-border/60 pb-2">
+            <h3 className="flex items-center gap-1.5 text-sm font-bold text-amber-300">
+              <Trophy className="size-4" aria-hidden /> อันดับสมาคมกิลด์สูงสุดในเซิร์ฟเวอร์
+            </h3>
+            <span className="text-[11px] text-muted-foreground">จัดอันดับตามเลเวลและยอดบริจาครวม</span>
+          </div>
+          {sortedGuilds.length === 0 ? (
+            <p className="py-4 text-center text-xs text-muted-foreground">ยังไม่มีข้อมูลกิลด์ในขณะนี้</p>
+          ) : (
+            <div className="space-y-1.5">
+              {sortedGuilds.map((gd, idx) => {
+                const isMine = ext.guildId === gd.guildId
+                return (
+                  <div
+                    key={gd.guildId}
+                    className={`flex flex-wrap items-center justify-between gap-2 border p-2.5 text-xs tabular-nums ${
+                      isMine ? 'border-primary bg-primary/10' : 'border-border/70 bg-background/80'
+                    }`}
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="flex w-7 shrink-0 items-center justify-center font-bold text-amber-300">
+                        {idx === 0 ? <Crown className="size-4" aria-hidden /> : `#${idx + 1}`}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate font-bold text-foreground">
+                          [{gd.tag}] {gd.name} {isMine ? '(กิลด์ของคุณ)' : ''}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          หัวหน้า: {gd.leaderName} · สมาชิก {gd.memberCount}/30 · บริจาครวม {formatNum(gd.totalDonatedGold)} G
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className="font-bold text-primary">Lv.{gd.level}</span>
+                      {!ext.guildId && (
+                        <PxButton disabled={busy} onClick={() => handleJoinGuild(gd.guildId)}>
+                          เข้าร่วม
+                        </PxButton>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -498,7 +786,7 @@ export function GuildBossPanel() {
                       placeholder="พิมพ์ข้อความคุยกับกิลด์..."
                       className="pixel-input min-w-0 flex-1 px-2 py-1 text-xs"
                     />
-                    <PxButton type="submit" disabled={!guildChatInput.trim()}>
+                    <PxButton type="submit" aria-label="ส่งข้อความแชทกิลด์" disabled={!guildChatInput.trim()}>
                       <Send className="size-3.5" aria-hidden />
                     </PxButton>
                   </form>

@@ -20,6 +20,7 @@ const ACTION_OPTIONS: Array<{ id: PreviewAction; label: string; short: string }>
   { id: 'idle', label: 'ยืนหายใจ (Idle)', short: 'Idle' },
   { id: 'walk', label: 'เดิน (Walk)', short: 'Walk' },
   { id: 'attack', label: 'โจมตี (Attack)', short: 'Attack' },
+  { id: 'skill', label: 'ใช้สกิล (Skill)', short: 'Skill' },
 ]
 
 const DIR_LABELS: Record<ModelDir, string> = {
@@ -33,6 +34,7 @@ const ACTION_THAI: Record<SpriteAction, string> = {
   idle: 'ยืนหายใจ',
   walk: 'กำลังเดิน',
   attack: 'โจมตี',
+  skill: 'ใช้สกิล',
 }
 
 function getJobTraitTags(jobId: string): string[] {
@@ -48,7 +50,7 @@ function getJobTraitTags(jobId: string): string[] {
     cleric: ['หมวกมิเตอร์กางเขน', 'ปีกเทวทูต + วงแหวน', 'คทาศักดิ์สิทธิ์'],
     hunter: ['ฮู้ดพรานป่าชั้นสูง', 'เกราะหนังประดับทอง', 'ธนูพราน + ซองธนู'],
     assassin: ['หน้ากากนินจาเงา', 'มีดคู่ม่วงอเวจี', 'ผ้าคลุมรัตติกาล'],
-    gm: ['มงกุฎราชาทองคำ', 'ปีกเซราฟิม + วงแหวน', 'คทาทองคำ GM'],
+    gm: ['มงกุฎทองลอยตัว', 'ปีกโฮโลแกรมเรืองแสง', 'ผ้าคลุมราชันย์ 8 ทิศ + สกิล 6F'],
   }
   return map[jobId] ?? []
 }
@@ -158,6 +160,8 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                   <Pause className="size-3" aria-hidden />
                 ) : opt.id === 'walk' ? (
                   <Footprints className="size-3" aria-hidden />
+                ) : opt.id === 'skill' ? (
+                  <Sparkles className="size-3" aria-hidden />
                 ) : (
                   <Swords className="size-3" aria-hidden />
                 )}
@@ -341,11 +345,13 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                   })
                 ) : (
                   <span className="border border-gold/40 bg-gold/10 px-2 py-0.5 text-[11px] text-gold">
-                    พลัง GM พิเศษ: ล่องหน / เสกของ / อมตะ / โจมตี 9,999,999
+                    พลัง GM พิเศษ: พิพากษาสวรรค์ [1] / คลื่นพลังราชันย์ [2] / ปาฏิหาริย์ GM [3] / ล่องหน / เสกของ / อมตะ
                   </span>
                 )}
                 <span className="ml-auto font-mono text-[10px] text-muted-foreground tabular-nums">
-                  Idle 4F • Walk 6F • Attack 4F
+                  {selectedJobEntry.job.id === 'gm'
+                    ? 'Idle 4F • Walk 8F/6F • Attack 4F • Skill 6F'
+                    : 'Idle 4F • Walk 6F • Attack 4F'}
                 </span>
               </div>
 

@@ -1,8 +1,24 @@
 'use client'
 
 import { useState } from 'react'
+import { Lock, RefreshCw } from 'lucide-react'
 import { ITEMS, MAX_PLUS, enhanceCost, enhanceRate } from '@/lib/game/data'
-import { countItem, enhance, findEquipment, itemLabel, itemPower, type EnhanceResult, type InvItem } from '@/lib/game/engine'
+import {
+  countItem,
+  enhance,
+  findEquipment,
+  itemLabel,
+  itemPower,
+  reforgeEquipmentAction,
+  type EnhanceResult,
+  type InvItem,
+} from '@/lib/game/engine'
+import {
+  EQUIPMENT_RARITY_META,
+  formatAffixLabel,
+  reforgeCost,
+  resolveEffectiveRarity,
+} from '@/lib/game/mmo-systems'
 import { useGame } from '@/lib/game/use-game'
 import { cn } from '@/lib/utils'
 import { formatNum } from '../format'
@@ -13,6 +29,7 @@ export function EnhancePanel() {
   const g = useGame()
   const [selected, setSelected] = useState<string | null>(null)
   const [result, setResult] = useState<EnhanceResult | null>(null)
+  const [reforgeNotice, setReforgeNotice] = useState<{ ok: boolean; text: string } | null>(null)
   if (!g.p) return null
   const p = g.p
   const gear: { it: InvItem; equipped: boolean }[] = [
@@ -33,9 +50,12 @@ export function EnhancePanel() {
   const cost = item && def ? enhanceCost(item.plus, def.tier ?? 1) : null
   const rate = item ? enhanceRate(item.plus) : 0
   const maxed = item ? item.plus >= MAX_PLUS : false
+  const rarity = item && def ? resolveEffectiveRarity(item, def) : 'common'
+  const rarityMeta = EQUIPMENT_RARITY_META[rarity]
+  const rfCost = item && def ? reforgeCost(def.tier ?? 1, rarity) : null
 
   return (
-    <PanelFrame title="โรงตีเหล็กบุญมา" subtitle="ใช้หินตีบวก + เงิน เพื่อเพิ่มพลังอุปกรณ์ (สูงสุด +15)">
+    <PanelFrame title="โรงตีเหล็กบุญมา & รีสุ่มออปชัน" subtitle="ตีบวกเพิ่มพลัง (สูงสุด +15) หรือ Reforge สุ่มระดับและออปชันเสริมใหม่">
       <div className="grid gap-4 md:grid-cols-[1fr_1.2fr]">
         <div>
           <p className="mb-2 text-xs text-muted-foreground">เลือกอุปกรณ์ ({gear.length})</p>
@@ -51,6 +71,7 @@ export function EnhancePanel() {
                     onClick={() => {
                       setSelected(it.uid)
                       setResult(null)
+                      setReforgeNotice(null)
                     }}
                   />
                   {equipped && <span className="pointer-events-none absolute bottom-0 left-0.5 text-[9px] text-accent">E</span>}
@@ -63,20 +84,42 @@ export function EnhancePanel() {
           </p>
         </div>
 
-        {item && def && cost ? (
-          <div className="flex flex-col gap-3 border-2 border-border bg-muted p-3">
+        {item && def && cost && rfCost ? (
+          <div className={cn('flex flex-col gap-3 border-2 bg-muted p-3', rarityMeta.borderColorClass)}>
             <div className="flex items-center gap-3">
-              <div className="border-2 border-border bg-background p-1">
+              <div className={cn('border-2 bg-background p-1', rarityMeta.borderColorClass)}>
                 <ItemIcon itemId={item.itemId} size={48} />
               </div>
-              <div>
-                <p className="text-base text-foreground">{itemLabel(item)}</p>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <p className="text-base font-bold text-foreground">{itemLabel(item)}</p>
+                  <span className={cn('px-1.5 py-0.5 text-[10px] font-bold', rarityMeta.badgeBgClass, rarityMeta.textColorClass)}>
+                    {rarityMeta.thaiLabel}
+                  </span>
+                  {item.bound && (
+                    <span className="inline-flex items-center gap-0.5 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
+                      <Lock className="size-2.5" aria-hidden /> ผูกมัด
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-muted-foreground">
                   {def.kind === 'weapon' ? 'พลังโจมตี' : 'พลังป้องกัน'} {itemPower(item)}
                   {!maxed && (
                     <span className="text-accent"> → {itemPower({ ...item, plus: item.plus + 1 })}</span>
                   )}
                 </p>
+                {item.affixes && item.affixes.length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {item.affixes.map((af, idx) => (
+                      <span
+                        key={`${af.stat}-${idx}`}
+                        className="border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary"
+                      >
+                        {formatAffixLabel(af)}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -128,6 +171,41 @@ export function EnhancePanel() {
                 {result.message}
               </p>
             )}
+
+            {/* Reforge Sub-stats Section */}
+            <div className="space-y-2 border-t border-border/70 pt-2.5 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="font-bold text-amber-300">รีสุ่มออปชันเสริม (Reforge)</p>
+                  <p className="text-[11px] text-muted-foreground tabular-nums">
+                    ใช้ {formatNum(rfCost.gold)} G + หิน {rfCost.stones} ก้อน (มีโอกาสเลื่อนระดับและได้ออปชันใหม่)
+                  </p>
+                </div>
+                <PxButton
+                  variant="accent"
+                  disabled={p.gold < rfCost.gold || stones < rfCost.stones}
+                  onClick={() => {
+                    const rf = reforgeEquipmentAction(item.uid)
+                    setReforgeNotice({ ok: rf.ok, text: rf.message })
+                  }}
+                >
+                  <span className="flex items-center gap-1">
+                    <RefreshCw className="size-3.5" aria-hidden /> รีสุ่ม
+                  </span>
+                </PxButton>
+              </div>
+              {reforgeNotice && (
+                <p
+                  role="status"
+                  className={cn(
+                    'border p-2 text-center text-xs font-semibold',
+                    reforgeNotice.ok ? 'border-amber-400/60 bg-amber-500/10 text-amber-300' : 'border-destructive bg-destructive/10 text-destructive',
+                  )}
+                >
+                  {reforgeNotice.text}
+                </p>
+              )}
+            </div>
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">เลือกอุปกรณ์ทางซ้ายเพื่อตีบวก</p>

@@ -10,7 +10,6 @@ import {
   mapCanvas,
   mapObjectSprite,
   monsterSprite,
-  npcSprite,
   type SpriteAction,
 } from './sprites'
 import { getActivePetBonuses } from './systems'
@@ -339,8 +338,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         const scaleX = 1 - breath * 0.02
         const scaleY = 1 + breath * 0.024
         const idleF = Math.sin(t * 1.1 + fx) > 0.96 ? -1 : Math.floor(t * 2 + fx) % 4
-        const rawNpc = npcSprite(n.id)
-        const img = rawNpc ?? humanSprite(n.colors, 'down', idleF, null, '#ced4da', false, 'idle')
+        const img = humanSprite(n.colors, 'down', idleF, null, '#ced4da', false, 'idle')
         const targetNpcH = 33
         const baseScale = targetNpcH / Math.max(1, img.height)
         const drawW = img.width * baseScale
@@ -350,10 +348,10 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         ctx.save()
         ctx.translate(fx, fy + nearHop)
         ctx.scale(scaleX, scaleY)
-        ctx.drawImage(img, Math.round(-drawW / 2), Math.round(-drawH), drawW, drawH)
+        ctx.drawImage(img, Math.round(-drawW / 2), Math.round(-drawH + 2), drawW, drawH)
         if (near) {
           ctx.fillStyle = `rgba(122, 229, 130, ${0.45 + Math.sin(t * 6) * 0.25})`
-          ctx.fillRect(-1, -drawH - 4, 2, 2)
+          ctx.fillRect(-1, -drawH - 2, 2, 2)
         }
         ctx.restore()
       },
@@ -444,13 +442,15 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     const remoteY = (other.previousY ?? other.y) + (other.y - (other.previousY ?? other.y)) * networkBlend
     const remoteJob = JOBS[other.jobId] ?? JOBS.novice
     const remoteAttacking = other.attackAnim > 0
+    const isRemoteGm = Boolean(other.gm || other.jobId === 'gm')
     const remoteAction: SpriteAction = remoteAttacking ? 'attack' : other.moving ? 'walk' : 'idle'
     const atkProgress = remoteAttacking ? Math.max(0, Math.min(1, 1 - other.attackAnim / 0.3)) : 0
     const remoteAtkFrame = Math.min(3, Math.floor(atkProgress * 4))
+    const remoteWalkMod = isRemoteGm && other.facing === 'down' ? 8 : 6
     const remoteFrame = remoteAttacking
       ? remoteAtkFrame
       : other.moving
-        ? Math.floor(t * 11) % 6
+        ? Math.floor(t * (remoteWalkMod === 8 ? 13 : 11)) % remoteWalkMod
         : (Math.sin(t * 1.3 + remoteX) > 0.96 ? -1 : Math.floor(t * 2.4) % 4)
     const remoteWeapon = remoteJob.weaponTypes[0] ?? 'stick'
     const styledColors = jobHumanColors(other.jobId, remoteJob.colors, other.gm)
@@ -464,9 +464,11 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       remoteAction,
       remoteAtkFrame,
     )
-    const remoteScale = 33 / Math.max(1, remoteImg.height)
+    const isRemoteGmEpic = remoteImg.dataset?.gmReady === '1'
+    const remoteScale = (isRemoteGmEpic ? 50 : 33) / Math.max(1, remoteImg.height)
     const remoteW = remoteImg.width * remoteScale
     const remoteH = remoteImg.height * remoteScale
+    const remoteFootOffset = isRemoteGmEpic ? 10 : 2
     ents.push({
       y: remoteY,
       draw: () => {
@@ -482,8 +484,8 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         }
         ctx.save()
         ctx.translate(Math.round(remoteX + ox), Math.round(remoteY + oy))
-        ctx.drawImage(remoteImg, Math.round(-remoteW / 2), Math.round(-remoteH + 2), remoteW, remoteH)
-        if (remoteAttacking) {
+        ctx.drawImage(remoteImg, Math.round(-remoteW / 2), Math.round(-remoteH + remoteFootOffset), remoteW, remoteH)
+        if (remoteAttacking && !isRemoteGmEpic) {
           drawWeaponAttackOverlay(ctx, other.facing, remoteWeapon, atkProgress, remoteJob.colors.accent)
         }
         ctx.restore()
@@ -502,30 +504,44 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   ents.push({
     y: p.y,
     draw: () => {
-      const attacking = game.attackAnim > 0
-      const action: SpriteAction = attacking ? 'attack' : game.moving ? 'walk' : 'idle'
+      const castingSkill = game.skillAnim > 0
+      const attacking = !castingSkill && game.attackAnim > 0
+      const action: SpriteAction = castingSkill ? 'skill' : attacking ? 'attack' : game.moving ? 'walk' : 'idle'
       const atkProgress = attacking ? Math.max(0, Math.min(1, 1 - game.attackAnim / 0.3)) : 0
       const atkFrame = Math.min(3, Math.floor(atkProgress * 4))
-      const frame = attacking
-        ? atkFrame
-        : game.moving
-          ? Math.floor(game.walkT * 11) % 6
-          : (Math.sin(t * 1.4) > 0.96 ? -1 : Math.floor(t * 2.4) % 4)
+      const skillProgress = castingSkill
+        ? Math.max(0, Math.min(1, 1 - game.skillAnim / Math.max(0.2, game.skillAnimMax || 0.55)))
+        : 0
+      const skillFrame = Math.min(5, Math.floor(skillProgress * 6))
+      const isGmChar = Boolean(p.gm || p.jobId === 'gm')
+      const walkMod = isGmChar && game.facing === 'down' ? 8 : 6
+      const frame = castingSkill
+        ? skillFrame
+        : attacking
+          ? atkFrame
+          : game.moving
+            ? Math.floor(game.walkT * (walkMod === 8 ? 13 : 11)) % walkMod
+            : (Math.sin(t * 1.4) > 0.96 ? -1 : Math.floor(t * 2.4) % 4)
       const weaponType = weapon?.weaponType ?? job.weaponTypes[0] ?? 'stick'
       const styledColors = jobHumanColors(p.jobId, job.colors, p.gm)
+      const weaponDrawColor = castingSkill
+        ? game.skillVfxColor
+        : (equippedWeaponSkin?.primaryColor ?? weapon?.color ?? job.colors.accent)
       const img = humanSprite(
         styledColors,
         game.facing,
         frame,
         weaponType,
-        equippedWeaponSkin?.primaryColor ?? weapon?.color ?? job.colors.accent,
+        weaponDrawColor,
         attacking,
         action,
         atkFrame,
       )
-      const drawScale = 33 / Math.max(1, img.height)
+      const isGmEpic = img.dataset?.gmReady === '1'
+      const drawScale = (isGmEpic ? 50 : 33) / Math.max(1, img.height)
       const drawW = img.width * drawScale
       const drawH = img.height * drawScale
+      const footOffset = isGmEpic ? 10 : 2
       const stride = game.moving ? Math.sin(game.walkT * 11 * Math.PI / 3) : 0
       const lungeDist = attacking ? Math.sin(atkProgress * Math.PI) * 3.5 : 0
       let ox = 0
@@ -608,14 +624,14 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       }
       ctx.save()
       ctx.translate(Math.round(p.x + ox), Math.round(p.y + oy))
-      ctx.drawImage(img, Math.round(-drawW / 2), Math.round(-drawH + 2), drawW, drawH)
-      if (attacking) {
+      ctx.drawImage(img, Math.round(-drawW / 2), Math.round(-drawH + footOffset), drawW, drawH)
+      if ((attacking || (castingSkill && !isGmEpic)) && !isGmEpic) {
         drawWeaponAttackOverlay(
           ctx,
           game.facing,
           weaponType,
-          atkProgress,
-          equippedWeaponSkin?.primaryColor ?? weapon?.color ?? job.colors.accent,
+          attacking ? atkProgress : skillProgress,
+          weaponDrawColor,
         )
       }
       ctx.restore()

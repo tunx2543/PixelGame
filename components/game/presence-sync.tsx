@@ -19,6 +19,7 @@ import {
   upsertWorldPresence,
 } from '@/lib/firebase/presence'
 import { computePartySynergyBonus } from '@/lib/firebase/party-helpers'
+import { computePartyRoleSynergy } from '@/lib/game/mmo-systems'
 import {
   subscribeIncomingPartyInvites,
   subscribeMyPartyState,
@@ -79,13 +80,39 @@ export function PresenceSync() {
         activeFbUser?.uid ?? null,
         game.p?.mapId ?? null,
       )
+      const roleSyn = computePartyRoleSynergy(
+        game.party,
+        game.onlinePlayers,
+        activeFbUser?.uid ?? null,
+        game.p?.jobId ?? 'novice',
+        game.p?.mapId ?? null,
+      )
+      const roleChanged =
+        game.partyRoleBuffs.atkPct !== roleSyn.atkPct ||
+        game.partyRoleBuffs.defPct !== roleSyn.defPct ||
+        game.partyRoleBuffs.critBonus !== roleSyn.critBonus ||
+        game.partyRoleBuffs.hpRegenPct !== roleSyn.hpRegenPct ||
+        game.partyRoleBuffs.hasTrinity !== roleSyn.hasTrinity ||
+        game.partyRoleBuffs.labels.length !== roleSyn.labels.length
       const changed =
+        roleChanged ||
         game.partySameMapCount !== synergy.sameMapMates ||
         game.partyExpMul !== synergy.expMul ||
         game.partyGoldMul !== synergy.goldMul
       game.partySameMapCount = synergy.sameMapMates
       game.partyExpMul = synergy.expMul
       game.partyGoldMul = synergy.goldMul
+      game.partyRoleBuffs = {
+        tanks: roleSyn.tanks,
+        healers: roleSyn.healers,
+        dps: roleSyn.dps,
+        hasTrinity: roleSyn.hasTrinity,
+        atkPct: roleSyn.atkPct,
+        defPct: roleSyn.defPct,
+        critBonus: roleSyn.critBonus,
+        hpRegenPct: roleSyn.hpRegenPct,
+        labels: roleSyn.labels,
+      }
       return changed
     }
 
@@ -107,12 +134,28 @@ export function PresenceSync() {
       }
       subscribedPartyUid = null
       lastPartySent = { partyId: '', mapId: '', level: 0, jobId: '', name: '', hp: -1, maxHp: -1 }
-      if (game.party !== null || game.partyInvites.length > 0 || game.partySameMapCount > 0) {
+      if (
+        game.party !== null ||
+        game.partyInvites.length > 0 ||
+        game.partySameMapCount > 0 ||
+        game.partyRoleBuffs.labels.length > 0
+      ) {
         game.party = null
         game.partyInvites = []
         game.partySameMapCount = 0
         game.partyExpMul = 1
         game.partyGoldMul = 1
+        game.partyRoleBuffs = {
+          tanks: 0,
+          healers: 0,
+          dps: 0,
+          hasTrinity: false,
+          atkPct: 0,
+          defPct: 0,
+          critBonus: 0,
+          hpRegenPct: 0,
+          labels: [],
+        }
         notify()
       }
     }

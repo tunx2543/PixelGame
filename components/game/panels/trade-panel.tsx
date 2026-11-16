@@ -1,9 +1,18 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { auth as firebaseAuth } from '@/lib/firebase/client'
+import { subscribeTradeSession } from '@/lib/firebase/mmo-online'
 import { getOptionalClient } from '@/lib/supabase/client'
-import { closePanel, game, notify, saveGame, loadCloudGame } from '@/lib/game/engine'
-import { updateTradeOffer, type TradeOfferSnapshot } from '@/lib/game/social'
+import {
+  applyCompletedTradeAction,
+  closePanel,
+  game,
+  loadCloudGame,
+  notify,
+  saveGame,
+} from '@/lib/game/engine'
+import { cancelTradeRequest, updateTradeOffer, type TradeOfferSnapshot } from '@/lib/game/social'
 import { useGame } from '@/lib/game/use-game'
 import { ITEMS } from '@/lib/game/data'
 import { GEM_SHOP_ITEMS } from '@/lib/game/gem-shop'
@@ -27,12 +36,16 @@ export function TradePanel() {
   const [offer, setOffer] = useState<TradeOfferSnapshot>(EMPTY_OFFER)
   const [side, setSide] = useState<'sender' | 'recipient'>('sender')
   const [tradeStatus, setTradeStatus] = useState('pending')
+  const [otherPlayerName, setOtherPlayerName] = useState('อีกฝ่าย')
   const [status, setStatus] = useState('กำลังเชื่อมต่อรายการแลกเปลี่ยน...')
   const [goldDraft, setGoldDraft] = useState('0')
   const goldDraftIsDirty = useRef(false)
   const tradeId = game.tradeId
   const target = game.remotePlayers.find((player) => player.userId === game.tradeTargetId)
-  const inventory = useMemo(() => g.p?.inventory.filter((entry) => entry.qty > 0) ?? [], [g.p?.inventory])
+  const inventory = useMemo(
+    () => g.p?.inventory.filter((entry) => entry.qty > 0 && !entry.bound) ?? [],
+    [g.p?.inventory],
+  )
   const offered = side === 'sender' ? offer.senderItems : offer.recipientItems
   const offeredByOther = side === 'sender' ? offer.recipientDisplay : offer.senderDisplay
   const ready = side === 'sender' ? offer.senderReady : offer.recipientReady
@@ -40,19 +53,81 @@ export function TradePanel() {
   const offeredGemItems = side === 'sender' ? offer.senderGemItems : offer.recipientGemItems
   const offeredByOtherGemItems = side === 'sender' ? offer.recipientGemItems : offer.senderGemItems
   const otherGold = side === 'sender' ? offer.recipientGold : offer.senderGold
-  const ownedGemShopItems = side === 'sender'
-    ? GEM_SHOP_ITEMS.filter((item) => item.category !== 'utility' && (g.p?.ownedGemItems ?? []).includes(item.id))
-    : []
+  const isFirebaseTrade = typeof tradeId === 'string'
+  const ownedGemShopItems =
+    isFirebaseTrade || side === 'sender'
+      ? GEM_SHOP_ITEMS.filter((item) => item.category !== 'utility' && (g.p?.ownedGemItems ?? []).includes(item.id))
+      : []
 
   useEffect(() => {
     if (!tradeId) return
+    goldDraftIsDirty.current = false
+    setGoldDraft('0')
+
+    if (typeof tradeId === 'string') {
+      const selfUid = firebaseAuth.currentUser?.uid ?? ''
+      const unsub = subscribeTradeSession(tradeId, (session) => {
+        if (!session) return
+        const nextSide = session.senderUid === selfUid ? 'sender' : 'recipient'
+        setSide(nextSide)
+        setOtherPlayerName(nextSide === 'sender' ? session.recipientName : session.senderName)
+        const mappedStatus = session.status === 'active' ? 'accepted' : session.status
+        setTradeStatus(mappedStatus)
+        const nextOffer: TradeOfferSnapshot = {
+          senderItems: session.senderItems.map((i) => i.uid),
+          recipientItems: session.recipientItems.map((i) => i.uid),
+          senderDisplay: session.senderItems,
+          recipientDisplay: session.recipientItems,
+          senderGold: session.senderGold,
+          recipientGold: session.recipientGold,
+          senderGemItems: session.senderGemItems,
+          recipientGemItems: session.recipientGemItems,
+          senderReady: session.senderReady,
+          recipientReady: session.recipientReady,
+        }
+        setOffer(nextOffer)
+        if (!goldDraftIsDirty.current) {
+          setGoldDraft(String(nextSide === 'sender' ? session.senderGold : session.recipientGold))
+        }
+        if (session.status === 'cancelled' || session.status === 'declined') {
+          game.chat.push({ id: Date.now(), type: 'system', text: 'อีกฝ่ายปิดการแลกเปลี่ยนแล้ว' })
+          game.tradeId = null
+          closePanel()
+          return
+        }
+        if (session.status === 'completed') {
+          const giveItems = nextSide === 'sender' ? session.senderItems : session.recipientItems
+          const receiveItems = nextSide === 'sender' ? session.recipientItems : session.senderItems
+          const giveGold = nextSide === 'sender' ? session.senderGold : session.recipientGold
+          const receiveGold = nextSide === 'sender' ? session.recipientGold : session.senderGold
+          const giveGemItems = nextSide === 'sender' ? session.senderGemItems : session.recipientGemItems
+          const receiveGemItems = nextSide === 'sender' ? session.recipientGemItems : session.senderGemItems
+          const res = applyCompletedTradeAction({
+            tradeId: session.tradeId,
+            giveItemUids: giveItems.map((i) => i.uid),
+            giveGold,
+            receiveItems,
+            receiveGold,
+            giveGemItems,
+            receiveGemItems,
+          })
+          setStatus(res.message)
+          return
+        }
+        if (session.status === 'pending') {
+          setStatus('รออีกฝ่ายยอมรับคำขอแลกเปลี่ยน')
+        } else {
+          setStatus('เลือกไอเทมที่ต้องการเสนอ แล้วกด "พร้อมแลก"')
+        }
+      })
+      return () => unsub()
+    }
+
     const supabase = getOptionalClient()
     if (!supabase) {
       setStatus('ระบบแลกเปลี่ยนออนไลน์ยังไม่พร้อมใช้งาน')
       return
     }
-    goldDraftIsDirty.current = false
-    setGoldDraft('0')
     let active = true
     let completedApplied = false
     let loading = false
@@ -122,22 +197,31 @@ export function TradePanel() {
       return
     }
     setStatus('กำลังบันทึกรายการ...')
-    const result = await updateTradeOffer(tradeId, nextItems, offeredGold, nextGemItems, nextReady)
+    const result = await updateTradeOffer(
+      tradeId,
+      nextItems,
+      offeredGold,
+      nextGemItems,
+      nextReady,
+      g.p?.inventory,
+    )
     setStatus(result.message)
     if (result.offer) setOffer({ ...EMPTY_OFFER, ...result.offer })
     if (result.ok) {
       goldDraftIsDirty.current = false
       setGoldDraft(String(offeredGold))
     }
-    const completedSave = result.completed ? await loadCloudGame() : null
-    const savedData = completedSave ?? result.saveData
-    if (savedData && game.p) {
-      game.p.inventory = savedData.inventory
-      game.p.gold = savedData.gold
-      game.p.ownedGemItems = savedData.ownedGemItems
-      game.p.equippedGemFashion = savedData.equippedGemFashion
-      game.p.equippedGemCompanion = savedData.equippedGemCompanion
-      saveGame()
+    if (!isFirebaseTrade) {
+      const completedSave = result.completed ? await loadCloudGame() : null
+      const savedData = completedSave ?? result.saveData
+      if (savedData && game.p) {
+        game.p.inventory = savedData.inventory
+        game.p.gold = savedData.gold
+        game.p.ownedGemItems = savedData.ownedGemItems
+        game.p.equippedGemFashion = savedData.equippedGemFashion
+        game.p.equippedGemCompanion = savedData.equippedGemCompanion
+        saveGame()
+      }
     }
     if (!result.ok) game.chat.push({ id: Date.now(), type: 'error', text: result.message })
     if (result.completed) setTradeStatus('completed')
@@ -145,10 +229,10 @@ export function TradePanel() {
   }
 
   const canEdit = tradeStatus === 'accepted'
-  const otherName = target?.displayName ?? 'อีกฝ่าย'
+  const otherName = target?.displayName ?? otherPlayerName
 
   return (
-    <PanelFrame title="แลกเปลี่ยนไอเท็ม" subtitle={`กับ ${otherName}`}>
+    <PanelFrame title="แลกเปลี่ยนไอเท็ม 1v1" subtitle={`กับ ${otherName}`}>
       <div className="grid gap-3 md:grid-cols-2">
         <section className="rounded-lg border border-primary/30 bg-primary/5 p-3">
           <h3 className="text-sm font-bold text-primary">ของที่คุณเสนอ</h3>
@@ -188,7 +272,7 @@ export function TradePanel() {
                 </button>
               )
             })}
-            {!inventory.length && <p className="text-xs text-muted-foreground">ไม่มีไอเท็มในกระเป๋า</p>}
+            {!inventory.length && <p className="text-xs text-muted-foreground">ไม่มีไอเท็มที่แลกเปลี่ยนได้ในกระเป๋า</p>}
           </div>
           <h4 className="mt-3 text-xs font-semibold text-primary">ไอเท็มร้านเพชรที่เป็นเจ้าของ</h4>
           <div className="mt-1 grid max-h-28 gap-1 overflow-y-auto">
@@ -211,9 +295,7 @@ export function TradePanel() {
               )
             })}
             {!ownedGemShopItems.length && (
-              <p className="text-xs text-muted-foreground">
-                {side === 'sender' ? 'ไม่มีไอเท็มร้านเพชรที่โอนได้' : 'ผู้เริ่มต้นแลกเปลี่ยนเป็นฝ่ายเสนอไอเท็มตกแต่งร้านเพชรได้'}
-              </p>
+              <p className="text-xs text-muted-foreground">ไม่มีไอเท็มร้านเพชรที่โอนได้</p>
             )}
           </div>
           <p className={`mt-2 text-[10px] ${ready ? 'text-emerald-400' : 'text-muted-foreground'}`}>{ready ? 'คุณพร้อมแลกแล้ว' : 'ยังไม่พร้อม'}</p>
@@ -241,13 +323,28 @@ export function TradePanel() {
           <p className={`mt-2 text-[10px] ${otherReady ? 'text-emerald-400' : 'text-muted-foreground'}`}>{otherReady ? 'อีกฝ่ายพร้อมแลกแล้ว' : 'อีกฝ่ายยังไม่พร้อม'}</p>
         </section>
       </div>
-      <div className="mt-3 flex items-center justify-between gap-2">
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <p className="text-[10px] text-primary" role="status">{status}</p>
-        <PxButton disabled={!canEdit} variant={ready ? 'secondary' : 'primary'} onClick={() => void sync(offered, offeredGemItems, !ready)}>
-          {ready ? 'ยกเลิกพร้อม' : 'พร้อมแลก'}
-        </PxButton>
+        <div className="flex items-center gap-2">
+          {tradeId && tradeStatus !== 'completed' && (
+            <PxButton
+              variant="danger"
+              onClick={() => {
+                void cancelTradeRequest(tradeId).then(() => {
+                  game.tradeId = null
+                  closePanel()
+                })
+              }}
+            >
+              ยกเลิก / ปิดห้อง
+            </PxButton>
+          )}
+          <PxButton disabled={!canEdit} variant={ready ? 'secondary' : 'primary'} onClick={() => void sync(offered, offeredGemItems, !ready)}>
+            {ready ? 'ยกเลิกพร้อม' : 'พร้อมแลก'}
+          </PxButton>
+        </div>
       </div>
-      <p className="mt-1 text-[10px] text-muted-foreground">ไอเท็ม Gold และสิทธิ์ครอบครองของร้านเพชรจะโอนเมื่อทั้งสองฝ่ายยืนยัน พร้อมตรวจสอบยอดและพื้นที่กระเป๋าในธุรกรรมเดียว</p>
+      <p className="mt-1 text-[10px] text-muted-foreground">ไอเท็ม Gold และสิทธิ์ครอบครองของร้านเพชรจะโอนเมื่อทั้งสองฝ่ายกด "พร้อมแลก" พร้อมกัน</p>
     </PanelFrame>
   )
 }

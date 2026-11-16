@@ -1,13 +1,24 @@
 'use client'
 
 import { useState } from 'react'
+import { X } from 'lucide-react'
 import { auth as firebaseAuth } from '@/lib/firebase/client'
 import { invitePlayerToPartyAutoCreate } from '@/lib/firebase/parties'
+import { createDuelChallenge } from '@/lib/firebase/mmo-online'
 import { formatPresenceStatusLabel } from '@/lib/firebase/presence-helpers'
 import { MAPS, TILE } from '@/lib/game/maps'
+import { createDuelFighter } from '@/lib/game/mmo-systems'
 import { formatGameUid } from '@/lib/game/permissions'
 import { createTrade, sendFriendRequest, sendWhisper } from '@/lib/game/social'
-import { game, getStats, notify, openPanel } from '@/lib/game/engine'
+import {
+  blockPlayerAction,
+  game,
+  getStats,
+  isPlayerBlocked,
+  notify,
+  openPanel,
+  unblockPlayerAction,
+} from '@/lib/game/engine'
 
 export function PlayerActionMenu() {
   const [copied, setCopied] = useState(false)
@@ -62,6 +73,49 @@ export function PlayerActionMenu() {
     )
   }
 
+  const openInspect = (userId: string, displayName: string, gameUid?: string) => {
+    game.inspectTarget = { userId, displayName, gameUid }
+    closeMenu()
+  }
+
+  const challengeDuel = (userId: string, displayName: string) => {
+    const p = game.p
+    if (!p) return
+    const s = getStats(p)
+    const selfUid = firebaseAuth.currentUser?.uid ?? 'guest_player'
+    const fighter = createDuelFighter({
+      uid: selfUid,
+      name: p.name,
+      jobId: p.jobId,
+      level: p.level,
+      maxHp: s.maxHp,
+      atk: s.atk,
+      def: s.def,
+      crit: s.crit,
+    })
+    void createDuelChallenge({
+      targetUidOrGameUid: userId,
+      challenger: fighter,
+      challengerGameUid: p.gameUid ?? '1000',
+    })
+      .then((res) => {
+        game.chat.push({ id: Date.now(), type: res.ok ? 'system' : 'error', text: res.message })
+        if (res.ok && res.duelId) {
+          game.activeDuelId = res.duelId
+          game.duelTarget = { userId, displayName }
+          game.socialTargetId = null
+          game.socialTargetMeta = null
+          openPanel('arena')
+        } else {
+          closeMenu()
+        }
+      })
+      .catch(() => {
+        game.chat.push({ id: Date.now(), type: 'error', text: 'ส่งคำท้าดวล PvP ไม่สำเร็จ' })
+        closeMenu()
+      })
+  }
+
   if (!target && fallback) {
     const copyUid = async () => {
       if (!fallback.gameUid) return
@@ -73,10 +127,11 @@ export function PlayerActionMenu() {
         // Ignore clipboard failures.
       }
     }
+    const blocked = isPlayerBlocked(fallback.userId)
 
     return (
       <div
-        className="pointer-events-auto absolute left-1/2 top-1/2 z-40 w-60 -translate-x-1/2 -translate-y-1/2 rounded-xl border border-primary/50 bg-background/95 p-3 shadow-2xl"
+        className="pointer-events-auto absolute left-1/2 top-1/2 z-40 w-64 -translate-x-1/2 -translate-y-1/2 rounded-xl border border-primary/50 bg-background/95 p-3 shadow-2xl"
         role="dialog"
         aria-label={`ข้อมูลเพื่อน ${fallback.displayName}`}
         onClick={(event) => event.stopPropagation()}
@@ -90,40 +145,65 @@ export function PlayerActionMenu() {
           </div>
           <button
             type="button"
-            className="rounded px-1.5 py-0.5 text-muted-foreground hover:bg-secondary"
+            className="rounded p-1 text-muted-foreground hover:bg-secondary"
             aria-label="ปิดเมนู"
             onClick={closeMenu}
           >
-            ×
+            <X className="size-3.5" aria-hidden />
           </button>
         </div>
         <p className="mb-2.5 text-[11px] text-muted-foreground">
           {liveRemoteAnywhere
             ? `กำลังออนไลน์อยู่ที่ ${MAPS[liveRemoteAnywhere.mapId]?.name ?? liveRemoteAnywhere.mapId} (${Math.floor(liveRemoteAnywhere.x / TILE)}, ${Math.floor(liveRemoteAnywhere.y / TILE)}) • ${formatPresenceStatusLabel(liveRemoteAnywhere.status, liveRemoteAnywhere.mapId)}`
-            : 'กระซิบและแลกเปลี่ยนแบบเรียลไทม์ใช้งานได้เมื่อผู้เล่นออนไลน์อยู่ในห้องเดียวกัน'}
+            : 'สามารถส่องข้อมูล ชวนปาร์ตี้ กระซิบ หรือท้าดวล Live PvP ได้ทันที'}
         </p>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="grid grid-cols-2 gap-1.5">
+          <button
+            type="button"
+            className="pixel-button primary px-2 py-1.5 text-[10px]"
+            onClick={() => openInspect(fallback.userId, fallback.displayName, fallback.gameUid)}
+          >
+            ส่องข้อมูล
+          </button>
           {fallback.gameUid && firebaseAuth.currentUser?.emailVerified && (
             <button
               type="button"
-              className="pixel-button primary flex-1 px-2 py-1.5 text-[10px]"
+              className="pixel-button secondary px-2 py-1.5 text-[10px]"
               onClick={() => invitePartyByGameUid(fallback.gameUid!)}
             >
               ชวนปาร์ตี้
             </button>
           )}
+          <button
+            type="button"
+            className="pixel-button secondary px-2 py-1.5 text-[10px]"
+            onClick={() => challengeDuel(fallback.userId, fallback.displayName)}
+          >
+            ท้า PvP
+          </button>
           {fallback.gameUid && (
             <button
               type="button"
-              className="pixel-button secondary flex-1 px-2 py-1.5 text-[10px]"
+              className="pixel-button secondary px-2 py-1.5 text-[10px]"
               onClick={() => void copyUid()}
             >
-              {copied ? 'คัดลอก UID แล้ว' : 'คัดลอก UID'}
+              {copied ? 'คัดลอกแล้ว' : 'คัดลอก UID'}
             </button>
           )}
           <button
             type="button"
-            className="pixel-button secondary flex-1 px-2 py-1.5 text-[10px]"
+            className="pixel-button secondary px-2 py-1.5 text-[10px]"
+            onClick={() => {
+              const res = blocked ? unblockPlayerAction(fallback.userId) : blockPlayerAction(fallback.userId)
+              game.chat.push({ id: Date.now(), type: 'system', text: res.message })
+              closeMenu()
+            }}
+          >
+            {blocked ? 'ปลดบล็อก' : 'บล็อก'}
+          </button>
+          <button
+            type="button"
+            className="pixel-button secondary px-2 py-1.5 text-[10px]"
             onClick={closeMenu}
           >
             ปิด
@@ -134,12 +214,14 @@ export function PlayerActionMenu() {
   }
 
   if (!target) return null
+  const p = game.p
   const targetGameUid = target.gameUid ?? formatGameUid(target.uid)
   const friendTargetArg = firebaseAuth.currentUser ? targetGameUid : target.userId
+  const blocked = isPlayerBlocked(target.userId)
 
   return (
     <div
-      className="pointer-events-auto absolute left-1/2 top-1/2 z-40 w-52 -translate-x-1/2 -translate-y-1/2 rounded-xl border border-primary/50 bg-background/95 p-2 shadow-2xl"
+      className="pointer-events-auto absolute left-1/2 top-1/2 z-40 w-60 -translate-x-1/2 -translate-y-1/2 rounded-xl border border-primary/50 bg-background/95 p-2.5 shadow-2xl"
       role="dialog"
       aria-label={`เมนูผู้เล่น ${target.displayName}`}
       onClick={(event) => event.stopPropagation()}
@@ -153,14 +235,21 @@ export function PlayerActionMenu() {
         </div>
         <button
           type="button"
-          className="rounded px-1.5 py-0.5 text-muted-foreground hover:bg-secondary"
+          className="rounded p-1 text-muted-foreground hover:bg-secondary"
           aria-label="ปิดเมนู"
           onClick={closeMenu}
         >
-          ×
+          <X className="size-3.5" aria-hidden />
         </button>
       </div>
       <div className="grid grid-cols-2 gap-1.5">
+        <button
+          type="button"
+          className="pixel-button primary px-1 py-2 text-[10px]"
+          onClick={() => openInspect(target.userId, target.displayName, targetGameUid)}
+        >
+          ส่องข้อมูล
+        </button>
         <button
           type="button"
           className="pixel-button primary px-1 py-2 text-[10px]"
@@ -179,7 +268,7 @@ export function PlayerActionMenu() {
           type="button"
           className="pixel-button secondary px-1 py-2 text-[10px]"
           onClick={() =>
-            void createTrade(target.userId)
+            void createTrade(target.userId, p?.name, p?.gameUid)
               .then((result) => {
                 if (result.ok && result.tradeId) {
                   game.tradeTargetId = target.userId
@@ -203,9 +292,29 @@ export function PlayerActionMenu() {
         <button
           type="button"
           className="pixel-button secondary px-1 py-2 text-[10px]"
-          onClick={() => run(sendWhisper(target.userId, 'สวัสดี'))}
+          onClick={() =>
+            run(sendWhisper(target.userId, 'สวัสดี!', p?.name ?? 'ผู้กล้า', p?.gameUid ?? '1000'))
+          }
         >
           กระซิบ
+        </button>
+        <button
+          type="button"
+          className="pixel-button secondary px-1 py-2 text-[10px]"
+          onClick={() => challengeDuel(target.userId, target.displayName)}
+        >
+          ท้า Live PvP
+        </button>
+        <button
+          type="button"
+          className="pixel-button secondary col-span-2 px-1 py-1.5 text-[10px] text-amber-300"
+          onClick={() => {
+            const res = blocked ? unblockPlayerAction(target.userId) : blockPlayerAction(target.userId)
+            game.chat.push({ id: Date.now(), type: 'system', text: res.message })
+            closeMenu()
+          }}
+        >
+          {blocked ? 'ปลดบล็อกผู้เล่น' : 'บล็อกผู้เล่น / ปิดกั้นข้อความ'}
         </button>
       </div>
     </div>

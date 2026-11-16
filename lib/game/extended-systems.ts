@@ -800,8 +800,9 @@ export function sanitizeExtV2(raw: unknown): PlayerExtensionV2 {
   }
 }
 
-export function isItemListableOnMarket(def: ItemDef | undefined): boolean {
+export function isItemListableOnMarket(def: ItemDef | undefined, item?: { bound?: boolean } | null): boolean {
   if (!def || def.gmOnly) return false
+  if (item?.bound) return false
   return def.kind === 'weapon' || def.kind === 'armor' || def.kind === 'material' || def.kind === 'consumable'
 }
 

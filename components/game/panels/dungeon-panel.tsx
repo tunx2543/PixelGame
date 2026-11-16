@@ -9,9 +9,11 @@ import {
   type PartyCoopState,
 } from '@/lib/firebase/rpg-online'
 import {
+  closePanel,
   completeDailyDungeonAction,
   game,
   getStats,
+  notify,
   recordCoopDungeonClearAction,
 } from '@/lib/game/engine'
 import {
@@ -161,14 +163,33 @@ export function DungeonPanel() {
                 <Users className="size-4" aria-hidden /> โถงเรดปาร์ตี้ Co-op: {coopState.bossName} (Lv.{coopState.level})
               </h3>
               <p className="text-[11px] text-muted-foreground tabular-nums">
-                โหมด: {game.party ? `ปาร์ตี้ "${game.party.name}" (${game.party.memberIds.length} คน)` : 'โหมดซ้อมเดี่ยว (สร้างปาร์ตี้เพื่อเพิ่มดาเมจทีม)'} · พิชิตแล้ว {coopState.clears} ครั้ง
+                โหมด: {game.party ? `ปาร์ตี้ "${game.party.name}" (${game.party.memberIds.length} คน)` : 'โหมดซ้อมเดี่ยว (สร้างหรือหาปาร์ตี้เพื่อรับบัฟทีม)'} · พิชิตแล้ว {coopState.clears} ครั้ง
               </p>
+              {game.partyRoleBuffs.labels.length > 0 && (
+                <p className="mt-0.5 text-[11px] font-semibold text-emerald-300">
+                  ประสานบทบาททำงาน: {game.partyRoleBuffs.labels.join(' · ')}
+                </p>
+              )}
             </div>
-            <PxButton variant="accent" disabled={busyCoop} onClick={handleCoopAttack}>
-              <span className="flex items-center gap-1.5">
-                <Swords className="size-3.5" aria-hidden /> ช่วยกันตีบอส Co-op!
-              </span>
-            </PxButton>
+            <div className="flex flex-wrap items-center gap-2">
+              {!game.party && (
+                <PxButton
+                  variant="secondary"
+                  onClick={() => {
+                    closePanel()
+                    game.partyPanelOpen = true
+                    notify()
+                  }}
+                >
+                  เปิด Party Finder
+                </PxButton>
+              )}
+              <PxButton variant="accent" disabled={busyCoop} onClick={handleCoopAttack}>
+                <span className="flex items-center gap-1.5">
+                  <Swords className="size-3.5" aria-hidden /> ช่วยกันตีบอส Co-op!
+                </span>
+              </PxButton>
+            </div>
           </div>
           <div className="mt-2 space-y-1">
             <div className="flex justify-between text-[11px] tabular-nums">

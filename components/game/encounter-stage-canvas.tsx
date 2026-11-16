@@ -315,10 +315,12 @@ export function EncounterStageCanvas({
             heroAction,
             heroAttackFrame,
           )
-          const heroTargetHeight = 82
+          const isGmEpic = heroSprite.dataset?.gmReady === '1'
+          const heroTargetHeight = isGmEpic ? 112 : 82
           const heroScale = Math.max(1.5, Math.min(3.0, heroTargetHeight / Math.max(1, heroSprite.height)))
           const hw = heroSprite.width * heroScale
           const hh = heroSprite.height * heroScale
+          const heroFootOffset = isGmEpic ? 9 * heroScale : 2 * heroScale
 
           // Hero shadow
           ctx.fillStyle = 'rgba(0,0,0,0.36)'
@@ -343,7 +345,7 @@ export function EncounterStageCanvas({
           if (ph === 'DEFEAT') ctx.globalAlpha = 0.45
           else if (isPlayerHurt) ctx.globalAlpha = 0.65
           ctx.translate(heroX + heroLunge + heroShake, floorY)
-          ctx.drawImage(heroSprite, Math.round(-hw / 2), Math.round(-hh + 2 * heroScale), hw, hh)
+          ctx.drawImage(heroSprite, Math.round(-hw / 2), Math.round(-hh + heroFootOffset), hw, hh)
           ctx.restore()
 
           if ((s.rebirthCount ?? 0) > 0 && ph !== 'DEFEAT') {

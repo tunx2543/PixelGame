@@ -138,24 +138,25 @@ export function SkillVfxPreview({
       }
 
       // Hero sprite
-      const isHeroAttacking = vfxActive && vfxProgress < 0.65
-      const heroAttackFrame = isHeroAttacking ? Math.min(3, Math.floor((vfxProgress / 0.65) * 4)) : 0
+      const isHeroCasting = vfxActive && vfxProgress < 0.78
+      const heroSkillFrame = isHeroCasting ? Math.min(5, Math.floor((vfxProgress / 0.78) * 6)) : 0
       const heroIdleFrame = Math.floor(timeSec * 3) % 4
-      const lungeX = isHeroAttacking ? Math.round(Math.sin((vfxProgress / 0.65) * Math.PI) * 8) : 0
+      const lungeX = isHeroCasting && job.id !== 'gm' ? Math.round(Math.sin((vfxProgress / 0.78) * Math.PI) * 8) : 0
       const heroCanvas = humanSprite(
         jobHumanColors(job.id, job.colors, job.id === 'gm'),
         'right',
-        isHeroAttacking ? heroAttackFrame : heroIdleFrame,
+        isHeroCasting ? heroSkillFrame : heroIdleFrame,
         weapon,
         job.colors.accent,
-        isHeroAttacking,
-        isHeroAttacking ? 'attack' : 'idle',
-        heroAttackFrame,
+        false,
+        isHeroCasting ? 'skill' : 'idle',
       )
-      const heroScale = 1.95
+      const isGmEpic = heroCanvas.dataset?.gmReady === '1'
+      const heroScale = isGmEpic ? 2.35 : 1.95
       const hw = Math.round(heroCanvas.width * heroScale)
       const hh = Math.round(heroCanvas.height * heroScale)
-      ctx.drawImage(heroCanvas, Math.round(heroX + lungeX - hw / 2), Math.round(floorY - hh + 4), hw, hh)
+      const footOffset = isGmEpic ? 18 : 4
+      ctx.drawImage(heroCanvas, Math.round(heroX + lungeX - hw / 2), Math.round(floorY - hh + footOffset), hw, hh)
 
       // Front layer of rebirth aura (floating crown halo / orbiting star shards / rising motes)
       if (activeRebirth > 0) {

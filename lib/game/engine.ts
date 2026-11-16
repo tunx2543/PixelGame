@@ -16,6 +16,7 @@ import {
 import { MAPS, MAP_ORDER, TILE, boxBlocked, isSolidPx, type MapDef, type NpcDef, type NpcRole } from './maps'
 import { GEM_SHOP_ITEMS } from './gem-shop'
 import type { Dir } from './sprites'
+import { GM_ACTIVE_SKILLS } from './gm-sprite'
 import { createClient } from '@/lib/supabase/client'
 import { auth as firebaseAuth } from '@/lib/firebase/client'
 import {
@@ -114,6 +115,19 @@ import {
 } from './extended-systems'
 import { MAX_PET_STARS, petEvolveCost } from './systems'
 import { stopBgm, syncBgmForMap } from './bgm'
+import {
+  EQUIPMENT_RARITY_META,
+  aggregateEquipmentAffixes,
+  computeSupportSkillEffect,
+  reforgeCost,
+  resolveEffectiveRarity,
+  rollEquipmentAffixes,
+  rollEquipmentRarity,
+  sanitizeAffixes,
+  type ChatChannel,
+  type EquipmentRarity,
+  type ItemAffix,
+} from './mmo-systems'
 
 if (typeof window !== 'undefined') {
   onDailyMissionCompleted((mission) => {
@@ -272,6 +286,9 @@ export interface InvItem {
   itemId: string
   qty: number
   plus: number
+  rarity?: EquipmentRarity
+  affixes?: ItemAffix[]
+  bound?: boolean
 }
 
 export interface SaveData {
@@ -315,6 +332,8 @@ export interface SaveData {
   towerState?: TowerState
   rpgExt?: RpgExtensionState
   extV2?: PlayerExtensionV2
+  blockedUids?: string[]
+  appliedTradeIds?: string[]
 }
 
 export interface RemotePlayer {
@@ -419,6 +438,9 @@ export interface ChatMsg {
   type: ChatType
   text: string
   author?: string
+  channel?: Exclude<ChatChannel, 'all'>
+  senderUid?: string
+  senderGameUid?: string
 }
 
 export const game = {
@@ -434,6 +456,7 @@ export const game = {
   effects: [] as Effect[],
   projectiles: [] as Projectile[],
   chat: [] as ChatMsg[],
+  chatChannel: 'all' as ChatChannel,
   panel: null as PanelId | null,
   socialMenuOpen: false,
   onlinePanelOpen: false,
@@ -443,6 +466,18 @@ export const game = {
   partySameMapCount: 0,
   partyExpMul: 1,
   partyGoldMul: 1,
+  partyRoleBuffs: {
+    tanks: 0,
+    healers: 0,
+    dps: 0,
+    hasTrinity: false,
+    atkPct: 0,
+    defPct: 0,
+    critBonus: 0,
+    hpRegenPct: 0,
+    labels: [] as string[],
+  },
+  partySupportCd: 0,
   keys: new Set<string>(),
   attackHeld: false,
   facing: 'down' as Dir,
@@ -450,6 +485,9 @@ export const game = {
   walkT: 0,
   attackCd: 0,
   attackAnim: 0,
+  skillAnim: 0,
+  skillAnimMax: 0.55,
+  skillVfxColor: '#38bdf8',
   petAttackCd: 0,
   skillCd: {} as Record<string, number>,
   bubble: null as null | { text: string; until: number },
@@ -467,8 +505,11 @@ export const game = {
   }>,
   socialTargetId: null as string | null,
   socialTargetMeta: null as null | { userId: string; displayName: string; gameUid?: string },
+  inspectTarget: null as null | { userId: string; displayName: string; gameUid?: string },
+  activeDuelId: null as string | null,
+  duelTarget: null as null | { userId: string; displayName: string },
   tradeTargetId: null as string | null,
-  tradeId: null as number | null,
+  tradeId: null as string | number | null,
   nearNpc: null as NpcDef | null,
   time: 0,
   regenT: 0,
@@ -570,10 +611,12 @@ export function getStats(p: SaveData = game.p!) {
   const codexBonus = computeBestiaryAndTitleBonuses(ext)
   const runeBonus = computeRuneBonuses(ext)
   const setBonus = computeEquipmentSetBonuses(p.equipment)
+  const affixBonus = aggregateEquipmentAffixes(p.equipment)
   const guildBuff = ext.guildId ? getGuildBuffs(ext.guildLevel) : null
   const extV2 = sanitizeExtV2(p.extV2)
   const talentBonus = computeTalentBonuses(extV2.talents)
   const foodBuff = getActiveFoodBuffBonuses(extV2.activeFoodBuff)
+  const roleSynergy = p === game.p ? game.partyRoleBuffs : { atkPct: 0, defPct: 0, critBonus: 0 }
 
   const baseHp =
     Math.floor((80 + L * 22) * job.hpMul + aDef * 2) +
@@ -581,25 +624,28 @@ export function getStats(p: SaveData = game.p!) {
     (petBonus?.hpBonus ?? 0) +
     codexBonus.hpBonus +
     runeBonus.hpBonus +
-    setBonus.hpBonus
+    setBonus.hpBonus +
+    affixBonus.hpFlat
   const baseAtk =
     Math.floor((8 + L * 2.6 + wAtk) * job.atkMul) +
     (p.rebirthBonus?.atk ?? 0) +
     (petBonus?.atkBonus ?? 0) +
     codexBonus.atkBonus +
     runeBonus.atkBonus +
-    setBonus.atkBonus
+    setBonus.atkBonus +
+    affixBonus.atkFlat
   const baseDef =
     Math.floor((3 + L * 1.4) * job.defMul + aDef) +
     (p.rebirthBonus?.def ?? 0) +
     (petBonus?.defBonus ?? 0) +
     codexBonus.defBonus +
     runeBonus.defBonus +
-    setBonus.defBonus
+    setBonus.defBonus +
+    affixBonus.defFlat
 
   const rawHp = Math.round(baseHp * (1 + talentBonus.hpPct / 100))
-  const rawAtk = Math.round(baseAtk * (1 + (talentBonus.atkPct + foodBuff.atkPct) / 100))
-  const rawDef = Math.round(baseDef * (1 + (talentBonus.defPct + foodBuff.defPct) / 100))
+  const rawAtk = Math.round(baseAtk * (1 + (talentBonus.atkPct + foodBuff.atkPct + roleSynergy.atkPct) / 100))
+  const rawDef = Math.round(baseDef * (1 + (talentBonus.defPct + foodBuff.defPct + roleSynergy.defPct) / 100))
 
   return {
     maxHp: rawHp,
@@ -614,17 +660,32 @@ export function getStats(p: SaveData = game.p!) {
       (1 + talentBonus.speedPct / 100),
     crit: Math.min(
       0.85,
-      job.crit + codexBonus.critBonus + runeBonus.critBonus + setBonus.critBonus + talentBonus.critBonus + foodBuff.critBonus,
+      job.crit +
+        codexBonus.critBonus +
+        runeBonus.critBonus +
+        setBonus.critBonus +
+        talentBonus.critBonus +
+        foodBuff.critBonus +
+        affixBonus.critBonus +
+        roleSynergy.critBonus,
     ),
     attackSpeed: job.attackSpeed,
-    lifestealPct: runeBonus.lifestealPct + talentBonus.lifestealPct,
+    lifestealPct: runeBonus.lifestealPct + talentBonus.lifestealPct + affixBonus.lifestealPct,
+    cdReducePct: affixBonus.cdReducePct,
+    affixGoldPct: affixBonus.goldPct,
+    affixExpPct: affixBonus.expPct,
   }
 }
 
 let chatId = 0
-export function say(type: ChatType, text: string, author?: string) {
-  game.chat.push({ id: ++chatId, type, text, author })
-  if (game.chat.length > 150) game.chat.splice(0, game.chat.length - 150)
+export function say(
+  type: ChatType,
+  text: string,
+  author?: string,
+  meta?: { channel?: Exclude<ChatChannel, 'all'>; senderUid?: string; senderGameUid?: string },
+) {
+  game.chat.push({ id: ++chatId, type, text, author, ...meta })
+  if (game.chat.length > 180) game.chat.splice(0, game.chat.length - 180)
 }
 
 function addFloat(x: number, y: number, text: string, color: string, size = 10) {
@@ -646,7 +707,14 @@ export function getInventoryCapacity(p: SaveData) {
   return INV_SIZE + bonus
 }
 
-export function addItem(itemId: string, qty = 1, plus = 0, list?: InvItem[], cap?: number): boolean {
+export function addItem(
+  itemId: string,
+  qty = 1,
+  plus = 0,
+  list?: InvItem[],
+  cap?: number,
+  options?: { rarity?: EquipmentRarity; affixes?: ItemAffix[]; bound?: boolean; rollAffix?: boolean },
+): boolean {
   const p = player()
   const target = list ?? p.inventory
   const maxSlots = cap ?? (target === p.inventory ? getInventoryCapacity(p) : INV_SIZE)
@@ -662,9 +730,28 @@ export function addItem(itemId: string, qty = 1, plus = 0, list?: InvItem[], cap
     target.push({ uid: uid(), itemId, qty, plus: 0 })
     return true
   }
+  const shouldRoll =
+    options?.rollAffix !== false &&
+    options?.rarity === undefined &&
+    options?.affixes === undefined &&
+    !def.gmOnly
   for (let i = 0; i < qty; i++) {
     if (target.length >= maxSlots) return false
-    target.push({ uid: uid(), itemId, qty: 1, plus })
+    const rarity = options?.rarity ?? (shouldRoll ? rollEquipmentRarity(def.tier ?? 1) : resolveEffectiveRarity(undefined, def))
+    const affixes = options?.affixes
+      ? sanitizeAffixes(options.affixes)
+      : shouldRoll
+        ? rollEquipmentAffixes(def.tier ?? 1, rarity)
+        : []
+    target.push({
+      uid: uid(),
+      itemId,
+      qty: 1,
+      plus,
+      rarity,
+      affixes,
+      bound: Boolean(options?.bound),
+    })
   }
   return true
 }
@@ -1137,8 +1224,24 @@ function killMonster(m: Monster) {
   }
   addEffect({ type: 'burst', x: m.x, y: m.y - 6, r: def.boss ? 30 : 14, color: def.color, max: 0.4 })
   const baseGold = randInt(def.gold[0], def.gold[1])
-  const gold = Math.round(baseGold * (petBonus?.goldMul ?? 1) * (game.partyGoldMul || 1) * guildGoldMul * talentBonus.goldMul)
-  const expGain = Math.round(def.exp * (petBonus?.expMul ?? 1) * (game.partyExpMul || 1) * guildExpMul * talentBonus.expMul * foodBuff.expMul * timeExpMul)
+  const gold = Math.round(
+    baseGold *
+      (petBonus?.goldMul ?? 1) *
+      (game.partyGoldMul || 1) *
+      guildGoldMul *
+      talentBonus.goldMul *
+      (1 + (getStats(p).affixGoldPct ?? 0) / 100),
+  )
+  const expGain = Math.round(
+    def.exp *
+      (petBonus?.expMul ?? 1) *
+      (game.partyExpMul || 1) *
+      guildExpMul *
+      talentBonus.expMul *
+      foodBuff.expMul *
+      timeExpMul *
+      (1 + (getStats(p).affixExpPct ?? 0) / 100),
+  )
   p.gold += gold
   recordDailyMissionProgress({
     kills: 1,
@@ -1266,6 +1369,11 @@ export function castSkill(index: number) {
   const p = game.p
   if (!p || game.panel) return
   const job = currentJob()
+  if (job.id === 'gm' && p.gm && isCurrentAccountGm()) {
+    const gmSkill = GM_ACTIVE_SKILLS[index]
+    if (gmSkill) castGmSkill(gmSkill.skillKey)
+    return
+  }
   const skill = job.skills[index]
   if (!skill) return
   const skillLevel = p.skillLevels?.[skill.id] ?? 1
@@ -1285,8 +1393,12 @@ export function castSkill(index: number) {
     const recovered = Math.min(Math.floor(stats.maxHp * skillMult), stats.maxHp - p.hp)
     p.hp += recovered
     p.mp -= skill.mp
-    game.skillCd[skill.id] = skill.cooldown * Math.max(0.65, 1 - (skillLevel - 1) * 0.05)
+    const cdReduce = Math.max(0.4, 1 - (stats.cdReducePct ?? 0))
+    game.skillCd[skill.id] = skill.cooldown * Math.max(0.65, 1 - (skillLevel - 1) * 0.05) * cdReduce
     game.attackAnim = 0.32
+    game.skillAnim = 0.52
+    game.skillAnimMax = 0.52
+    game.skillVfxColor = vfx.primaryColor
     addEffect({
       type: 'ring',
       x: p.x,
@@ -1396,8 +1508,12 @@ export function castSkill(index: number) {
     }
   }
   p.mp -= skill.mp
-  game.skillCd[skill.id] = skill.cooldown * Math.max(0.65, 1 - (skillLevel - 1) * 0.05)
+  const cdReduce = Math.max(0.4, 1 - (getStats(p).cdReducePct ?? 0))
+  game.skillCd[skill.id] = skill.cooldown * Math.max(0.65, 1 - (skillLevel - 1) * 0.05) * cdReduce
   game.attackAnim = 0.32
+  game.skillAnim = 0.52
+  game.skillAnimMax = 0.52
+  game.skillVfxColor = vfx.primaryColor
   addFloat(p.x, p.y - 30, skill.name, vfx.primaryColor, 9)
   recordDailyMissionProgress({ skillsUsed: 1 })
 }
@@ -1456,6 +1572,9 @@ export function triggerUltimateSkill() {
   }
   game.ultimateCharge = 0
   game.attackAnim = 0.45
+  game.skillAnim = 0.68
+  game.skillAnimMax = 0.68
+  game.skillVfxColor = '#fbbf24'
   addEffect({ type: 'burst', x: p.x, y: p.y - 8, r, color: '#fbbf24', secondaryColor: '#f43f5e', vfxStyle: 'light_judgment', max: 0.9 })
   addFloat(p.x, p.y - 36, 'ULTIMATE!', '#fbbf24', 15)
   say('system', hitCount > 0 ? `★ ปลดปล่อยท่าไม้ตาย! โดนมอนสเตอร์ ${hitCount} ตัว` : '★ ปลดปล่อยท่าไม้ตายแห่งแสง!')
@@ -1587,17 +1706,116 @@ export function action() {
   if (!interact()) basicAttack()
 }
 
-export function castGmSkill(skill: 'invisible' | 'summon' | 'immortal') {
+export function castGmSkill(skill: 'invisible' | 'summon' | 'immortal' | 'judgment' | 'nova' | 'miracle') {
   const p = player()
   if (!p.gm || !isCurrentAccountGm()) return
   if (skill === 'invisible') {
     p.invisible = !p.invisible
+    game.skillAnim = 0.5
+    game.skillAnimMax = 0.5
+    game.skillVfxColor = '#38bdf8'
+    addEffect({ type: 'ring', x: p.x, y: p.y - 8, r: 30, color: '#38bdf8', secondaryColor: '#a855f7', max: 0.55 })
     say('gm', `ล่องหน: ${p.invisible ? 'เปิด' : 'ปิด'}`)
   } else if (skill === 'immortal') {
     p.god = !p.god
     if (p.god) { p.hp = getStats().maxHp; p.mp = getStats().maxMp }
+    game.skillAnim = 0.55
+    game.skillAnimMax = 0.55
+    game.skillVfxColor = '#ffd60a'
+    addEffect({ type: 'ring', x: p.x, y: p.y - 8, r: 36, color: '#ffd60a', secondaryColor: '#38bdf8', vfxStyle: 'holy_heal', max: 0.65 })
     say('gm', `อมตะ: ${p.god ? 'เปิด' : 'ปิด'}`)
+  } else if (skill === 'judgment') {
+    const cdKey = 'gm_judgment'
+    if ((game.skillCd[cdKey] ?? 0) > 0) return
+    const target = nearestMonster(160)
+    if (target) faceToward(target.x, target.y)
+    const cx = target?.x ?? p.x
+    const cy = target?.y ?? p.y
+    const r = 82
+    let hits = 0
+    for (const m of game.monsters) {
+      if (!m.dead && Math.hypot(m.x - cx, m.y - cy) <= r) {
+        damageMonster(m, 6.5, 'divine_judgment')
+        hits += 1
+      }
+    }
+    game.skillCd[cdKey] = 1.8
+    game.skillAnim = 0.65
+    game.skillAnimMax = 0.65
+    game.skillVfxColor = '#ffd60a'
+    addEffect({
+      type: 'burst',
+      x: cx,
+      y: cy - 8,
+      sourceX: p.x,
+      sourceY: p.y - 10,
+      r,
+      color: '#ffd60a',
+      secondaryColor: '#38bdf8',
+      vfxStyle: 'light_judgment',
+      max: 0.75,
+    })
+    addFloat(p.x, p.y - 34, 'พิพากษาสวรรค์!', '#ffd60a', 11)
+    if (hits > 0) say('gm', `พิพากษาสวรรค์! โจมตีเป้าหมาย ${hits} ตัว`)
+    recordDailyMissionProgress({ skillsUsed: 1 })
+  } else if (skill === 'nova') {
+    const cdKey = 'gm_nova'
+    if ((game.skillCd[cdKey] ?? 0) > 0) return
+    const r = 120
+    let hits = 0
+    for (const m of game.monsters) {
+      if (!m.dead && Math.hypot(m.x - p.x, m.y - p.y) <= r) {
+        damageMonster(m, 4.8, 'sovereign_nova')
+        hits += 1
+      }
+    }
+    game.skillCd[cdKey] = 2.4
+    game.skillAnim = 0.6
+    game.skillAnimMax = 0.6
+    game.skillVfxColor = '#38bdf8'
+    addEffect({
+      type: 'ring',
+      x: p.x,
+      y: p.y - 8,
+      sourceX: p.x,
+      sourceY: p.y - 8,
+      r,
+      color: '#38bdf8',
+      secondaryColor: '#f472b6',
+      vfxStyle: 'meteor_strike',
+      max: 0.68,
+    })
+    addFloat(p.x, p.y - 34, 'คลื่นพลังราชันย์!', '#38bdf8', 11)
+    if (hits > 0) say('gm', `คลื่นพลังราชันย์! โดนมอนสเตอร์ ${hits} ตัว`)
+    recordDailyMissionProgress({ skillsUsed: 1 })
+  } else if (skill === 'miracle') {
+    const cdKey = 'gm_miracle'
+    if ((game.skillCd[cdKey] ?? 0) > 0) return
+    const stats = getStats(p)
+    p.hp = stats.maxHp
+    p.mp = stats.maxMp
+    game.invulnUntil = Math.max(game.invulnUntil, game.time + 3.0)
+    game.skillCd[cdKey] = 4.0
+    game.skillAnim = 0.58
+    game.skillAnimMax = 0.58
+    game.skillVfxColor = '#fde047'
+    addEffect({
+      type: 'ring',
+      x: p.x,
+      y: p.y - 8,
+      r: 44,
+      color: '#fde047',
+      secondaryColor: '#67e8f9',
+      vfxStyle: 'holy_heal',
+      max: 0.72,
+    })
+    addFloat(p.x, p.y - 34, 'GM MIRACLE!', '#fde047', 11)
+    say('gm', 'ปาฏิหาริย์ GM: ฟื้นฟู HP/MP เต็ม + โล่อมตะ 3 วินาที')
+    recordDailyMissionProgress({ skillsUsed: 1 })
   } else {
+    game.skillAnim = 0.45
+    game.skillAnimMax = 0.45
+    game.skillVfxColor = '#ffd60a'
     openPanel('gm-summon')
   }
   saveGame()
@@ -2829,12 +3047,29 @@ export function startTownInvasionAction(): { ok: boolean; message: string } {
 export function listInventoryItemForMarketAction(
   itemUid: string,
   qty: number,
-): { ok: boolean; message: string; item?: { itemId: string; itemName: string; qty: number; plus: number; kind: string } } {
+): {
+  ok: boolean
+  message: string
+  item?: {
+    itemId: string
+    itemName: string
+    qty: number
+    plus: number
+    kind: string
+    rarity?: EquipmentRarity
+    affixes?: ItemAffix[]
+  }
+} {
   const p = player()
   const it = p.inventory.find((i) => i.uid === itemUid)
   if (!it) return { ok: false, message: 'ไม่พบไอเทมในกระเป๋า' }
   const def = ITEMS[it.itemId]
-  if (!isItemListableOnMarket(def)) return { ok: false, message: 'ไอเทมนี้ไม่สามารถลงตลาดได้' }
+  if (!isItemListableOnMarket(def, it)) {
+    return {
+      ok: false,
+      message: it.bound ? 'ไอเทมนี้ติดสถานะผูกมัด (Bound) ไม่สามารถลงตลาดได้' : 'ไอเทมนี้ไม่สามารถลงตลาดได้',
+    }
+  }
   const safeQty = Math.max(1, Math.min(it.qty, Math.floor(qty)))
   const removed = removeUid(p.inventory, itemUid, safeQty)
   if (!removed) return { ok: false, message: 'ไม่สามารถย้ายไอเทมลงตลาดได้' }
@@ -2849,17 +3084,23 @@ export function listInventoryItemForMarketAction(
       qty: removed.qty,
       plus: removed.plus,
       kind: def?.kind ?? 'material',
+      rarity: removed.rarity,
+      affixes: removed.affixes,
     },
   }
 }
 
 export function completeMarketPurchaseAction(
   costGold: number,
-  item: { itemId: string; qty: number; plus: number },
+  item: { itemId: string; qty: number; plus: number; rarity?: EquipmentRarity; affixes?: ItemAffix[] },
 ): { ok: boolean; message: string } {
   const p = player()
   if (p.gold < costGold) return { ok: false, message: `ทองไม่พอ (ต้องการ ${costGold.toLocaleString()} G)` }
-  if (!addItem(item.itemId, item.qty, item.plus)) {
+  if (!addItem(item.itemId, item.qty, item.plus, undefined, undefined, {
+    rarity: item.rarity,
+    affixes: item.affixes,
+    rollAffix: false,
+  })) {
     return { ok: false, message: 'กระเป๋าเต็ม กรุณาเคลียร์ช่องก่อนซื้อ' }
   }
   p.gold -= costGold
@@ -2873,6 +3114,144 @@ export function receiveMarketProceedsAction(gold: number) {
   p.gold += Math.max(0, Math.floor(gold))
   saveGame()
   notify()
+}
+
+export function reforgeEquipmentAction(itemUid: string): { ok: boolean; message: string; rarity?: EquipmentRarity; affixes?: ItemAffix[] } {
+  const p = player()
+  const it = findEquipment(itemUid)
+  if (!it) return { ok: false, message: 'ไม่พบอุปกรณ์ที่เลือก' }
+  const def = ITEMS[it.itemId]
+  if (!def || (def.kind !== 'weapon' && def.kind !== 'armor')) {
+    return { ok: false, message: 'รีสุ่มออปชันได้เฉพาะอาวุธและอุปกรณ์สวมใส่' }
+  }
+  const curRarity = resolveEffectiveRarity(it, def)
+  const cost = reforgeCost(def.tier ?? 1, curRarity)
+  if (p.gold < cost.gold) return { ok: false, message: `ทองไม่พอ (ต้องการ ${cost.gold.toLocaleString()} G)` }
+  if (countItem('enhance_stone') < cost.stones) return { ok: false, message: `หินตีบวกไม่พอ (ต้องการ ${cost.stones} ก้อน)` }
+
+  p.gold -= cost.gold
+  removeItemId('enhance_stone', cost.stones)
+  const nextRarity = rollEquipmentRarity(def.tier ?? 1, Math.random, 'uncommon')
+  const nextAffixes = rollEquipmentAffixes(def.tier ?? 1, nextRarity)
+  it.rarity = nextRarity
+  it.affixes = nextAffixes
+  clampVitals()
+  saveGame()
+  notify()
+  const meta = EQUIPMENT_RARITY_META[nextRarity]
+  say('loot', `รีสุ่มออปชัน ${def.name} สำเร็จ: ระดับ [${meta.thaiLabel}] (${nextAffixes.length} ออปชัน)`)
+  return {
+    ok: true,
+    rarity: nextRarity,
+    affixes: nextAffixes,
+    message: `รีสุ่มได้ระดับ ${meta.thaiLabel} (${nextAffixes.length} ออปชัน)!`,
+  }
+}
+
+export function usePartyRoleSupportAction(): { ok: boolean; message: string; label?: string } {
+  const p = game.p
+  if (!p) return { ok: false, message: 'ไม่พบตัวละคร' }
+  if (!game.party) return { ok: false, message: 'ต้องอยู่ในปาร์ตี้จึงจะใช้สกิลประสานทีมได้' }
+  if (game.partySupportCd > 0) {
+    return { ok: false, message: `สกิลประสานทีมคูลดาวน์เหลือ ${game.partySupportCd.toFixed(1)} วิ` }
+  }
+  const s = getStats(p)
+  const eff = computeSupportSkillEffect(p.jobId, s.maxHp, s.atk)
+  p.hp = Math.min(s.maxHp, p.hp + eff.healAmount)
+  if (eff.kind === 'guard') {
+    game.guardUntil = Math.max(game.guardUntil, game.time + 3.5)
+  }
+  game.partySupportCd = 12
+  addEffect({ type: 'ring', x: p.x, y: p.y - 6, r: 44, color: eff.kind === 'heal' ? '#34d399' : '#60a5fa', max: 0.65 })
+  addFloat(p.x, p.y - 28, `${eff.label}! +${eff.healAmount}`, eff.kind === 'heal' ? '#34d399' : '#60a5fa', 10)
+  say('system', `ใช้สกิลประสานปาร์ตี้ "${eff.label}" (ฟื้นฟู +${eff.healAmount} HP)`, undefined, { channel: 'party' })
+  notify()
+  return { ok: true, label: eff.label, message: `ใช้ "${eff.label}" สำเร็จ!` }
+}
+
+export function blockPlayerAction(targetUid: string): { ok: boolean; message: string } {
+  const p = player()
+  if (!targetUid) return { ok: false, message: 'ไม่พบผู้เล่น' }
+  p.blockedUids ??= []
+  if (p.blockedUids.includes(targetUid)) {
+    return { ok: true, message: 'ปิดกั้นผู้เล่นนี้อยู่แล้ว' }
+  }
+  p.blockedUids = [...p.blockedUids.slice(-49), targetUid]
+  saveGame()
+  notify()
+  return { ok: true, message: 'ปิดกั้นข้อความและคำเชิญจากผู้เล่นนี้แล้ว' }
+}
+
+export function unblockPlayerAction(targetUid: string): { ok: boolean; message: string } {
+  const p = player()
+  p.blockedUids = (p.blockedUids ?? []).filter((id) => id !== targetUid)
+  saveGame()
+  notify()
+  return { ok: true, message: 'ปลดบล็อกผู้เล่นเรียบร้อย' }
+}
+
+export function isPlayerBlocked(targetUid: string | null | undefined): boolean {
+  if (!targetUid || !game.p?.blockedUids) return false
+  return game.p.blockedUids.includes(targetUid)
+}
+
+export function applyCompletedTradeAction(params: {
+  tradeId: string
+  giveItemUids: string[]
+  giveGold: number
+  receiveItems: InvItem[]
+  receiveGold: number
+  giveGemItems?: string[]
+  receiveGemItems?: string[]
+}): { ok: boolean; message: string } {
+  const p = player()
+  p.appliedTradeIds ??= []
+  if (p.appliedTradeIds.includes(params.tradeId)) {
+    return { ok: true, message: 'อัปเดตผลแลกเปลี่ยนเรียบร้อยแล้ว' }
+  }
+
+  for (const uidToRemove of params.giveItemUids) {
+    const idx = p.inventory.findIndex((entry) => entry.uid === uidToRemove)
+    if (idx >= 0) p.inventory.splice(idx, 1)
+  }
+  p.gold = Math.max(0, p.gold - Math.max(0, Math.floor(params.giveGold))) + Math.max(0, Math.floor(params.receiveGold))
+
+  for (const item of params.receiveItems) {
+    addItem(item.itemId, item.qty, item.plus, undefined, undefined, {
+      rarity: item.rarity,
+      affixes: item.affixes,
+      bound: false,
+      rollAffix: false,
+    })
+  }
+
+  if (params.giveGemItems?.length) {
+    const rmSet = new Set(params.giveGemItems)
+    p.ownedGemItems = p.ownedGemItems.filter((id) => !rmSet.has(id))
+    if (p.equippedGemFashion && rmSet.has(p.equippedGemFashion)) p.equippedGemFashion = null
+    if (p.equippedGemCompanion && rmSet.has(p.equippedGemCompanion)) p.equippedGemCompanion = null
+  }
+  if (params.receiveGemItems?.length) {
+    for (const id of params.receiveGemItems) {
+      if (!p.ownedGemItems.includes(id)) p.ownedGemItems.push(id)
+    }
+  }
+
+  p.appliedTradeIds = [...p.appliedTradeIds.slice(-39), params.tradeId]
+  clampVitals()
+  saveGame()
+  notify()
+  return { ok: true, message: 'แลกเปลี่ยนสำเร็จและรับไอเทมเข้ากระเป๋าแล้ว!' }
+}
+
+export function applyFieldBossRewardAction(reward: { gold: number; diamonds: number; stones: number; bossName: string }) {
+  const p = player()
+  p.gold += Math.max(0, reward.gold)
+  p.diamonds = (p.diamonds ?? 0) + Math.max(0, reward.diamonds)
+  if (reward.stones > 0) addItem('enhance_stone', reward.stones)
+  saveGame()
+  notify()
+  say('loot', `★ พิชิต ${reward.bossName}! รับ +${reward.gold.toLocaleString()} G · +${reward.diamonds} เพชร · หิน x${reward.stones}`)
 }
 
 export function deductGoldForMailGiftAction(gold: number): boolean {
@@ -2921,14 +3300,15 @@ export function recordCoopDungeonClearAction(gold: number, diamonds: number, exp
 
 /* ---------------- chat & commands ---------------- */
 
-export function submitChat(raw: string) {
+export function submitChat(raw: string, channelOverride?: ChatChannel) {
   const p = game.p
   if (!p) return
   const text = raw.trim().slice(0, 140)
   if (!text) return
   if (text.startsWith('/')) runCommand(text)
   else {
-    say('player', text, p.name)
+    const ch = channelOverride && channelOverride !== 'all' ? channelOverride : game.chatChannel === 'all' ? 'world' : game.chatChannel
+    say('player', text, p.name, { channel: ch, senderUid: firebaseAuth.currentUser?.uid, senderGameUid: p.gameUid })
     game.bubble = { text, until: game.time + 4 }
   }
   notify()
@@ -3408,7 +3788,15 @@ function sanitizeList(list: unknown): InvItem[] {
   if (!Array.isArray(list)) return []
   return list
     .filter((i): i is InvItem => !!i && typeof i.itemId === 'string' && !!ITEMS[i.itemId])
-    .map((i) => ({ uid: i.uid || uid(), itemId: i.itemId, qty: Math.max(1, Math.floor(i.qty || 1)), plus: Math.max(0, Math.min(MAX_PLUS, Math.floor(i.plus || 0))) }))
+    .map((i) => ({
+      uid: i.uid || uid(),
+      itemId: i.itemId,
+      qty: Math.max(1, Math.floor(i.qty || 1)),
+      plus: Math.max(0, Math.min(MAX_PLUS, Math.floor(i.plus || 0))),
+      rarity: i.rarity && EQUIPMENT_RARITY_META[i.rarity] ? i.rarity : undefined,
+      affixes: i.affixes ? sanitizeAffixes(i.affixes) : undefined,
+      bound: i.bound ? true : undefined,
+    }))
 }
 
 function resetRuntime() {
@@ -3420,8 +3808,25 @@ function resetRuntime() {
   game.chat = []
   game.panel = null
   game.partyPanelOpen = false
+  game.partyRoleBuffs = {
+    tanks: 0,
+    healers: 0,
+    dps: 0,
+    hasTrinity: false,
+    atkPct: 0,
+    defPct: 0,
+    critBonus: 0,
+    hpRegenPct: 0,
+    labels: [],
+  }
+  game.partySupportCd = 0
+  game.inspectTarget = null
+  game.activeDuelId = null
+  game.duelTarget = null
   game.keys.clear()
   game.attackHeld = false
+  game.attackAnim = 0
+  game.skillAnim = 0
   game.skillCd = {}
   game.bubble = null
   game.socialTargetId = null
@@ -3546,6 +3951,8 @@ export function loadGame(d: SaveData) {
     towerState: sanitizeTowerState(d.towerState),
     rpgExt: sanitizeRpgExt(d.rpgExt),
     extV2: sanitizeExtV2(d.extV2),
+    blockedUids: Array.isArray(d.blockedUids) ? [...new Set(d.blockedUids.filter((x): x is string => typeof x === 'string').slice(0, 50))] : [],
+    appliedTradeIds: Array.isArray(d.appliedTradeIds) ? [...new Set(d.appliedTradeIds.filter((x): x is string => typeof x === 'string').slice(-40))] : [],
   }
   if (p.hp <= 0) p.hp = getStats(p).maxHp
   const prevSavedAt = p.savedAt
@@ -3646,10 +4053,12 @@ export function update(dt: number) {
   p.playTime += dt
   game.attackCd -= dt
   game.attackAnim = Math.max(0, game.attackAnim - dt)
+  game.skillAnim = Math.max(0, game.skillAnim - dt)
   game.petAttackCd = Math.max(0, game.petAttackCd - dt)
   game.guardCd = Math.max(0, game.guardCd - dt)
   game.dashCd = Math.max(0, game.dashCd - dt)
   game.gatherCd = Math.max(0, game.gatherCd - dt)
+  game.partySupportCd = Math.max(0, game.partySupportCd - dt)
   for (const k in game.skillCd) game.skillCd[k] -= dt
   game.combatT += dt
   if (game.comboCount > 0 && game.time > game.comboUntil) {
@@ -3765,13 +4174,19 @@ export function update(dt: number) {
   game.regenT += dt
   if (game.regenT >= 2) {
     game.regenT = 0
-    if (game.combatT > 4) {
+    const synergyRegen = game.partyRoleBuffs.hpRegenPct / 100
+    if (game.combatT > 4 || synergyRegen > 0) {
       const s = getStats()
-      const rate = map.safe ? 0.08 : 0.025
+      const baseRate = game.combatT > 4 ? (map.safe ? 0.08 : 0.025) : 0
+      const hpRate = baseRate + synergyRegen
       const prevHp = p.hp
       const prevMp = p.mp
-      p.hp = Math.min(s.maxHp, p.hp + Math.max(1, Math.floor(s.maxHp * rate)))
-      p.mp = Math.min(s.maxMp, p.mp + Math.max(1, Math.floor(s.maxMp * rate)))
+      if (hpRate > 0) {
+        p.hp = Math.min(s.maxHp, p.hp + Math.max(1, Math.floor(s.maxHp * hpRate)))
+      }
+      if (baseRate > 0) {
+        p.mp = Math.min(s.maxMp, p.mp + Math.max(1, Math.floor(s.maxMp * baseRate)))
+      }
       if (p.hp !== prevHp || p.mp !== prevMp) uiDirty = true
     }
   }

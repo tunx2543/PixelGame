@@ -1,8 +1,10 @@
 'use client'
 
-import { Moon, Sun, Users, Utensils } from 'lucide-react'
-import { currentMap, game, notify } from '@/lib/game/engine'
+import { Flame, Moon, Skull, Sun, Users, Utensils } from 'lucide-react'
+import { currentMap, game, notify, openPanel } from '@/lib/game/engine'
 import { getActiveFoodBuffBonuses, getWorldTimePhase, sanitizeExtV2 } from '@/lib/game/extended-systems'
+import { getFieldBossForMap } from '@/lib/game/mmo-systems'
+import { getActiveWorldBoss } from '@/lib/game/rpg-systems'
 import { useGame } from '@/lib/game/use-game'
 import { MapMinimap } from './map-minimap'
 import { OnlinePlayersPopover } from './online-players-popover'
@@ -17,6 +19,11 @@ export function WorldBanner() {
   const worldPhase = getWorldTimePhase()
   const extV2 = p ? sanitizeExtV2(p.extV2) : null
   const foodBuff = extV2 ? getActiveFoodBuffBonuses(extV2.activeFoodBuff) : null
+  const worldBoss = getActiveWorldBoss()
+  const wbRemainSec = Math.max(0, Math.floor((worldBoss.endsAtMs - Date.now()) / 1000))
+  const wbMin = Math.floor(wbRemainSec / 60)
+  const wbSec = wbRemainSec % 60
+  const fieldBoss = getFieldBossForMap(map.id)
 
   return (
     <>
@@ -56,6 +63,26 @@ export function WorldBanner() {
           <SocialBar />
         </div>
         <div className="flex flex-wrap items-center justify-end gap-1 text-[10px]">
+          <button
+            type="button"
+            onClick={() => openPanel('guild')}
+            aria-label="เปิดหน้าต่างเวิลด์บอสและฟิลด์บอส"
+            className="pointer-events-auto pixel-panel flex items-center gap-1 border-rose-400/50 px-2 py-0.5 font-semibold text-rose-200 shadow hover:border-rose-400 tabular-nums"
+          >
+            <Flame className="size-3 text-rose-400" aria-hidden />
+            <span>WB {String(wbMin).padStart(2, '0')}:{String(wbSec).padStart(2, '0')}</span>
+          </button>
+          {fieldBoss && (
+            <button
+              type="button"
+              onClick={() => openPanel('guild')}
+              aria-label={`เปิดฟิลด์บอส ${fieldBoss.name}`}
+              className="pointer-events-auto pixel-panel flex items-center gap-1 border-amber-400/50 px-2 py-0.5 font-semibold text-amber-200 shadow hover:border-amber-400"
+            >
+              <Skull className="size-3 text-amber-300" aria-hidden />
+              <span>ฟิลด์บอส Lv.{fieldBoss.level}</span>
+            </button>
+          )}
           <span className="pixel-panel flex items-center gap-1 px-2 py-0.5 font-semibold text-amber-100/90 shadow">
             {worldPhase.phase === 'night' ? (
               <Moon className="size-3 text-indigo-300" aria-hidden />

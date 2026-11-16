@@ -4,29 +4,75 @@ import { useEffect, useState } from 'react'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from '@/lib/firebase/client'
 import { subscribeFriendSocialState, type PendingFriendRequest } from '@/lib/firebase/friends'
+import {
+  respondDuelChallenge,
+  respondTradeFirestore,
+  subscribeIncomingDuels,
+  subscribeIncomingTrades,
+  subscribeIncomingWhispers,
+  type DuelMatchRecord,
+  type TradeSessionRecord,
+} from '@/lib/firebase/mmo-online'
 import { respondPartyInvite } from '@/lib/firebase/parties'
 import { getOptionalClient } from '@/lib/supabase/client'
-import { game, getStats, notify, openPanel } from '@/lib/game/engine'
+import { game, getStats, isPlayerBlocked, notify, openPanel } from '@/lib/game/engine'
+import { createDuelFighter } from '@/lib/game/mmo-systems'
 import { respondFriendRequest } from '@/lib/game/social'
 import { useGame } from '@/lib/game/use-game'
 
 export function SocialNotifications() {
   useGame()
   const [request, setRequest] = useState<PendingFriendRequest | null>(null)
+  const [fbTrade, setFbTrade] = useState<TradeSessionRecord | null>(null)
+  const [fbDuel, setFbDuel] = useState<DuelMatchRecord | null>(null)
   const [trade, setTrade] = useState<{ id: number; userId: string } | null>(null)
   const [partyBusy, setPartyBusy] = useState(false)
 
   useEffect(() => {
     let unsubSocial = () => {}
+    let unsubWhispers = () => {}
+    let unsubTrades = () => {}
+    let unsubDuels = () => {}
+
     const unsubAuth = onAuthStateChanged(auth, (fbUser) => {
       unsubSocial()
+      unsubWhispers()
+      unsubTrades()
+      unsubDuels()
       unsubSocial = () => {}
+      unsubWhispers = () => {}
+      unsubTrades = () => {}
+      unsubDuels = () => {}
+
       if (fbUser && fbUser.emailVerified) {
         unsubSocial = subscribeFriendSocialState(fbUser.uid, (snapshot) => {
           setRequest(snapshot.incomingRequests[0] ?? null)
         })
+        unsubWhispers = subscribeIncomingWhispers(fbUser.uid, (whisper) => {
+          if (isPlayerBlocked(whisper.fromUid)) return
+          game.chat.push({
+            id: Date.now(),
+            type: 'player',
+            author: `${whisper.fromName}`,
+            text: `[กระซิบถึงคุณ] ${whisper.body}`,
+            channel: 'world',
+            senderUid: whisper.fromUid,
+            senderGameUid: whisper.fromGameUid,
+          })
+          notify()
+        })
+        unsubTrades = subscribeIncomingTrades(fbUser.uid, (trades) => {
+          const pending = trades.find((t) => t.status === 'pending' && !isPlayerBlocked(t.senderUid)) ?? null
+          setFbTrade(pending)
+        })
+        unsubDuels = subscribeIncomingDuels(fbUser.uid, (duels) => {
+          const pending = duels.find((d) => d.status === 'pending' && !isPlayerBlocked(d.challengerUid)) ?? null
+          setFbDuel(pending)
+        })
       } else {
         setRequest(null)
+        setFbTrade(null)
+        setFbDuel(null)
       }
     })
 
@@ -58,6 +104,9 @@ export function SocialNotifications() {
     return () => {
       active = false
       unsubSocial()
+      unsubWhispers()
+      unsubTrades()
+      unsubDuels()
       unsubAuth()
       if (timer !== null) window.clearInterval(timer)
     }
@@ -65,7 +114,7 @@ export function SocialNotifications() {
 
   const partyInvite = game.partyInvites[0] ?? null
 
-  if (!request && !trade && !partyInvite) return null
+  if (!request && !trade && !fbTrade && !fbDuel && !partyInvite) return null
 
   const respond = async (decision: 'accepted' | 'declined') => {
     if (!request) return
@@ -116,6 +165,62 @@ export function SocialNotifications() {
       notify()
     } finally {
       setPartyBusy(false)
+    }
+  }
+
+  const respondFbTrade = async (decision: 'active' | 'declined') => {
+    if (!fbTrade) return
+    const res = await respondTradeFirestore(fbTrade.tradeId, decision)
+    if (!res.ok) {
+      game.chat.push({ id: Date.now(), type: 'error', text: res.message })
+      notify()
+      return
+    }
+    if (decision === 'active') {
+      game.tradeId = fbTrade.tradeId
+      game.tradeTargetId = fbTrade.senderUid
+      setFbTrade(null)
+      openPanel('trade')
+    } else {
+      setFbTrade(null)
+      notify()
+    }
+  }
+
+  const respondFbDuel = async (decision: 'active' | 'declined') => {
+    if (!fbDuel || !game.p) return
+    const p = game.p
+    const s = getStats(p)
+    const selfUid = auth.currentUser?.uid ?? 'guest_player'
+    const res = await respondDuelChallenge(
+      fbDuel.duelId,
+      decision,
+      decision === 'active'
+        ? createDuelFighter({
+            uid: selfUid,
+            name: p.name,
+            jobId: p.jobId,
+            level: p.level,
+            maxHp: s.maxHp,
+            atk: s.atk,
+            def: s.def,
+            crit: s.crit,
+          })
+        : undefined,
+    )
+    if (!res.ok) {
+      game.chat.push({ id: Date.now(), type: 'error', text: res.message })
+      notify()
+      return
+    }
+    if (decision === 'active') {
+      game.activeDuelId = fbDuel.duelId
+      game.duelTarget = { userId: fbDuel.challengerUid, displayName: fbDuel.challengerName }
+      setFbDuel(null)
+      openPanel('arena')
+    } else {
+      setFbDuel(null)
+      notify()
     }
   }
 
@@ -178,6 +283,30 @@ export function SocialNotifications() {
           <div className="mt-2 grid grid-cols-2 gap-2">
             <button type="button" className="pixel-button primary px-2 py-1.5 text-[10px]" onClick={() => void respond('accepted')}>ยอมรับ</button>
             <button type="button" className="pixel-button secondary px-2 py-1.5 text-[10px]" onClick={() => void respond('declined')}>ปฏิเสธ</button>
+          </div>
+        </div>
+      )}
+      {fbTrade && (
+        <div className="rounded-xl border border-accent/60 bg-background/95 p-3 shadow-2xl backdrop-blur">
+          <p className="text-[10px] font-bold tracking-[0.15em] text-accent">คำขอแลกเปลี่ยน 1v1</p>
+          <p className="mt-1 text-xs text-foreground">
+            {fbTrade.senderName} <span className="font-mono text-[11px] text-accent">(UID {fbTrade.senderGameUid})</span> ต้องการแลกเปลี่ยนไอเทมกับคุณ
+          </p>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <button type="button" className="pixel-button primary px-2 py-1.5 text-[10px]" onClick={() => void respondFbTrade('active')}>ตกลง</button>
+            <button type="button" className="pixel-button secondary px-2 py-1.5 text-[10px]" onClick={() => void respondFbTrade('declined')}>ปฏิเสธ</button>
+          </div>
+        </div>
+      )}
+      {fbDuel && (
+        <div className="rounded-xl border border-rose-400/60 bg-background/95 p-3 shadow-2xl backdrop-blur">
+          <p className="text-[10px] font-bold tracking-[0.15em] text-rose-300">คำท้าประลอง Live PvP</p>
+          <p className="mt-1 text-xs text-foreground">
+            {fbDuel.challengerName} <span className="font-mono text-[11px] text-rose-300">(UID {fbDuel.challengerGameUid})</span> ท้าดวล 1v1 แบบเรียลไทม์!
+          </p>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <button type="button" className="pixel-button primary px-2 py-1.5 text-[10px]" onClick={() => void respondFbDuel('active')}>รับคำท้า!</button>
+            <button type="button" className="pixel-button secondary px-2 py-1.5 text-[10px]" onClick={() => void respondFbDuel('declined')}>ปฏิเสธ</button>
           </div>
         </div>
       )}

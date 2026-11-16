@@ -1,7 +1,7 @@
 'use client'
 
 import { X } from 'lucide-react'
-import type { ReactNode } from 'react'
+import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { closePanel } from '@/lib/game/engine'
 import { useGame } from '@/lib/game/use-game'
 import { formatNum } from '../format'
@@ -147,6 +147,7 @@ export function PxButton({
   variant = 'primary',
   type = 'button',
   className,
+  ...rest
 }: {
   children: ReactNode
   onClick?: () => void
@@ -154,7 +155,7 @@ export function PxButton({
   variant?: 'primary' | 'secondary' | 'accent' | 'danger'
   type?: 'button' | 'submit'
   className?: string
-}) {
+} & Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'onClick' | 'disabled' | 'type' | 'className'>) {
   const styles = {
     primary: 'bg-primary text-primary-foreground',
     secondary: 'bg-secondary text-secondary-foreground',
@@ -167,6 +168,7 @@ export function PxButton({
       onClick={onClick}
       disabled={disabled}
       className={`pixel-btn px-3 py-1.5 text-xs hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 ${styles} ${className ?? ''}`}
+      {...rest}
     >
       {children}
     </button>

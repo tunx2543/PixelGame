@@ -1,8 +1,19 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronUp, MessageSquare } from 'lucide-react'
-import { game, submitChat, type ChatType } from '@/lib/game/engine'
+import { auth as firebaseAuth } from '@/lib/firebase/client'
+import {
+  sendWorldChatMessage,
+  subscribeWorldChatMessages,
+  type WorldChatMessageRecord,
+} from '@/lib/firebase/mmo-online'
+import { game, notify, submitChat, type ChatType } from '@/lib/game/engine'
+import {
+  CHAT_CHANNEL_META,
+  filterBlockedMessages,
+  type ChatChannel,
+} from '@/lib/game/mmo-systems'
 import { useGame } from '@/lib/game/use-game'
 import { cn } from '@/lib/utils'
 
@@ -24,13 +35,36 @@ const TYPE_TAG: Record<ChatType, string> = {
   npc: '[NPC]',
 }
 
+const CHANNEL_TAG: Record<Exclude<ChatChannel, 'all'>, string> = {
+  world: 'โลก',
+  map: 'แมพ',
+  party: 'ปาร์ตี้',
+  trade: 'ค้าขาย',
+}
+
+interface DisplayChatItem {
+  key: string
+  type: ChatType
+  text: string
+  author?: string
+  channel: Exclude<ChatChannel, 'all'>
+  senderUid?: string
+  senderGameUid?: string
+  orderMs: number
+}
+
 export function ChatBox({ offsetTouch = false }: { offsetTouch?: boolean }) {
   const g = useGame()
   const [text, setText] = useState('')
   const [isOpen, setIsOpen] = useState(false)
+  const [remoteMessages, setRemoteMessages] = useState<WorldChatMessageRecord[]>([])
   const listRef = useRef<HTMLDivElement>(null)
 
-  const lastId = g.chat.at(-1)?.id ?? 0
+  const activeChannel = g.chatChannel
+  const selfUid = firebaseAuth.currentUser?.uid ?? 'guest_player'
+  const currentMapId = g.p?.mapId ?? 'town'
+  const currentPartyId = g.party?.partyId ?? null
+  const blockedUids = g.p?.blockedUids
 
   useEffect(() => {
     const onOpenChat = () => setIsOpen(true)
@@ -39,9 +73,83 @@ export function ChatBox({ offsetTouch = false }: { offsetTouch?: boolean }) {
   }, [])
 
   useEffect(() => {
+    const unsub = subscribeWorldChatMessages(setRemoteMessages)
+    return () => unsub()
+  }, [])
+
+  const visibleMessages = useMemo(() => {
+    const localItems: DisplayChatItem[] = g.chat.map((m, idx) => ({
+      key: `local_${m.id}_${idx}`,
+      type: m.type,
+      text: m.text,
+      author: m.author,
+      channel: m.channel ?? 'world',
+      senderUid: m.senderUid,
+      senderGameUid: m.senderGameUid,
+      orderMs: m.id,
+    }))
+
+    const localFingerprints = new Set(
+      localItems.map((l) => `${l.senderUid ?? l.author ?? ''}:${l.channel}:${l.text}`),
+    )
+
+    const remoteItems: DisplayChatItem[] = remoteMessages
+      .filter((r) => {
+        if (r.channel === 'map' && r.mapId !== currentMapId) return false
+        if (r.channel === 'party' && (!currentPartyId || r.partyId !== currentPartyId)) return false
+        const fp = `${r.senderUid}:${r.channel}:${r.text}`
+        if (r.senderUid === selfUid && localFingerprints.has(fp)) return false
+        return true
+      })
+      .map((r) => ({
+        key: `remote_${r.messageId}`,
+        type: r.isGm ? 'gm' : 'player',
+        text: r.text,
+        author: r.senderName,
+        channel: r.channel,
+        senderUid: r.senderUid,
+        senderGameUid: r.senderGameUid,
+        orderMs: r.createdAtMs,
+      }))
+
+    const merged = filterBlockedMessages([...localItems, ...remoteItems], blockedUids)
+      .filter((msg) => activeChannel === 'all' || msg.channel === activeChannel)
+      .sort((a, b) => a.orderMs - b.orderMs)
+      .slice(-60)
+
+    return merged
+  }, [g.chat, remoteMessages, activeChannel, currentMapId, currentPartyId, selfUid, blockedUids])
+
+  const lastKey = visibleMessages.at(-1)?.key ?? ''
+
+  useEffect(() => {
     const el = listRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [lastId, isOpen])
+  }, [lastKey, isOpen, activeChannel])
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const raw = text.trim()
+    if (!raw || !g.p) return
+    const targetChannel: Exclude<ChatChannel, 'all'> =
+      activeChannel === 'all' ? 'world' : activeChannel
+
+    submitChat(raw, targetChannel)
+    if (!raw.startsWith('/')) {
+      void sendWorldChatMessage({
+        channel: targetChannel,
+        mapId: g.p.mapId,
+        partyId: g.party?.partyId ?? null,
+        senderName: g.p.name,
+        senderGameUid: g.p.gameUid ?? '1000',
+        jobId: g.p.jobId,
+        isGm: Boolean(g.p.gm),
+        text: raw,
+      })
+    }
+    setText('')
+    ;(document.activeElement as HTMLElement | null)?.blur()
+  }
 
   return (
     <div
@@ -50,7 +158,7 @@ export function ChatBox({ offsetTouch = false }: { offsetTouch?: boolean }) {
       className={cn(
         'pointer-events-auto pixel-panel absolute bottom-2 z-20 flex flex-col bg-card/90 shadow-lg transition-[width]',
         offsetTouch ? 'left-[8.25rem]' : 'left-2',
-        isOpen ? 'w-[min(17.5rem,calc(100vw-1rem))]' : 'w-28 sm:w-36',
+        isOpen ? 'w-[min(20.5rem,calc(100vw-1rem))]' : 'w-28 sm:w-36',
       )}
     >
       <button
@@ -62,7 +170,7 @@ export function ChatBox({ offsetTouch = false }: { offsetTouch?: boolean }) {
       >
         <span className="flex items-center gap-1 truncate">
           <MessageSquare className="size-3 shrink-0 text-primary" aria-hidden />
-          แชท ({g.chat.length})
+          แชท ({visibleMessages.length})
         </span>
         <span className="shrink-0 text-muted-foreground" aria-hidden>
           {isOpen ? <ChevronDown className="size-3.5" /> : <ChevronUp className="size-3.5" />}
@@ -71,30 +179,69 @@ export function ChatBox({ offsetTouch = false }: { offsetTouch?: boolean }) {
 
       {isOpen && (
         <>
+          <div className="flex flex-wrap gap-1 border-t border-border bg-background/50 px-1.5 py-1" role="tablist" aria-label="ช่องแชท">
+            {CHAT_CHANNEL_META.map((ch) => {
+              const active = activeChannel === ch.id
+              return (
+                <button
+                  key={ch.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => {
+                    game.chatChannel = ch.id
+                    notify()
+                  }}
+                  className={cn(
+                    'px-1.5 py-0.5 text-[10px] font-semibold transition-colors',
+                    active
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-secondary/70 text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {ch.label}
+                </button>
+              )
+            })}
+          </div>
           <div
             ref={listRef}
-            className="h-24 overflow-y-auto border-t border-border px-2 py-1 text-[11px] leading-snug"
+            className="h-28 overflow-y-auto border-t border-border px-2 py-1 text-[11px] leading-snug"
             role="log"
             aria-live="polite"
             aria-label="ช่องแชท"
           >
-            {g.chat.map((m) => (
-              <p key={m.id} className={cn('break-words', TYPE_STYLE[m.type])}>
-                {TYPE_TAG[m.type] && <span className="mr-1 opacity-80">{TYPE_TAG[m.type]}</span>}
-                {m.author && <span className="mr-1 text-primary">{m.author}:</span>}
-                {m.text}
+            {visibleMessages.length === 0 ? (
+              <p className="py-4 text-center text-[10px] text-muted-foreground">
+                ยังไม่มีข้อความในช่อง{CHAT_CHANNEL_META.find((c) => c.id === activeChannel)?.label ?? 'นี้'}
               </p>
-            ))}
+            ) : (
+              visibleMessages.map((m) => (
+                <p key={m.key} className={cn('break-words', TYPE_STYLE[m.type])}>
+                  <span className="mr-1 text-[9px] text-muted-foreground">[{CHANNEL_TAG[m.channel]}]</span>
+                  {TYPE_TAG[m.type] && <span className="mr-1 opacity-80">{TYPE_TAG[m.type]}</span>}
+                  {m.author && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        game.inspectTarget = {
+                          userId: m.senderUid || m.author!,
+                          displayName: m.author!,
+                          gameUid: m.senderGameUid,
+                        }
+                        notify()
+                      }}
+                      className="mr-1 font-semibold text-primary hover:underline"
+                    >
+                      {m.author}:
+                    </button>
+                  )}
+                  {m.text}
+                </p>
+              ))
+            )}
           </div>
-          <form
-            className="flex border-t border-border"
-            onSubmit={(e) => {
-              e.preventDefault()
-              submitChat(text)
-              setText('')
-              ;(document.activeElement as HTMLElement | null)?.blur()
-            }}
-          >
+          <form className="flex border-t border-border" onSubmit={handleSubmit}>
             <label htmlFor="chat-input" className="sr-only">
               พิมพ์ข้อความแชท
             </label>
@@ -112,7 +259,7 @@ export function ChatBox({ offsetTouch = false }: { offsetTouch?: boolean }) {
               }}
               maxLength={140}
               autoComplete="off"
-              placeholder="พิมพ์แชท... (Enter)"
+              placeholder={`พิมพ์ในช่อง${activeChannel === 'all' ? 'โลก' : (CHAT_CHANNEL_META.find((c) => c.id === activeChannel)?.label ?? '')}...`}
               className="min-w-0 flex-1 bg-transparent px-2 py-1 text-xs text-foreground outline-none placeholder:text-muted-foreground"
             />
             <button type="submit" className="px-2.5 py-1 text-xs font-semibold text-primary hover:bg-secondary">

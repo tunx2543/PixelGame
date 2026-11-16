@@ -5,6 +5,12 @@ import {
   respondToFriendRequest as respondToFriendRequestFirebase,
   sendFriendRequestByGameUid,
 } from '@/lib/firebase/friends'
+import {
+  cancelTradeFirestore,
+  createTradeFirestore,
+  sendWhisperFirestore,
+  updateTradeOfferFirestore,
+} from '@/lib/firebase/mmo-online'
 import { getOptionalClient } from '@/lib/supabase/client'
 import type { InvItem, SaveData } from './engine'
 
@@ -71,9 +77,23 @@ export async function respondFriendRequest(requesterId: string, decision: 'accep
     : { ok: true, message: decision === 'accepted' ? 'เพิ่มเพื่อนแล้ว' : 'ปฏิเสธคำขอแล้ว' }
 }
 
-export async function sendWhisper(targetUserId: string, body: string): Promise<SocialResult> {
+export async function sendWhisper(
+  targetUserId: string,
+  body: string,
+  senderName = 'ผู้กล้า',
+  senderGameUid = '1000',
+): Promise<SocialResult> {
+  if (firebaseAuth.currentUser) {
+    const res = await sendWhisperFirestore({
+      targetUidOrGameUid: targetUserId,
+      senderName,
+      senderGameUid,
+      body,
+    })
+    return { ok: res.ok, message: res.message }
+  }
   const supabase = getOptionalClient()
-  if (!supabase) return { ok: false, message: OFFLINE_MESSAGE }
+  if (!supabase) return { ok: false, message: 'กรุณาเข้าสู่ระบบ Google ก่อนส่งกระซิบ' }
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { ok: false, message: 'กรุณาเข้าสู่ระบบก่อน' }
   const targetId = await resolveTargetId(targetUserId)
@@ -84,9 +104,21 @@ export async function sendWhisper(targetUserId: string, body: string): Promise<S
   return error ? { ok: false, message: 'ส่งกระซิบไม่สำเร็จ' } : { ok: true, message: 'ส่งกระซิบแล้ว' }
 }
 
-export async function createTrade(targetUserId: string): Promise<SocialResult & { tradeId?: number }> {
+export async function createTrade(
+  targetUserId: string,
+  senderName?: string,
+  senderGameUid?: string,
+): Promise<SocialResult & { tradeId?: string | number }> {
+  if (firebaseAuth.currentUser) {
+    const res = await createTradeFirestore({
+      targetUidOrGameUid: targetUserId,
+      senderName,
+      senderGameUid,
+    })
+    return { ok: res.ok, message: res.message, tradeId: res.tradeId }
+  }
   const supabase = getOptionalClient()
-  if (!supabase) return { ok: false, message: OFFLINE_MESSAGE }
+  if (!supabase) return { ok: false, message: 'กรุณาเข้าสู่ระบบ Google ก่อนขอแลกเปลี่ยน' }
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { ok: false, message: 'กรุณาเข้าสู่ระบบก่อน' }
   const targetId = await resolveTargetId(targetUserId)
@@ -96,12 +128,42 @@ export async function createTrade(targetUserId: string): Promise<SocialResult & 
 }
 
 export async function updateTradeOffer(
-  tradeId: number,
+  tradeId: string | number,
   itemUids: string[],
   offeredGold: number,
   gemItemIds: string[],
   ready: boolean,
+  fullInventory?: InvItem[],
 ): Promise<TradeUpdate> {
+  if (firebaseAuth.currentUser && typeof tradeId === 'string') {
+    const selectedItems = (fullInventory ?? []).filter((item) => itemUids.includes(item.uid) && !item.bound)
+    const res = await updateTradeOfferFirestore(tradeId, {
+      items: selectedItems,
+      gold: offeredGold,
+      gemItems: gemItemIds,
+      ready,
+    })
+    const s = res.session
+    return {
+      ok: res.ok,
+      message: res.message,
+      completed: res.completed,
+      offer: s
+        ? {
+            senderItems: s.senderItems.map((i) => i.uid),
+            recipientItems: s.recipientItems.map((i) => i.uid),
+            senderDisplay: s.senderItems,
+            recipientDisplay: s.recipientItems,
+            senderGold: s.senderGold,
+            recipientGold: s.recipientGold,
+            senderGemItems: s.senderGemItems,
+            recipientGemItems: s.recipientGemItems,
+            senderReady: s.senderReady,
+            recipientReady: s.recipientReady,
+          }
+        : undefined,
+    }
+  }
   const supabase = getOptionalClient()
   if (!supabase) return { ok: false, message: OFFLINE_MESSAGE }
   const { data, error } = await supabase.rpc('update_trade_offer', {
@@ -133,7 +195,10 @@ export async function updateTradeOffer(
   }
 }
 
-export async function cancelTradeRequest(tradeId: number): Promise<SocialResult> {
+export async function cancelTradeRequest(tradeId: string | number): Promise<SocialResult> {
+  if (firebaseAuth.currentUser && typeof tradeId === 'string') {
+    return cancelTradeFirestore(tradeId)
+  }
   try {
     const supabase = getOptionalClient()
     if (!supabase) return { ok: false, message: OFFLINE_MESSAGE }

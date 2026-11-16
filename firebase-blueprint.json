@@ -733,6 +733,9 @@
         "status": { "type": "string", "enum": ["open", "sold", "cancelled"] },
         "buyerUid": { "type": "string", "maxLength": 128 },
         "buyerName": { "type": "string", "maxLength": 24 },
+        "sellerClaimed": { "type": "boolean" },
+        "rarity": { "type": "string", "maxLength": 16 },
+        "affixes": { "type": "array", "maxItems": 4 },
         "createdAtMs": { "type": "integer", "minimum": 0 },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
@@ -780,6 +783,156 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["coopId", "partyId", "dungeonName", "bossName", "level", "maxHp", "currentHp", "clears", "participants", "lastHitter", "updatedAt"]
+    },
+    "WorldChatMessage": {
+      "title": "WorldChatMessage",
+      "description": "Real-time multi-channel chat message across world, map, party, and trade channels.",
+      "type": "object",
+      "properties": {
+        "messageId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "channel": { "type": "string", "enum": ["world", "map", "party", "trade"] },
+        "mapId": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "partyId": { "type": "string", "maxLength": 64 },
+        "senderUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "senderName": { "type": "string", "minLength": 1, "maxLength": 24 },
+        "senderGameUid": { "type": "string", "minLength": 4, "maxLength": 8, "pattern": "^[0-9]{4,8}$" },
+        "jobId": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "isGm": { "type": "boolean" },
+        "text": { "type": "string", "minLength": 1, "maxLength": 180 },
+        "createdAtMs": { "type": "integer", "minimum": 0 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["messageId", "channel", "mapId", "senderUid", "senderName", "senderGameUid", "jobId", "isGm", "text", "createdAtMs", "createdAt"]
+    },
+    "WhisperMessage": {
+      "title": "WhisperMessage",
+      "description": "Private 1-on-1 whisper message between two verified players.",
+      "type": "object",
+      "properties": {
+        "whisperId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "fromUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "toUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "fromGameUid": { "type": "string", "minLength": 4, "maxLength": 8, "pattern": "^[0-9]{4,8}$" },
+        "toGameUid": { "type": "string", "minLength": 4, "maxLength": 8, "pattern": "^[0-9]{4,8}$" },
+        "fromName": { "type": "string", "minLength": 1, "maxLength": 24 },
+        "toName": { "type": "string", "minLength": 1, "maxLength": 24 },
+        "body": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "createdAtMs": { "type": "integer", "minimum": 0 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["whisperId", "fromUid", "toUid", "fromGameUid", "toGameUid", "fromName", "toName", "body", "createdAtMs", "createdAt"]
+    },
+    "TradeSession": {
+      "title": "TradeSession",
+      "description": "Live 1-on-1 player trade session with mutually confirmed offers.",
+      "type": "object",
+      "properties": {
+        "tradeId": { "type": "string", "minLength": 4, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "status": { "type": "string", "enum": ["pending", "active", "completed", "declined", "cancelled"] },
+        "senderUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "recipientUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "senderGameUid": { "type": "string", "minLength": 4, "maxLength": 8, "pattern": "^[0-9]{4,8}$" },
+        "recipientGameUid": { "type": "string", "minLength": 4, "maxLength": 8, "pattern": "^[0-9]{4,8}$" },
+        "senderName": { "type": "string", "minLength": 1, "maxLength": 24 },
+        "recipientName": { "type": "string", "minLength": 1, "maxLength": 24 },
+        "senderItems": { "type": "array", "maxItems": 12 },
+        "recipientItems": { "type": "array", "maxItems": 12 },
+        "senderGold": { "type": "integer", "minimum": 0, "maximum": 100000000 },
+        "recipientGold": { "type": "integer", "minimum": 0, "maximum": 100000000 },
+        "senderGemItems": { "type": "array", "maxItems": 8 },
+        "recipientGemItems": { "type": "array", "maxItems": 8 },
+        "senderReady": { "type": "boolean" },
+        "recipientReady": { "type": "boolean" },
+        "createdAtMs": { "type": "integer", "minimum": 0 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tradeId", "status", "senderUid", "recipientUid", "senderGameUid", "recipientGameUid", "senderName", "recipientName", "senderItems", "recipientItems", "senderGold", "recipientGold", "senderGemItems", "recipientGemItems", "senderReady", "recipientReady", "createdAtMs", "createdAt", "updatedAt"]
+    },
+    "PartyListing": {
+      "title": "PartyListing",
+      "description": "Public Party Finder recruitment board keyed by partyId.",
+      "type": "object",
+      "properties": {
+        "listingId": { "type": "string", "minLength": 4, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "partyId": { "type": "string", "minLength": 4, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "partyName": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "leaderUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "leaderName": { "type": "string", "minLength": 1, "maxLength": 24 },
+        "leaderGameUid": { "type": "string", "minLength": 4, "maxLength": 8, "pattern": "^[0-9]{4,8}$" },
+        "leaderJobId": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "targetActivity": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "minLevel": { "type": "integer", "minimum": 1, "maximum": 999 },
+        "memberCount": { "type": "integer", "minimum": 1, "maximum": 4 },
+        "maxMembers": { "type": "integer", "minimum": 2, "maximum": 4 },
+        "status": { "type": "string", "enum": ["open", "closed"] },
+        "createdAtMs": { "type": "integer", "minimum": 0 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["listingId", "partyId", "partyName", "leaderUid", "leaderName", "leaderGameUid", "leaderJobId", "targetActivity", "minLevel", "memberCount", "maxMembers", "status", "createdAtMs", "createdAt", "updatedAt"]
+    },
+    "FieldBoss": {
+      "title": "FieldBoss",
+      "description": "Shared field boss encounter state per combat map.",
+      "type": "object",
+      "properties": {
+        "mapId": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "bossId": { "type": "string", "minLength": 2, "maxLength": 48, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "bossName": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "level": { "type": "integer", "minimum": 1, "maximum": 999 },
+        "maxHp": { "type": "integer", "minimum": 1000 },
+        "currentHp": { "type": "integer", "minimum": 0 },
+        "defeatedAtMs": { "type": "integer", "minimum": 0 },
+        "respawnAtMs": { "type": "integer", "minimum": 0 },
+        "lastHitter": { "type": "string", "maxLength": 24 },
+        "clearCount": { "type": "integer", "minimum": 0 },
+        "contributors": { "type": "object" },
+        "claimedUids": { "type": "array", "maxItems": 30 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["mapId", "bossId", "bossName", "level", "maxHp", "currentHp", "defeatedAtMs", "respawnAtMs", "lastHitter", "clearCount", "contributors", "claimedUids", "updatedAt"]
+    },
+    "DuelMatch": {
+      "title": "DuelMatch",
+      "description": "Live 1-on-1 turn-based PvP duel session between two verified players.",
+      "type": "object",
+      "properties": {
+        "duelId": { "type": "string", "minLength": 4, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "status": { "type": "string", "enum": ["pending", "active", "completed", "declined", "cancelled"] },
+        "challengerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "opponentUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "challengerName": { "type": "string", "minLength": 1, "maxLength": 24 },
+        "opponentName": { "type": "string", "minLength": 1, "maxLength": 24 },
+        "challengerGameUid": { "type": "string", "minLength": 4, "maxLength": 8, "pattern": "^[0-9]{4,8}$" },
+        "opponentGameUid": { "type": "string", "minLength": 4, "maxLength": 8, "pattern": "^[0-9]{4,8}$" },
+        "turnNumber": { "type": "integer", "minimum": 1, "maximum": 999 },
+        "activeTurnUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "fighters": { "type": "object" },
+        "logs": { "type": "array", "maxItems": 30 },
+        "winnerUid": { "type": "string", "maxLength": 128 },
+        "createdAtMs": { "type": "integer", "minimum": 0 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["duelId", "status", "challengerUid", "opponentUid", "challengerName", "opponentName", "challengerGameUid", "opponentGameUid", "turnNumber", "activeTurnUid", "fighters", "logs", "createdAtMs", "createdAt", "updatedAt"]
+    },
+    "PlayerReport": {
+      "title": "PlayerReport",
+      "description": "Player abuse/cheat report submitted for GM review.",
+      "type": "object",
+      "properties": {
+        "reportId": { "type": "string", "minLength": 4, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "reporterUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "targetUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "targetGameUid": { "type": "string", "minLength": 4, "maxLength": 8, "pattern": "^[0-9]{4,8}$" },
+        "targetName": { "type": "string", "minLength": 1, "maxLength": 24 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "details": { "type": "string", "maxLength": 240 },
+        "createdAtMs": { "type": "integer", "minimum": 0 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["reportId", "reporterUid", "targetUid", "targetGameUid", "targetName", "reason", "details", "createdAtMs", "createdAt"]
     }
   },
   "firestore": {
@@ -850,6 +1003,34 @@
     "/parties/{partyId}/coops/{coopId}": {
       "schema": { "$ref": "#/entities/PartyCoop" },
       "description": "Shared Co-op Party Dungeon boss instances."
+    },
+    "/worldChat/{messageId}": {
+      "schema": { "$ref": "#/entities/WorldChatMessage" },
+      "description": "Multi-channel real-time public world/map/party/trade chat messages."
+    },
+    "/whispers/{whisperId}": {
+      "schema": { "$ref": "#/entities/WhisperMessage" },
+      "description": "Private 1-on-1 whispers isolated strictly to sender and recipient."
+    },
+    "/trades/{tradeId}": {
+      "schema": { "$ref": "#/entities/TradeSession" },
+      "description": "Real-time 1-on-1 player trade sessions isolated strictly to participants."
+    },
+    "/partyListings/{listingId}": {
+      "schema": { "$ref": "#/entities/PartyListing" },
+      "description": "Open Party Finder recruitment listings."
+    },
+    "/fieldBosses/{mapId}": {
+      "schema": { "$ref": "#/entities/FieldBoss" },
+      "description": "Shared per-map Field Boss HP & contributor records."
+    },
+    "/duels/{duelId}": {
+      "schema": { "$ref": "#/entities/DuelMatch" },
+      "description": "Live 1-on-1 PvP duel sessions isolated strictly to participants."
+    },
+    "/playerReports/{reportId}": {
+      "schema": { "$ref": "#/entities/PlayerReport" },
+      "description": "Player abuse and exploit reports submitted for GM moderation."
     }
   }
 }

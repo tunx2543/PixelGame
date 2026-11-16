@@ -39,6 +39,27 @@ export function GmToolsWidget() {
         >
           อมตะ
         </button>
+        <button
+          type="button"
+          onClick={() => castGmSkill('judgment')}
+          className="pixel-btn bg-cyan-500/20 px-1 py-1 text-[9px] font-semibold text-cyan-200 hover:bg-cyan-500/30"
+        >
+          พิพากษา
+        </button>
+        <button
+          type="button"
+          onClick={() => castGmSkill('nova')}
+          className="pixel-btn bg-cyan-500/20 px-1 py-1 text-[9px] font-semibold text-cyan-200 hover:bg-cyan-500/30"
+        >
+          คลื่นราชันย์
+        </button>
+        <button
+          type="button"
+          onClick={() => castGmSkill('miracle')}
+          className="pixel-btn bg-cyan-500/20 px-1 py-1 text-[9px] font-semibold text-cyan-200 hover:bg-cyan-500/30"
+        >
+          ฟื้นฟู GM
+        </button>
       </div>
       <button
         type="button"

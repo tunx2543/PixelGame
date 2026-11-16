@@ -784,6 +784,9 @@ service cloud.firestore {
           'status',
           'buyerUid',
           'buyerName',
+          'sellerClaimed',
+          'rarity',
+          'affixes',
           'createdAtMs',
           'createdAt',
           'updatedAt'
@@ -814,10 +817,431 @@ service cloud.firestore {
         data.status in ['open', 'sold', 'cancelled'] &&
         (data.buyerUid == null || isValidId(data.buyerUid)) &&
         (data.buyerName == null || (data.buyerName is string && data.buyerName.size() >= 1 && data.buyerName.size() <= 24)) &&
+        (!('sellerClaimed' in data) || data.sellerClaimed is bool) &&
+        (!('rarity' in data) || data.rarity == null || (data.rarity is string && data.rarity.size() <= 16)) &&
+        (!('affixes' in data) || (data.affixes is list && data.affixes.size() <= 4)) &&
         data.createdAtMs is int &&
         data.createdAtMs >= 0 &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
+    }
+
+    function isValidWorldChatMessage(data, messageId) {
+      return data.keys().hasAll([
+          'messageId',
+          'channel',
+          'mapId',
+          'partyId',
+          'senderUid',
+          'senderName',
+          'senderGameUid',
+          'jobId',
+          'isGm',
+          'text',
+          'createdAtMs',
+          'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'messageId',
+          'channel',
+          'mapId',
+          'partyId',
+          'senderUid',
+          'senderName',
+          'senderGameUid',
+          'jobId',
+          'isGm',
+          'text',
+          'createdAtMs',
+          'createdAt'
+        ]) &&
+        isValidId(data.messageId) &&
+        data.messageId == messageId &&
+        data.channel in ['world', 'map', 'party', 'trade'] &&
+        data.mapId is string &&
+        data.mapId.size() >= 1 &&
+        data.mapId.size() <= 32 &&
+        data.mapId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        (data.partyId == null || isValidId(data.partyId)) &&
+        isValidId(data.senderUid) &&
+        data.senderName is string &&
+        data.senderName.size() >= 1 &&
+        data.senderName.size() <= 24 &&
+        isValidGameUid(data.senderGameUid) &&
+        data.jobId is string &&
+        data.jobId.size() >= 1 &&
+        data.jobId.size() <= 32 &&
+        data.jobId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.isGm is bool &&
+        data.text is string &&
+        data.text.size() >= 1 &&
+        data.text.size() <= 180 &&
+        data.createdAtMs is int &&
+        data.createdAtMs >= 0 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidWhisperMessage(data, whisperId) {
+      return data.keys().hasAll([
+          'whisperId',
+          'fromUid',
+          'toUid',
+          'fromGameUid',
+          'toGameUid',
+          'fromName',
+          'toName',
+          'body',
+          'createdAtMs',
+          'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'whisperId',
+          'fromUid',
+          'toUid',
+          'fromGameUid',
+          'toGameUid',
+          'fromName',
+          'toName',
+          'body',
+          'createdAtMs',
+          'createdAt'
+        ]) &&
+        isValidId(data.whisperId) &&
+        data.whisperId == whisperId &&
+        isValidId(data.fromUid) &&
+        isValidId(data.toUid) &&
+        data.fromUid != data.toUid &&
+        isValidGameUid(data.fromGameUid) &&
+        isValidGameUid(data.toGameUid) &&
+        data.fromName is string &&
+        data.fromName.size() >= 1 &&
+        data.fromName.size() <= 24 &&
+        data.toName is string &&
+        data.toName.size() >= 1 &&
+        data.toName.size() <= 24 &&
+        data.body is string &&
+        data.body.size() >= 1 &&
+        data.body.size() <= 240 &&
+        data.createdAtMs is int &&
+        data.createdAtMs >= 0 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidTradeSession(data, tradeId) {
+      return data.keys().hasAll([
+          'tradeId',
+          'status',
+          'senderUid',
+          'recipientUid',
+          'senderGameUid',
+          'recipientGameUid',
+          'senderName',
+          'recipientName',
+          'senderItems',
+          'recipientItems',
+          'senderGold',
+          'recipientGold',
+          'senderGemItems',
+          'recipientGemItems',
+          'senderReady',
+          'recipientReady',
+          'createdAtMs',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'tradeId',
+          'status',
+          'senderUid',
+          'recipientUid',
+          'senderGameUid',
+          'recipientGameUid',
+          'senderName',
+          'recipientName',
+          'senderItems',
+          'recipientItems',
+          'senderGold',
+          'recipientGold',
+          'senderGemItems',
+          'recipientGemItems',
+          'senderReady',
+          'recipientReady',
+          'createdAtMs',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.tradeId) &&
+        data.tradeId == tradeId &&
+        data.status in ['pending', 'active', 'completed', 'declined', 'cancelled'] &&
+        isValidId(data.senderUid) &&
+        isValidId(data.recipientUid) &&
+        data.senderUid != data.recipientUid &&
+        isValidGameUid(data.senderGameUid) &&
+        isValidGameUid(data.recipientGameUid) &&
+        data.senderName is string &&
+        data.senderName.size() >= 1 &&
+        data.senderName.size() <= 24 &&
+        data.recipientName is string &&
+        data.recipientName.size() >= 1 &&
+        data.recipientName.size() <= 24 &&
+        data.senderItems is list &&
+        data.senderItems.size() <= 12 &&
+        data.recipientItems is list &&
+        data.recipientItems.size() <= 12 &&
+        data.senderGold is int &&
+        data.senderGold >= 0 &&
+        data.senderGold <= 100000000 &&
+        data.recipientGold is int &&
+        data.recipientGold >= 0 &&
+        data.recipientGold <= 100000000 &&
+        data.senderGemItems is list &&
+        data.senderGemItems.size() <= 8 &&
+        data.recipientGemItems is list &&
+        data.recipientGemItems.size() <= 8 &&
+        data.senderReady is bool &&
+        data.recipientReady is bool &&
+        data.createdAtMs is int &&
+        data.createdAtMs >= 0 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidPartyListing(data, listingId) {
+      return data.keys().hasAll([
+          'listingId',
+          'partyId',
+          'partyName',
+          'leaderUid',
+          'leaderName',
+          'leaderGameUid',
+          'leaderJobId',
+          'targetActivity',
+          'minLevel',
+          'memberCount',
+          'maxMembers',
+          'status',
+          'createdAtMs',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'listingId',
+          'partyId',
+          'partyName',
+          'leaderUid',
+          'leaderName',
+          'leaderGameUid',
+          'leaderJobId',
+          'targetActivity',
+          'minLevel',
+          'memberCount',
+          'maxMembers',
+          'status',
+          'createdAtMs',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.listingId) &&
+        data.listingId == listingId &&
+        isValidId(data.partyId) &&
+        data.partyId == listingId &&
+        data.partyName is string &&
+        data.partyName.size() >= 1 &&
+        data.partyName.size() <= 32 &&
+        isValidId(data.leaderUid) &&
+        data.leaderName is string &&
+        data.leaderName.size() >= 1 &&
+        data.leaderName.size() <= 24 &&
+        isValidGameUid(data.leaderGameUid) &&
+        data.leaderJobId is string &&
+        data.leaderJobId.size() >= 1 &&
+        data.leaderJobId.size() <= 32 &&
+        data.leaderJobId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.targetActivity is string &&
+        data.targetActivity.size() >= 1 &&
+        data.targetActivity.size() <= 64 &&
+        data.minLevel is int &&
+        data.minLevel >= 1 &&
+        data.minLevel <= 999 &&
+        data.memberCount is int &&
+        data.memberCount >= 1 &&
+        data.memberCount <= 4 &&
+        data.maxMembers is int &&
+        data.maxMembers >= 2 &&
+        data.maxMembers <= 4 &&
+        data.status in ['open', 'closed'] &&
+        data.createdAtMs is int &&
+        data.createdAtMs >= 0 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidFieldBoss(data, mapId) {
+      return data.keys().hasAll([
+          'mapId',
+          'bossId',
+          'bossName',
+          'level',
+          'maxHp',
+          'currentHp',
+          'defeatedAtMs',
+          'respawnAtMs',
+          'lastHitter',
+          'clearCount',
+          'contributors',
+          'claimedUids',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'mapId',
+          'bossId',
+          'bossName',
+          'level',
+          'maxHp',
+          'currentHp',
+          'defeatedAtMs',
+          'respawnAtMs',
+          'lastHitter',
+          'clearCount',
+          'contributors',
+          'claimedUids',
+          'updatedAt'
+        ]) &&
+        isValidId(data.mapId) &&
+        data.mapId == mapId &&
+        isValidId(data.bossId) &&
+        data.bossName is string &&
+        data.bossName.size() >= 1 &&
+        data.bossName.size() <= 64 &&
+        data.level is int &&
+        data.level >= 1 &&
+        data.level <= 999 &&
+        data.maxHp is int &&
+        data.maxHp >= 1000 &&
+        data.currentHp is int &&
+        data.currentHp >= 0 &&
+        data.currentHp <= data.maxHp &&
+        data.defeatedAtMs is int &&
+        data.defeatedAtMs >= 0 &&
+        data.respawnAtMs is int &&
+        data.respawnAtMs >= 0 &&
+        data.lastHitter is string &&
+        data.lastHitter.size() <= 24 &&
+        data.clearCount is int &&
+        data.clearCount >= 0 &&
+        data.contributors is map &&
+        data.contributors.keys().size() <= 25 &&
+        data.claimedUids is list &&
+        data.claimedUids.size() <= 30 &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidDuelMatch(data, duelId) {
+      return data.keys().hasAll([
+          'duelId',
+          'status',
+          'challengerUid',
+          'opponentUid',
+          'challengerName',
+          'opponentName',
+          'challengerGameUid',
+          'opponentGameUid',
+          'turnNumber',
+          'activeTurnUid',
+          'fighters',
+          'logs',
+          'winnerUid',
+          'createdAtMs',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'duelId',
+          'status',
+          'challengerUid',
+          'opponentUid',
+          'challengerName',
+          'opponentName',
+          'challengerGameUid',
+          'opponentGameUid',
+          'turnNumber',
+          'activeTurnUid',
+          'fighters',
+          'logs',
+          'winnerUid',
+          'createdAtMs',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.duelId) &&
+        data.duelId == duelId &&
+        data.status in ['pending', 'active', 'completed', 'declined', 'cancelled'] &&
+        isValidId(data.challengerUid) &&
+        isValidId(data.opponentUid) &&
+        data.challengerUid != data.opponentUid &&
+        data.challengerName is string &&
+        data.challengerName.size() >= 1 &&
+        data.challengerName.size() <= 24 &&
+        data.opponentName is string &&
+        data.opponentName.size() >= 1 &&
+        data.opponentName.size() <= 24 &&
+        isValidGameUid(data.challengerGameUid) &&
+        isValidGameUid(data.opponentGameUid) &&
+        data.turnNumber is int &&
+        data.turnNumber >= 1 &&
+        data.turnNumber <= 999 &&
+        isValidId(data.activeTurnUid) &&
+        data.fighters is map &&
+        data.fighters.keys().size() == 2 &&
+        data.logs is list &&
+        data.logs.size() <= 30 &&
+        (data.winnerUid == null || isValidId(data.winnerUid)) &&
+        data.createdAtMs is int &&
+        data.createdAtMs >= 0 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidPlayerReport(data, reportId) {
+      return data.keys().hasAll([
+          'reportId',
+          'reporterUid',
+          'targetUid',
+          'targetGameUid',
+          'targetName',
+          'reason',
+          'details',
+          'createdAtMs',
+          'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'reportId',
+          'reporterUid',
+          'targetUid',
+          'targetGameUid',
+          'targetName',
+          'reason',
+          'details',
+          'createdAtMs',
+          'createdAt'
+        ]) &&
+        isValidId(data.reportId) &&
+        data.reportId == reportId &&
+        isValidId(data.reporterUid) &&
+        isValidId(data.targetUid) &&
+        data.reporterUid != data.targetUid &&
+        isValidGameUid(data.targetGameUid) &&
+        data.targetName is string &&
+        data.targetName.size() >= 1 &&
+        data.targetName.size() <= 24 &&
+        data.reason is string &&
+        data.reason.size() >= 1 &&
+        data.reason.size() <= 80 &&
+        data.details is string &&
+        data.details.size() <= 240 &&
+        data.createdAtMs is int &&
+        data.createdAtMs >= 0 &&
+        data.createdAt is timestamp;
     }
 
     function isValidMailMessage(data, mailId) {
@@ -1087,7 +1511,7 @@ service cloud.firestore {
             isValidPartyMemberInfo(incoming().members[request.auth.uid], request.auth.uid) &&
             (incoming().members[request.auth.uid].isGm == false || isGmAccount())
           ) ||
-          // Action 2: Invited player joins party with a verified pending invite
+          // Action 2: Invited player joins party OR player joins via open Party Finder listing
           (
             !(request.auth.uid in existing().memberIds) &&
             existing().memberIds.size() < 4 &&
@@ -1100,10 +1524,18 @@ service cloud.firestore {
             incoming().members.diff(existing().members).affectedKeys().hasOnly([request.auth.uid]) &&
             isValidPartyMemberInfo(incoming().members[request.auth.uid], request.auth.uid) &&
             (incoming().members[request.auth.uid].isGm == false || isGmAccount()) &&
-            exists(/databases/$(database)/documents/partyInvites/$(partyId + '__' + request.auth.uid)) &&
-            get(/databases/$(database)/documents/partyInvites/$(partyId + '__' + request.auth.uid)).data.status == 'pending' &&
-            get(/databases/$(database)/documents/partyInvites/$(partyId + '__' + request.auth.uid)).data.toUid == request.auth.uid &&
-            get(/databases/$(database)/documents/partyInvites/$(partyId + '__' + request.auth.uid)).data.partyId == partyId
+            (
+              (
+                exists(/databases/$(database)/documents/partyInvites/$(partyId + '__' + request.auth.uid)) &&
+                get(/databases/$(database)/documents/partyInvites/$(partyId + '__' + request.auth.uid)).data.status == 'pending' &&
+                get(/databases/$(database)/documents/partyInvites/$(partyId + '__' + request.auth.uid)).data.toUid == request.auth.uid &&
+                get(/databases/$(database)/documents/partyInvites/$(partyId + '__' + request.auth.uid)).data.partyId == partyId
+              ) ||
+              (
+                exists(/databases/$(database)/documents/partyListings/$(partyId)) &&
+                get(/databases/$(database)/documents/partyListings/$(partyId)).data.status == 'open'
+              )
+            )
           ) ||
           // Action 3: Member voluntarily leaves party (transfers leader if leader leaves with members remaining)
           (
@@ -1699,7 +2131,7 @@ service cloud.firestore {
 
       allow list: if isSignedIn() &&
         isEmailVerified() &&
-        resource.data.status == 'open' &&
+        (resource.data.status == 'open' || resource.data.sellerUid == request.auth.uid) &&
         request.query.limit != null &&
         request.query.limit <= 50;
 
@@ -1711,6 +2143,7 @@ service cloud.firestore {
         incoming().status == 'open' &&
         incoming().buyerUid == null &&
         incoming().buyerName == null &&
+        (!('sellerClaimed' in incoming()) || incoming().sellerClaimed == false) &&
         incoming().createdAt == request.time &&
         incoming().updatedAt == request.time &&
         isUserAccountOwner(request.auth.uid);
@@ -1719,7 +2152,6 @@ service cloud.firestore {
         isEmailVerified() &&
         isValidId(listingId) &&
         isValidMarketListing(incoming(), listingId) &&
-        existing().status == 'open' &&
         incoming().listingId == existing().listingId &&
         incoming().sellerUid == existing().sellerUid &&
         incoming().sellerName == existing().sellerName &&
@@ -1733,21 +2165,36 @@ service cloud.firestore {
         incoming().createdAtMs == existing().createdAtMs &&
         incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'buyerUid', 'buyerName', 'updatedAt']) &&
         (
           (
-            request.auth.uid == existing().sellerUid &&
-            incoming().status == 'cancelled' &&
-            incoming().buyerUid == null &&
-            incoming().buyerName == null
+            existing().status == 'open' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'buyerUid', 'buyerName', 'updatedAt']) &&
+            (
+              (
+                request.auth.uid == existing().sellerUid &&
+                incoming().status == 'cancelled' &&
+                incoming().buyerUid == null &&
+                incoming().buyerName == null
+              ) ||
+              (
+                request.auth.uid != existing().sellerUid &&
+                incoming().status == 'sold' &&
+                incoming().buyerUid == request.auth.uid &&
+                incoming().buyerName is string &&
+                incoming().buyerName.size() >= 1 &&
+                incoming().buyerName.size() <= 24
+              )
+            )
           ) ||
           (
-            request.auth.uid != existing().sellerUid &&
-            incoming().status == 'sold' &&
-            incoming().buyerUid == request.auth.uid &&
-            incoming().buyerName is string &&
-            incoming().buyerName.size() >= 1 &&
-            incoming().buyerName.size() <= 24
+            existing().status == 'sold' &&
+            request.auth.uid == existing().sellerUid &&
+            (!('sellerClaimed' in existing()) || existing().sellerClaimed == false) &&
+            incoming().status == existing().status &&
+            incoming().buyerUid == existing().buyerUid &&
+            incoming().buyerName == existing().buyerName &&
+            incoming().sellerClaimed == true &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['sellerClaimed', 'updatedAt'])
           )
         );
 
@@ -1756,6 +2203,282 @@ service cloud.firestore {
         isValidId(listingId) &&
         existing().sellerUid == request.auth.uid &&
         existing().status != 'open';
+    }
+
+    match /worldChat/{messageId} {
+      allow get: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(messageId);
+
+      allow list: if isSignedIn() &&
+        isEmailVerified() &&
+        resource.data.createdAtMs >= 0 &&
+        request.query.limit != null &&
+        request.query.limit <= 50;
+
+      allow create: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(messageId) &&
+        isValidWorldChatMessage(incoming(), messageId) &&
+        incoming().senderUid == request.auth.uid &&
+        (incoming().isGm == false || isGmAccount()) &&
+        incoming().createdAt == request.time;
+
+      allow update, delete: if false;
+    }
+
+    match /whispers/{whisperId} {
+      allow get: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(whisperId) &&
+        (resource == null || existing().fromUid == request.auth.uid || existing().toUid == request.auth.uid);
+
+      allow list: if isSignedIn() &&
+        isEmailVerified() &&
+        (existing().fromUid == request.auth.uid || existing().toUid == request.auth.uid) &&
+        request.query.limit != null &&
+        request.query.limit <= 30;
+
+      allow create: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(whisperId) &&
+        isValidWhisperMessage(incoming(), whisperId) &&
+        incoming().fromUid == request.auth.uid &&
+        incoming().createdAt == request.time;
+
+      allow update, delete: if false;
+    }
+
+    match /trades/{tradeId} {
+      allow get: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(tradeId) &&
+        (resource == null || existing().senderUid == request.auth.uid || existing().recipientUid == request.auth.uid);
+
+      allow list: if isSignedIn() &&
+        isEmailVerified() &&
+        (existing().senderUid == request.auth.uid || existing().recipientUid == request.auth.uid) &&
+        request.query.limit != null &&
+        request.query.limit <= 15;
+
+      allow create: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(tradeId) &&
+        isValidTradeSession(incoming(), tradeId) &&
+        incoming().senderUid == request.auth.uid &&
+        incoming().status == 'pending' &&
+        incoming().senderReady == false &&
+        incoming().recipientReady == false &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(tradeId) &&
+        isValidTradeSession(incoming(), tradeId) &&
+        (existing().status == 'pending' || existing().status == 'active') &&
+        incoming().tradeId == existing().tradeId &&
+        incoming().senderUid == existing().senderUid &&
+        incoming().recipientUid == existing().recipientUid &&
+        incoming().senderGameUid == existing().senderGameUid &&
+        incoming().recipientGameUid == existing().recipientGameUid &&
+        incoming().senderName == existing().senderName &&
+        incoming().recipientName == existing().recipientName &&
+        incoming().createdAtMs == existing().createdAtMs &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          (
+            existing().recipientUid == request.auth.uid &&
+            existing().status == 'pending' &&
+            (incoming().status == 'active' || incoming().status == 'declined') &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+          ) ||
+          (
+            (existing().senderUid == request.auth.uid || existing().recipientUid == request.auth.uid) &&
+            (incoming().status == 'active' || incoming().status == 'completed') &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'status',
+              'senderItems',
+              'recipientItems',
+              'senderGold',
+              'recipientGold',
+              'senderGemItems',
+              'recipientGemItems',
+              'senderReady',
+              'recipientReady',
+              'updatedAt'
+            ])
+          ) ||
+          (
+            (existing().senderUid == request.auth.uid || existing().recipientUid == request.auth.uid) &&
+            incoming().status == 'cancelled' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    match /partyListings/{listingId} {
+      allow get: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(listingId);
+
+      allow list: if isSignedIn() &&
+        isEmailVerified() &&
+        resource.data.status == 'open' &&
+        request.query.limit != null &&
+        request.query.limit <= 30;
+
+      allow create: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(listingId) &&
+        isValidPartyListing(incoming(), listingId) &&
+        incoming().leaderUid == request.auth.uid &&
+        incoming().status == 'open' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/parties/$(incoming().partyId)) &&
+        get(/databases/$(database)/documents/parties/$(incoming().partyId)).data.leaderId == request.auth.uid;
+
+      allow update: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(listingId) &&
+        isValidPartyListing(incoming(), listingId) &&
+        existing().leaderUid == request.auth.uid &&
+        incoming().listingId == existing().listingId &&
+        incoming().partyId == existing().partyId &&
+        incoming().leaderUid == existing().leaderUid &&
+        incoming().createdAtMs == existing().createdAtMs &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'memberCount', 'targetActivity', 'minLevel', 'updatedAt']);
+
+      allow delete: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(listingId) &&
+        existing().leaderUid == request.auth.uid;
+    }
+
+    match /fieldBosses/{mapId} {
+      allow get: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(mapId);
+
+      allow list: if isSignedIn() &&
+        isEmailVerified() &&
+        resource.data.maxHp >= 1000 &&
+        request.query.limit != null &&
+        request.query.limit <= 10;
+
+      allow create: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(mapId) &&
+        isValidFieldBoss(incoming(), mapId) &&
+        incoming().updatedAt == request.time &&
+        isUserAccountOwner(request.auth.uid);
+
+      allow update: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(mapId) &&
+        isValidFieldBoss(incoming(), mapId) &&
+        incoming().mapId == existing().mapId &&
+        incoming().bossId == existing().bossId &&
+        incoming().clearCount >= existing().clearCount &&
+        incoming().updatedAt == request.time &&
+        isUserAccountOwner(request.auth.uid);
+
+      allow delete: if false;
+    }
+
+    match /duels/{duelId} {
+      allow get: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(duelId) &&
+        (resource == null || existing().challengerUid == request.auth.uid || existing().opponentUid == request.auth.uid);
+
+      allow list: if isSignedIn() &&
+        isEmailVerified() &&
+        (existing().challengerUid == request.auth.uid || existing().opponentUid == request.auth.uid) &&
+        request.query.limit != null &&
+        request.query.limit <= 15;
+
+      allow create: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(duelId) &&
+        isValidDuelMatch(incoming(), duelId) &&
+        incoming().challengerUid == request.auth.uid &&
+        incoming().status == 'pending' &&
+        incoming().activeTurnUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(duelId) &&
+        isValidDuelMatch(incoming(), duelId) &&
+        (existing().status == 'pending' || existing().status == 'active') &&
+        incoming().duelId == existing().duelId &&
+        incoming().challengerUid == existing().challengerUid &&
+        incoming().opponentUid == existing().opponentUid &&
+        incoming().createdAtMs == existing().createdAtMs &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          (
+            existing().opponentUid == request.auth.uid &&
+            existing().status == 'pending' &&
+            (incoming().status == 'active' || incoming().status == 'declined') &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'fighters', 'logs', 'updatedAt'])
+          ) ||
+          (
+            existing().status == 'active' &&
+            existing().activeTurnUid == request.auth.uid &&
+            (incoming().status == 'active' || incoming().status == 'completed') &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'status',
+              'turnNumber',
+              'activeTurnUid',
+              'fighters',
+              'logs',
+              'winnerUid',
+              'updatedAt'
+            ])
+          ) ||
+          (
+            (existing().challengerUid == request.auth.uid || existing().opponentUid == request.auth.uid) &&
+            incoming().status == 'cancelled' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    match /playerReports/{reportId} {
+      allow get: if isGmAccount() ||
+        (
+          isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(reportId) &&
+          resource != null &&
+          existing().reporterUid == request.auth.uid
+        );
+
+      allow list: if isGmAccount() &&
+        request.query.limit != null &&
+        request.query.limit <= 50;
+
+      allow create: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(reportId) &&
+        isValidPlayerReport(incoming(), reportId) &&
+        incoming().reporterUid == request.auth.uid &&
+        incoming().targetUid != request.auth.uid &&
+        incoming().createdAt == request.time;
+
+      allow update, delete: if false;
     }
   }
 }

@@ -4,17 +4,20 @@ import { Bot, Flame, Leaf, Shield, Swords, Wind, Zap } from 'lucide-react'
 import { useGame } from '@/lib/game/use-game'
 import {
   action,
+  castGmSkill,
   castSkill,
   currentJob,
   drinkPotion,
   game,
   gatherNearbyNodeAction,
+  isCurrentAccountGm,
   notify,
   skillCooldown,
   triggerDodgeDash,
   triggerOpenWorldGuard,
   triggerUltimateSkill,
 } from '@/lib/game/engine'
+import { GM_ACTIVE_SKILLS } from '@/lib/game/gm-sprite'
 import { findNearbyGatheringNode } from '@/lib/game/extended-systems'
 import { getSkillIconPath } from '@/lib/game/vfx-specs'
 
@@ -143,36 +146,57 @@ export function AutoFarmWidget({ compactTouchMode = false }: { compactTouchMode?
           <span className="font-mono text-[8px] opacity-75">[Space]</span>
         </button>
 
-        {job.skills.map((sk, i) => {
-          const cd = skillCooldown(sk)
-          const lowMp = p.mp < sk.mp
-          return (
-            <button
-              key={sk.id}
-              type="button"
-              onClick={() => castSkill(i)}
-              disabled={lowMp && cd <= 0}
-              title={`${sk.name} (MP ${sk.mp}) [${i + 1}]`}
-              className="pixel-btn relative flex size-8 shrink-0 items-center justify-center overflow-hidden bg-secondary hover:brightness-110 disabled:opacity-45"
-            >
-              {getSkillIconPath(sk.id) ? (
-                <img src={getSkillIconPath(sk.id)} alt={sk.name} className="asset-no-bg size-6 object-cover" />
-              ) : (
-                <span className="text-[9px] font-bold" style={{ color: sk.color }}>
-                  {i + 1}
-                </span>
-              )}
-              <span className="absolute left-0.5 top-0 font-mono text-[8px] font-bold text-white/90">
-                {i + 1}
-              </span>
-              {cd > 0 && (
-                <span className="absolute inset-0 grid place-items-center bg-black/70 font-mono text-[9px] font-bold text-white tabular-nums">
-                  {cd.toFixed(1)}
-                </span>
-              )}
-            </button>
-          )
-        })}
+        {job.id === 'gm' && p.gm && isCurrentAccountGm()
+          ? GM_ACTIVE_SKILLS.map((sk, i) => {
+              const cd = Math.max(0, game.skillCd[`gm_${sk.skillKey}`] ?? 0)
+              return (
+                <button
+                  key={sk.skillKey}
+                  type="button"
+                  onClick={() => castGmSkill(sk.skillKey)}
+                  title={`${sk.name} [${i + 1}]`}
+                  className="pixel-btn relative flex h-8 items-center gap-1 border border-gold/50 bg-gold/15 px-2 text-[10px] font-bold text-gold hover:bg-gold/25"
+                >
+                  <span className="font-mono text-[8px] text-amber-200">[{i + 1}]</span>
+                  <span>{sk.shortLabel}</span>
+                  {cd > 0 && (
+                    <span className="absolute inset-0 grid place-items-center bg-black/70 font-mono text-[9px] font-bold text-white tabular-nums">
+                      {cd.toFixed(1)}
+                    </span>
+                  )}
+                </button>
+              )
+            })
+          : job.skills.map((sk, i) => {
+              const cd = skillCooldown(sk)
+              const lowMp = p.mp < sk.mp
+              return (
+                <button
+                  key={sk.id}
+                  type="button"
+                  onClick={() => castSkill(i)}
+                  disabled={lowMp && cd <= 0}
+                  title={`${sk.name} (MP ${sk.mp}) [${i + 1}]`}
+                  className="pixel-btn relative flex size-8 shrink-0 items-center justify-center overflow-hidden bg-secondary hover:brightness-110 disabled:opacity-45"
+                >
+                  {getSkillIconPath(sk.id) ? (
+                    <img src={getSkillIconPath(sk.id)} alt={sk.name} className="asset-no-bg size-6 object-cover" />
+                  ) : (
+                    <span className="text-[9px] font-bold" style={{ color: sk.color }}>
+                      {i + 1}
+                    </span>
+                  )}
+                  <span className="absolute left-0.5 top-0 font-mono text-[8px] font-bold text-white/90">
+                    {i + 1}
+                  </span>
+                  {cd > 0 && (
+                    <span className="absolute inset-0 grid place-items-center bg-black/70 font-mono text-[9px] font-bold text-white tabular-nums">
+                      {cd.toFixed(1)}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
 
         <button
           type="button"

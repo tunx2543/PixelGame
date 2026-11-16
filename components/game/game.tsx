@@ -27,6 +27,7 @@ import { CheckinModal } from './checkin-modal'
 import { OfflineAfkModal } from './offline-afk-modal'
 import { KillRewardToast } from './kill-reward-toast'
 import { ItemIcon } from './item-icon'
+import { PlayerInspectModal } from './player-inspect-modal'
 
 function LootToast() {
   const loot = game.lootToast
@@ -122,6 +123,7 @@ export function Game() {
         {!g.zenHud && <ChatBox offsetTouch={showTouch} />}
 
         <PlayerActionMenu />
+        <PlayerInspectModal />
         <SocialNotifications />
         <SocialPopover />
         <PartyPopover />
