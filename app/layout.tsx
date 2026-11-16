@@ -1,10 +1,10 @@
 import type { Metadata, Viewport } from 'next'
-import { Kanit, Pixelify_Sans } from 'next/font/google'
+import { Cinzel, Kanit } from 'next/font/google'
 import { PwaRuntime } from '@/components/game/pwa-controls'
 import './globals.css'
 
-const pixel = Pixelify_Sans({ subsets: ['latin'], variable: '--font-pixel' })
-const thai = Kanit({ subsets: ['thai', 'latin'], weight: ['400', '500', '700'], variable: '--font-thai' })
+const display = Cinzel({ subsets: ['latin'], weight: ['600', '700', '800'], variable: '--font-display' })
+const thai = Kanit({ subsets: ['thai', 'latin'], weight: ['400', '500', '600', '700'], variable: '--font-thai' })
 
 export const metadata: Metadata = {
   title: 'Pixel Quest - เกม RPG พิกเซล',
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   colorScheme: 'dark',
-  themeColor: '#0e0f1a',
+  themeColor: '#14111d',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
@@ -43,7 +43,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="th" className={`${pixel.variable} ${thai.variable} h-full bg-background`}>
+    <html lang="th" className={`${display.variable} ${thai.variable} h-full bg-background`}>
       <body className="font-sans antialiased h-full overflow-hidden select-none">
         {children}
         <PwaRuntime />

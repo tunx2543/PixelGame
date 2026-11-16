@@ -25,13 +25,13 @@ export function CharacterBar({ compact = false }: { compact?: boolean; layout?: 
       className="pointer-events-auto pixel-panel flex w-full items-center justify-between gap-1.5 px-2 py-1 shadow-lg"
     >
       <div className="flex min-w-0 items-center gap-1.5">
-        <div className="grid size-7 shrink-0 place-items-center overflow-hidden border border-[#d4a446] bg-[#0b0e1c]">
+        <div className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-md border-2 border-[#e8b84e] bg-gradient-to-b from-[#3d2922] to-[#1d1414] shadow-inner">
           <SpriteModelCanvas
             mode="job"
             id={p.jobId}
             action="idle"
             dir="down"
-            size={26}
+            size={30}
             variant="portrait"
             isGm={isGmDev}
             showShadow={false}

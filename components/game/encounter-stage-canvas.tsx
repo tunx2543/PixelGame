@@ -241,7 +241,8 @@ export function EncounterStageCanvas({
             ctx.translate(shake.dx * 0.55, shake.dy * 0.55)
           }
 
-          ctx.imageSmoothingEnabled = false
+          ctx.imageSmoothingEnabled = true
+          ctx.imageSmoothingQuality = 'high'
 
           // Sky gradient
           const grad = ctx.createLinearGradient(0, 0, 0, h * 0.62)
@@ -316,11 +317,14 @@ export function EncounterStageCanvas({
             heroAttackFrame,
           )
           const isGmEpic = heroSprite.dataset?.gmReady === '1'
+          const heroHd = heroSprite.dataset?.hdScale ? Number(heroSprite.dataset.hdScale) : 1
           const heroTargetHeight = isGmEpic ? 112 : 82
-          const heroScale = Math.max(1.5, Math.min(3.0, heroTargetHeight / Math.max(1, heroSprite.height)))
+          const heroScale = isGmEpic
+            ? Math.max(1.5, Math.min(3.0, heroTargetHeight / Math.max(1, heroSprite.height)))
+            : heroTargetHeight / Math.max(1, heroSprite.height)
           const hw = heroSprite.width * heroScale
           const hh = heroSprite.height * heroScale
-          const heroFootOffset = isGmEpic ? 9 * heroScale : 2 * heroScale
+          const heroFootOffset = isGmEpic ? 9 * heroScale : 2 * heroScale * heroHd
 
           // Hero shadow
           ctx.fillStyle = 'rgba(0,0,0,0.36)'
@@ -372,7 +376,8 @@ export function EncounterStageCanvas({
             const petAtkFrame = petIsAttacking ? Math.min(3, Math.floor((petBoltAge / 1.3) * 4)) : 0
             const petFrame = petIsAttacking ? petAtkFrame : Math.floor(t * 3.2) % 6
             const pImg = petSprite(activePet.petId, 'right', petAction, petFrame, petAtkFrame)
-            const pScale = 1.9
+            const pHd = pImg.dataset?.hdScale ? Number(pImg.dataset.hdScale) : 1
+            const pScale = 1.9 / Math.max(1, pHd)
             const pw = Math.round(pImg.width * pScale)
             const phPx = Math.round(pImg.height * pScale)
 
@@ -431,7 +436,7 @@ export function EncounterStageCanvas({
             )
 
             const targetHeight = mon.rarity === 'boss' ? 94 : mon.rarity === 'elite' ? 82 : 74
-            const baseMonsterScale = Math.max(2.2, Math.min(3.1, targetHeight / Math.max(1, mImg.height)))
+            const baseMonsterScale = targetHeight / Math.max(1, mImg.height)
             const mw = mImg.width * baseMonsterScale
             const mh = mImg.height * baseMonsterScale
 
@@ -464,7 +469,8 @@ export function EncounterStageCanvas({
               ctx.rotate(0.45)
               ctx.scale(1.15, 0.45)
             }
-            ctx.drawImage(mImg, Math.round(-mw / 2), Math.round(-mh + 2 * baseMonsterScale), mw, mh)
+            const mHd = mImg.dataset?.hdScale ? Number(mImg.dataset.hdScale) : 1
+            ctx.drawImage(mImg, Math.round(-mw / 2), Math.round(-mh + 2 * baseMonsterScale * mHd), mw, mh)
 
             if (isEnemyHurt && !isDead) {
               ctx.globalAlpha = 0.55
@@ -561,7 +567,7 @@ export function EncounterStageCanvas({
         width={560}
         height={230}
         aria-label="เวทีต่อสู้ Pixel Quest"
-        className="pixelated block h-48 w-full object-cover sm:h-56"
+        className="block h-48 w-full object-cover sm:h-56"
       />
 
       {/* Crisp floating damage & combat text overlay */}

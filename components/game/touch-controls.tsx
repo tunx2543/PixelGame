@@ -70,36 +70,36 @@ export function TouchControls() {
 
   return (
     <div data-testid="touch-controls" className="pointer-events-none absolute inset-0 touch-none">
-      <div className="pointer-events-auto absolute inset-x-0 bottom-2 flex items-end justify-between gap-2 px-2">
-        <div className="grid grid-cols-3 grid-rows-3 gap-0.5 border border-white/15 bg-card/85 p-1 shadow-lg">
+      <div className="pointer-events-auto absolute inset-x-0 bottom-2 flex items-end justify-between gap-2 px-2 pb-[env(safe-area-inset-bottom)]">
+        <div className="grid grid-cols-3 grid-rows-3 gap-1 rounded-2xl border-2 border-[#c9963b]/65 bg-[#1b1414]/85 p-1.5 shadow-xl">
           <span />
-          <HoldButton label="เดินขึ้น" onDown={() => setKey('arrowup', true)} onUp={() => setKey('arrowup', false)} className="size-9 bg-secondary/90 text-sm">▲</HoldButton>
+          <HoldButton label="เดินขึ้น" onDown={() => setKey('arrowup', true)} onUp={() => setKey('arrowup', false)} className="size-11 rounded-xl bg-[#382721]/95 text-base font-bold text-amber-100">▲</HoldButton>
           <span />
-          <HoldButton label="เดินซ้าย" onDown={() => setKey('arrowleft', true)} onUp={() => setKey('arrowleft', false)} className="size-9 bg-secondary/90 text-sm">◀</HoldButton>
-          <span className="grid size-9 place-items-center bg-primary/25 text-[9px] text-primary">เดิน</span>
-          <HoldButton label="เดินขวา" onDown={() => setKey('arrowright', true)} onUp={() => setKey('arrowright', false)} className="size-9 bg-secondary/90 text-sm">▶</HoldButton>
+          <HoldButton label="เดินซ้าย" onDown={() => setKey('arrowleft', true)} onUp={() => setKey('arrowleft', false)} className="size-11 rounded-xl bg-[#382721]/95 text-base font-bold text-amber-100">◀</HoldButton>
+          <span className="grid size-11 place-items-center rounded-full border border-[#c9963b]/40 bg-amber-500/20 text-[10px] font-bold text-amber-200">เดิน</span>
+          <HoldButton label="เดินขวา" onDown={() => setKey('arrowright', true)} onUp={() => setKey('arrowright', false)} className="size-11 rounded-xl bg-[#382721]/95 text-base font-bold text-amber-100">▶</HoldButton>
           <span />
-          <HoldButton label="เดินลง" onDown={() => setKey('arrowdown', true)} onUp={() => setKey('arrowdown', false)} className="size-9 bg-secondary/90 text-sm">▼</HoldButton>
+          <HoldButton label="เดินลง" onDown={() => setKey('arrowdown', true)} onUp={() => setKey('arrowdown', false)} className="size-11 rounded-xl bg-[#382721]/95 text-base font-bold text-amber-100">▼</HoldButton>
           <span />
         </div>
 
         <div className="flex items-end gap-1.5">
-          <div className="flex flex-col gap-1">
-            <HoldButton label="ยา HP" onDown={() => drinkPotion('hp')} className="size-8 bg-hp/85 text-[9px] font-bold">
+          <div className="flex flex-col gap-1.5">
+            <HoldButton label="ยา HP" onDown={() => drinkPotion('hp')} className="size-11 rounded-full border-2 border-rose-300/60 bg-gradient-to-b from-rose-500 to-rose-700 text-[10px] font-bold text-white shadow-md">
               HP
             </HoldButton>
-            <HoldButton label="ยา MP" onDown={() => drinkPotion('mp')} className="size-8 bg-mp/85 text-[9px] font-bold">
+            <HoldButton label="ยา MP" onDown={() => drinkPotion('mp')} className="size-11 rounded-full border-2 border-sky-300/60 bg-gradient-to-b from-sky-500 to-blue-700 text-[10px] font-bold text-white shadow-md">
               MP
             </HoldButton>
           </div>
 
-          <div className="flex flex-col items-end gap-1">
-            <div className="flex items-center gap-1">
+          <div className="flex flex-col items-end gap-1.5">
+            <div className="flex items-center gap-1.5">
               <HoldButton
                 label="ป้องกัน (การ์ด)"
                 onDown={() => triggerOpenWorldGuard()}
                 className={cn(
-                  'size-9 bg-sky-500/25 text-sky-200',
+                  'size-11 rounded-xl border-2 border-sky-300/50 bg-[#1c2b42]/90 text-sky-200 shadow-md',
                   game.guardCd > 0 && 'opacity-50',
                 )}
               >
@@ -111,12 +111,12 @@ export function TouchControls() {
                   label={sk.name}
                   onDown={() => castSkill(i)}
                   className={cn(
-                    'relative size-10 border border-white/25 bg-card/90 p-1 text-[8px] leading-tight shadow-lg',
+                    'relative size-11 overflow-hidden rounded-xl border-2 border-[#d4a348] bg-[#241a18]/95 p-1 text-[9px] leading-tight shadow-lg',
                     g.p && g.p.mp < sk.mp && 'opacity-50',
                   )}
                 >
                   {getSkillIconPath(sk.id) ? (
-                    <img src={getSkillIconPath(sk.id)} alt="" className="asset-no-bg size-full object-cover" />
+                    <img src={getSkillIconPath(sk.id)} alt="" className="size-full rounded-md object-cover" />
                   ) : (
                     <span style={{ color: sk.color }}>{sk.name}</span>
                   )}
@@ -140,7 +140,7 @@ export function TouchControls() {
               onUp={() => {
                 game.attackHeld = false
               }}
-              className="h-12 w-24 bg-primary text-xs font-bold text-primary-foreground shadow-[0_3px_0_rgba(0,0,0,0.35)]"
+              className="h-12 min-w-[6.75rem] rounded-2xl border-2 border-amber-200/80 bg-gradient-to-b from-amber-400 to-amber-600 px-3 text-xs font-extrabold text-[#241409] shadow-lg"
             >
               โจมตี / คุย
             </HoldButton>

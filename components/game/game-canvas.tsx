@@ -159,7 +159,7 @@ export function GameCanvas() {
           notify()
         }
       }}
-      className="pixelated absolute inset-0 h-full w-full touch-none"
+      className="absolute inset-0 h-full w-full touch-none"
       aria-label="หน้าจอเกม ใช้ WASD หรือปุ่มลูกศรเพื่อเดิน คลิกตัวละครใกล้เคียงเพื่อเปิดเมนูโซเชียล"
     />
   )

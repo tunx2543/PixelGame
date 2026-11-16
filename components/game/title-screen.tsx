@@ -284,17 +284,34 @@ export function TitleScreen() {
       <img
         src="/images/title-bg.png"
         alt=""
-        className="pixelated fixed inset-0 h-full w-full object-cover"
+        className="fixed inset-0 h-full w-full scale-[1.02] object-cover blur-[1px]"
       />
-      <div className="fixed inset-0 bg-background/60" />
+      <div className="fixed inset-0 bg-gradient-to-b from-[#170f16]/70 via-[#1b1218]/60 to-[#120b10]/85" />
 
       <div className="relative flex w-full max-w-md flex-col items-center gap-4 py-4">
-        <div className="text-center">
-          <p className="text-5xl font-bold tracking-wider text-primary drop-shadow-[4px_4px_0_#1a1423] md:text-6xl">
+        <div className="flex flex-col items-center text-center">
+          <div className="mb-2 flex items-center gap-3">
+            <img
+              src="/assets/hd/landmarks/angel_fountain.png"
+              alt=""
+              className="hidden h-12 w-14 object-contain drop-shadow-[0_4px_8px_rgba(0,0,0,0.65)] sm:block"
+            />
+            <img
+              src="/assets/hd/ui/portrait_frame.png"
+              alt=""
+              className="size-14 rounded-xl object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.75)]"
+            />
+            <img
+              src="/assets/hd/buildings/guild_inn.png"
+              alt=""
+              className="hidden h-12 w-14 object-contain drop-shadow-[0_4px_8px_rgba(0,0,0,0.65)] sm:block"
+            />
+          </div>
+          <p className="font-[family-name:var(--font-display)] text-4xl font-extrabold tracking-wider text-amber-300 drop-shadow-[0_3px_0_#2c1810] md:text-5xl">
             PIXEL QUEST
           </p>
-          <p className="mt-1.5 text-base text-foreground drop-shadow-[2px_2px_0_#1a1423]">
-            ตำนานนักผจญภัยพิกเซล • ระบบล็อคอินตัวละคร
+          <p className="mt-1 text-sm font-medium text-amber-100/95 drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)]">
+            HD Hand-Drawn Fantasy RPG • ผจญภัยโลกแฟนตาซี 2D
           </p>
         </div>
 
@@ -344,11 +361,11 @@ export function TitleScreen() {
                 {cloudChars.map((char) => (
                   <div
                     key={char.id}
-                    className="border-2 border-border bg-muted/80 p-3"
+                    className="rounded-lg border-2 border-[#c9963b]/65 bg-[#1b1416]/85 p-3"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex min-w-0 items-center gap-2.5">
-                        <div className="grid size-11 shrink-0 place-items-center border-2 border-[#0e0f1a] bg-[#131726]">
+                        <div className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg border-2 border-[#d4a348] bg-[#2a1d1a]">
                           <SpriteModelCanvas
                             mode="job"
                             id={char.jobId}
@@ -379,8 +396,9 @@ export function TitleScreen() {
                     <div className="mt-2.5 flex items-center gap-2">
                       <button
                         type="button"
+                        data-start="true"
                         onClick={() => loginWithCloudCharacter(char)}
-                        className="pixel-btn flex flex-1 items-center justify-center gap-1.5 bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:brightness-110"
+                        className="pixel-btn flex flex-1 items-center justify-center gap-1.5 bg-gradient-to-b from-amber-400 to-amber-600 px-3 py-2 text-xs font-bold text-[#241409] hover:brightness-110"
                       >
                         <UserCheck className="size-3.5" aria-hidden />
                         เข้าเล่นตัวละครนี้
@@ -420,8 +438,8 @@ export function TitleScreen() {
             </div>
           ) : !user && mode === 'list' && guestSave ? (
             <div className="flex flex-col gap-4">
-              <div className="flex items-center gap-3 border-2 border-border bg-muted p-3">
-                <div className="grid size-14 shrink-0 place-items-center border-2 border-[#0e0f1a] bg-[#131726]">
+              <div className="flex items-center gap-3 rounded-lg border-2 border-[#c9963b]/65 bg-[#1b1416]/85 p-3">
+                <div className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-lg border-2 border-[#d4a348] bg-[#2a1d1a]">
                   <SpriteModelCanvas
                     mode="job"
                     id={guestSave.jobId}
@@ -447,8 +465,9 @@ export function TitleScreen() {
               </div>
               <button
                 type="button"
+                data-start="true"
                 onClick={() => loadGame(guestSave)}
-                className="pixel-btn bg-primary px-4 py-3 text-lg text-primary-foreground hover:brightness-110"
+                className="pixel-btn bg-gradient-to-b from-amber-400 to-amber-600 px-4 py-3 text-lg font-bold text-[#241409] hover:brightness-110"
               >
                 เล่นต่อ (Guest)
               </button>
@@ -480,16 +499,17 @@ export function TitleScreen() {
                 maxLength={16}
                 placeholder="นักผจญภัย"
                 autoFocus
-                className="border-2 border-border bg-input px-3 py-2 text-foreground outline-none focus:border-primary"
+                className="rounded-lg border-2 border-[#c9963b]/60 bg-[#1a1314] px-3 py-2 text-foreground outline-none focus:border-amber-400"
               />
               {!user && guestSave && (
-                <p className="border-2 border-destructive/60 bg-destructive/10 p-2 text-xs text-destructive">
+                <p className="rounded-md border-2 border-destructive/60 bg-destructive/10 p-2 text-xs text-destructive">
                   การเริ่มเกมใหม่จะลบความคืบหน้าของ {guestSave.name} (Lv.{guestSave.level})
                 </p>
               )}
               <button
                 type="submit"
-                className="pixel-btn bg-primary px-4 py-3 text-lg text-primary-foreground hover:brightness-110"
+                data-start="true"
+                className="pixel-btn bg-gradient-to-b from-amber-400 to-amber-600 px-4 py-3 text-lg font-bold text-[#241409] hover:brightness-110"
               >
                 สร้างตัวละครและเข้าสู่เกม
               </button>

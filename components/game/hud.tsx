@@ -1,6 +1,5 @@
 'use client'
 
-import { Coins, Gem } from 'lucide-react'
 import { useGame } from '@/lib/game/use-game'
 import { getStats } from '@/lib/game/engine'
 import { buildVitalsSnapshot } from '@/lib/game/hud-vitals'
@@ -8,9 +7,18 @@ import { computeCombatPower } from '@/lib/game/rpg-systems'
 import { formatNum } from './format'
 
 const BAR_STYLES = {
-  hp: { color: 'bg-hp', text: 'text-[#ff9aa2]' },
-  mp: { color: 'bg-mp', text: 'text-[#8bb8ff]' },
-  exp: { color: 'bg-exp', text: 'text-[#e0b3ff]' },
+  hp: {
+    fill: 'bg-gradient-to-b from-[#ff6b72] via-[#ef4444] to-[#b91c1c]',
+    text: 'text-[#ffb3b8]',
+  },
+  mp: {
+    fill: 'bg-gradient-to-b from-[#6bb6ff] via-[#3b82f6] to-[#1d4ed8]',
+    text: 'text-[#9ecaff]',
+  },
+  exp: {
+    fill: 'bg-gradient-to-b from-[#fde047] via-[#f59e0b] to-[#b45309]',
+    text: 'text-[#fde68a]',
+  },
 } as const
 
 function VitalBar({
@@ -37,14 +45,18 @@ function VitalBar({
         aria-valuemin={0}
         aria-valuemax={max}
         aria-valuenow={current}
-        className="h-2 flex-1 overflow-hidden border border-[#0e0f1a] bg-muted/70"
+        className="relative h-2.5 flex-1 overflow-hidden rounded-full border border-[#3d281f] bg-[#160f10]/90 shadow-inner"
       >
         <div
-          className={`h-full ${tone.color} transition-[width] duration-150`}
+          className={`h-full rounded-full ${tone.fill} transition-[width] duration-150`}
           style={{ width: `${percent}%` }}
         />
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-1 top-0.5 h-[2px] rounded-full bg-white/30"
+        />
       </div>
-      <span className="w-[4.1rem] shrink-0 text-right font-mono text-[9px] text-muted-foreground tabular-nums">
+      <span className="w-[4.1rem] shrink-0 text-right font-mono text-[9px] text-amber-100/80 tabular-nums">
         {formatNum(current)}/{formatNum(max)}
       </span>
     </div>
@@ -75,7 +87,7 @@ export function Hud({ compact = false }: { compact?: boolean }) {
       data-testid="vitals-hud"
       className="pointer-events-auto pixel-panel w-full px-2 py-1.5 shadow-lg"
     >
-      <div className="flex flex-col gap-0.5">
+      <div className="flex flex-col gap-1">
         {bars.map((bar) => (
           <VitalBar
             key={bar.key}
@@ -89,16 +101,16 @@ export function Hud({ compact = false }: { compact?: boolean }) {
       </div>
 
       {!compact && (
-        <div className="mt-1 flex items-center justify-between gap-2 border-t border-border/60 pt-1 text-[10px] font-semibold">
+        <div className="mt-1.5 flex items-center justify-between gap-2 border-t border-[#c9963b]/30 pt-1 text-[10px] font-semibold">
           <span className="flex items-center gap-1 text-gold tabular-nums">
-            <Coins className="size-3 shrink-0" aria-hidden />
+            <img src="/assets/hd/ui/coin_gold.png" alt="" width={14} height={14} className="size-3.5 shrink-0 object-contain" />
             <span>{formatNum(vitals.gold)} G</span>
           </span>
-          <span className="font-mono text-[9px] text-muted-foreground tabular-nums">
+          <span className="font-mono text-[9px] text-amber-100/75 tabular-nums">
             CP {formatNum(cp)}
           </span>
           <span className="flex items-center gap-1 text-cyan-200 tabular-nums">
-            <Gem className="size-3 shrink-0" aria-hidden />
+            <img src="/assets/hd/ui/gem_blue.png" alt="" width={14} height={14} className="size-3.5 shrink-0 object-contain" />
             <span>{formatNum(vitals.diamonds)} D</span>
           </span>
         </div>

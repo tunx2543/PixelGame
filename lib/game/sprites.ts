@@ -17,6 +17,13 @@ import {
   getGmSpritePaths,
   type GmAnimAction,
 } from './gm-sprite'
+import {
+  renderHdHumanSprite,
+  renderHdMonsterSprite,
+  renderHdMountSprite,
+  renderHdPetSprite,
+} from './hd-characters'
+import { buildHdMapCanvas } from './hd-tiles'
 
 const OUTLINE = '#1a1423'
 
@@ -1074,8 +1081,11 @@ export function humanSprite(
         ? -1
         : Math.abs(frame) % 4
 
-  const key = `ha48|${JSON.stringify(colors)}|${dir}|${action}|${f}|${weapon ?? 'none'}|${weaponColor}`
+  const key = `hd_ha48|${JSON.stringify(colors)}|${dir}|${action}|${f}|${weapon ?? 'none'}|${weaponColor}`
   return cached(key, () => {
+    if (typeof document !== 'undefined') {
+      return renderHdHumanSprite(colors, dir, f, weapon, weaponColor, attacking, requestedAction, attackFrameOverride)
+    }
     const W = 42
     const H = 48
     const s = new PixelSurface(W, H)
@@ -2513,42 +2523,19 @@ export function monsterSprite(
     )
   }
 
-  const key = `ma32|${spec.archetype}|${defId ?? ''}|${color}|${dir}|${action}|${f}`
+  const key = `hd_ma32|${spec.archetype}|${defId ?? ''}|${color}|${dir}|${action}|${f}`
   return cached(key, () => {
-    switch (spec.archetype) {
-      case 'slime':
-        return renderSlime(color, dir, action, f, false)
-      case 'pink_slime':
-        return renderSlime(color, dir, action, f, true)
-      case 'mushroom':
-        return renderMushroom(color, dir, action, f)
-      case 'rabbit':
-        return renderRabbit(color, dir, action, f)
-      case 'wolf':
-        return renderWolf(color, dir, action, f)
-      case 'goblin_chief':
-        return renderGoblinChief(color, dir, action, f)
-      case 'bat':
-        return renderBat(color, dir, action, f)
-      case 'ghost':
-        return renderGhost(color, dir, action, f)
-      case 'fire_golem':
-        return renderGolem(color, dir, action, f, 'fire_golem')
-      case 'earth_golem':
-        return renderGolem(color, dir, action, f, 'earth_golem')
-      case 'abyss_knight':
-        return renderAbyssKnight(color, dir, action, f)
-      case 'gale_sentinel':
-        return renderGaleSentinel(color, dir, action, f)
-      case 'demon':
-        return renderDemon(color, dir, action, f, false)
-      case 'demon_lord':
-        return renderDemon(color, dir, action, f, true)
-      case 'abyss_dragon':
-        return renderAbyssDragon(color, dir, action, f)
-      default:
-        return renderSlime(color, dir, action, f, false)
-    }
+    return renderHdMonsterSprite(
+      spec.archetype,
+      sprite,
+      color,
+      spec.accentColor,
+      dir,
+      action,
+      f,
+      spec.canvasSize.width,
+      spec.canvasSize.height,
+    )
   })
 }
 
@@ -2890,12 +2877,9 @@ export function petSprite(
         ? Math.abs(frame) % 6
         : Math.abs(frame) % 4
   const spec = getPetModelSpec(petId)
-  const key = `pet2d|${spec.petId}|${dir}|${action}|${f}`
+  const key = `hd_pet2d|${spec.petId}|${dir}|${action}|${f}`
   return cached(key, () => {
-    if (spec.category === 'phao') {
-      return renderPhaoPet(spec, dir, action, f)
-    }
-    return renderCreaturePet(spec, dir, action, f)
+    return renderHdPetSprite(spec, dir, action, f)
   })
 }
 
@@ -3135,8 +3119,8 @@ export function mountSprite(
         ? Math.abs(frame) % 6
         : Math.abs(frame) % 4
   const spec = getMountModelSpec(mountId)
-  const key = `mount2d|${spec.mountId}|${dir}|${action}|${f}`
-  return cached(key, () => renderMountModel(spec, dir, action, f))
+  const key = `hd_mount2d|${spec.mountId}|${dir}|${action}|${f}`
+  return cached(key, () => renderHdMountSprite(spec, dir, action, f))
 }
 
 /* ---------------- Tiles ---------------- */
@@ -3556,20 +3540,8 @@ function tileCanvas(tile: number, base: number, variant: number) {
   })
 }
 
-const mapCache = new Map<string, HTMLCanvasElement>()
 export function mapCanvas(map: MapDef) {
-  let c = mapCache.get(map.id)
-  if (c) return c
-  const made = makeCanvas(map.width * TILE, map.height * TILE)
-  c = made.c
-  for (let y = 0; y < map.height; y++)
-    for (let x = 0; x < map.width; x++) {
-      const t = map.tiles[y * map.width + x]
-      const variant = (x * 7 + y * 13) % 4
-      made.ctx.drawImage(tileCanvas(t, map.base, variant), x * TILE, y * TILE)
-    }
-  mapCache.set(map.id, c)
-  return c
+  return buildHdMapCanvas(map)
 }
 
 export function mapObjectSprite(kind: MapObjectKind, frame = 0, variant = 0): HTMLCanvasElement {

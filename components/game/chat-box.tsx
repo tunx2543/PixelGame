@@ -156,8 +156,8 @@ export function ChatBox({ offsetTouch = false }: { offsetTouch?: boolean }) {
       data-testid="chat-box"
       onPointerDown={(event) => event.stopPropagation()}
       className={cn(
-        'pointer-events-auto pixel-panel absolute bottom-2 z-20 flex flex-col bg-card/90 shadow-lg transition-[width]',
-        offsetTouch ? 'left-[8.25rem]' : 'left-2',
+        'pointer-events-auto pixel-panel absolute z-20 flex flex-col bg-card/90 shadow-lg transition-[width]',
+        offsetTouch ? 'bottom-[10.25rem] left-2 sm:bottom-2 sm:left-[10.5rem]' : 'bottom-2 left-2',
         isOpen ? 'w-[min(20.5rem,calc(100vw-1rem))]' : 'w-28 sm:w-36',
       )}
     >

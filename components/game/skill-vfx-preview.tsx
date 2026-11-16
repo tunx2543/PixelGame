@@ -90,7 +90,8 @@ export function SkillVfxPreview({
       const vfxProgress = reducedMotion ? 0.42 : Math.min(1, loopMs / vfxDurationMs)
 
       ctx.clearRect(0, 0, w, h)
-      ctx.imageSmoothingEnabled = false
+      ctx.imageSmoothingEnabled = true
+      ctx.imageSmoothingQuality = 'high'
 
       // Dark astral dojo background
       const bgGrad = ctx.createLinearGradient(0, 0, 0, h)
@@ -152,7 +153,8 @@ export function SkillVfxPreview({
         isHeroCasting ? 'skill' : 'idle',
       )
       const isGmEpic = heroCanvas.dataset?.gmReady === '1'
-      const heroScale = isGmEpic ? 2.35 : 1.95
+      const heroHd = heroCanvas.dataset?.hdScale ? Number(heroCanvas.dataset.hdScale) : 1
+      const heroScale = isGmEpic ? 2.35 : 1.95 / Math.max(1, heroHd)
       const hw = Math.round(heroCanvas.width * heroScale)
       const hh = Math.round(heroCanvas.height * heroScale)
       const footOffset = isGmEpic ? 18 : 4
@@ -184,8 +186,9 @@ export function SkillVfxPreview({
         0,
         'slime',
       )
-      const ew = Math.round(enemyCanvas.width * 2)
-      const eh = Math.round(enemyCanvas.height * 2)
+      const enemyHd = enemyCanvas.dataset?.hdScale ? Number(enemyCanvas.dataset.hdScale) : 1
+      const ew = Math.round((enemyCanvas.width * 2) / Math.max(1, enemyHd))
+      const eh = Math.round((enemyCanvas.height * 2) / Math.max(1, enemyHd))
       ctx.drawImage(enemyCanvas, Math.round(enemyX + enemyKnockX - ew / 2), Math.round(floorY - eh + 3), ew, eh)
 
       // Skill VFX burst
@@ -228,7 +231,7 @@ export function SkillVfxPreview({
       data-rebirth={rebirthCount}
       data-rebirth-style={aura.style}
       aria-label={label ?? `เวทีจำลองเอฟเฟคสกิลอาชีพ ${jobId}`}
-      className={`pixelated block w-full border border-[#c9993f]/45 bg-[#0a0d1c] ${className}`}
+      className={`block w-full rounded-lg border border-[#c9993f]/55 bg-[#12162b] ${className}`}
     />
   )
 }

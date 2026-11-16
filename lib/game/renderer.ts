@@ -1,9 +1,17 @@
 import { ITEMS, JOBS, MONSTERS, type MonsterSprite } from './data'
 import { GEM_SHOP_ITEMS } from './gem-shop'
 import { currentMap, game, getStats } from './engine'
-import { computeCameraZoom } from './camera'
+import {
+  compareDepthOrder,
+  computeCameraZoom,
+  createCameraState,
+  isEntityOccludedByOverhead,
+  stepSmoothCamera,
+} from './camera'
 import { T, TILE } from './maps'
 import { getMonsterModelSpec } from './models-2d'
+import { buildTilePropDrawable, buildTownStructureDrawables, drawHdMapObject, type HdDepthDrawable } from './hd-props'
+import { LAYERED_PROP_TILES } from './hd-tiles'
 import {
   type Dir,
   humanSprite,
@@ -20,6 +28,9 @@ import { getActiveMountBonuses } from './mounts'
 import { TITLE_DEFS } from './rpg-systems'
 import { GATHERING_NODES, getCosmeticDef, getWorldTimePhase, sanitizeExtV2 } from './extended-systems'
 import { drawOverworldSkillEffect, drawRebirthAura } from './vfx-canvas'
+
+const cameraState = createCameraState('town')
+let prevRenderTime = 0
 
 const THEME_BG: Record<string, string> = {
   town: '#2d5a27',
@@ -160,7 +171,10 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   if (!p) return
   const map = currentMap()
   const t = game.time
-  ctx.imageSmoothingEnabled = false
+  const dt = prevRenderTime > 0 ? Math.min(0.05, Math.max(0, t - prevRenderTime)) : 0.016
+  prevRenderTime = t
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'medium'
 
   const cssW = cw / dpr
   const cssH = ch / dpr
@@ -170,23 +184,39 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   const viewH = ch / s
   const mapW = map.width * TILE
   const mapH = map.height * TILE
-  let camX = p.x - viewW / 2
-  let camY = p.y - 8 - viewH / 2
-  camX = mapW <= viewW ? (mapW - viewW) / 2 : Math.max(0, Math.min(mapW - viewW, camX))
-  camY = mapH <= viewH ? (mapH - viewH) / 2 : Math.max(0, Math.min(mapH - viewH, camY))
-  camX = Math.round(camX * s) / s
-  camY = Math.round(camY * s) / s
+  const cam = stepSmoothCamera(cameraState, p.x, p.y, viewW, viewH, mapW, mapH, map.id, dt, game.facing)
+  const camX = cam.x
+  const camY = cam.y
 
   ctx.setTransform(1, 0, 0, 1, 0, 0)
   ctx.fillStyle = THEME_BG[map.theme]
   ctx.fillRect(0, 0, cw, ch)
   ctx.setTransform(s, 0, 0, s, -camX * s, -camY * s)
-  ctx.drawImage(mapCanvas(map), 0, 0)
+  const mc = mapCanvas(map)
+  const hdScaleX = mc.width / mapW
+  const hdScaleY = mc.height / mapH
+  const vx0 = Math.max(0, camX)
+  const vy0 = Math.max(0, camY)
+  const vx1 = Math.min(mapW, camX + viewW)
+  const vy1 = Math.min(mapH, camY + viewH)
+  if (vx1 > vx0 && vy1 > vy0) {
+    ctx.drawImage(
+      mc,
+      vx0 * hdScaleX,
+      vy0 * hdScaleY,
+      (vx1 - vx0) * hdScaleX,
+      (vy1 - vy0) * hdScaleY,
+      vx0,
+      vy0,
+      vx1 - vx0,
+      vy1 - vy0,
+    )
+  }
 
   const minTx = Math.max(0, Math.floor(camX / TILE) - 2)
   const maxTx = Math.min(map.width - 1, Math.ceil((camX + viewW) / TILE) + 2)
   const minTy = Math.max(0, Math.floor(camY / TILE) - 2)
-  const maxTy = Math.min(map.height - 1, Math.ceil((camY + viewH) / TILE) + 2)
+  const maxTy = Math.min(map.height - 1, Math.ceil((camY + viewH) / TILE) + 3)
 
   // Subtle animated tile glints (water, lava, ice, magic circles)
   const glintPhase = Math.floor(t * 2.4)
@@ -238,7 +268,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     }
   }
 
-  if (map.id === 'town') drawFountain(ctx, 22 * TILE, 16 * TILE, t)
+  // Town fountain is now rendered via Y-sorted HD structures below.
 
   const visibleObjects = map.objects.filter(
     (obj) => obj.tx >= minTx - 1 && obj.tx <= maxTx + 1 && obj.ty >= minTy - 1 && obj.ty <= maxTy + 2,
@@ -314,8 +344,29 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     ctx.restore()
   }
 
-  type Ent = { y: number; draw: () => void }
-  const ents: Ent[] = []
+  const ents: HdDepthDrawable[] = []
+  const overheads: HdDepthDrawable[] = []
+
+  // Town HD Buildings, Watchtowers, and Central Angel Fountain
+  if (map.id === 'town') {
+    for (const st of buildTownStructureDrawables(t)) {
+      ents.push(st)
+      if (st.drawOverhead) overheads.push(st)
+    }
+  }
+
+  // Y-sorted HD Trees, Pines, Bushes, Fences, Rocks, Crystals, Signs
+  for (let ty = minTy; ty <= maxTy; ty++) {
+    for (let tx = minTx; tx <= maxTx; tx++) {
+      const tile = map.tiles[ty * map.width + tx]
+      if (!LAYERED_PROP_TILES.has(tile) || tile === T.FOUNTAIN) continue
+      const prop = buildTilePropDrawable(map, tx, ty, tile)
+      if (prop) {
+        ents.push(prop)
+        if (prop.drawOverhead) overheads.push(prop)
+      }
+    }
+  }
 
   for (const obj of visibleObjects) {
     const ox = (obj.tx + 0.5) * TILE
@@ -325,8 +376,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     ents.push({
       y: oy,
       draw: () => {
-        shadow(ctx, ox, oy, Math.min(11, Math.max(5, img.width * 0.34)))
-        ctx.drawImage(img, Math.round(ox - img.width / 2), Math.round(oy - img.height + 2))
+        drawHdMapObject(ctx, obj, ox, oy, t, img)
       },
     })
   }
@@ -364,15 +414,16 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   }
 
   for (const m of game.monsters) {
-    if (m.dead) continue
+    const dying = m.dead && (m.dyingT ?? 0) > 0
+    if (m.dead && !dying) continue
     const def = MONSTERS[m.defId]
     if (!def) continue
     ents.push({
       y: m.y,
       draw: () => {
         const mSpec = getMonsterModelSpec(def.id, def.sprite, def.color)
-        const walking = m.moving
-        const attacking = m.lunge > 0
+        const walking = !dying && m.moving
+        const attacking = !dying && m.lunge > 0
         const action: SpriteAction = attacking ? 'attack' : walking ? 'walk' : 'idle'
         const dir = monsterFacing(def.id, def.sprite, m.x, m.y, m.vx, m.vy, m.flip, m.provoked)
         const speedMul = m.provoked ? 1.3 : 1
@@ -383,10 +434,24 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         const frame = attacking ? attackFrame : walking ? walkFrame : idleFrame
 
         const img = monsterSprite(def.sprite, def.color, frame, attacking, action, dir, attackFrame, def.id)
+        const hdFactor = img.dataset?.hdScale ? Number(img.dataset.hdScale) : 1
         const isHumanRigMob = mSpec.archetype === 'goblin' || mSpec.archetype === 'skeleton'
-        const scale = isHumanRigMob ? 31 / Math.max(1, img.height) : def.boss ? 1.65 : 1.05
+        const scale = isHumanRigMob ? 31 / Math.max(1, img.height) : (def.boss ? 1.65 : 1.05) / hdFactor
         const w = img.width * scale
         const h = img.height * scale
+
+        if (dying) {
+          const dieRatio = Math.max(0, Math.min(1, (m.dyingT ?? 0) / 0.55))
+          const collapse = 1 - dieRatio
+          ctx.save()
+          ctx.globalAlpha = dieRatio
+          ctx.translate(m.x, m.y)
+          ctx.rotate((m.flip ? -1 : 1) * collapse * 1.15)
+          ctx.scale(1 + collapse * 0.12, Math.max(0.25, dieRatio))
+          ctx.drawImage(img, -w / 2, -h + 2 * scale * hdFactor, w, h)
+          ctx.restore()
+          return
+        }
 
         const flying = mSpec.flying
         const hover = flying ? Math.round(Math.sin(m.animT * 4.2) * 2.4) - (mSpec.archetype === 'abyss_dragon' ? 3 : 4) : 0
@@ -415,10 +480,10 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         if (m.hitFlash > 0) ctx.globalAlpha = 0.65
         if (def.sprite === 'ghost') ctx.globalAlpha *= 0.8 + Math.sin(m.animT * 4) * 0.08
         ctx.translate(
-          Math.round(m.x + hoverX + hitShake + faceX * attackReach),
-          Math.round(m.y + faceY * attackReach + hover),
+          m.x + hoverX + hitShake + faceX * attackReach,
+          m.y + faceY * attackReach + hover,
         )
-        ctx.drawImage(img, Math.round(-w / 2), Math.round(-h + 2 * scale), w, h)
+        ctx.drawImage(img, -w / 2, -h + 2 * scale * hdFactor, w, h)
 
         if (m.hitFlash > 0) {
           ctx.globalAlpha = Math.min(0.55, m.hitFlash * 4)
@@ -622,12 +687,13 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
               ? atkFrame
               : Math.floor(t * 2.5) % 4
         const mImg = mountSprite(activeMount.mountId, game.facing, mAction, mFrame, atkFrame)
-        const mDrawW = Math.round(mImg.width * 0.78)
-        const mDrawH = Math.round(mImg.height * 0.78)
+        const mHd = mImg.dataset?.hdScale ? Number(mImg.dataset.hdScale) : 1
+        const mDrawW = (mImg.width * 0.78) / mHd
+        const mDrawH = (mImg.height * 0.78) / mHd
         ctx.drawImage(
           mImg,
-          Math.round(p.x + ox * 0.4 - mDrawW / 2),
-          Math.round(p.y + oy * 0.4 + mountHover - mDrawH + 3),
+          p.x + ox * 0.4 - mDrawW / 2,
+          p.y + oy * 0.4 + mountHover - mDrawH + 3,
           mDrawW,
           mDrawH,
         )
@@ -726,9 +792,10 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         ? Math.floor(game.walkT * 9) % 6
         : Math.floor(t * 2.6) % 4
     const pImg = petSprite(activePet.petId, game.facing, petAction, petFrame, petAtkFrame)
-    const pScale = activePet.petId === 'aurora_cloud_dragon' ? 0.85 : isPhao ? 0.74 : 0.7
-    const pDrawW = Math.round(pImg.width * pScale)
-    const pDrawH = Math.round(pImg.height * pScale)
+    const pHd = pImg.dataset?.hdScale ? Number(pImg.dataset.hdScale) : 1
+    const pScale = (activePet.petId === 'aurora_cloud_dragon' ? 0.85 : isPhao ? 0.74 : 0.7) / pHd
+    const pDrawW = pImg.width * pScale
+    const pDrawH = pImg.height * pScale
 
     ents.push({
       y: p.y + 1,
@@ -746,14 +813,23 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           ctx.stroke()
           ctx.restore()
         }
-        ctx.drawImage(pImg, Math.round(petX - pDrawW / 2), Math.round(petY - pDrawH + 2), pDrawW, pDrawH)
+        ctx.drawImage(pImg, petX - pDrawW / 2, petY - pDrawH + 2, pDrawW, pDrawH)
         ctx.restore()
       },
     })
   }
 
-  ents.sort((a, b) => a.y - b.y)
-  for (const e of ents) e.draw()
+  ents.sort(compareDepthOrder)
+  for (const e of ents) e.draw(ctx)
+
+  // Layer 3: Overhead roofs, tree canopies, watchtower spires & angel wings
+  // Allows walking cleanly behind buildings/trees with subtle translucency if player stands directly behind.
+  overheads.sort(compareDepthOrder)
+  for (const ov of overheads) {
+    if (!ov.drawOverhead) continue
+    const occluded = ov.overheadZone ? isEntityOccludedByOverhead(p.x, p.y, ov.overheadZone) : false
+    ov.drawOverhead(ctx, occluded ? 0.72 : 1)
+  }
 
   for (const pr of game.projectiles) {
     if (pr.delay > 0) continue

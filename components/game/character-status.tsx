@@ -306,7 +306,7 @@ export function CharacterStatus({
                   backgroundColor: pt.color,
                   boxShadow: `0 0 6px ${pt.color}`,
                 }}
-                className="pixelated absolute block"
+                className="absolute block rounded-full"
               />
             ))}
           </div>

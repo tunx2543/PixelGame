@@ -62,7 +62,7 @@ export function WorldBanner() {
           </button>
           <SocialBar />
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-1 text-[10px]">
+        <div className="flex max-w-[11.25rem] flex-wrap items-center justify-end gap-1 text-[10px] sm:max-w-none">
           <button
             type="button"
             onClick={() => openPanel('guild')}

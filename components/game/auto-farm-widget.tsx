@@ -39,7 +39,7 @@ export function AutoFarmWidget({ compactTouchMode = false }: { compactTouchMode?
     return (
       <div
         data-testid="auto-farm-widget"
-        className="pointer-events-auto pixel-panel absolute bottom-[7.6rem] right-2 z-20 flex items-center gap-1 p-1 shadow-lg"
+        className="pointer-events-auto pixel-panel absolute bottom-[8.75rem] right-2 z-20 flex items-center gap-1 p-1 shadow-lg"
       >
         {nearbyNode && (
           <button
@@ -195,10 +195,10 @@ export function AutoFarmWidget({ compactTouchMode = false }: { compactTouchMode?
                   onClick={() => castSkill(i)}
                   disabled={lowMp && cd <= 0}
                   title={`${sk.name} (MP ${sk.mp}) [${i + 1}]`}
-                  className="pixel-btn relative flex size-8 shrink-0 items-center justify-center overflow-hidden bg-secondary hover:brightness-110 disabled:opacity-45"
+                  className="pixel-btn relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border-[#d4a348]/80 bg-[#2b1f1c] hover:brightness-110 disabled:opacity-45"
                 >
                   {getSkillIconPath(sk.id) ? (
-                    <img src={getSkillIconPath(sk.id)} alt={sk.name} className="asset-no-bg size-6 object-cover" />
+                    <img src={getSkillIconPath(sk.id)} alt={sk.name} className="size-6 rounded object-cover" />
                   ) : (
                     <span className="text-[9px] font-bold" style={{ color: sk.color }}>
                       {i + 1}

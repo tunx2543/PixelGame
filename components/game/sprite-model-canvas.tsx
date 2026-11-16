@@ -214,13 +214,17 @@ export function SpriteModelCanvas({
       if (sig !== lastSig) {
         lastSig = sig
         ctx.clearRect(0, 0, canvas.width, canvas.height)
-        ctx.imageSmoothingEnabled = false
+        ctx.imageSmoothingEnabled = true
+        ctx.imageSmoothingQuality = 'high'
 
+        const hdScale = spriteImg.dataset?.hdScale ? Number(spriteImg.dataset.hdScale) : 1
         if (variant === 'portrait' && mode === 'job') {
-          const cropW = gmReady ? 30 : Math.min(spriteImg.width, 30)
-          const cropH = gmReady ? 26 : Math.min(spriteImg.height, 26)
+          const baseCropW = gmReady ? 30 : 28
+          const baseCropH = gmReady ? 26 : 24
+          const cropW = Math.min(spriteImg.width, Math.round(baseCropW * hdScale))
+          const cropH = Math.min(spriteImg.height, Math.round(baseCropH * hdScale))
           const sx = Math.max(0, Math.round((spriteImg.width - cropW) / 2))
-          const sy = gmReady ? 7 : 3
+          const sy = gmReady ? 7 : Math.round(3 * hdScale)
           ctx.drawImage(spriteImg, sx, sy, cropW, cropH, 0, 0, canvas.width, canvas.height)
         } else {
           const padW = canvas.width * (gmReady ? 0.98 : 0.9)
@@ -329,7 +333,7 @@ export function SpriteModelCanvas({
       width={size}
       height={size}
       aria-label={label ?? `โมเดล 2D ${id}`}
-      className={`pixelated block shrink-0 ${className}`}
+      className={`block shrink-0 ${className}`}
       style={{ width: size, height: size }}
     />
   )

@@ -60,7 +60,7 @@ export function ItemIcon({ itemId, size = 32, className }: { itemId: string; siz
       alt={def.name}
       width={size}
       height={size}
-      className={cn('pixelated shrink-0 object-contain', className)}
+      className={cn('shrink-0 object-contain', className)}
       draggable={false}
     />
   )

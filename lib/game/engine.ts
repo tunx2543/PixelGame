@@ -390,6 +390,7 @@ export interface Monster {
   flip: boolean
   moving: boolean
   animT: number
+  dyingT?: number
   isWorldBoss?: boolean
   worldBossName?: string
 }
@@ -1228,6 +1229,7 @@ function killMonster(m: Monster) {
     return
   }
   m.dead = true
+  m.dyingT = 0.55
   m.hp = 0
   m.respawnAt = m.isWorldBoss || (game.invasion?.active && p.mapId === 'town') ? Infinity : game.time + (def.boss ? 90 : 10)
   p.kills++
@@ -4389,11 +4391,14 @@ function updateMonsters(dt: number, map: MapDef) {
   const p = player()
   for (const m of game.monsters) {
     if (m.dead) {
+      if ((m.dyingT ?? 0) > 0) {
+        m.dyingT = Math.max(0, (m.dyingT ?? 0) - dt)
+      }
       if (game.time >= m.respawnAt) {
         const pt = map.id === 'cave' && m.defId === 'earth_golem'
           ? earthBossSpawnPoint(map)
           : randomSpawnPoint(map)
-        Object.assign(m, { x: pt.x, y: pt.y, homeX: pt.x, homeY: pt.y, hp: m.maxHp, dead: false, provoked: false, moving: false })
+        Object.assign(m, { x: pt.x, y: pt.y, homeX: pt.x, homeY: pt.y, hp: m.maxHp, dead: false, dyingT: 0, provoked: false, moving: false })
       }
       continue
     }

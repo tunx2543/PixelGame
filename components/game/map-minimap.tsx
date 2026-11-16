@@ -258,12 +258,12 @@ export function MapMinimap() {
 
       {expanded && (
         <div className="mt-1.5 border-t border-border/60 pt-1.5">
-          <div className="overflow-hidden border border-border bg-[#0e0f1a]">
+          <div className="overflow-hidden rounded-md border border-[#c9963b]/60 bg-[#0e0f1a]">
             <canvas
               ref={canvasRef}
               width={map.width * MINIMAP_SCALE}
               height={map.height * MINIMAP_SCALE}
-              className="pixelated block h-auto w-full"
+              className="block h-auto w-full"
               aria-label={`แผนที่ย่อ ${map.name}`}
             />
           </div>
