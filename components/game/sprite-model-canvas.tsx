@@ -219,12 +219,13 @@ export function SpriteModelCanvas({
 
         const hdScale = spriteImg.dataset?.hdScale ? Number(spriteImg.dataset.hdScale) : 1
         if (variant === 'portrait' && mode === 'job') {
-          const baseCropW = gmReady ? 30 : 28
-          const baseCropH = gmReady ? 26 : 24
+          const isSheet = Boolean(spriteImg.dataset?.sheetId)
+          const baseCropW = gmReady ? 30 : isSheet ? 30 : 28
+          const baseCropH = gmReady ? 26 : isSheet ? 28 : 24
           const cropW = Math.min(spriteImg.width, Math.round(baseCropW * hdScale))
           const cropH = Math.min(spriteImg.height, Math.round(baseCropH * hdScale))
           const sx = Math.max(0, Math.round((spriteImg.width - cropW) / 2))
-          const sy = gmReady ? 7 : Math.round(3 * hdScale)
+          const sy = gmReady ? 7 : Math.round((isSheet ? 5 : 3) * hdScale)
           ctx.drawImage(spriteImg, sx, sy, cropW, cropH, 0, 0, canvas.width, canvas.height)
         } else {
           const padW = canvas.width * (gmReady ? 0.98 : 0.9)
@@ -285,7 +286,7 @@ export function SpriteModelCanvas({
             drawH,
           )
 
-          if (isAttack && !gmReady && attackProgress > 0.2 && attackProgress < 0.85) {
+          if (isAttack && !gmReady && !spriteImg.dataset?.sheetId && attackProgress > 0.2 && attackProgress < 0.85) {
             const slashAlpha = Math.max(0, 1 - Math.abs(attackProgress - 0.5) * 2.4)
             ctx.globalAlpha = slashAlpha
             ctx.strokeStyle = auraColor ?? '#ffd60a'

@@ -24,6 +24,7 @@ import {
   renderHdPetSprite,
 } from './hd-characters'
 import { buildHdMapCanvas } from './hd-tiles'
+import { getHeroSheetFrame, getMonsterSheetFrame } from './sprite-sheets'
 
 const OUTLINE = '#1a1423'
 
@@ -1069,6 +1070,17 @@ export function humanSprite(
     const gmFrame = requestedAction === 'attack' ? (attackFrameOverride ?? frame) : frame
     const gmCanvas = gmEpicSprite(dir, requestedAction, gmFrame, weaponColor)
     if (gmCanvas) return gmCanvas
+  }
+
+  if (typeof document !== 'undefined' && colors.jobId && !colors.skeleton && !colors.goblinEars) {
+    const sheetFrameIdx =
+      requestedAction === 'attack'
+        ? (attackFrameOverride ?? frame)
+        : requestedAction === 'skill'
+          ? Math.floor((Math.abs(frame) % 6) * (4 / 6))
+          : frame
+    const sheetCanvas = getHeroSheetFrame(colors.jobId, dir, requestedAction, sheetFrameIdx)
+    if (sheetCanvas) return sheetCanvas
   }
 
   const action: 'idle' | 'walk' | 'attack' =
@@ -2478,6 +2490,12 @@ export function monsterSprite(
       : Math.abs(frame) % 4
 
   const spec = getMonsterModelSpec(defId, sprite, color)
+
+  if (typeof document !== 'undefined') {
+    const sheetFrameIdx = action === 'attack' ? (attackFrameOverride ?? f) : f
+    const sheetCanvas = getMonsterSheetFrame(defId, sprite, dir, action, sheetFrameIdx)
+    if (sheetCanvas) return sheetCanvas
+  }
 
   if (spec.archetype === 'goblin') {
     return humanSprite(

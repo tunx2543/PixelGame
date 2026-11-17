@@ -28,6 +28,7 @@ import { getActiveMountBonuses } from './mounts'
 import { TITLE_DEFS } from './rpg-systems'
 import { GATHERING_NODES, getCosmeticDef, getWorldTimePhase, sanitizeExtV2 } from './extended-systems'
 import { drawOverworldSkillEffect, drawRebirthAura } from './vfx-canvas'
+import { preloadAllSpriteSheets } from './sprite-sheets'
 
 const cameraState = createCameraState('town')
 let prevRenderTime = 0
@@ -167,6 +168,7 @@ function monsterFacing(
 }
 
 export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dpr: number, font: string) {
+  preloadAllSpriteSheets()
   const p = game.p
   if (!p) return
   const map = currentMap()
@@ -555,7 +557,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         ctx.save()
         ctx.translate(Math.round(remoteX + ox), Math.round(remoteY + oy))
         ctx.drawImage(remoteImg, Math.round(-remoteW / 2), Math.round(-remoteH + remoteFootOffset), remoteW, remoteH)
-        if (remoteAttacking && !isRemoteGmEpic) {
+        if (remoteAttacking && !isRemoteGmEpic && !remoteImg.dataset?.sheetId) {
           drawWeaponAttackOverlay(ctx, other.facing, remoteWeapon, atkProgress, remoteJob.colors.accent)
         }
         ctx.restore()
@@ -731,7 +733,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       ctx.save()
       ctx.translate(Math.round(p.x + ox), Math.round(p.y + oy + riderSeatY))
       ctx.drawImage(img, Math.round(-drawW / 2), Math.round(-drawH + footOffset), drawW, drawH)
-      if ((attacking || (castingSkill && !isGmEpic)) && !isGmEpic) {
+      if ((attacking || (castingSkill && !isGmEpic)) && !isGmEpic && !img.dataset?.sheetId) {
         drawWeaponAttackOverlay(
           ctx,
           game.facing,
