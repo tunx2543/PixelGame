@@ -61,6 +61,8 @@ export async function removeWorldPresence(userId: string): Promise<void> {
   }
 }
 
+let sessionClockOffsetMs: number | null = null
+
 export function subscribeWorldPresence(
   selfUserId: string,
   currentPlayers: Map<string, RemotePlayerSnapshot>,
@@ -75,7 +77,8 @@ export function subscribeWorldPresence(
     return () => {}
   }
 
-  let clockOffsetMs: number | null = null
+  let clockOffsetMs: number | null = sessionClockOffsetMs
+  let lastCalibratedSelfServerMs = 0
   let unsubscribed = false
   let activeUnsub: (() => void) | null = null
   let usingMapFallback = false
@@ -90,16 +93,21 @@ export function subscribeWorldPresence(
     const nowMs = Date.now()
     const seenUserIds = new Set<string>()
 
-    // Calibrate Firestore server clock offset using our own committed presence doc.
+    // Calibrate Firestore server clock offset ONLY when our own presence doc commits a fresh server timestamp.
     for (const docSnap of snapshot.docs) {
       if (docSnap.id === selfUserId && !docSnap.metadata.hasPendingWrites) {
         const serverMs = extractDocTimestampMs(docSnap.data().updatedAt)
-        if (serverMs !== null) {
+        if (serverMs !== null && serverMs !== lastCalibratedSelfServerMs) {
+          lastCalibratedSelfServerMs = serverMs
           clockOffsetMs = serverMs - nowMs
+          sessionClockOffsetMs = clockOffsetMs
         }
         break
       }
     }
+
+    // If our own doc hasn't committed yet (or GM is invisible), tolerate skew up to 5 minutes until calibrated.
+    const effectiveStaleMs = clockOffsetMs === null ? Math.max(PRESENCE_STALE_MS, 5 * 60_000) : PRESENCE_STALE_MS
 
     for (const docSnap of snapshot.docs) {
       if (docSnap.id === selfUserId) continue
@@ -108,7 +116,7 @@ export function subscribeWorldPresence(
         nowMs,
         clockOffsetMs,
         existing: currentPlayers.get(docSnap.id) ?? null,
-        staleMs: PRESENCE_STALE_MS,
+        staleMs: effectiveStaleMs,
       })
       if (parsed) {
         seenUserIds.add(parsed.userId)
@@ -157,7 +165,13 @@ export function subscribeWorldPresence(
           return
         }
         const msg = error instanceof Error ? error.message : String(error ?? '')
-        if (!mapOnly && !usingMapFallback && (msg.includes('permission-denied') || msg.includes('Missing or insufficient permissions'))) {
+        if (
+          !mapOnly &&
+          !usingMapFallback &&
+          (msg.includes('permission-denied') ||
+            msg.includes('Missing or insufficient permissions') ||
+            msg.includes('failed-precondition'))
+        ) {
           usingMapFallback = true
           attachListener(true)
           return

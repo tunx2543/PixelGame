@@ -1,7 +1,7 @@
 import { normalizeGameUidInput } from '@/lib/game/permissions'
 
 export const PRESENCE_HEARTBEAT_MS = 4_000
-export const PRESENCE_MOVE_THROTTLE_MS = 200
+export const PRESENCE_MOVE_THROTTLE_MS = 120
 export const PRESENCE_STALE_MS = 45_000
 export const PRESENCE_QUERY_LIMIT = 60
 
@@ -67,6 +67,16 @@ export interface RemotePlayerSnapshot {
   previousX?: number
   previousY?: number
   receivedAt?: number
+  renderX?: number
+  renderY?: number
+  vx?: number
+  vy?: number
+  renderMoving?: boolean
+  localWalkT?: number
+  localAttackAnim?: number
+  lastNetX?: number
+  lastNetY?: number
+  lastNetAt?: number
 }
 
 const VALID_FACING = new Set<PresenceFacing>(['up', 'down', 'left', 'right'])
@@ -119,10 +129,10 @@ export function formatPresenceStatusLabel(status: PresenceStatus | undefined, ma
   }
 }
 
-export function filterPlayersForMap(
-  players: readonly RemotePlayerSnapshot[],
+export function filterPlayersForMap<T extends { invisible?: boolean; mapId?: string }>(
+  players: readonly T[],
   mapId: string | null | undefined,
-): RemotePlayerSnapshot[] {
+): T[] {
   if (!mapId) return []
   return players.filter((player) => !player.invisible && player.mapId === mapId)
 }
@@ -268,6 +278,7 @@ export function parseWorldPresenceToRemotePlayer(
 
   const existing = options.existing
   const sameMapExisting = existing && existing.mapId === mapId ? existing : null
+  const posChanged = !sameMapExisting || Math.hypot(x - sameMapExisting.x, y - sameMapExisting.y) >= 0.05
 
   return {
     userId,
@@ -287,9 +298,148 @@ export function parseWorldPresenceToRemotePlayer(
     attackAnim,
     invisible: false,
     lastSeen: localLastSeen,
-    previousX: sameMapExisting ? sameMapExisting.x : x,
-    previousY: sameMapExisting ? sameMapExisting.y : y,
-    receivedAt: nowMs,
+    previousX: sameMapExisting ? (posChanged ? sameMapExisting.x : (sameMapExisting.previousX ?? sameMapExisting.x)) : x,
+    previousY: sameMapExisting ? (posChanged ? sameMapExisting.y : (sameMapExisting.previousY ?? sameMapExisting.y)) : y,
+    receivedAt: posChanged ? nowMs : (sameMapExisting?.receivedAt ?? nowMs),
+  }
+}
+
+export function mergeRemotePlayerSnapshots<T extends RemotePlayerSnapshot>(
+  previousList: readonly T[],
+  incomingList: readonly T[],
+  nowMs: number = Date.now(),
+): T[] {
+  const prevById = new Map<string, T>()
+  for (const entry of previousList) {
+    prevById.set(entry.userId, entry)
+  }
+
+  return incomingList.map((snap) => {
+    const prev = prevById.get(snap.userId)
+    const sameMap = Boolean(prev && prev.mapId === snap.mapId)
+    const prevRenderX = prev ? (prev.renderX ?? prev.x) : snap.x
+    const prevRenderY = prev ? (prev.renderY ?? prev.y) : snap.y
+    const warpReset = !sameMap || Math.hypot(snap.x - prevRenderX, snap.y - prevRenderY) > 160
+
+    if (warpReset || !prev) {
+      return {
+        ...snap,
+        renderX: snap.x,
+        renderY: snap.y,
+        vx: 0,
+        vy: 0,
+        renderMoving: snap.moving,
+        localWalkT: 0,
+        localAttackAnim: snap.attackAnim,
+        lastNetX: snap.x,
+        lastNetY: snap.y,
+        lastNetAt: nowMs,
+      }
+    }
+
+    const prevNetX = prev.lastNetX ?? prev.x
+    const prevNetY = prev.lastNetY ?? prev.y
+    const netDx = snap.x - prevNetX
+    const netDy = snap.y - prevNetY
+    const netDist = Math.hypot(netDx, netDy)
+
+    let vx = prev.vx ?? 0
+    let vy = prev.vy ?? 0
+    let lastNetX = prevNetX
+    let lastNetY = prevNetY
+    let lastNetAt = prev.lastNetAt ?? nowMs
+
+    if (netDist >= 0.25) {
+      const dtNet = Math.max(0.05, Math.min(0.6, (nowMs - lastNetAt) / 1000))
+      vx = netDx / dtNet
+      vy = netDy / dtNet
+      const spd = Math.hypot(vx, vy)
+      if (spd > 260) {
+        const scale = 260 / spd
+        vx *= scale
+        vy *= scale
+      }
+      lastNetX = snap.x
+      lastNetY = snap.y
+      lastNetAt = nowMs
+    } else if (!snap.moving) {
+      vx = 0
+      vy = 0
+    }
+
+    const attackRestarted =
+      snap.attackAnim > 0 &&
+      ((prev.attackAnim ?? 0) <= 0.02 ||
+        snap.attackAnim > (prev.attackAnim ?? 0) + 0.05 ||
+        (snap.receivedAt !== prev.receivedAt && snap.attackAnim >= 0.18 && (prev.localAttackAnim ?? 0) <= 0.04))
+
+    return {
+      ...snap,
+      renderX: prevRenderX,
+      renderY: prevRenderY,
+      vx,
+      vy,
+      renderMoving: prev.renderMoving ?? snap.moving,
+      localWalkT: prev.localWalkT ?? 0,
+      localAttackAnim: attackRestarted ? snap.attackAnim : (prev.localAttackAnim ?? snap.attackAnim),
+      lastNetX,
+      lastNetY,
+      lastNetAt,
+    }
+  })
+}
+
+export function stepRemotePlayers<T extends RemotePlayerSnapshot>(
+  players: T[],
+  dt: number,
+  nowMs: number = Date.now(),
+): void {
+  if (dt <= 0 || players.length === 0) return
+
+  for (const other of players) {
+    let rx = other.renderX ?? other.x
+    let ry = other.renderY ?? other.y
+    const prevRx = rx
+    const prevRy = ry
+    const dx = other.x - rx
+    const dy = other.y - ry
+    const dist = Math.hypot(dx, dy)
+
+    if (dist > 160) {
+      rx = other.x
+      ry = other.y
+    } else if (dist > 0.25) {
+      const speedHint = Math.hypot(other.vx ?? 0, other.vy ?? 0)
+      let chaseSpeed: number
+      if (other.moving && speedHint > 5) {
+        const targetLag = Math.min(10, speedHint * 0.08)
+        chaseSpeed = Math.max(speedHint * 0.72, Math.min(260, speedHint + (dist - targetLag) * 5))
+      } else {
+        chaseSpeed = Math.max(60, Math.min(240, dist * 10))
+      }
+      const step = Math.min(dist, chaseSpeed * dt)
+      rx += (dx / dist) * step
+      ry += (dy / dist) * step
+      if (Math.hypot(other.x - rx, other.y - ry) <= 0.25) {
+        rx = other.x
+        ry = other.y
+      }
+    } else {
+      rx = other.x
+      ry = other.y
+    }
+
+    const visualMoved = Math.hypot(rx - prevRx, ry - prevRy)
+    const netAgeMs = nowMs - (other.lastNetAt ?? nowMs)
+    const isMovingVisually = visualMoved > 0.05 || (other.moving && netAgeMs < 350 && dist > 0.1)
+
+    other.renderX = rx
+    other.renderY = ry
+    other.renderMoving = isMovingVisually
+    if (isMovingVisually) {
+      other.localWalkT = (other.localWalkT ?? 0) + dt
+    }
+    other.localAttackAnim = Math.max(0, (other.localAttackAnim ?? 0) - dt)
   }
 }
 
