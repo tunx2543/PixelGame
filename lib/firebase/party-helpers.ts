@@ -100,8 +100,8 @@ export function buildPartyMemberSnapshot(input: BuildPartyMemberInput): PartyMem
 
   const rawName = typeof input.name === 'string' ? input.name.trim() : ''
   const name = rawName.slice(0, 24) || 'นักผจญภัย'
-  let jobId = sanitizeSafePresenceId(input.jobId, 'novice', 32)
-  if (!isGm && jobId === 'gm') jobId = 'novice'
+  let jobId = sanitizeSafePresenceId(input.jobId, 'swordsman', 32)
+  if (jobId === 'gm') jobId = 'swordsman'
   const mapId = sanitizeSafePresenceId(input.mapId, 'town', 32)
   const level = clampInt(input.level, 1, 999, 1)
   const maxHp = clampInt(input.maxHp, 1, 100_000_000, 100)
@@ -139,7 +139,7 @@ export function parsePartyMemberSnapshot(
     uid,
     gameUid,
     name: (typeof r.name === 'string' ? r.name.trim() : '').slice(0, 24) || 'นักผจญภัย',
-    jobId: sanitizeSafePresenceId(r.jobId, 'novice', 32),
+    jobId: sanitizeSafePresenceId(r.jobId, 'swordsman', 32),
     level: clampInt(r.level, 1, 999, 1),
     hp,
     maxHp,

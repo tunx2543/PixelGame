@@ -72,14 +72,23 @@ export interface JobModelSpec {
 
 export type MonsterModelArchetype =
   | 'slime'
+  | 'slime_blue'
   | 'pink_slime'
   | 'mushroom'
   | 'rabbit'
+  | 'boss_wolf'
   | 'wolf'
   | 'goblin'
+  | 'boss_spider_queen'
   | 'goblin_chief'
+  | 'boss_lich'
   | 'bat'
+  | 'spider'
+  | 'boss_fire_dragon'
   | 'skeleton'
+  | 'orc'
+  | 'golem'
+  | 'boss_demon_king'
   | 'ghost'
   | 'fire_golem'
   | 'earth_golem'
@@ -115,37 +124,22 @@ export const MODEL_ACTIONS: readonly ModelAction[] = ['idle', 'walk', 'attack'] 
 export const HUMAN_MODEL_CANVAS_SIZE = { width: 42, height: 48 } as const
 
 export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
-  novice: {
-    jobId: 'novice',
-    name: JOBS.novice.name,
-    tier: 0,
-    hatStyle: 'none',
-    armorStyle: 'tunic',
-    hairStyle: 'spiky',
-    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
-    weapon: 'stick',
-    hatColor: '#c9b27c',
-    scarfColor: '#e9c46a',
-    backpack: true,
-    wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 6, attack: 4 },
-  },
   swordsman: {
     jobId: 'swordsman',
     name: JOBS.swordsman.name,
     tier: 1,
-    hatStyle: 'bandana',
+    hatStyle: 'none',
     armorStyle: 'brigandine',
     hairStyle: 'spiky',
     canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
     weapon: 'sword',
-    hatColor: '#e63946',
-    scarfColor: '#d62828',
-    shieldColor: '#8d99ae',
-    shieldCrestColor: '#e9c46a',
+    hatColor: '#e11d48',
+    capeColor: '#be123c',
+    shieldColor: '#94a3b8',
+    shieldCrestColor: '#f43f5e',
     shoulderPads: true,
     wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 6, attack: 4 },
+    animationFrames: { idle: 4, walk: 4, attack: 4 },
   },
   mage: {
     jobId: 'mage',
@@ -156,11 +150,11 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     hairStyle: 'long',
     canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
     weapon: 'staff',
-    hatColor: '#5b3f8c',
-    capeColor: '#3a2a5c',
-    auraColor: '#c77dff',
+    hatColor: '#5b21b6',
+    capeColor: '#3b0764',
+    auraColor: '#38bdf8',
     wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 6, attack: 4 },
+    animationFrames: { idle: 4, walk: 4, attack: 4 },
   },
   archer: {
     jobId: 'archer',
@@ -171,150 +165,28 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     hairStyle: 'ponytail',
     canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
     weapon: 'bow',
-    hatColor: '#3f7d4e',
-    capeColor: '#2d6a4f',
+    hatColor: '#15803d',
+    capeColor: '#166534',
     scarfColor: '#e9c46a',
     quiver: true,
     wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 6, attack: 4 },
-  },
-  thief: {
-    jobId: 'thief',
-    name: JOBS.thief.name,
-    tier: 1,
-    hatStyle: 'bandana',
-    armorStyle: 'shadow',
-    hairStyle: 'swept',
-    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
-    weapon: 'dagger',
-    hatColor: '#b23a48',
-    scarfColor: '#e63946',
-    capeColor: '#262633',
-    dualDaggers: true,
-    wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 6, attack: 4 },
-  },
-  knight: {
-    jobId: 'knight',
-    name: JOBS.knight.name,
-    tier: 2,
-    hatStyle: 'helm',
-    armorStyle: 'plate',
-    hairStyle: 'parted',
-    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
-    weapon: 'sword',
-    hatColor: '#9aa5b1',
-    capeColor: '#e63946',
-    shieldColor: '#cbd5e1',
-    shieldCrestColor: '#e63946',
-    shoulderPads: true,
-    wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 6, attack: 4 },
-  },
-  paladin: {
-    jobId: 'paladin',
-    name: JOBS.paladin.name,
-    tier: 2,
-    hatStyle: 'paladin_helm',
-    armorStyle: 'paladin_plate',
-    hairStyle: 'royal',
-    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
-    weapon: 'sword',
-    hatColor: '#e2e8f0',
-    capeColor: '#2563eb',
-    shieldColor: '#fef08a',
-    shieldCrestColor: '#3a86ff',
-    shoulderPads: true,
-    halo: true,
-    auraColor: '#fde047',
-    wingStyle: 'angel',
-    animationFrames: { idle: 4, walk: 6, attack: 4 },
-  },
-  wizard: {
-    jobId: 'wizard',
-    name: JOBS.wizard.name,
-    tier: 2,
-    hatStyle: 'archmage',
-    armorStyle: 'arch_robe',
-    hairStyle: 'long',
-    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
-    weapon: 'staff',
-    hatColor: '#1d3557',
-    capeColor: '#457b9d',
-    shoulderPads: true,
-    auraColor: '#67e8f9',
-    wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 6, attack: 4 },
+    animationFrames: { idle: 4, walk: 4, attack: 4 },
   },
   cleric: {
     jobId: 'cleric',
     name: JOBS.cleric.name,
-    tier: 2,
+    tier: 1,
     hatStyle: 'mitre',
     armorStyle: 'vestment',
-    hairStyle: 'braid',
+    hairStyle: 'long',
     canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
     weapon: 'staff',
     hatColor: '#f8fafc',
-    capeColor: '#f4d35e',
+    capeColor: '#facc15',
     halo: true,
-    wings: true,
-    wingStyle: 'angel',
-    auraColor: '#bef264',
-    animationFrames: { idle: 4, walk: 6, attack: 4 },
-  },
-  hunter: {
-    jobId: 'hunter',
-    name: JOBS.hunter.name,
-    tier: 2,
-    hatStyle: 'ranger_hood',
-    armorStyle: 'leather',
-    hairStyle: 'ponytail',
-    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
-    weapon: 'bow',
-    hatColor: '#1b4332',
-    capeColor: '#40916c',
-    scarfColor: '#ffb703',
-    shoulderPads: true,
-    quiver: true,
+    auraColor: '#fde047',
     wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 6, attack: 4 },
-  },
-  assassin: {
-    jobId: 'assassin',
-    name: JOBS.assassin.name,
-    tier: 2,
-    hatStyle: 'cowl',
-    armorStyle: 'shadow',
-    hairStyle: 'swept',
-    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
-    weapon: 'dagger',
-    hatColor: '#1b1b2f',
-    capeColor: '#5a189a',
-    scarfColor: '#e63946',
-    shoulderPads: true,
-    dualDaggers: true,
-    auraColor: '#9d4edd',
-    wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 6, attack: 4 },
-  },
-  gm: {
-    jobId: 'gm',
-    name: JOBS.gm.name,
-    tier: 2,
-    hatStyle: 'crown',
-    armorStyle: 'sovereign',
-    hairStyle: 'royal',
-    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
-    weapon: 'staff',
-    hatColor: '#ffd60a',
-    capeColor: '#b5179e',
-    shoulderPads: true,
-    halo: true,
-    wings: true,
-    wingStyle: 'seraph',
-    auraColor: '#ffd60a',
-    animationFrames: { idle: 4, walk: 6, attack: 4 },
+    animationFrames: { idle: 4, walk: 4, attack: 4 },
   },
   merchant: {
     jobId: 'merchant',
@@ -329,49 +201,46 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     scarfColor: '#fbbf24',
     backpack: true,
     wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 6, attack: 4 },
+    animationFrames: { idle: 4, walk: 4, attack: 4 },
   },
-  templar: {
-    jobId: 'templar',
-    name: JOBS.templar.name,
-    tier: 2,
-    hatStyle: 'paladin_helm',
-    armorStyle: 'paladin_plate',
-    hairStyle: 'royal',
+  thief: {
+    jobId: 'thief',
+    name: JOBS.thief.name,
+    tier: 1,
+    hatStyle: 'bandana',
+    armorStyle: 'shadow',
+    hairStyle: 'swept',
     canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
-    weapon: 'sword',
-    hatColor: '#f8fafc',
-    capeColor: '#b45309',
-    shieldColor: '#fef3c7',
-    shieldCrestColor: '#f59e0b',
-    shoulderPads: true,
-    halo: true,
-    auraColor: '#fbbf24',
-    wingStyle: 'angel',
-    animationFrames: { idle: 4, walk: 6, attack: 4 },
+    weapon: 'dagger',
+    hatColor: '#9f1239',
+    scarfColor: '#e11d48',
+    capeColor: '#1e1b2e',
+    dualDaggers: true,
+    wingStyle: 'none',
+    animationFrames: { idle: 4, walk: 4, attack: 4 },
   },
   kensei: {
     jobId: 'kensei',
     name: JOBS.kensei.name,
     tier: 2,
-    hatStyle: 'bandana',
+    hatStyle: 'none',
     armorStyle: 'brigandine',
     hairStyle: 'ponytail',
     canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
     weapon: 'sword',
-    hatColor: '#e11d48',
-    capeColor: '#450a0a',
-    scarfColor: '#fb7185',
+    hatColor: '#1e3a8a',
+    capeColor: '#0f172a',
+    scarfColor: '#38bdf8',
     shoulderPads: true,
-    auraColor: '#f43f5e',
+    auraColor: '#38bdf8',
     wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 6, attack: 4 },
+    animationFrames: { idle: 4, walk: 4, attack: 4 },
   },
   iron_fist: {
     jobId: 'iron_fist',
     name: JOBS.iron_fist.name,
     tier: 2,
-    hatStyle: 'bandana',
+    hatStyle: 'none',
     armorStyle: 'plate',
     hairStyle: 'spiky',
     canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
@@ -383,24 +252,7 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     shoulderPads: true,
     auraColor: '#fb923c',
     wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 6, attack: 4 },
-  },
-  the_king: {
-    jobId: 'the_king',
-    name: JOBS.the_king.name,
-    tier: 2,
-    hatStyle: 'crown',
-    armorStyle: 'sovereign',
-    hairStyle: 'royal',
-    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
-    weapon: 'staff',
-    hatColor: '#facc15',
-    capeColor: '#6b21a8',
-    shoulderPads: true,
-    halo: true,
-    auraColor: '#facc15',
-    wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 6, attack: 4 },
+    animationFrames: { idle: 4, walk: 4, attack: 4 },
   },
   wicked_necromancer: {
     jobId: 'wicked_necromancer',
@@ -417,42 +269,24 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     shoulderPads: true,
     auraColor: '#a855f7',
     wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 6, attack: 4 },
+    animationFrames: { idle: 4, walk: 4, attack: 4 },
   },
-  mamushi: {
-    jobId: 'mamushi',
-    name: JOBS.mamushi.name,
+  the_king: {
+    jobId: 'the_king',
+    name: JOBS.the_king.name,
     tier: 2,
-    hatStyle: 'cowl',
-    armorStyle: 'shadow',
-    hairStyle: 'swept',
+    hatStyle: 'crown',
+    armorStyle: 'sovereign',
+    hairStyle: 'royal',
     canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
-    weapon: 'bow',
-    hatColor: '#064e3b',
-    capeColor: '#022c22',
-    scarfColor: '#4ade80',
-    quiver: true,
-    auraColor: '#22c55e',
+    weapon: 'staff',
+    hatColor: '#facc15',
+    capeColor: '#991b1b',
+    shoulderPads: true,
+    halo: true,
+    auraColor: '#facc15',
     wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 6, attack: 4 },
-  },
-  nekobaku: {
-    jobId: 'nekobaku',
-    name: JOBS.nekobaku.name,
-    tier: 2,
-    hatStyle: 'cat_hood',
-    armorStyle: 'leather',
-    hairStyle: 'ponytail',
-    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
-    weapon: 'bow',
-    hatColor: '#9a3412',
-    capeColor: '#7c2d12',
-    scarfColor: '#fbbf24',
-    backpack: true,
-    quiver: true,
-    auraColor: '#fb923c',
-    wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 6, attack: 4 },
+    animationFrames: { idle: 4, walk: 4, attack: 4 },
   },
   sinister: {
     jobId: 'sinister',
@@ -470,20 +304,83 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     dualDaggers: true,
     auraColor: '#e11d48',
     wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 6, attack: 4 },
+    animationFrames: { idle: 4, walk: 4, attack: 4 },
+  },
+  templar: {
+    jobId: 'templar',
+    name: JOBS.templar.name,
+    tier: 2,
+    hatStyle: 'paladin_helm',
+    armorStyle: 'paladin_plate',
+    hairStyle: 'royal',
+    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
+    weapon: 'sword',
+    hatColor: '#f8fafc',
+    capeColor: '#2563eb',
+    shieldColor: '#fef3c7',
+    shieldCrestColor: '#3b82f6',
+    shoulderPads: true,
+    halo: true,
+    auraColor: '#60a5fa',
+    wingStyle: 'angel',
+    animationFrames: { idle: 4, walk: 4, attack: 4 },
+  },
+  nekobaku: {
+    jobId: 'nekobaku',
+    name: JOBS.nekobaku.name,
+    tier: 2,
+    hatStyle: 'cat_hood',
+    armorStyle: 'leather',
+    hairStyle: 'ponytail',
+    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
+    weapon: 'bow',
+    hatColor: '#be185d',
+    capeColor: '#831843',
+    scarfColor: '#f472b6',
+    backpack: true,
+    quiver: true,
+    auraColor: '#f472b6',
+    wingStyle: 'none',
+    animationFrames: { idle: 4, walk: 4, attack: 4 },
+  },
+  mamushi: {
+    jobId: 'mamushi',
+    name: JOBS.mamushi.name,
+    tier: 2,
+    hatStyle: 'cowl',
+    armorStyle: 'shadow',
+    hairStyle: 'swept',
+    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
+    weapon: 'bow',
+    hatColor: '#064e3b',
+    capeColor: '#022c22',
+    scarfColor: '#4ade80',
+    quiver: true,
+    auraColor: '#22c55e',
+    wingStyle: 'none',
+    animationFrames: { idle: 4, walk: 4, attack: 4 },
   },
 }
 
 const ARCHETYPE_BY_ID: Record<string, MonsterModelArchetype> = {
   slime: 'slime',
+  slime_blue: 'slime_blue',
   pink_slime: 'pink_slime',
   mushroom: 'mushroom',
   rabbit: 'rabbit',
+  boss_wolf: 'boss_wolf',
   wolf: 'wolf',
   goblin: 'goblin',
+  boss_spider_queen: 'boss_spider_queen',
   goblin_chief: 'goblin_chief',
+  boss_lich: 'boss_lich',
   bat: 'bat',
+  spider: 'spider',
+  boss_fire_dragon: 'boss_fire_dragon',
   skeleton: 'skeleton',
+  orc: 'orc',
+  golem: 'golem',
+  boss_demon_king: 'boss_demon_king',
   ghost: 'ghost',
   fire_golem: 'fire_golem',
   earth_golem: 'earth_golem',
@@ -501,8 +398,10 @@ const ARCHETYPE_BY_SPRITE: Record<MonsterSprite, MonsterModelArchetype> = {
   wolf: 'wolf',
   goblin: 'goblin',
   bat: 'bat',
+  spider: 'spider',
   skeleton: 'skeleton',
   ghost: 'ghost',
+  orc: 'orc',
   golem: 'fire_golem',
   earth_golem: 'earth_golem',
   demon: 'demon',
@@ -514,46 +413,78 @@ function buildMonsterSpec(def: MonsterDef): MonsterModelSpec {
   const flying =
     archetype === 'bat' ||
     archetype === 'ghost' ||
+    archetype === 'boss_fire_dragon' ||
     archetype === 'abyss_dragon' ||
     archetype === 'gale_sentinel'
   const supports4Way =
     archetype === 'goblin' ||
     archetype === 'goblin_chief' ||
+    archetype === 'orc' ||
     archetype === 'skeleton' ||
+    archetype === 'boss_lich' ||
     archetype === 'abyss_knight' ||
     archetype === 'gale_sentinel' ||
     archetype === 'demon' ||
+    archetype === 'boss_demon_king' ||
     archetype === 'demon_lord'
 
   const canvasSize =
-    archetype === 'abyss_dragon'
+    archetype === 'abyss_dragon' || archetype === 'boss_fire_dragon'
       ? { width: 42, height: 34 }
-      : archetype === 'demon_lord' || archetype === 'earth_golem' || archetype === 'goblin_chief'
+      : archetype === 'demon_lord' ||
+          archetype === 'boss_demon_king' ||
+          archetype === 'boss_wolf' ||
+          archetype === 'boss_spider_queen' ||
+          archetype === 'boss_lich' ||
+          archetype === 'earth_golem' ||
+          archetype === 'goblin_chief'
         ? { width: 34, height: 32 }
-        : archetype === 'abyss_knight' || archetype === 'gale_sentinel' || archetype === 'fire_golem'
+        : archetype === 'abyss_knight' ||
+            archetype === 'gale_sentinel' ||
+            archetype === 'fire_golem' ||
+            archetype === 'orc' ||
+            archetype === 'golem'
           ? { width: 32, height: 30 }
           : archetype === 'wolf'
             ? { width: 30, height: 24 }
             : { width: 28, height: 26 }
 
   const accentColor =
-    archetype === 'pink_slime'
-      ? '#ffd6e0'
-      : archetype === 'goblin_chief'
-        ? '#ffd60a'
-        : archetype === 'fire_golem'
-          ? '#ffb703'
-          : archetype === 'earth_golem'
-            ? '#a3e635'
-            : archetype === 'abyss_knight'
-              ? '#c77dff'
-              : archetype === 'gale_sentinel'
+    archetype === 'slime_blue'
+      ? '#bae6fd'
+      : archetype === 'pink_slime'
+        ? '#ffd6e0'
+        : archetype === 'boss_wolf'
+          ? '#fb923c'
+          : archetype === 'spider'
+            ? '#f43f5e'
+            : archetype === 'boss_spider_queen'
+              ? '#fde047'
+              : archetype === 'goblin_chief'
                 ? '#ffd60a'
-                : archetype === 'demon_lord'
-                  ? '#ff9e00'
-                  : archetype === 'abyss_dragon'
-                    ? '#e0aaff'
-                    : def.color
+                : archetype === 'boss_lich'
+                  ? '#c084fc'
+                  : archetype === 'boss_fire_dragon'
+                    ? '#ffb703'
+                    : archetype === 'orc'
+                      ? '#fde047'
+                      : archetype === 'golem'
+                        ? '#a8a29e'
+                        : archetype === 'boss_demon_king'
+                          ? '#f43f5e'
+                          : archetype === 'fire_golem'
+                            ? '#ffb703'
+                            : archetype === 'earth_golem'
+                              ? '#a3e635'
+                              : archetype === 'abyss_knight'
+                                ? '#c77dff'
+                                : archetype === 'gale_sentinel'
+                                  ? '#ffd60a'
+                                  : archetype === 'demon_lord'
+                                    ? '#ff9e00'
+                                    : archetype === 'abyss_dragon'
+                                      ? '#e0aaff'
+                                      : def.color
 
   return {
     monsterId: def.id,
@@ -577,7 +508,7 @@ export const MONSTER_MODEL_SPECS: Record<string, MonsterModelSpec> = Object.from
 )
 
 export function getJobModelSpec(jobId: string): JobModelSpec {
-  return JOB_MODEL_SPECS[jobId] ?? JOB_MODEL_SPECS.novice
+  return JOB_MODEL_SPECS[jobId] ?? JOB_MODEL_SPECS.swordsman
 }
 
 export function getMonsterModelSpec(defId?: string, sprite?: MonsterSprite, color?: string): MonsterModelSpec {

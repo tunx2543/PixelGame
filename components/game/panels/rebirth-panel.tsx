@@ -17,7 +17,7 @@ export function RebirthPanel() {
   const { p } = useGame()
   const level = p?.level ?? 1
   const count = p?.rebirthCount ?? 0
-  const jobId = p?.jobId ?? 'novice'
+  const jobId = p?.jobId ?? 'swordsman'
   const currentAura = resolveRebirthAuraSpec(count)
   const nextAura = resolveRebirthAuraSpec(Math.min(6, count + 1))
 
@@ -31,7 +31,6 @@ export function RebirthPanel() {
             action="idle"
             dir="down"
             size={88}
-            isGm={p?.gm}
             rebirthCount={count}
             label={`ออร่าจุติปัจจุบัน ${currentAura.title}`}
           />

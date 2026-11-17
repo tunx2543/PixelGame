@@ -1,8 +1,16 @@
 import Link from 'next/link'
 import { ArrowLeft, Sparkles } from 'lucide-react'
+import { JOBS, MONSTERS } from '@/lib/game/data'
+import { MOUNT_DEFS } from '@/lib/game/mounts'
+import { COMBAT_PETS } from '@/lib/game/systems'
 import { ModelGalleryView } from '@/components/game/model-gallery-view'
 
 export default function ModelsGalleryPage() {
+  const jobCount = Object.keys(JOBS).length
+  const monsterCount = Object.keys(MONSTERS).length
+  const mountCount = MOUNT_DEFS.length
+  const petCount = COMBAT_PETS.length
+
   return (
     <main className="relative min-h-screen w-full overflow-y-auto bg-background p-4 md:p-8">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
@@ -10,7 +18,7 @@ export default function ModelsGalleryPage() {
           <div>
             <h1 className="flex items-center gap-2 text-xl font-bold text-primary md:text-2xl">
               <Sparkles className="size-5 text-gold" aria-hidden />
-              คลังโมเดล 2D &amp; แอนิเมชั่น (21 อาชีพ • 17 มอนสเตอร์ • 5 สัตว์ขี่ • 10 ผอบ/สัตว์เลี้ยง)
+              คลังโมเดล 2D &amp; แอนิเมชั่น ({jobCount} อาชีพ • {monsterCount} มอนสเตอร์ • {mountCount} สัตว์ขี่ • {petCount} ผอบ/สัตว์เลี้ยง)
             </h1>
             <p className="text-xs text-muted-foreground">
               สำรวจโมเดลพิกเซล 2D พร้อมแอนิเมชั่น Idle, Walk และ Attack สำหรับทุกสายอาชีพ มอนสเตอร์ สัตว์ขี่ และผอบ/สัตว์เลี้ยงใน Pixel Quest

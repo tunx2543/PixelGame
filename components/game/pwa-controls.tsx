@@ -8,7 +8,36 @@ export function PwaRuntime() {
   const isOnline = useOnlineStatus()
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return
+    if (typeof window === 'undefined') return
+    const host = window.location.hostname
+    const isDevPreview =
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host.startsWith('ais-dev-')
+
+    if (isDevPreview) {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker
+          .getRegistrations()
+          .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+          .catch(() => undefined)
+      }
+      if ('caches' in window) {
+        caches
+          .keys()
+          .then((keys) =>
+            Promise.all(
+              keys
+                .filter((key) => key.startsWith('pixel-quest-pwa'))
+                .map((key) => caches.delete(key)),
+            ),
+          )
+          .catch(() => undefined)
+      }
+      return
+    }
+
+    if (!('serviceWorker' in navigator)) return
     navigator.serviceWorker
       .register('/sw.js', { scope: '/' })
       .catch(() => undefined)

@@ -263,8 +263,8 @@ export interface PartyRoleSynergyResult {
 }
 
 export function getJobRole(jobId: string): PartyRole {
-  if (jobId === 'cleric') return 'healer'
-  if (jobId === 'swordsman' || jobId === 'knight' || jobId === 'paladin' || jobId === 'templar' || jobId === 'iron_fist') {
+  if (jobId === 'cleric' || jobId === 'nekobaku') return 'healer'
+  if (jobId === 'swordsman' || jobId === 'templar' || jobId === 'the_king' || jobId === 'iron_fist') {
     return 'tank'
   }
   return 'dps'
@@ -314,7 +314,7 @@ export function computePartyRoleSynergy(
     const mapId = live?.mapId ?? member?.mapId
     if (mapId !== currentMapId) continue
     sameMapMates++
-    const role = getJobRole(live?.jobId ?? member?.jobId ?? 'novice')
+    const role = getJobRole(live?.jobId ?? member?.jobId ?? 'swordsman')
     if (role === 'tank') tanks++
     else if (role === 'healer') healers++
     else dps++
@@ -531,7 +531,7 @@ export function createDuelFighter(input: {
   return {
     uid: input.uid,
     name: input.name.slice(0, 24) || 'ผู้กล้า',
-    jobId: input.jobId || 'novice',
+    jobId: input.jobId || 'swordsman',
     level: Math.max(1, Math.floor(input.level || 1)),
     maxHp,
     hp: maxHp,

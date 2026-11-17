@@ -38,7 +38,7 @@ function StatBars({ job }: { job: JobDef }) {
 function JobTree({ currentJobId }: { currentJobId: string }) {
   const roots = Object.values(JOBS).filter((j) => j.tier === 1)
   return (
-    <div className="grid grid-cols-2 gap-1.5 text-[11px] md:grid-cols-5">
+    <div className="grid grid-cols-2 gap-1.5 text-[11px] sm:grid-cols-3 md:grid-cols-6">
       {roots.map((j) => {
         const nextJobs = Object.values(JOBS).filter(
           (nextJob) => nextJob.from === j.id || Boolean(nextJob.alsoFrom?.includes(j.id)),
@@ -100,7 +100,6 @@ export function JobPanel() {
               action={previewAction}
               dir="down"
               size={76}
-              isGm={p.gm}
               label={`โมเดลอาชีพ ${job.name}`}
             />
           </div>
@@ -109,7 +108,7 @@ export function JobPanel() {
             <p className="text-lg text-primary">
               {job.name} <span className="text-sm text-foreground">Lv.{p.level}</span>
             </p>
-            <p className="mt-0.5 text-xs text-muted-foreground">สกิล: {job.skills.map((s) => s.name).join(', ') || 'GM พิเศษ'}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">สกิล: {job.skills.map((s) => s.name).join(', ')}</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-1">
@@ -119,6 +118,7 @@ export function JobPanel() {
               ['idle', 'ยืน'],
               ['walk', 'เดิน'],
               ['attack', 'โจมตี'],
+              ['skill', 'ใช้สกิล'],
             ] as Array<[PreviewAction, string]>
           ).map(([act, lbl]) => (
             <button
@@ -202,7 +202,7 @@ export function JobPanel() {
       )}
 
       <div className="mt-4">
-        <p className="mb-1.5 text-xs text-muted-foreground">เส้นทางอาชีพ (เริ่มจาก ผู้ฝึกหัด)</p>
+        <p className="mb-1.5 text-xs text-muted-foreground">สายอาชีพทั้งหมด (6 คลาสเริ่มต้น → 8 คลาส 2)</p>
         <JobTree currentJobId={p.jobId} />
       </div>
     </PanelFrame>

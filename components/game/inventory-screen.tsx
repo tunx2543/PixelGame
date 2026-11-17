@@ -22,7 +22,7 @@ import { AccountPanel } from './account-panel'
 import { formatNum } from './format'
 import { ItemIcon } from './item-icon'
 import { SpriteModelCanvas } from './sprite-model-canvas'
-import { ITEMS, JOBS, type EquipmentSlot } from '@/lib/game/data'
+import { ITEMS, JOBS, normalizeJobId, type EquipmentSlot } from '@/lib/game/data'
 import {
   SAVE_KEY,
   getActiveCharacterSlot,
@@ -343,7 +343,7 @@ export function InventoryScreen() {
     )
   }
 
-  const job = JOBS[save.jobId] ?? JOBS.novice
+  const job = JOBS[normalizeJobId(save.jobId)]
   const weaponDef = save.equipment.weapon ? ITEMS[save.equipment.weapon.itemId] : undefined
   const inspectedEquippedItem = inspectedEquippedSlot ? save.equipment[inspectedEquippedSlot] : null
   const inspectedEquippedDef = inspectedEquippedItem ? ITEMS[inspectedEquippedItem.itemId] : null

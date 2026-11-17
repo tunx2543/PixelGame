@@ -1,4 +1,4 @@
-import { ITEMS, JOBS, type EquipmentSlot, type ItemDef } from './data'
+import { ITEMS, JOBS, normalizeJobId, type EquipmentSlot, type ItemDef } from './data'
 import type { InvItem, SaveData } from './engine'
 
 export type PrimaryEquipmentSlot = 'weapon' | 'armor' | 'accessory'
@@ -132,7 +132,7 @@ export function getEquipRestriction(
   if (!def) return 'ไม่พบข้อมูลไอเทม'
   if (def.kind !== 'weapon' && def.kind !== 'armor') return 'ไอเทมนี้สวมใส่ไม่ได้'
   if ((def.reqLevel ?? 1) > player.level) return `ต้องการเลเวล ${def.reqLevel}`
-  const job = JOBS[player.jobId] ?? JOBS.novice
+  const job = JOBS[normalizeJobId(player.jobId)]
   if (def.kind === 'weapon' && (!def.weaponType || !job.weaponTypes.includes(def.weaponType))) {
     return `อาชีพ ${job.name} ใช้อาวุธนี้ไม่ได้`
   }

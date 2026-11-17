@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { JOBS, type WeaponType } from '@/lib/game/data'
+import { JOBS, normalizeJobId, type WeaponType } from '@/lib/game/data'
 import { humanSprite, jobHumanColors, monsterSprite } from '@/lib/game/sprites'
 import { drawRebirthAura, drawStageSkillEffect } from '@/lib/game/vfx-canvas'
 import { getSkillVfxSpec, resolveRebirthAuraSpec } from '@/lib/game/vfx-specs'
@@ -73,7 +73,7 @@ export function SkillVfxPreview({
       if (!isVisible) return
 
       const { jobId: activeJobId, skillId: activeSkillId, rebirthCount: activeRebirth } = propsRef.current
-      const job = JOBS[activeJobId] ?? JOBS.novice
+      const job = JOBS[normalizeJobId(activeJobId)]
       const weapon: WeaponType = job.weaponTypes[0] ?? 'stick'
       const w = canvas.width
       const h = canvas.height
@@ -140,11 +140,11 @@ export function SkillVfxPreview({
 
       // Hero sprite
       const isHeroCasting = vfxActive && vfxProgress < 0.78
-      const heroSkillFrame = isHeroCasting ? Math.min(5, Math.floor((vfxProgress / 0.78) * 6)) : 0
+      const heroSkillFrame = isHeroCasting ? Math.min(3, Math.floor((vfxProgress / 0.78) * 4)) : 0
       const heroIdleFrame = Math.floor(timeSec * 3) % 4
-      const lungeX = isHeroCasting && job.id !== 'gm' ? Math.round(Math.sin((vfxProgress / 0.78) * Math.PI) * 8) : 0
+      const lungeX = isHeroCasting ? Math.round(Math.sin((vfxProgress / 0.78) * Math.PI) * 8) : 0
       const heroCanvas = humanSprite(
-        jobHumanColors(job.id, job.colors, job.id === 'gm'),
+        jobHumanColors(job.id, job.colors, false),
         'right',
         isHeroCasting ? heroSkillFrame : heroIdleFrame,
         weapon,

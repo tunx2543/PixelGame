@@ -1,4 +1,4 @@
-import { ITEMS, JOBS, MONSTERS, type MonsterSprite } from './data'
+import { ITEMS, JOBS, MONSTERS, normalizeJobId, type MonsterSprite } from './data'
 import { GEM_SHOP_ITEMS } from './gem-shop'
 import { currentMap, game, getStats } from './engine'
 import {
@@ -28,7 +28,7 @@ import { getActiveMountBonuses } from './mounts'
 import { TITLE_DEFS } from './rpg-systems'
 import { GATHERING_NODES, getCosmeticDef, getWorldTimePhase, sanitizeExtV2 } from './extended-systems'
 import { drawOverworldSkillEffect, drawRebirthAura } from './vfx-canvas'
-import { preloadAllSpriteSheets } from './sprite-sheets'
+import { getNpcSheetFrame, preloadAllSpriteSheets } from './sprite-sheets'
 
 const cameraState = createCameraState('town')
 let prevRenderTime = 0
@@ -392,11 +392,12 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       draw: () => {
         const phase = t * 2.6 + fx * 0.15
         const breath = Math.sin(phase)
-        const scaleX = 1 - breath * 0.02
-        const scaleY = 1 + breath * 0.024
+        const scaleX = 1 - breath * 0.018
+        const scaleY = 1 + breath * 0.022
         const idleF = Math.sin(t * 1.1 + fx) > 0.96 ? -1 : Math.floor(t * 2 + fx) % 4
-        const img = humanSprite(n.colors, 'down', idleF, null, '#ced4da', false, 'idle')
-        const targetNpcH = 33
+        const npcSheetImg = getNpcSheetFrame(n.id, Math.floor(t * 2.2 + fx) % 4)
+        const img = npcSheetImg ?? humanSprite(n.colors, 'down', idleF, null, '#ced4da', false, 'idle')
+        const targetNpcH = 34
         const baseScale = targetNpcH / Math.max(1, img.height)
         const drawW = img.width * baseScale
         const drawH = img.height * baseScale
@@ -431,7 +432,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         const speedMul = m.provoked ? 1.3 : 1
         const attackProgress = attacking ? Math.max(0, Math.min(1, 1 - m.lunge / 0.3)) : 0
         const attackFrame = Math.min(3, Math.floor(attackProgress * 4))
-        const walkFrame = Math.floor(m.animT * 10 * speedMul) % 6
+        const walkFrame = Math.floor(m.animT * 8.5 * speedMul) % 4
         const idleFrame = Math.floor(m.animT * 2.8) % 4
         const frame = attacking ? attackFrame : walking ? walkFrame : idleFrame
 
@@ -478,13 +479,35 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           ctx.restore()
         }
 
+        const isBouncyMob = def.sprite === 'slime' || def.id === 'mushroom' || def.id === 'rabbit'
+        const walkCycle = m.animT * (isBouncyMob ? 8.5 : 9.2) * speedMul
+        const walkBounce = walking
+          ? -Math.abs(Math.sin(walkCycle)) * (isBouncyMob ? 2.8 : flying ? 1.4 : def.boss ? 2.0 : 1.7)
+          : 0
+        const walkTilt = walking && !isBouncyMob
+          ? Math.sin(walkCycle) * (flying ? 0.035 : 0.045)
+          : 0
+        const breathPhase = Math.sin(t * 2.8 + m.x * 0.1)
+        const walkSx = walking
+          ? isBouncyMob
+            ? 1 - Math.sin(walkCycle * 2) * 0.055
+            : 1 + Math.cos(walkCycle) * 0.025
+          : 1 - breathPhase * 0.018
+        const walkSy = walking
+          ? isBouncyMob
+            ? 1 + Math.sin(walkCycle * 2) * 0.055
+            : 1 - Math.cos(walkCycle) * 0.025
+          : 1 + breathPhase * 0.022
+
         ctx.save()
         if (m.hitFlash > 0) ctx.globalAlpha = 0.65
         if (def.sprite === 'ghost') ctx.globalAlpha *= 0.8 + Math.sin(m.animT * 4) * 0.08
         ctx.translate(
           m.x + hoverX + hitShake + faceX * attackReach,
-          m.y + faceY * attackReach + hover,
+          m.y + faceY * attackReach + hover + walkBounce,
         )
+        if (walkTilt !== 0) ctx.rotate(walkTilt)
+        ctx.scale(walkSx, walkSy)
         ctx.drawImage(img, -w / 2, -h + 2 * scale * hdFactor, w, h)
 
         if (m.hitFlash > 0) {
@@ -512,20 +535,19 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     const networkBlend = other.receivedAt ? Math.min(1, (Date.now() - other.receivedAt) / 100) : 1
     const remoteX = (other.previousX ?? other.x) + (other.x - (other.previousX ?? other.x)) * networkBlend
     const remoteY = (other.previousY ?? other.y) + (other.y - (other.previousY ?? other.y)) * networkBlend
-    const remoteJob = JOBS[other.jobId] ?? JOBS.novice
+    const remoteJob = JOBS[normalizeJobId(other.jobId)]
     const remoteAttacking = other.attackAnim > 0
-    const isRemoteGm = Boolean(other.gm || other.jobId === 'gm')
     const remoteAction: SpriteAction = remoteAttacking ? 'attack' : other.moving ? 'walk' : 'idle'
     const atkProgress = remoteAttacking ? Math.max(0, Math.min(1, 1 - other.attackAnim / 0.3)) : 0
     const remoteAtkFrame = Math.min(3, Math.floor(atkProgress * 4))
-    const remoteWalkMod = isRemoteGm && other.facing === 'down' ? 8 : 6
+    const remoteWalkMod = 4
     const remoteFrame = remoteAttacking
       ? remoteAtkFrame
       : other.moving
-        ? Math.floor(t * (remoteWalkMod === 8 ? 13 : 11)) % remoteWalkMod
+        ? Math.floor(t * 10) % remoteWalkMod
         : (Math.sin(t * 1.3 + remoteX) > 0.96 ? -1 : Math.floor(t * 2.4) % 4)
     const remoteWeapon = remoteJob.weaponTypes[0] ?? 'stick'
-    const styledColors = jobHumanColors(other.jobId, remoteJob.colors, other.gm)
+    const styledColors = jobHumanColors(remoteJob.id, remoteJob.colors, false)
     const remoteImg = humanSprite(
       styledColors,
       other.facing,
@@ -565,7 +587,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     })
   }
 
-  const job = JOBS[p.jobId] ?? JOBS.novice
+  const job = JOBS[normalizeJobId(p.jobId)]
   const weapon = p.equipment.weapon ? ITEMS[p.equipment.weapon.itemId] : null
   const gemFashion = GEM_SHOP_ITEMS.find((item) => item.id === p.equippedGemFashion)
   const activePet = getActivePetBonuses(p.petState, p.equippedGemCompanion, p.ownedGemItems)
@@ -585,18 +607,17 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       const skillProgress = castingSkill
         ? Math.max(0, Math.min(1, 1 - game.skillAnim / Math.max(0.2, game.skillAnimMax || 0.55)))
         : 0
-      const skillFrame = Math.min(5, Math.floor(skillProgress * 6))
-      const isGmChar = Boolean(p.gm || p.jobId === 'gm')
-      const walkMod = isGmChar && game.facing === 'down' ? 8 : 6
+      const skillFrame = Math.min(3, Math.floor(skillProgress * 4))
+      const walkMod = 4
       const frame = castingSkill
         ? skillFrame
         : attacking
           ? atkFrame
           : game.moving
-            ? Math.floor(game.walkT * (walkMod === 8 ? 13 : 11)) % walkMod
+            ? Math.floor(game.walkT * 10) % walkMod
             : (Math.sin(t * 1.4) > 0.96 ? -1 : Math.floor(t * 2.4) % 4)
       const weaponType = weapon?.weaponType ?? job.weaponTypes[0] ?? 'stick'
-      const styledColors = jobHumanColors(p.jobId, job.colors, p.gm)
+      const styledColors = jobHumanColors(job.id, job.colors, false)
       const weaponDrawColor = castingSkill
         ? game.skillVfxColor
         : (equippedWeaponSkin?.primaryColor ?? weapon?.color ?? job.colors.accent)

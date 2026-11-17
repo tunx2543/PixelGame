@@ -1,4 +1,4 @@
-import type { MonsterSprite, WeaponType } from './data'
+import { normalizeJobId, type MonsterSprite, type WeaponType } from './data'
 import { T, TILE, type MapDef, type MapObjectKind } from './maps'
 import {
   getJobModelSpec,
@@ -496,9 +496,9 @@ export interface HumanColors {
 export function jobHumanColors(
   jobId: string,
   base: { hair: string; body: string; legs: string; accent: string; skin?: string; hat?: string },
-  isGm = false,
+  _isGm = false,
 ): HumanColors {
-  const effectiveJobId = isGm ? 'gm' : jobId
+  const effectiveJobId = normalizeJobId(jobId)
   const spec = getJobModelSpec(effectiveJobId)
   return {
     ...base,
@@ -545,7 +545,7 @@ function drawWeaponInHand(
   const perpY = cos
   const hilt = '#6b4226'
   const hiltDark = '#4a2c18'
-  const guard = jobId === 'paladin' || jobId === 'gm' ? '#ffd60a' : '#e9c46a'
+  const guard = jobId === 'templar' || jobId === 'the_king' ? '#ffd60a' : '#e9c46a'
   const guardDark = shade(guard, -0.3)
   const bladeHi = shade(weaponColor, 0.45)
   const bladeDark = shade(weaponColor, -0.28)
@@ -1066,19 +1066,11 @@ export function humanSprite(
 ) {
   const requestedAction: SpriteAction = attacking ? 'attack' : actionOverride ?? (frame > 0 ? 'walk' : 'idle')
 
-  if (colors.jobId === 'gm' && typeof document !== 'undefined') {
-    const gmFrame = requestedAction === 'attack' ? (attackFrameOverride ?? frame) : frame
-    const gmCanvas = gmEpicSprite(dir, requestedAction, gmFrame, weaponColor)
-    if (gmCanvas) return gmCanvas
-  }
-
   if (typeof document !== 'undefined' && colors.jobId && !colors.skeleton && !colors.goblinEars) {
     const sheetFrameIdx =
       requestedAction === 'attack'
         ? (attackFrameOverride ?? frame)
-        : requestedAction === 'skill'
-          ? Math.floor((Math.abs(frame) % 6) * (4 / 6))
-          : frame
+        : frame
     const sheetCanvas = getHeroSheetFrame(colors.jobId, dir, requestedAction, sheetFrameIdx)
     if (sheetCanvas) return sheetCanvas
   }

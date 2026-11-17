@@ -24,7 +24,7 @@ export default function ClassSelectorPage() {
         <div>
           <h1 className="text-lg font-bold text-primary">Character Class & Base Stats</h1>
           <p className="text-xs text-muted-foreground">
-            ทดลองสลับสายอาชีพ Warrior / Mage / Archer เพื่อดูค่าสถานะและ HP/MP ที่เปลี่ยนแบบเรียลไทม์
+            ทดลองสลับสายอาชีพ Swordsman / Mage / Archer / Cleric / Merchant / Thief เพื่อดูค่าสถานะและ HP/MP ที่เปลี่ยนแบบเรียลไทม์
           </p>
         </div>
 

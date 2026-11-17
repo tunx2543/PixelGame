@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Crown, Eye, Flame, Heart, Shield, Swords, Trophy, Zap } from 'lucide-react'
-import { JOBS } from '@/lib/game/data'
+import { JOBS, normalizeJobId } from '@/lib/game/data'
 import { auth } from '@/lib/firebase/client'
 import {
   cancelDuelChallenge,
@@ -232,7 +232,7 @@ export function ArenaPanel() {
       {tab === 'arena' && (
         <div className="grid gap-2 sm:grid-cols-2">
           {opponents.map((opp) => {
-            const job = JOBS[opp.jobId] ?? JOBS.novice
+            const job = JOBS[normalizeJobId(opp.jobId)]
             const title = opp.activeTitle ? TITLE_DEFS.find((t) => t.id === opp.activeTitle) : null
             return (
               <div
@@ -477,7 +477,7 @@ export function ArenaPanel() {
               )
               .map((h, idx) => {
                 const isSelf = h.userId === myUid
-                const job = JOBS[h.jobId] ?? JOBS.novice
+                const job = JOBS[normalizeJobId(h.jobId)]
                 const metricDisplay =
                   sortMetric === 'tower'
                     ? `ชั้น ${h.highestTowerFloor}`

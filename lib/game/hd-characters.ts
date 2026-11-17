@@ -126,10 +126,10 @@ function drawHdWeapon(
   ctx.rotate(angle)
   const hi = shadeCol(weaponColor, 0.45)
   const dark = shadeCol(weaponColor, -0.28)
-  const gold = jobId === 'paladin' || jobId === 'gm' ? '#fde047' : '#e9c46a'
+  const gold = jobId === 'templar' || jobId === 'the_king' ? '#fde047' : '#e9c46a'
 
   if (weapon === 'sword') {
-    const heavy = jobId === 'knight' || jobId === 'paladin'
+    const heavy = jobId === 'templar' || jobId === 'the_king' || jobId === 'kensei'
     const len = heavy ? 46 : 40
     const bw = heavy ? 8 : 6
     // Pommel & hilt
@@ -198,7 +198,7 @@ function drawHdWeapon(
   } else if (weapon === 'staff') {
     ctx.strokeStyle = HD_INK
     ctx.lineWidth = 2.2
-    ctx.fillStyle = jobId === 'cleric' || jobId === 'gm' ? '#eab308' : '#784421'
+    ctx.fillStyle = jobId === 'cleric' || jobId === 'the_king' ? '#eab308' : '#784421'
     ctx.beginPath()
     ctx.roundRect(-18, -2.4, 54, 4.8, 2)
     ctx.fill()
@@ -908,7 +908,7 @@ export function renderHdMonsterSprite(
   ctx.strokeStyle = HD_INK
   ctx.lineWidth = 3.2
 
-  if (archetype === 'slime' || archetype === 'pink_slime') {
+  if (archetype === 'slime' || archetype === 'slime_blue' || archetype === 'pink_slime') {
     const rX = W * 0.34 * squashX
     const rY = H * 0.28 * squashY
     const cy = footY - rY + bob * 0.5
@@ -943,7 +943,7 @@ export function renderHdMonsterSprite(
       ctx.stroke()
     }
     if (dir !== 'up') {
-      const lookX = dir === 'right' ? 8 : 0
+      const lookX = dir === 'right' || dir === 'left' ? 8 : 0
       drawAnimeEye(ctx, cx - 12 + lookX, cy, 4.5, 6, '#1e1b4b', false, action === 'attack')
       drawAnimeEye(ctx, cx + 12 + lookX, cy, 4.5, 6, '#1e1b4b', false, action === 'attack')
     }
@@ -970,10 +970,11 @@ export function renderHdMonsterSprite(
       drawAnimeEye(ctx, cx - 8, footY - stemH * 0.55 + bob, 3.6, 5, '#291713', false)
       drawAnimeEye(ctx, cx + 8, footY - stemH * 0.55 + bob, 3.6, 5, '#291713', false)
     }
-  } else if (archetype === 'rabbit' || archetype === 'wolf') {
-    const isWolf = archetype === 'wolf'
-    const bodyRx = isWolf ? 34 : 24
-    const bodyRy = isWolf ? 24 : 22
+  } else if (archetype === 'rabbit' || archetype === 'wolf' || archetype === 'boss_wolf') {
+    const isBossWolf = archetype === 'boss_wolf'
+    const isWolf = archetype === 'wolf' || isBossWolf
+    const bodyRx = isBossWolf ? 38 : isWolf ? 34 : 24
+    const bodyRy = isBossWolf ? 28 : isWolf ? 24 : 22
     const cy = footY - bodyRy - 10 + bob * 0.6
     // Paws
     ctx.fillStyle = dark
@@ -989,8 +990,16 @@ export function renderHdMonsterSprite(
     ctx.ellipse(cx - 4, cy, bodyRx, bodyRy, 0, 0, Math.PI * 2)
     ctx.fill()
     ctx.stroke()
+    if (isBossWolf) {
+      // Armored gold shoulder plate on Boss Wolf
+      ctx.fillStyle = accent
+      ctx.beginPath()
+      ctx.roundRect(cx - 16, cy - bodyRy + 2, 28, 12, 5)
+      ctx.fill()
+      ctx.stroke()
+    }
     // Head & ears
-    const hx = cx + (dir === 'right' ? 18 : 0)
+    const hx = cx + (dir === 'right' || dir === 'left' ? 18 : 0)
     const hy = cy - 16
     for (const sx of [-1, 1]) {
       ctx.fillStyle = hi
@@ -1007,6 +1016,49 @@ export function renderHdMonsterSprite(
     if (dir !== 'up') {
       drawAnimeEye(ctx, hx - 7, hy - 2, 4, 5.2, isWolf ? '#ef4444' : '#be123c', false, isWolf)
       drawAnimeEye(ctx, hx + 8, hy - 2, 4, 5.2, isWolf ? '#ef4444' : '#be123c', false, isWolf)
+    }
+  } else if (archetype === 'spider' || archetype === 'boss_spider_queen') {
+    const isQueen = archetype === 'boss_spider_queen'
+    const bodyR = isQueen ? 26 : 20
+    const cy = footY - bodyR - 14 + bob * 0.6
+    // 8 jointed spider legs
+    ctx.strokeStyle = HD_INK
+    ctx.lineWidth = isQueen ? 5 : 4
+    for (const sx of [-1, 1]) {
+      for (let i = 0; i < 4; i++) {
+        const yOff = -8 + i * 7
+        const stride = action === 'walk' ? Math.sin((f / 6) * Math.PI * 2 + i) * 5 : 0
+        ctx.beginPath()
+        ctx.moveTo(cx + sx * (bodyR * 0.65), cy + yOff)
+        ctx.lineTo(cx + sx * (bodyR + 18), cy + yOff - 10 + stride)
+        ctx.lineTo(cx + sx * (bodyR + 24), footY - 2 + stride * 0.5)
+        ctx.stroke()
+      }
+    }
+    ctx.lineWidth = 3.2
+    // Abdomen & cephalothorax
+    ctx.fillStyle = gradVert(ctx, cx, cy - bodyR - 10, cy + bodyR, hi, dark)
+    ctx.beginPath()
+    ctx.ellipse(cx, cy - 4, bodyR * 1.15, bodyR * 0.95, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+    if (isQueen) {
+      ctx.fillStyle = '#fbbf24'
+      ctx.beginPath()
+      ctx.moveTo(cx - 14, cy - bodyR)
+      ctx.lineTo(cx - 16, cy - bodyR - 14)
+      ctx.lineTo(cx - 5, cy - bodyR - 6)
+      ctx.lineTo(cx, cy - bodyR - 18)
+      ctx.lineTo(cx + 5, cy - bodyR - 6)
+      ctx.lineTo(cx + 16, cy - bodyR - 14)
+      ctx.lineTo(cx + 14, cy - bodyR)
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+    }
+    if (dir !== 'up') {
+      drawAnimeEye(ctx, cx - 9, cy + 2, 4.4, 5.6, '#f43f5e', false, true)
+      drawAnimeEye(ctx, cx + 9, cy + 2, 4.4, 5.6, '#f43f5e', false, true)
     }
   } else if (archetype === 'bat' || archetype === 'ghost') {
     const isGhost = archetype === 'ghost'
@@ -1042,11 +1094,13 @@ export function renderHdMonsterSprite(
       drawAnimeEye(ctx, cx + 9, cy - 4, 4.5, 6, accent, false, !isGhost)
     }
   } else {
-    // Bold anime fantasy boss / golem / knight / demon / dragon / sentinel / goblin_chief
-    const isDragon = archetype === 'abyss_dragon'
+    // Bold anime fantasy boss / golem / knight / demon / dragon / sentinel / orc / lich / goblin_chief
+    const isDragon = archetype === 'abyss_dragon' || archetype === 'boss_fire_dragon'
     const isBoss =
       archetype === 'demon_lord' ||
-      archetype === 'abyss_dragon' ||
+      archetype === 'boss_demon_king' ||
+      archetype === 'boss_lich' ||
+      isDragon ||
       archetype === 'fire_golem' ||
       archetype === 'earth_golem' ||
       archetype === 'abyss_knight' ||
@@ -1055,7 +1109,13 @@ export function renderHdMonsterSprite(
     const cy = footY - 46 * scaleBody + bob
 
     // Wings / Aura spikes for bosses & demons
-    if (archetype === 'demon' || archetype === 'demon_lord' || isDragon || archetype === 'gale_sentinel') {
+    if (
+      archetype === 'demon' ||
+      archetype === 'demon_lord' ||
+      archetype === 'boss_demon_king' ||
+      isDragon ||
+      archetype === 'gale_sentinel'
+    ) {
       ctx.fillStyle = archetype === 'gale_sentinel' ? '#e0f2fe' : shadeCol(accent, -0.3)
       for (const sx of [-1, 1]) {
         ctx.beginPath()
@@ -1087,13 +1147,20 @@ export function renderHdMonsterSprite(
     ctx.fill()
     ctx.stroke()
     // Horned / Crowned Head
-    ctx.fillStyle = gradVert(ctx, cx, cy - 58, cy - 14, hi, color)
+    ctx.fillStyle = archetype === 'boss_lich' ? '#f1f5f9' : gradVert(ctx, cx, cy - 58, cy - 14, hi, color)
     ctx.beginPath()
     ctx.ellipse(cx, cy - 34, 24 * scaleBody, 22 * scaleBody, 0, 0, Math.PI * 2)
     ctx.fill()
     ctx.stroke()
-    if (archetype === 'demon' || archetype === 'demon_lord' || isDragon || archetype === 'goblin_chief') {
-      ctx.fillStyle = archetype === 'goblin_chief' ? '#fbbf24' : '#f8fafc'
+    if (
+      archetype === 'demon' ||
+      archetype === 'demon_lord' ||
+      archetype === 'boss_demon_king' ||
+      isDragon ||
+      archetype === 'goblin_chief' ||
+      archetype === 'boss_lich'
+    ) {
+      ctx.fillStyle = archetype === 'goblin_chief' || archetype === 'boss_lich' ? '#fbbf24' : '#f8fafc'
       for (const sx of [-1, 1]) {
         ctx.beginPath()
         ctx.moveTo(cx + sx * 12, cy - 48)
@@ -1259,7 +1326,7 @@ export function renderHdMountSprite(
   ctx.stroke()
 
   // Head
-  const hx = dir === 'right' ? cx + 38 : cx
+  const hx = dir === 'right' || dir === 'left' ? cx + 38 : cx
   const hy = footY - 68 + bob
   ctx.fillStyle = hi
   ctx.beginPath()

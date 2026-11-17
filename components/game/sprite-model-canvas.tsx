@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { JOBS, MONSTERS, type WeaponType } from '@/lib/game/data'
+import { JOBS, MONSTERS, normalizeJobId, type WeaponType } from '@/lib/game/data'
 import { getJobModelSpec, getMonsterModelSpec, getMountModelSpec, getPetModelSpec } from '@/lib/game/models-2d'
 import {
   type Dir,
@@ -120,7 +120,7 @@ export function SpriteModelCanvas({
         phaseCallbackRef.current?.(effectiveAction)
       }
 
-      const throttleMs = effectiveAction === 'idle' ? 120 : 80
+      const throttleMs = mode === 'monster' && effectiveAction === 'walk' ? 40 : effectiveAction === 'idle' ? 110 : 75
       if (!reducedMotion && lastDrawAt > 0 && now - lastDrawAt < throttleMs) {
         rafId = requestAnimationFrame(renderFrame)
         return
@@ -130,15 +130,14 @@ export function SpriteModelCanvas({
       const isAttack = effectiveAction === 'attack'
       const isSkill = effectiveAction === 'skill'
       const attackFrame = isAttack ? Math.min(3, Math.floor(attackProgress * 4)) : 0
-      const skillFrame = isSkill ? Math.min(5, Math.floor(attackProgress * 6)) : 0
-      const isGmJob = mode === 'job' && (isGm || id === 'gm')
-      const walkMod = isGmJob && dir === 'down' ? 8 : 6
+      const skillFrame = isSkill ? Math.min(3, Math.floor(attackProgress * 4)) : 0
+      const walkMod = 4
       const frame = isSkill
         ? skillFrame
         : isAttack
           ? attackFrame
           : effectiveAction === 'walk'
-            ? Math.floor(elapsed * (walkMod === 8 ? 11.5 : 9.5)) % walkMod
+            ? Math.floor(elapsed * (mode === 'job' ? 8.5 : 8.0)) % walkMod
             : mode === 'job' && !reducedMotion && Math.sin(elapsed * 1.4) > 0.96
               ? -1
               : Math.floor(elapsed * 2.6) % 4
@@ -150,9 +149,9 @@ export function SpriteModelCanvas({
       let isBoss = false
 
       if (mode === 'job') {
-        const jobDef = JOBS[id] ?? JOBS.novice
-        const spec = getJobModelSpec(id)
-        const colors = jobHumanColors(jobDef.id, jobDef.colors, isGm ?? jobDef.id === 'gm')
+        const jobDef = JOBS[normalizeJobId(id)]
+        const spec = getJobModelSpec(jobDef.id)
+        const colors = jobHumanColors(jobDef.id, jobDef.colors, false)
         const weapon = weaponOverride !== undefined ? weaponOverride : (jobDef.weaponTypes[0] ?? 'stick')
         const wColor = weaponColorOverride ?? jobDef.colors.accent
         spriteImg = humanSprite(
@@ -209,7 +208,11 @@ export function SpriteModelCanvas({
           ? Math.round(elapsed * 8)
           : 0
       const gmReady = spriteImg.dataset?.gmReady === '1'
-      const sig = `${effectiveAction}|${frame}|${hoverY}|${lungeOffset}|${slashBucket}|${auraBucket}|${rebirthCount}|${gmReady ? '1' : '0'}`
+      const mMotionBucket =
+        mode === 'monster' && (effectiveAction === 'walk' || effectiveAction === 'idle') && !reducedMotion
+          ? Math.round(elapsed * 24)
+          : 0
+      const sig = `${effectiveAction}|${frame}|${hoverY}|${lungeOffset}|${slashBucket}|${auraBucket}|${rebirthCount}|${gmReady ? '1' : '0'}|${mMotionBucket}`
 
       if (sig !== lastSig) {
         lastSig = sig
@@ -278,13 +281,38 @@ export function SpriteModelCanvas({
           if (isGhost) {
             ctx.globalAlpha = 0.84 + (reducedMotion ? 0 : Math.sin(elapsed * 4) * 0.08)
           }
+          const isMonsterWalk = mode === 'monster' && effectiveAction === 'walk' && !reducedMotion
+          const isMonsterIdle = mode === 'monster' && effectiveAction === 'idle' && !reducedMotion
+          const isBouncyMonster = mode === 'monster' && (id.includes('slime') || id === 'mushroom' || id === 'rabbit')
+          const mBounce = isMonsterWalk
+            ? -Math.abs(Math.sin(elapsed * 9.0)) * (isBouncyMonster ? 6 : isFlying ? 3 : 4)
+            : 0
+          const mSx = isMonsterWalk
+            ? (isBouncyMonster ? 1 - Math.sin(elapsed * 18) * 0.055 : 1 + Math.cos(elapsed * 9) * 0.025)
+            : isMonsterIdle
+              ? 1 - Math.sin(elapsed * 2.8) * 0.018
+              : 1
+          const mSy = isMonsterWalk
+            ? (isBouncyMonster ? 1 + Math.sin(elapsed * 18) * 0.055 : 1 - Math.cos(elapsed * 9) * 0.025)
+            : isMonsterIdle
+              ? 1 + Math.sin(elapsed * 2.8) * 0.022
+              : 1
+          const mTilt = isMonsterWalk && !isBouncyMonster ? Math.sin(elapsed * 9.0) * 0.04 : 0
+
+          const drawX = Math.round(centerX + lungeOffset)
+          const drawAnchorY = Math.round(baseFloorY + hoverY + mBounce)
+          ctx.save()
+          ctx.translate(drawX, drawAnchorY)
+          if (mTilt !== 0) ctx.rotate(mTilt)
+          ctx.scale(mSx, mSy)
           ctx.drawImage(
             spriteImg,
-            Math.round(centerX + lungeOffset - drawW / 2),
-            Math.round(baseFloorY + hoverY - drawH + footPad),
+            Math.round(-drawW / 2),
+            Math.round(-drawH + footPad),
             drawW,
             drawH,
           )
+          ctx.restore()
 
           if (isAttack && !gmReady && !spriteImg.dataset?.sheetId && attackProgress > 0.2 && attackProgress < 0.85) {
             const slashAlpha = Math.max(0, 1 - Math.abs(attackProgress - 0.5) * 2.4)

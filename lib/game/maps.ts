@@ -652,10 +652,12 @@ function buildMeadow(): MapDef {
     { to: 'town', tx: 40, ty: 15, label: 'เมืองปราการเริ่มต้น' },
     { to: 'forest', tx: 3, ty: 18, label: 'ป่าลึกลับ Lv.10-20' },
     [
-      { monsterId: 'slime', count: 10 },
-      { monsterId: 'pink_slime', count: 7 },
-      { monsterId: 'mushroom', count: 6 },
+      { monsterId: 'slime', count: 8 },
+      { monsterId: 'slime_blue', count: 8 },
+      { monsterId: 'pink_slime', count: 6 },
+      { monsterId: 'mushroom', count: 5 },
       { monsterId: 'rabbit', count: 5 },
+      { monsterId: 'boss_wolf', count: 1 },
     ],
   )
 }
@@ -715,9 +717,11 @@ function buildForest(): MapDef {
     { to: 'meadow', tx: 48, ty: 18, label: 'ทุ่งหญ้าสายลม Lv.1-10' },
     { to: 'cave', tx: 3, ty: 18, label: 'ถ้ำมืด Lv.20-35' },
     [
-      { monsterId: 'wolf', count: 11 },
+      { monsterId: 'wolf', count: 10 },
       { monsterId: 'goblin', count: 10 },
+      { monsterId: 'boss_spider_queen', count: 1 },
       { monsterId: 'goblin_chief', count: 1 },
+      { monsterId: 'boss_lich', count: 1 },
     ],
   )
 }
@@ -778,9 +782,14 @@ function buildCave(): MapDef {
     { to: 'forest', tx: 48, ty: 18, label: 'ป่าลึกลับ Lv.10-20' },
     { to: 'volcano', tx: 3, ty: 18, label: 'แมพลาวา Lv.35-50' },
     [
-      { monsterId: 'bat', count: 11 },
-      { monsterId: 'skeleton', count: 10 },
-      { monsterId: 'ghost', count: 8 },
+      { monsterId: 'bat', count: 9 },
+      { monsterId: 'spider', count: 8 },
+      { monsterId: 'skeleton', count: 8 },
+      { monsterId: 'orc', count: 6 },
+      { monsterId: 'golem', count: 5 },
+      { monsterId: 'ghost', count: 6 },
+      { monsterId: 'boss_fire_dragon', count: 1 },
+      { monsterId: 'boss_demon_king', count: 1 },
       { monsterId: 'earth_golem', count: 1 },
     ],
   )

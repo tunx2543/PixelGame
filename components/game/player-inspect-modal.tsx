@@ -11,7 +11,7 @@ import {
   type InspectedPlayerProfile,
 } from '@/lib/firebase/mmo-online'
 import { formatPresenceStatusLabel } from '@/lib/firebase/presence-helpers'
-import { JOBS } from '@/lib/game/data'
+import { JOBS, normalizeJobId } from '@/lib/game/data'
 import {
   blockPlayerAction,
   game,
@@ -72,7 +72,7 @@ export function PlayerInspectModal() {
             userId: target.userId,
             gameUid: target.gameUid ?? online?.gameUid ?? '1000',
             name: target.displayName || online?.displayName || 'นักผจญภัย',
-            jobId: online?.jobId ?? 'novice',
+            jobId: normalizeJobId(online?.jobId),
             level: online?.level ?? 1,
             rebirthCount: 0,
             combatPower: Math.max(120, (online?.level ?? 1) * 55),
@@ -101,8 +101,8 @@ export function PlayerInspectModal() {
   const selfUid = firebaseAuth.currentUser?.uid ?? 'guest_player'
   const isSelf = Boolean(profile && (profile.userId === selfUid || (p.gameUid && profile.gameUid === p.gameUid)))
   const blocked = profile ? isPlayerBlocked(profile.userId) : isPlayerBlocked(target.userId)
-  const job = JOBS[profile?.jobId ?? 'novice'] ?? JOBS.novice
-  const roleLabel = getJobRoleLabel(getJobRole(profile?.jobId ?? 'novice'))
+  const job = JOBS[normalizeJobId(profile?.jobId)]
+  const roleLabel = getJobRoleLabel(getJobRole(normalizeJobId(profile?.jobId)))
   const titleDef = profile?.activeTitle ? TITLE_DEFS.find((t) => t.id === profile.activeTitle) : null
 
   const closeModal = () => {

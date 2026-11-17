@@ -152,8 +152,8 @@ export function buildWorldPresencePayload(input: BuildPresenceInput): WorldPrese
 
   const rawName = typeof input.name === 'string' ? input.name.trim() : ''
   const displayName = rawName.slice(0, 24) || 'นักผจญภัย'
-  let jobId = sanitizeSafePresenceId(input.jobId, 'novice', 32)
-  if (!gm && jobId === 'gm') jobId = 'novice'
+  let jobId = sanitizeSafePresenceId(input.jobId, 'swordsman', 32)
+  if (jobId === 'gm') jobId = 'swordsman'
   const mapId = sanitizeSafePresenceId(input.mapId, 'town', 32)
   const facing: PresenceFacing = VALID_FACING.has(input.facing as PresenceFacing)
     ? (input.facing as PresenceFacing)
@@ -253,7 +253,7 @@ export function parseWorldPresenceToRemotePlayer(
   const facing: PresenceFacing = VALID_FACING.has(docData.facing as PresenceFacing)
     ? (docData.facing as PresenceFacing)
     : 'down'
-  const jobId = sanitizeSafePresenceId(docData.jobId, 'novice', 32)
+  const jobId = sanitizeSafePresenceId(docData.jobId, 'swordsman', 32)
   const displayName =
     (typeof docData.displayName === 'string' ? docData.displayName.trim() : '').slice(0, 24) || 'นักผจญภัย'
   const gameUid = normalizeGameUidInput(docData.gameUid as string | undefined) ?? undefined

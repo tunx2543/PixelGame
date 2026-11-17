@@ -27,7 +27,7 @@ import {
 import { auth } from '@/lib/firebase/client'
 import { listUserCharacters } from '@/lib/firebase/characters'
 import { AccountPanel } from './account-panel'
-import { JOBS, MAX_LEVEL, expToNext, type SkillDef } from '@/lib/game/data'
+import { JOBS, MAX_LEVEL, expToNext, normalizeJobId, type SkillDef } from '@/lib/game/data'
 import { getSkillIconPath, getSkillVfxSpec } from '@/lib/game/vfx-specs'
 import {
   SAVE_KEY,
@@ -486,7 +486,7 @@ export function TowerArena() {
       }
 
       const nextSave: SaveData = structuredClone(currentSave)
-      const job = JOBS[nextSave.jobId] ?? JOBS.novice
+      const job = JOBS[normalizeJobId(nextSave.jobId)]
 
       if (skill) {
         nextSave.mp -= skill.mp
@@ -944,7 +944,7 @@ export function TowerArena() {
       if (key === '1' || key === '2' || key === '3') {
         const s = saveRef.current
         if (!s) return
-        const job = JOBS[s.jobId] ?? JOBS.novice
+        const job = JOBS[normalizeJobId(s.jobId)]
         const skill = job.skills[Number(key) - 1]
         if (skill) executeHeroAttack(skill)
       } else if (key === 'q') {
@@ -980,7 +980,7 @@ export function TowerArena() {
     )
   }
 
-  const job = JOBS[save.jobId] ?? JOBS.novice
+  const job = JOBS[normalizeJobId(save.jobId)]
   const towerState = sanitizeTowerState(save.towerState)
   const maxSelectableFloor = towerState.highestFloor + 1
   const expNeed = expToNext(save.level)

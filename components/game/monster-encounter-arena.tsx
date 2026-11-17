@@ -21,7 +21,7 @@ import {
 import { auth } from '@/lib/firebase/client'
 import { listUserCharacters } from '@/lib/firebase/characters'
 import { AccountPanel } from './account-panel'
-import { ITEMS, JOBS, MAX_LEVEL, MAX_PLUS, enhanceCost, enhanceRate, expToNext, type SkillDef } from '@/lib/game/data'
+import { ITEMS, JOBS, MAX_LEVEL, MAX_PLUS, enhanceCost, enhanceRate, expToNext, normalizeJobId, type SkillDef } from '@/lib/game/data'
 import { getSkillIconPath, getSkillVfxSpec } from '@/lib/game/vfx-specs'
 import {
   SAVE_KEY,
@@ -437,7 +437,7 @@ export function MonsterEncounterArena() {
       }
 
       const nextSave: SaveData = structuredClone(currentSave)
-      const job = JOBS[nextSave.jobId] ?? JOBS.novice
+      const job = JOBS[normalizeJobId(nextSave.jobId)]
 
       if (skill) {
         nextSave.mp -= skill.mp
@@ -921,7 +921,7 @@ export function MonsterEncounterArena() {
       if (key === '1' || key === '2' || key === '3') {
         const s = saveRef.current
         if (!s) return
-        const job = JOBS[s.jobId] ?? JOBS.novice
+        const job = JOBS[normalizeJobId(s.jobId)]
         const skill = job.skills[Number(key) - 1]
         if (skill) executeHeroAttack(skill)
       } else if (key === 'q') {
@@ -943,7 +943,7 @@ export function MonsterEncounterArena() {
 
   const ownedWeapons = useMemo(() => {
     if (!save) return []
-    const job = JOBS[save.jobId] ?? JOBS.novice
+    const job = JOBS[normalizeJobId(save.jobId)]
     return save.inventory.filter((item) => {
       const def = ITEMS[item.itemId]
       return (

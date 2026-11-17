@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { ITEMS, JOBS, type WeaponType } from '@/lib/game/data'
+import { ITEMS, JOBS, normalizeJobId, type WeaponType } from '@/lib/game/data'
 import type { SaveData } from '@/lib/game/engine'
 import type { EncounterBiome, EncounterEnemy } from '@/lib/game/encounter'
 import type { FloatingDamagePopup } from '@/lib/game/floating-damage'
@@ -282,7 +282,7 @@ export function EncounterStageCanvas({
           const enemyX = Math.round(w * 0.73)
 
           // --- Hero Sprite ---
-          const job = JOBS[s.jobId] ?? JOBS.novice
+          const job = JOBS[normalizeJobId(s.jobId)]
           const equippedWeapon = s.equipment.weapon ? ITEMS[s.equipment.weapon.itemId] : null
           const weaponType: WeaponType = equippedWeapon?.weaponType ?? job.weaponTypes[0] ?? 'stick'
           const weaponColor = equippedWeapon?.color ?? job.colors.accent
@@ -301,11 +301,11 @@ export function EncounterStageCanvas({
           const heroFrame = heroStrike
             ? heroAttackFrame
             : heroStepIn
-              ? Math.floor(pAtkAge * 24) % 6
+              ? Math.floor(pAtkAge * 16) % 4
               : Math.sin(t * 1.4) > 0.96
                 ? -1
                 : Math.floor(t * (ph === 'FIGHTING' ? 3.2 : 2.2)) % 4
-          const styledJobColors = jobHumanColors(s.jobId, job.colors, s.gm)
+          const styledJobColors = jobHumanColors(job.id, job.colors, false)
           const heroSprite = humanSprite(
             styledJobColors,
             'right',

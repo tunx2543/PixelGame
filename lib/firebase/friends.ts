@@ -67,7 +67,7 @@ export async function lookupPlayerByGameUid(rawInput: string): Promise<PlayerUid
       displayName: String(d.displayName || 'นักผจญภัย'),
       characterName: String(d.characterName || d.displayName || 'นักผจญภัย'),
       level: Number(d.level || 1),
-      jobId: String(d.jobId || 'novice'),
+      jobId: String(d.jobId || 'swordsman'),
       isGm: Boolean(d.isGm),
     }
   } catch (error) {

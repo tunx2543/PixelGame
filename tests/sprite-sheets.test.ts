@@ -154,21 +154,29 @@ describe('HD Transparent Sprite Sheets & Anchors', () => {
     }
   })
 
-  it('maps every job in JOBS (21/21) and every monster in MONSTERS (17/17) consistently', () => {
+  it('maps every job in JOBS (24/24) and every monster in MONSTERS (26/26) consistently', () => {
+    assert.equal(Object.keys(JOBS).length, 24)
+    assert.equal(Object.keys(MONSTERS).length, 26)
+
     for (const jobId of Object.keys(JOBS)) {
       assert.ok(JOB_TO_HERO_SHEET[jobId], `Missing hero sheet mapping for job ${jobId}`)
       const spec = resolveHeroSheetSpec(jobId)
       assert.ok(spec, `resolveHeroSheetSpec failed for ${jobId}`)
     }
 
+    const activeSheets = new Set<string>()
     for (const monsterId of Object.keys(MONSTERS)) {
       assert.equal(monsterId in MONSTER_ID_TO_SHEET, true, `Monster ${monsterId} missing from MONSTER_ID_TO_SHEET`)
       const spec = resolveMonsterSheetSpec(monsterId, MONSTERS[monsterId].sprite)
       if (MONSTER_ID_TO_SHEET[monsterId] !== null) {
         assert.ok(spec, `Expected non-null sheet spec for ${monsterId}`)
+        activeSheets.add(spec.id)
       } else {
         assert.equal(spec, null)
       }
     }
+
+    // All 15 HD monster/boss sprite sheets are actively linked to MONSTERS
+    assert.equal(activeSheets.size, Object.keys(MONSTER_SPRITE_SHEETS).length)
   })
 })

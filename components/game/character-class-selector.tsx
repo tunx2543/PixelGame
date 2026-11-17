@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Droplets, Footprints, Heart, Play, RotateCw, Shield, Sparkles, Swords, Target, Wand2, Zap } from 'lucide-react'
+import { Coins, Droplets, Footprints, Heart, Play, RotateCw, Shield, Sparkles, Swords, Target, Wand2, Zap } from 'lucide-react'
 import { JOBS, type JobDef } from '@/lib/game/data'
 import { MODEL_DIRS, type ModelDir } from '@/lib/game/models-2d'
 import { getSkillIconPath, getSkillVfxSpec, resolveRebirthAuraSpec } from '@/lib/game/vfx-specs'
@@ -9,7 +9,7 @@ import { formatNum } from './format'
 import { SkillVfxPreview } from './skill-vfx-preview'
 import { SpriteModelCanvas, type PreviewAction } from './sprite-model-canvas'
 
-export type SelectableClassId = 'swordsman' | 'mage' | 'archer'
+export type SelectableClassId = 'swordsman' | 'mage' | 'archer' | 'cleric' | 'merchant' | 'thief'
 
 const DIR_LABELS: Record<ModelDir, string> = {
   down: 'หน้า',
@@ -42,7 +42,7 @@ export interface ComputedBaseStats {
 export const CLASS_ROLE_OPTIONS: ClassRoleOption[] = [
   {
     id: 'swordsman',
-    englishName: 'Warrior',
+    englishName: 'Swordsman',
     thaiName: 'นักดาบ',
     tagline: 'แนวหน้าอึดถึก พลังชีวิตและพลังป้องกันสูง',
     accentClass: 'border-[#e5484d]/70 bg-[#e5484d]/15 text-[#ff8b8e]',
@@ -67,6 +67,33 @@ export const CLASS_ROLE_OPTIONS: ClassRoleOption[] = [
     badgeClass: 'bg-[#4fc3a1]/20 text-[#7de2c4]',
     job: JOBS.archer,
   },
+  {
+    id: 'cleric',
+    englishName: 'Cleric',
+    thaiName: 'นักบวช',
+    tagline: 'เวทแสงศักดิ์สิทธิ์ ฟื้นฟู HP และช่วยสนับสนุนทีม',
+    accentClass: 'border-[#f4d35e]/70 bg-[#f4d35e]/15 text-[#fde68a]',
+    badgeClass: 'bg-[#f4d35e]/20 text-[#fde68a]',
+    job: JOBS.cleric,
+  },
+  {
+    id: 'merchant',
+    englishName: 'Merchant',
+    thaiName: 'พ่อค้า',
+    tagline: 'เชี่ยวชาญการค้า เพิ่มทองดรอป +15% และตีหนัก',
+    accentClass: 'border-[#f59e0b]/70 bg-[#f59e0b]/15 text-[#fcd34d]',
+    badgeClass: 'bg-[#f59e0b]/20 text-[#fcd34d]',
+    job: JOBS.merchant,
+  },
+  {
+    id: 'thief',
+    englishName: 'Thief',
+    thaiName: 'โจร',
+    tagline: 'ว่องไวสูงสุด มีดคู่โจมตีเร็วและคริติคอลรุนแรง',
+    accentClass: 'border-[#c77dff]/70 bg-[#c77dff]/15 text-[#e9d5ff]',
+    badgeClass: 'bg-[#c77dff]/20 text-[#e9d5ff]',
+    job: JOBS.thief,
+  },
 ]
 
 export function calculateClassBaseStats(classId: string, level = 10): ComputedBaseStats {
@@ -87,6 +114,9 @@ export function calculateClassBaseStats(classId: string, level = 10): ComputedBa
 function ClassIcon({ classId, className }: { classId: SelectableClassId; className?: string }) {
   if (classId === 'swordsman') return <Swords className={className} aria-hidden />
   if (classId === 'mage') return <Wand2 className={className} aria-hidden />
+  if (classId === 'cleric') return <Sparkles className={className} aria-hidden />
+  if (classId === 'merchant') return <Coins className={className} aria-hidden />
+  if (classId === 'thief') return <Zap className={className} aria-hidden />
   return <Target className={className} aria-hidden />
 }
 
@@ -178,13 +208,13 @@ export function CharacterClassSelector({
   return (
     <section
       aria-label="เลือกสายอาชีพตัวละคร"
-      className="pixel-panel w-full max-w-xl p-4 text-foreground"
+      className="pixel-panel w-full max-w-2xl p-4 text-foreground"
     >
       <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-border/70 pb-3">
         <div>
           <h2 className="text-base font-bold text-primary">เลือกสายอาชีพ (Character Class)</h2>
           <p className="text-xs text-muted-foreground">
-            สลับระหว่าง Warrior, Mage และ Archer เพื่อปรับค่าสถานะพื้นฐานทันที
+            สลับระหว่าง Swordsman, Mage, Archer, Cleric, Merchant และ Thief เพื่อปรับค่าสถานะพื้นฐานทันที
           </p>
         </div>
 
@@ -219,7 +249,7 @@ export function CharacterClassSelector({
       </div>
 
       {/* Class Selector Buttons */}
-      <div role="radiogroup" aria-label="สายอาชีพ" className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <div role="radiogroup" aria-label="สายอาชีพ" className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {CLASS_ROLE_OPTIONS.map((role) => {
           const isSelected = role.id === activeRole.id
           return (
@@ -229,15 +259,15 @@ export function CharacterClassSelector({
               role="radio"
               aria-checked={isSelected}
               onClick={() => selectRole(role)}
-              className={`pixel-btn flex flex-col items-start gap-1.5 p-3 text-left transition-all ${
+              className={`pixel-btn flex min-w-0 flex-col items-start gap-1.5 overflow-hidden p-2.5 text-left transition-all ${
                 isSelected
                   ? `${role.accentClass} ring-2 ring-primary/70`
                   : 'bg-secondary/70 text-muted-foreground hover:bg-secondary hover:text-foreground'
               }`}
             >
-              <div className="flex w-full items-center justify-between">
-                <span className="flex items-center gap-1.5 text-sm font-bold text-foreground">
-                  <ClassIcon classId={role.id} className="size-4" />
+              <div className="flex w-full flex-wrap items-center justify-between gap-1">
+                <span className="flex items-center gap-1 text-[13px] font-bold text-foreground">
+                  <ClassIcon classId={role.id} className="size-3.5 shrink-0" />
                   {role.englishName}
                 </span>
                 <span className={`shrink-0 whitespace-nowrap px-1.5 py-0.5 text-[10px] font-semibold ${role.badgeClass}`}>
@@ -294,7 +324,7 @@ export function CharacterClassSelector({
             <div>
               <p className="text-xs font-bold text-primary">โมเดล 2D: {activeRole.thaiName}</p>
               <p className="text-[11px] text-muted-foreground">
-                อาวุธ: {activeRole.job.weaponTypes[0]} • Idle 4F / Walk 6F / Attack 4F
+                อาวุธ: {activeRole.job.weaponTypes[0]} • Idle 4F / Walk 4F / Attack 4F / Skill 4F
               </p>
               <div className="mt-1.5 flex flex-wrap gap-1">
                 {(
@@ -303,6 +333,7 @@ export function CharacterClassSelector({
                     ['idle', 'Idle'],
                     ['walk', 'Walk'],
                     ['attack', 'Attack'],
+                    ['skill', 'Skill'],
                   ] as Array<[PreviewAction, string]>
                 ).map(([act, lbl]) => (
                   <button

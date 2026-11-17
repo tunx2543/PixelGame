@@ -1,4 +1,4 @@
-import { ITEMS, JOBS, MONSTERS, type EquipmentSlot } from './data'
+import { ITEMS, JOBS, MONSTERS, normalizeJobId, type EquipmentSlot } from './data'
 import type { InvItem, SaveData } from './engine'
 
 /* ========================================================================== */
@@ -197,14 +197,23 @@ export function getElementMultiplier(
 
 const MONSTER_ELEMENT_MAP: Record<string, ElementType> = {
   slime: 'ice',
+  slime_blue: 'ice',
   pink_slime: 'ice',
   mushroom: 'earth',
   rabbit: 'neutral',
+  boss_wolf: 'earth',
   wolf: 'earth',
   goblin: 'neutral',
+  boss_spider_queen: 'dark',
   goblin_chief: 'earth',
+  boss_lich: 'dark',
   bat: 'dark',
+  spider: 'dark',
+  boss_fire_dragon: 'fire',
   skeleton: 'dark',
+  orc: 'earth',
+  golem: 'earth',
+  boss_demon_king: 'dark',
   ghost: 'dark',
   fire_golem: 'fire',
   earth_golem: 'earth',
@@ -331,11 +340,16 @@ export const TITLE_DEFS: TitleDef[] = [
 export function evaluateUnlockedTitleIds(save: Pick<SaveData, 'kills' | 'rebirthCount' | 'questState' | 'towerState' | 'rpgExt'>): string[] {
   const ext = sanitizeRpgExt(save.rpgExt)
   const unlocked = new Set<string>(['novice_traveler', ...ext.titles])
-  const slimeKills = (ext.bestiary.slime ?? 0) + (ext.bestiary.pink_slime ?? 0)
+  const slimeKills = (ext.bestiary.slime ?? 0) + (ext.bestiary.slime_blue ?? 0) + (ext.bestiary.pink_slime ?? 0)
   const goblinKills = ext.bestiary.goblin ?? 0
   const goblinBoss = ext.bestiary.goblin_chief ?? 0
   const totalBossKills = (save.questState?.totalBossKills ?? 0) +
+    (ext.bestiary.boss_wolf ?? 0) +
+    (ext.bestiary.boss_spider_queen ?? 0) +
     (ext.bestiary.goblin_chief ?? 0) +
+    (ext.bestiary.boss_lich ?? 0) +
+    (ext.bestiary.boss_fire_dragon ?? 0) +
+    (ext.bestiary.boss_demon_king ?? 0) +
     (ext.bestiary.earth_golem ?? 0) +
     (ext.bestiary.demon_lord ?? 0) +
     (ext.bestiary.abyss_dragon ?? 0)
@@ -967,12 +981,12 @@ export function computeCombatPower(
 }
 
 export const SEED_RIVAL_HEROES: LeaderboardHeroEntry[] = [
-  { userId: 'seed_kael', gameUid: '1042', name: 'เคเอลผู้พิทักษ์', jobId: 'knight', level: 48, rebirthCount: 2, combatPower: 3420, arenaRating: 1280, arenaWins: 18, highestTowerFloor: 24, activeTitle: 'boss_breaker', guildName: 'ภาคีอัศวินแสง', isSeed: true },
-  { userId: 'seed_lyra', gameUid: '2098', name: 'ไลราสายฟ้า', jobId: 'wizard', level: 55, rebirthCount: 3, combatPower: 4650, arenaRating: 1410, arenaWins: 27, highestTowerFloor: 31, activeTitle: 'tower_conqueror', guildName: 'หอคอยดารา', isSeed: true },
-  { userId: 'seed_zen', gameUid: '3115', name: 'เซนเงาจันทรา', jobId: 'assassin', level: 62, rebirthCount: 5, combatPower: 6850, arenaRating: 1620, arenaWins: 44, highestTowerFloor: 42, activeTitle: 'reborn_ascendant', guildName: 'เงาอเวจี', isSeed: true },
+  { userId: 'seed_kael', gameUid: '1042', name: 'เคเอลผู้พิทักษ์', jobId: 'templar', level: 48, rebirthCount: 2, combatPower: 3420, arenaRating: 1280, arenaWins: 18, highestTowerFloor: 24, activeTitle: 'boss_breaker', guildName: 'ภาคีอัศวินแสง', isSeed: true },
+  { userId: 'seed_lyra', gameUid: '2098', name: 'ไลราสายฟ้า', jobId: 'wicked_necromancer', level: 55, rebirthCount: 3, combatPower: 4650, arenaRating: 1410, arenaWins: 27, highestTowerFloor: 31, activeTitle: 'tower_conqueror', guildName: 'หอคอยดารา', isSeed: true },
+  { userId: 'seed_zen', gameUid: '3115', name: 'เซนเงาจันทรา', jobId: 'sinister', level: 62, rebirthCount: 5, combatPower: 6850, arenaRating: 1620, arenaWins: 44, highestTowerFloor: 42, activeTitle: 'reborn_ascendant', guildName: 'เงาอเวจี', isSeed: true },
   { userId: 'seed_aria', gameUid: '4081', name: 'อาเรียผู้เยียวยา', jobId: 'cleric', level: 36, rebirthCount: 1, combatPower: 2150, arenaRating: 1120, arenaWins: 9, highestTowerFloor: 15, activeTitle: 'guild_pillar', guildName: 'วิหารแห่งแสง', isSeed: true },
-  { userId: 'seed_kuro', gameUid: '5177', name: 'คุโระนักล่า', jobId: 'hunter', level: 24, rebirthCount: 0, combatPower: 1180, arenaRating: 1030, arenaWins: 5, highestTowerFloor: 9, activeTitle: 'goblin_slayer', guildName: 'พรานไพร', isSeed: true },
-  { userId: 'seed_mira', gameUid: '6019', name: 'มิร่าพาลาดิน', jobId: 'paladin', level: 16, rebirthCount: 0, combatPower: 690, arenaRating: 980, arenaWins: 2, highestTowerFloor: 5, activeTitle: 'slime_hunter', guildName: null, isSeed: true },
+  { userId: 'seed_kuro', gameUid: '5177', name: 'คุโระนักล่า', jobId: 'mamushi', level: 24, rebirthCount: 0, combatPower: 1180, arenaRating: 1030, arenaWins: 5, highestTowerFloor: 9, activeTitle: 'goblin_slayer', guildName: 'พรานไพร', isSeed: true },
+  { userId: 'seed_mira', gameUid: '6019', name: 'มิร่าเคนเซ', jobId: 'kensei', level: 16, rebirthCount: 0, combatPower: 690, arenaRating: 980, arenaWins: 2, highestTowerFloor: 5, activeTitle: 'slime_hunter', guildName: null, isSeed: true },
 ]
 
 export interface PvpRoundLog {
@@ -998,7 +1012,7 @@ export function simulatePvpBattle(
   opponent: LeaderboardHeroEntry,
   rng: () => number = Math.random,
 ): PvpSimulationResult {
-  const oppJob = JOBS[opponent.jobId] ?? JOBS.novice
+  const oppJob = JOBS[normalizeJobId(opponent.jobId)]
   const oppMaxHp = Math.max(120, Math.round(opponent.combatPower * 0.95))
   const oppAtk = Math.max(15, Math.round(opponent.combatPower * 0.115 * (oppJob.atkMul / 1.3)))
   const oppDef = Math.max(8, Math.round(opponent.combatPower * 0.08))
@@ -1007,7 +1021,7 @@ export function simulatePvpBattle(
   let pHp = Math.max(1, playerStats.maxHp)
   let oHp = oppMaxHp
   const rounds: PvpRoundLog[] = []
-  const pJob = JOBS[playerStats.jobId] ?? JOBS.novice
+  const pJob = JOBS[normalizeJobId(playerStats.jobId)]
 
   for (let round = 1; round <= 12 && pHp > 0 && oHp > 0; round++) {
     // Player turn

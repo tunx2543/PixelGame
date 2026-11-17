@@ -14,7 +14,7 @@ import {
   type UserAccountIdentity,
 } from '@/lib/firebase/characters'
 import { PERMANENT_GM_UID } from '@/lib/game/permissions'
-import { JOBS } from '@/lib/game/data'
+import { JOBS, normalizeJobId, STARTER_JOB_IDS } from '@/lib/game/data'
 import {
   SAVE_KEY,
   deleteAccountCharacter,
@@ -45,6 +45,7 @@ export function TitleScreen() {
   const [recoverableSaves, setRecoverableSaves] = useState<RecoverableLocalSave[]>([])
   const [mode, setMode] = useState<'list' | 'new'>('list')
   const [name, setName] = useState('')
+  const [starterJobId, setStarterJobId] = useState<string>('swordsman')
   const [selectedSlotForNew, setSelectedSlotForNew] = useState<CharacterSlotId>('slot_1')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [isLoadingSave, setIsLoadingSave] = useState(true)
@@ -123,13 +124,25 @@ export function TitleScreen() {
 
   useEffect(() => {
     let active = true
+    let resolvedAuth = false
+    const authFallbackTimer = window.setTimeout(() => {
+      if (!active || resolvedAuth) return
+      const fallback = readSave()
+      setGuestSave(fallback)
+      setMode(fallback ? 'list' : 'new')
+      setIsLoadingSave(false)
+    }, 3500)
+
     const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
       if (!active) return
+      resolvedAuth = true
+      window.clearTimeout(authFallbackTimer)
       setUser(nextUser)
       void refreshCharacters(nextUser)
     })
     return () => {
       active = false
+      window.clearTimeout(authFallbackTimer)
       unsubscribe()
     }
   }, [refreshCharacters])
@@ -175,7 +188,7 @@ export function TitleScreen() {
       setActiveCharacterSlot('slot_1')
       if (guestSave) deleteSave()
     }
-    newGame(name)
+    newGame(name, starterJobId)
     setName('')
   }
 
@@ -262,7 +275,7 @@ export function TitleScreen() {
               พบ{entry.sourceLabel}: {entry.saveData.name} (Lv.{entry.saveData.level})
             </p>
             <p className="text-[10px] text-muted-foreground">
-              {JOBS[entry.saveData.jobId]?.name ?? 'ผู้ฝึกหัด'} • กดนำเข้าเพื่อบันทึกขึ้นคลาวด์ในบัญชีนี้
+              {JOBS[normalizeJobId(entry.saveData.jobId)].name} • กดนำเข้าเพื่อบันทึกขึ้นคลาวด์ในบัญชีนี้
             </p>
           </div>
           <button
@@ -380,7 +393,7 @@ export function TitleScreen() {
                         <div className="min-w-0">
                           <p className="truncate text-base font-bold text-primary">{char.name}</p>
                           <p className="text-xs text-foreground">
-                            Lv.{char.level} {JOBS[char.jobId]?.name ?? 'ผู้ฝึกหัด'} •{' '}
+                            Lv.{char.level} {JOBS[normalizeJobId(char.jobId)].name} •{' '}
                             {MAPS[char.mapId]?.name ?? 'เมือง'}
                           </p>
                         </div>
@@ -454,7 +467,7 @@ export function TitleScreen() {
                   <p className="text-xs text-muted-foreground">ตัวละคร Guest ในเครื่องนี้</p>
                   <p className="mt-0.5 truncate text-lg text-primary">{guestSave.name}</p>
                   <p className="text-sm text-foreground">
-                    Lv.{guestSave.level} {JOBS[guestSave.jobId]?.name ?? 'ผู้ฝึกหัด'} •{' '}
+                    Lv.{guestSave.level} {JOBS[normalizeJobId(guestSave.jobId)].name} •{' '}
                     {MAPS[guestSave.mapId]?.name ?? 'เมือง'}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
@@ -501,6 +514,39 @@ export function TitleScreen() {
                 autoFocus
                 className="rounded-lg border-2 border-[#c9963b]/60 bg-[#1a1314] px-3 py-2 text-foreground outline-none focus:border-amber-400"
               />
+              <div>
+                <p className="mb-1.5 text-xs text-muted-foreground">เลือกอาชีพเริ่มต้น (6 คลาสหลัก)</p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {STARTER_JOB_IDS.map((jid) => {
+                    const j = JOBS[jid]
+                    const picked = starterJobId === jid
+                    return (
+                      <button
+                        key={jid}
+                        type="button"
+                        onClick={() => setStarterJobId(jid)}
+                        aria-pressed={picked}
+                        className={`flex flex-col items-center gap-1 rounded-md border-2 p-1.5 text-center transition-colors ${
+                          picked
+                            ? 'border-amber-400 bg-amber-500/15 text-amber-200'
+                            : 'border-[#c9963b]/35 bg-[#1a1314]/80 text-muted-foreground hover:border-amber-400/60 hover:text-foreground'
+                        }`}
+                      >
+                        <SpriteModelCanvas
+                          mode="job"
+                          id={jid}
+                          action={picked ? 'auto' : 'idle'}
+                          dir="down"
+                          size={44}
+                          showAura={false}
+                          label={j.name}
+                        />
+                        <span className="w-full truncate text-[10px] font-semibold">{j.name}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
               {!user && guestSave && (
                 <p className="rounded-md border-2 border-destructive/60 bg-destructive/10 p-2 text-xs text-destructive">
                   การเริ่มเกมใหม่จะลบความคืบหน้าของ {guestSave.name} (Lv.{guestSave.level})

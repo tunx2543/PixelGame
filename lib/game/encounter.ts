@@ -7,6 +7,7 @@ import {
   enhanceCost,
   enhanceRate,
   expToNext,
+  normalizeJobId,
   type ItemDef,
   type MonsterDef,
 } from './data'
@@ -128,7 +129,7 @@ export function createDefaultEncounterSave(name = 'นักผจญภัย')
   const base: SaveData = {
     version: 1,
     name: name.trim().slice(0, 16) || 'นักผจญภัย',
-    jobId: 'novice',
+    jobId: 'swordsman',
     level: 1,
     exp: 0,
     hp: 1,
@@ -293,7 +294,7 @@ export function rollEncounterForLevel(
 }
 
 export function getWeaponUpgradeBreakdown(save: SaveData) {
-  const job = JOBS[save.jobId] ?? JOBS.novice
+  const job = JOBS[normalizeJobId(save.jobId)]
   const weaponItem = save.equipment.weapon
   const weaponDef: ItemDef | null = weaponItem ? ITEMS[weaponItem.itemId] ?? null : null
   const weaponBaseAtk = weaponDef?.atk ?? 0
@@ -419,7 +420,7 @@ export function settleEncounterVictory(save: SaveData, enemy: EncounterEnemy): E
       nextSave.statPoints = (nextSave.statPoints ?? 0) + 3
       nextSave.skillPoints = (nextSave.skillPoints ?? 0) + 1
       nextSave.skillLevels ??= {}
-      const job = JOBS[nextSave.jobId] ?? JOBS.novice
+      const job = JOBS[normalizeJobId(nextSave.jobId)]
       const autoSkill = job.skills[(nextSave.level - 1) % Math.max(1, job.skills.length)]
       if (autoSkill) {
         nextSave.skillLevels[autoSkill.id] = (nextSave.skillLevels[autoSkill.id] ?? 1) + 1
@@ -495,7 +496,7 @@ export function equipWeaponFromInventory(
   const target = nextSave.inventory.find((i) => i.uid === itemUid)
   if (!target) return { nextSave: save, error: 'ไม่พบอาวุธในกระเป๋า' }
   const def = ITEMS[target.itemId]
-  const job = JOBS[nextSave.jobId] ?? JOBS.novice
+  const job = JOBS[normalizeJobId(nextSave.jobId)]
   if (!def || def.kind !== 'weapon') return { nextSave: save, error: 'ไอเทมนี้ไม่ใช่อาวุธ' }
   if ((def.reqLevel ?? 1) > nextSave.level) {
     return { nextSave: save, error: `ต้องการเลเวล ${def.reqLevel}` }

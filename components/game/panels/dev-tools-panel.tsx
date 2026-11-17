@@ -233,7 +233,7 @@ export function DevToolsPanel() {
             </div>
 
             <div className="space-y-2 border-2 border-border bg-muted/50 p-2.5">
-              <p className="font-semibold text-primary">เปลี่ยนอาชีพทันที (รวมอาชีพผู้ดูแลระบบ)</p>
+              <p className="font-semibold text-primary">เปลี่ยนอาชีพทันที (14 อาชีพ)</p>
               <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
                 {Object.values(JOBS).map((job) => (
                   <button
@@ -243,9 +243,7 @@ export function DevToolsPanel() {
                     className={`border px-2 py-1.5 text-left text-[11px] transition-colors ${
                       p.jobId === job.id
                         ? 'border-primary bg-primary/20 font-bold text-primary'
-                        : job.id === 'gm'
-                          ? 'border-amber-400/50 bg-amber-400/10 text-amber-300 hover:bg-amber-400/20'
-                          : 'border-border bg-background/70 text-foreground hover:border-primary/60'
+                        : 'border-border bg-background/70 text-foreground hover:border-primary/60'
                     }`}
                   >
                     <span className="block truncate">{job.name}</span>

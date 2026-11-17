@@ -612,7 +612,7 @@ export async function sendGuildMessage(
     senderUid: user?.uid ?? 'guest_player',
     senderName: input.senderName.slice(0, 24) || 'นักผจญภัย',
     senderGameUid: (input.senderGameUid || '1000').slice(0, 8),
-    jobId: input.jobId || 'novice',
+    jobId: input.jobId || 'swordsman',
     text: cleanText,
     createdAtMs: Date.now(),
   }

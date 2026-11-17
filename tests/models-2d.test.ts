@@ -14,10 +14,10 @@ import {
 } from '../lib/game/models-2d'
 
 describe('2D character job models & animations', () => {
-  it('defines a 42x48 2D model spec with hairStyle for every job in JOBS (21/21)', () => {
+  it('defines a 42x48 2D model spec with hairStyle for every job in JOBS (24/24)', () => {
     const jobIds = Object.keys(JOBS)
-    assert.equal(jobIds.length, 21)
-    assert.equal(getAllJobModels().length, 21)
+    assert.equal(jobIds.length, 24)
+    assert.equal(getAllJobModels().length, 24)
     assert.deepEqual(HUMAN_MODEL_CANVAS_SIZE, { width: 42, height: 48 })
 
     for (const id of jobIds) {
@@ -53,15 +53,19 @@ describe('2D character job models & animations', () => {
     assert.equal(getJobModelSpec('the_king').armorStyle, 'sovereign')
     assert.equal(getJobModelSpec('sinister').dualDaggers, true)
     assert.equal(getJobModelSpec('mamushi').quiver, true)
+    assert.equal(getJobModelSpec('priest').hatStyle, 'mitre')
+    assert.equal(getJobModelSpec('priest').halo, true)
+    assert.equal(getJobModelSpec('high_priest').wings, true)
+    assert.equal(getJobModelSpec('berserker').hatStyle, 'bandana')
     assert.equal(getJobModelSpec('unknown_job').jobId, 'novice')
   })
 })
 
 describe('2D monster & boss models & animations', () => {
-  it('defines a dedicated 2D model spec for every monster in MONSTERS (17/17)', () => {
+  it('defines a dedicated 2D model spec for every monster in MONSTERS (26/26)', () => {
     const monsterIds = Object.keys(MONSTERS)
-    assert.equal(monsterIds.length, 17)
-    assert.equal(getAllMonsterModels().length, 17)
+    assert.equal(monsterIds.length, 26)
+    assert.equal(getAllMonsterModels().length, 26)
 
     const seenArchetypes = new Set<string>()
     for (const id of monsterIds) {
@@ -78,7 +82,7 @@ describe('2D monster & boss models & animations', () => {
     }
 
     // Every monster in MONSTERS has its own bespoke archetype
-    assert.equal(seenArchetypes.size, 17)
+    assert.equal(seenArchetypes.size, 26)
   })
 
   it('correctly configures boss sizes, flying flags, and 4-way facing support', () => {
@@ -101,6 +105,20 @@ describe('2D monster & boss models & animations', () => {
     const gale = getMonsterModelSpec('gale_sentinel')
     assert.equal(gale.flying, true)
     assert.equal(gale.supports4Way, true)
+
+    const fireDragon = getMonsterModelSpec('boss_fire_dragon')
+    assert.equal(fireDragon.archetype, 'boss_fire_dragon')
+    assert.equal(fireDragon.boss, true)
+    assert.equal(fireDragon.flying, true)
+    assert.equal(fireDragon.canvasSize.width, 42)
+    assert.equal(fireDragon.canvasSize.height, 34)
+
+    const bossWolf = getMonsterModelSpec('boss_wolf')
+    assert.equal(bossWolf.boss, true)
+    assert.equal(getMonsterModelSpec('boss_spider_queen').boss, true)
+    assert.equal(getMonsterModelSpec('boss_lich').supports4Way, true)
+    assert.equal(getMonsterModelSpec('boss_demon_king').supports4Way, true)
+    assert.equal(getMonsterModelSpec('orc').supports4Way, true)
 
     const fallback = getMonsterModelSpec(undefined, 'golem', '#ff0000')
     assert.equal(fallback.archetype, 'fire_golem')

@@ -41,42 +41,44 @@ const ACTION_THAI: Record<SpriteAction, string> = {
 
 function getJobTraitTags(jobId: string): string[] {
   const map: Record<string, string[]> = {
-    novice: ['กระเป๋าเดินทาง', 'ผ้าพันคอผู้เริ่มต้น', 'ไม้พลองฝึกหัด'],
-    swordsman: ['ผ้าคาดหัวแดง', 'เกราะไหล่เหล็ก', 'โล่ + ดาบเหล็ก'],
-    mage: ['หมวกพ่อมดปลายแหลม', 'ผ้าคลุมเวท', 'คทาอัญมณี'],
-    archer: ['ฮู้ดพรานขนนก', 'ซองธนูสะพายหลัง', 'คันธนูยาว'],
-    thief: ['ผ้าปิดปากโจร', 'มีดคู่ (ซ้าย-ขวา)', 'ผ้าคลุมเงา'],
-    knight: ['หมวกเกราะขนนกแดง', 'เกราะหนักเต็มยศ', 'โล่ตราอัศวิน'],
-    paladin: ['วงแหวนศักดิ์สิทธิ์', 'เกราะขาว-ทอง', 'โล่กางเขนสุริยัน'],
-    wizard: ['หมวกจอมเวทประดับดาว', 'ชุดคลุมอาร์คเมจ', 'คทาผลึกฟ้า'],
-    cleric: ['หมวกมิเตอร์กางเขน', 'ปีกเทวทูต + วงแหวน', 'คทาศักดิ์สิทธิ์'],
-    hunter: ['ฮู้ดพรานป่าชั้นสูง', 'เกราะหนังประดับทอง', 'ธนูพราน + ซองธนู'],
-    assassin: ['หน้ากากนินจาเงา', 'มีดคู่ม่วงอเวจี', 'ผ้าคลุมรัตติกาล'],
-    gm: ['มงกุฎทองลอยตัว', 'ปีกโฮโลแกรมเรืองแสง', 'ผ้าคลุมราชันย์ 8 ทิศ + สกิล 6F'],
-    merchant: ['หมวกเบเร่ต์พ่อค้าติดเหรียญทอง', 'กระเป๋าสินค้า + โบนัส +15% Gold', 'ดาบ + สกิลรถเข็นพุ่งชน'],
-    templar: ['หมวกอัศวินวิหาร + วงแหวนศักดิ์สิทธิ์', 'เกราะทอง-ขาว + โล่กางเขนสุริยัน', 'ท่าประสานศักดิ์สิทธิ์ + ฮีลป้อมปราการ'],
-    kensei: ['ผ้าคาดหัวนักดาบสายฟ้า', 'ผ้าคลุมโลหิต + เกราะซามูไร', 'คอมโบอิไอจุตสึ + ดาบคู่/ดาบยาว'],
-    iron_fist: ['สนับมือเหล็กกล้า + เกราะหนัก', 'ออร่าเพลิงส้ม + โล่กำปั้น', 'พุ่งซัด Flash Smash & ทุบพสุธา'],
-    the_king: ['มงกุฎจักรพรรดิตลาดทุน', 'เสื้อคลุมม่วงราชันย์ + โบนัส +25% Gold', 'พายุแท่งเทียน + ลำแสง Stop-Loss'],
-    wicked_necromancer: ['หมวกอาร์คเมจต้องสาป', 'อาภรณ์รัตติกาล + ออร่าม่วงทมิฬ', 'มนต์แมวดำ + คำสาปทลายเกราะ'],
-    mamushi: ['หน้ากากชิโนบิอสรพิษมรกต', 'ซองลูกดอก + ผ้าคลุมพิษ', 'เขี้ยวอสรพิษ + ดาวกระจายสะท้อน'],
-    nekobaku: ['ฮู้ดหูแมว + แว่นเล่นแร่แปรธาตุ', 'กระเป๋าระเบิดเคมี + ซองกระสุน', 'ขวดระเบิด Fizz Flask & Tar Flask'],
-    sinister: ['ผ้าคลุมมัจจุราชสีชาด', 'มีดคู่สังหาร + อัตราคริสูงสุด', 'กากบาททมิฬ + จันทราโลหิต'],
+    swordsman: ['นักดาบผมแดง + ผ้าคลุมเพลิง', 'เกราะเหล็กอัศวิน', 'ดาบ + ทักษะฟันกระแทก'],
+    mage: ['หมวกจอมเวทปลายแหลม', 'อาภรณ์ม่วงดารา', 'คทาผลึกอัญมณีฟ้า'],
+    archer: ['หมวกพรานขนนกมรกต', 'ซองธนูสะพายหลัง', 'คันธนู + ทักษะฝนธนู'],
+    cleric: ['หมวกมิเตอร์กางเขนทอง', 'อาภรณ์นักบวชสีขาว-ทอง', 'คทาศักดิ์สิทธิ์ + ฮีลทีม'],
+    merchant: ['แว่นกอกเกิล + หมวกนักประดิษฐ์', 'เป้ขวดยา + โบนัส +15% Gold', 'ฟาดเหรียญทอง + รถเข็นพุ่งชน'],
+    thief: ['ผ้าพันคอแดง + หน้ากากโจร', 'มีดคู่ (ซ้าย-ขวา)', 'แทงสองครั้ง + แทงข้างหลัง'],
+    kensei: ['หางม้าซามูไร + กิโมโนขาว-คราม', 'ดาบคาตานะสายฟ้า', 'อิไอจุตสึ + พายุเคนเซย์'],
+    iron_fist: ['ลูกประคำทอง + กางเกงนักสู้ส้ม', 'หมัดเพลิงออร่าทองคำ', 'พุ่งซัดหมัดเหล็ก & ทุบพสุธา'],
+    wicked_necromancer: ['เขาทมิฬ + ผมเงินต้องสาป', 'อาภรณ์อเวจีม่วง-ดำ', 'มนต์แมวดำ + เสียงเพรียกอเวจี'],
+    the_king: ['มงกุฎทองคำ + ผ้าคลุมราชันย์', 'โบนัส +25% Gold', 'พายุแท่งเทียน + ตัดขาดทุนพิฆาต'],
+    sinister: ['ปีกเงาโลหิต + นัยน์ตาสีชาด', 'ออร่าเพลิงอเวจี', 'กากบาททมิฬ + จันทราโลหิต'],
+    templar: ['หมวกเกราะอัศวินวิหาร', 'โล่กางเขนทอง + เกราะขาว-น้ำเงิน', 'ฟันศักดิ์สิทธิ์ + โล่เทมพลาร์'],
+    nekobaku: ['หูแมว + หางปุกปุย + โบว์ชมพู', 'ออร่าพลังระเบิดสีชมพู', 'ขวดระเบิด Fizz Flask & ฝนระเบิดเนโกะ'],
+    mamushi: ['ผ้าคาดหัวอสรพิษ + หางมังกรเขียว', 'เขี้ยวพิษ + วงแหวนมรกต', 'เขี้ยวอสรพิษ + ดาวกระจายสะท้อน'],
   }
   return map[jobId] ?? []
 }
 
 function getMonsterTraitLabel(archetype: string): string {
   const map: Record<string, string> = {
-    slime: 'หยดเจลใส + ไฮไลต์กระดอน',
-    pink_slime: 'สไลม์มงกุฎน้อย + ฟองอากาศ',
+    slime: 'หยดเจลสีเขียวใส + ไฮไลต์กระดอน',
+    slime_blue: 'สไลม์สีฟ้าสดใส + ออร่าหยดน้ำ',
+    pink_slime: 'สไลม์ชมพู + ฟองอากาศ',
     mushroom: 'หมวกเห็ดลายจุด + ท่าพุ่งโหม่ง',
     rabbit: 'หูยาวขยับตามจังหวะ + กระโดดพุ่ง',
+    boss_wolf: 'บอสหมาป่าใหญ่สวมเกราะทอง + กรงเล็บพายุ',
     wolf: 'หมาป่าสี่ขา + เขี้ยวตวัด',
     goblin: 'ก๊อบลินหูแหลม + กระบองไม้ (4 ทิศ)',
+    boss_spider_queen: 'บอสราชินีแมงมุมสวมมงกุฎทอง + ใยพิษ',
     goblin_chief: 'บอสหัวหน้าก๊อบลินมงกุฎเขา + กระบองหนาม',
+    boss_lich: 'บอสจอมเวทโครงกระดูกมงกุฎกษัตริย์ + คทามรณะ',
     bat: 'ค้างคาวปีกกระพือ + บินลอยกลางอากาศ',
+    spider: 'แมงมุมพิษ 8 ขา + ดวงตาสีชาด',
+    boss_fire_dragon: 'บอสมังกรไฟปีกเพลิง + พ่นลูกไฟ',
     skeleton: 'โครงกระดูกเกราะอก + ดาบกระดูก (4 ทิศ)',
+    orc: 'ออร์คนักรบกล้ามโต + ขวานศึก',
+    golem: 'โกเลมศิลาโบราณ + หมัดหินกระแทก',
+    boss_demon_king: 'บอสราชาปีศาจเขาคู่ + ปีกอเวจี + ดาบมาร',
     ghost: 'วิญญาณโปร่งแสง + ผ้าคลุมพลิ้ว',
     fire_golem: 'โกเลมหินปล่องภูเขาไฟ + รอยแยกแมกมา',
     earth_golem: 'บอสยักษ์ศิลามอส + แก่นคริสตัลมรกต',
@@ -123,7 +125,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
   const petModels = useMemo(() => getAllPetModels(), [])
 
   const [tab, setTab] = useState<'jobs' | 'monsters' | 'mounts' | 'pets'>('jobs')
-  const [selectedJobId, setSelectedJobId] = useState<string>('paladin')
+  const [selectedJobId, setSelectedJobId] = useState<string>('swordsman')
   const [selectedMonsterId, setSelectedMonsterId] = useState<string>('abyss_dragon')
   const [selectedMountId, setSelectedMountId] = useState<string>('starlight_kirin')
   const [selectedPetId, setSelectedPetId] = useState<string>('phao_gold_naga')
@@ -273,11 +275,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
           <div className="mmorpg-showcase-card flex flex-col items-center justify-between p-2.5">
             <div className="flex w-full items-center justify-between text-[10px]">
               <span className="border border-primary/40 bg-primary/15 px-1.5 py-0.5 font-semibold text-primary">
-                {selectedJobEntry.job.id === 'gm'
-                  ? 'GM พิเศษ'
-                  : selectedJobEntry.job.tier === 0
-                    ? 'เริ่มต้น'
-                    : `คลาส ${selectedJobEntry.job.tier}`}
+                {`คลาส ${selectedJobEntry.job.tier}`}
               </span>
               <span className="text-accent">
                 {action === 'auto' ? ACTION_THAI[liveAutoPhase] : ACTION_THAI[action]}
@@ -291,7 +289,6 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                 action={action}
                 dir={dir}
                 size={compact ? 124 : 144}
-                isGm={selectedJobEntry.job.id === 'gm'}
                 rebirthCount={previewRebirth}
                 onAutoPhaseChange={setLiveAutoPhase}
                 label={`โมเดลอาชีพ ${selectedJobEntry.job.name}`}
@@ -428,9 +425,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                   </span>
                 )}
                 <span className="ml-auto font-mono text-[10px] text-muted-foreground tabular-nums">
-                  {selectedJobEntry.job.id === 'gm'
-                    ? 'Idle 4F • Walk 8F/6F • Attack 4F • Skill 6F'
-                    : 'Idle 4F • Walk 6F • Attack 4F'}
+                  Idle 4F • Walk 4F (4 ทิศ) • Attack 4F • Skill 4F
                 </span>
               </div>
 
@@ -769,7 +764,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
               >
                 <div className="flex w-full items-center justify-between text-[10px]">
                   <span className="font-semibold text-primary">
-                    {job.id === 'gm' ? 'GM' : `T${job.tier}`}
+                    {`T${job.tier}`}
                   </span>
                   <span className="font-mono text-muted-foreground">Lv.{job.reqLevel}</span>
                 </div>
@@ -780,7 +775,6 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                     action={compact && !selected && action === 'auto' ? 'idle' : action}
                     dir={dir}
                     size={88}
-                    isGm={job.id === 'gm'}
                     label={`พรีวิวอาชีพ ${job.name}`}
                   />
                 </div>

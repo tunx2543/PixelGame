@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pixel-quest-pwa-v1'
+const CACHE_NAME = 'pixel-quest-pwa-v2'
 const CORE_ASSETS = [
   '/',
   '/models',
@@ -10,7 +10,19 @@ const CORE_ASSETS = [
   '/icon.svg',
 ]
 
+function isDevHost(hostname) {
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname.startsWith('ais-dev-')
+  )
+}
+
 self.addEventListener('install', (event) => {
+  if (isDevHost(self.location.hostname)) {
+    event.waitUntil(self.skipWaiting())
+    return
+  }
   event.waitUntil(
     caches
       .open(CACHE_NAME)
@@ -26,7 +38,7 @@ self.addEventListener('activate', (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((key) => key !== CACHE_NAME)
+            .filter((key) => isDevHost(self.location.hostname) || key !== CACHE_NAME)
             .map((key) => caches.delete(key)),
         ),
       )
@@ -35,10 +47,11 @@ self.addEventListener('activate', (event) => {
 })
 
 function shouldBypassCache(url) {
+  if (isDevHost(url.hostname)) return true
   if (url.origin !== self.location.origin) return true
   if (url.pathname.startsWith('/api/')) return true
   if (url.pathname.startsWith('/auth/')) return true
-  if (url.pathname.startsWith('/_next/webpack-hmr')) return true
+  if (url.pathname.startsWith('/_next/')) return true
   return false
 }
 
@@ -65,9 +78,8 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // Stale-while-revalidate for static assets & images
+  // Network-first for static assets & images to prevent stale chunk hydration errors
   const isStaticAsset =
-    url.pathname.startsWith('/_next/static/') ||
     url.pathname.startsWith('/images/') ||
     url.pathname.endsWith('.png') ||
     url.pathname.endsWith('.svg') ||
@@ -76,18 +88,15 @@ self.addEventListener('fetch', (event) => {
 
   if (isStaticAsset) {
     event.respondWith(
-      caches.match(request).then((cached) => {
-        const networkFetch = fetch(request)
-          .then((response) => {
-            if (response && response.ok) {
-              const copy = response.clone()
-              caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => undefined)
-            }
-            return response
-          })
-          .catch(() => cached)
-        return cached || networkFetch
-      }),
+      fetch(request)
+        .then((response) => {
+          if (response && response.ok) {
+            const copy = response.clone()
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => undefined)
+          }
+          return response
+        })
+        .catch(() => caches.match(request)),
     )
   }
 })

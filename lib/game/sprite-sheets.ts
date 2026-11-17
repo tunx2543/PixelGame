@@ -1,29 +1,62 @@
 import type { Dir, SpriteAction } from './sprites'
 
-export type HeroSheetId = 'warrior' | 'archer' | 'wizard' | 'priest' | 'rogue'
+export type HeroSheetId =
+  | 'swordsman'
+  | 'mage'
+  | 'archer'
+  | 'cleric'
+  | 'merchant'
+  | 'thief'
+  | 'kensei'
+  | 'iron_fist'
+  | 'wicked_necromancer'
+  | 'the_king'
+  | 'sinister'
+  | 'templar'
+  | 'nekobaku'
+  | 'mamushi'
 
 export type MonsterSheetId =
   | 'slime_blue'
   | 'slime_green'
   | 'slime_pink'
-  | 'goblin'
+  | 'mushroom'
+  | 'rabbit'
+  | 'boss_wolf'
   | 'wolf'
-  | 'skeleton'
+  | 'goblin'
+  | 'boss_spider_queen'
+  | 'goblin_chief'
+  | 'boss_lich'
   | 'bat'
   | 'spider'
+  | 'boss_fire_dragon'
+  | 'skeleton'
   | 'orc'
   | 'golem'
-  | 'boss_wolf'
-  | 'boss_spider_queen'
-  | 'boss_lich'
-  | 'boss_fire_dragon'
   | 'boss_demon_king'
+  | 'ghost'
+  | 'fire_golem'
+  | 'earth_golem'
+  | 'demon'
+  | 'demon_lord'
+  | 'abyss_knight'
+  | 'gale_sentinel'
+  | 'abyss_dragon'
+
+export type NpcSheetId =
+  | 'merchant'
+  | 'blacksmith'
+  | 'goddess'
+  | 'keeper'
+  | 'gacha'
+  | 'rebirth'
 
 export interface SpriteSheetActionSpec {
   row: number
   frames: number
-  /** Base horizontal facing of frames in this row ('right' | 'left' | 'front') */
-  baseFacing: 'right' | 'left' | 'front'
+  /** Base horizontal facing of frames in this row ('right' | 'left' | 'front' | 'back') */
+  baseFacing: 'right' | 'left' | 'front' | 'back'
 }
 
 export interface SpriteSheetSpec {
@@ -70,7 +103,7 @@ function makeHeroSheetSpec(id: HeroSheetId): SpriteSheetSpec {
       walk_down: { row: 0, frames: 4, baseFacing: 'front' },
       walk_left: { row: 1, frames: 4, baseFacing: 'left' },
       walk_right: { row: 2, frames: 4, baseFacing: 'right' },
-      walk_up: { row: 3, frames: 4, baseFacing: 'front' },
+      walk_up: { row: 3, frames: 4, baseFacing: 'back' },
       attack: { row: 4, frames: 4, baseFacing: 'right' },
       skill: { row: 5, frames: 4, baseFacing: 'right' },
     },
@@ -79,11 +112,20 @@ function makeHeroSheetSpec(id: HeroSheetId): SpriteSheetSpec {
 }
 
 export const HERO_SPRITE_SHEETS: Record<HeroSheetId, SpriteSheetSpec> = {
-  warrior: makeHeroSheetSpec('warrior'),
+  swordsman: makeHeroSheetSpec('swordsman'),
+  mage: makeHeroSheetSpec('mage'),
   archer: makeHeroSheetSpec('archer'),
-  wizard: makeHeroSheetSpec('wizard'),
-  priest: makeHeroSheetSpec('priest'),
-  rogue: makeHeroSheetSpec('rogue'),
+  cleric: makeHeroSheetSpec('cleric'),
+  merchant: makeHeroSheetSpec('merchant'),
+  thief: makeHeroSheetSpec('thief'),
+  kensei: makeHeroSheetSpec('kensei'),
+  iron_fist: makeHeroSheetSpec('iron_fist'),
+  wicked_necromancer: makeHeroSheetSpec('wicked_necromancer'),
+  the_king: makeHeroSheetSpec('the_king'),
+  sinister: makeHeroSheetSpec('sinister'),
+  templar: makeHeroSheetSpec('templar'),
+  nekobaku: makeHeroSheetSpec('nekobaku'),
+  mamushi: makeHeroSheetSpec('mamushi'),
 }
 
 function makeMonsterSheetSpec(
@@ -117,62 +159,114 @@ export const MONSTER_SPRITE_SHEETS: Record<MonsterSheetId, SpriteSheetSpec> = {
   slime_blue: makeMonsterSheetSpec('slime_blue', 112, 104, 94, 26),
   slime_green: makeMonsterSheetSpec('slime_green', 112, 104, 94, 26),
   slime_pink: makeMonsterSheetSpec('slime_pink', 112, 104, 94, 26),
-  goblin: makeMonsterSheetSpec('goblin', 112, 104, 96, 26),
+  mushroom: makeMonsterSheetSpec('mushroom', 112, 104, 94, 26),
+  rabbit: makeMonsterSheetSpec('rabbit', 112, 104, 94, 26),
+  boss_wolf: makeMonsterSheetSpec('boss_wolf', 136, 128, 118, 32),
   wolf: makeMonsterSheetSpec('wolf', 120, 96, 88, 24),
-  skeleton: makeMonsterSheetSpec('skeleton', 112, 104, 96, 26),
+  goblin: makeMonsterSheetSpec('goblin', 112, 104, 96, 26),
+  boss_spider_queen: makeMonsterSheetSpec('boss_spider_queen', 136, 128, 118, 32),
+  goblin_chief: makeMonsterSheetSpec('goblin_chief', 136, 128, 118, 32),
+  boss_lich: makeMonsterSheetSpec('boss_lich', 136, 128, 118, 32),
   bat: makeMonsterSheetSpec('bat', 120, 104, 90, 26),
   spider: makeMonsterSheetSpec('spider', 112, 104, 94, 26),
+  boss_fire_dragon: makeMonsterSheetSpec('boss_fire_dragon', 168, 136, 126, 34),
+  skeleton: makeMonsterSheetSpec('skeleton', 112, 104, 96, 26),
   orc: makeMonsterSheetSpec('orc', 128, 120, 110, 30),
   golem: makeMonsterSheetSpec('golem', 128, 120, 110, 30),
-  boss_wolf: makeMonsterSheetSpec('boss_wolf', 136, 128, 118, 32),
-  boss_spider_queen: makeMonsterSheetSpec('boss_spider_queen', 136, 128, 118, 32),
-  boss_lich: makeMonsterSheetSpec('boss_lich', 136, 128, 118, 32),
-  boss_fire_dragon: makeMonsterSheetSpec('boss_fire_dragon', 168, 136, 126, 34),
   boss_demon_king: makeMonsterSheetSpec('boss_demon_king', 144, 132, 122, 32),
+  ghost: makeMonsterSheetSpec('ghost', 112, 104, 94, 26),
+  fire_golem: makeMonsterSheetSpec('fire_golem', 128, 120, 110, 30),
+  earth_golem: makeMonsterSheetSpec('earth_golem', 136, 128, 118, 32),
+  demon: makeMonsterSheetSpec('demon', 128, 120, 110, 30),
+  demon_lord: makeMonsterSheetSpec('demon_lord', 144, 132, 122, 32),
+  abyss_knight: makeMonsterSheetSpec('abyss_knight', 128, 120, 110, 30),
+  gale_sentinel: makeMonsterSheetSpec('gale_sentinel', 128, 120, 110, 30),
+  abyss_dragon: makeMonsterSheetSpec('abyss_dragon', 168, 136, 126, 34),
+}
+
+function makeNpcSheetSpec(id: NpcSheetId): SpriteSheetSpec {
+  const base = `/assets/hd/npcs/${id}`
+  return {
+    id: `npc_${id}`,
+    sheetPath: `${base}/sheet.png`,
+    portraitPath: `${base}/portrait.png`,
+    frameWidth: HERO_FRAME_W,
+    frameHeight: HERO_FRAME_H,
+    cols: 4,
+    rows: 1,
+    anchorX: 0.5,
+    anchorY: HERO_ANCHOR_Y,
+    hdScale: 4,
+    actions: {
+      idle: { row: 0, frames: 4, baseFacing: 'front' },
+    },
+  }
+}
+
+export const NPC_SPRITE_SHEETS: Record<NpcSheetId, SpriteSheetSpec> = {
+  merchant: makeNpcSheetSpec('merchant'),
+  blacksmith: makeNpcSheetSpec('blacksmith'),
+  goddess: makeNpcSheetSpec('goddess'),
+  keeper: makeNpcSheetSpec('keeper'),
+  gacha: makeNpcSheetSpec('gacha'),
+  rebirth: makeNpcSheetSpec('rebirth'),
 }
 
 export const JOB_TO_HERO_SHEET: Record<string, HeroSheetId> = {
-  novice: 'warrior',
-  swordsman: 'warrior',
-  knight: 'warrior',
-  paladin: 'warrior',
-  templar: 'warrior',
-  kensei: 'warrior',
-  iron_fist: 'warrior',
-  merchant: 'warrior',
+  swordsman: 'swordsman',
+  mage: 'mage',
   archer: 'archer',
+  cleric: 'cleric',
+  merchant: 'merchant',
+  thief: 'thief',
+  kensei: 'kensei',
+  iron_fist: 'iron_fist',
+  wicked_necromancer: 'wicked_necromancer',
+  the_king: 'the_king',
+  sinister: 'sinister',
+  templar: 'templar',
+  nekobaku: 'nekobaku',
+  mamushi: 'mamushi',
+  // Legacy aliases fallback cleanly
+  novice: 'swordsman',
+  priest: 'cleric',
+  high_priest: 'cleric',
+  knight: 'templar',
+  paladin: 'templar',
+  berserker: 'kensei',
+  wizard: 'mage',
   hunter: 'archer',
-  mamushi: 'archer',
-  nekobaku: 'archer',
-  mage: 'wizard',
-  wizard: 'wizard',
-  the_king: 'wizard',
-  wicked_necromancer: 'wizard',
-  cleric: 'priest',
-  thief: 'rogue',
-  assassin: 'rogue',
-  sinister: 'rogue',
-  gm: 'wizard',
+  assassin: 'sinister',
+  gm: 'the_king',
 }
 
 export const MONSTER_ID_TO_SHEET: Record<string, MonsterSheetId | null> = {
   slime: 'slime_green',
+  slime_blue: 'slime_blue',
   pink_slime: 'slime_pink',
-  mushroom: null,
-  rabbit: null,
+  mushroom: 'mushroom',
+  rabbit: 'rabbit',
+  boss_wolf: 'boss_wolf',
   wolf: 'wolf',
   goblin: 'goblin',
-  goblin_chief: 'orc',
+  boss_spider_queen: 'boss_spider_queen',
+  goblin_chief: 'goblin_chief',
+  boss_lich: 'boss_lich',
   bat: 'bat',
+  spider: 'spider',
+  boss_fire_dragon: 'boss_fire_dragon',
   skeleton: 'skeleton',
-  ghost: null,
-  fire_golem: 'golem',
-  earth_golem: 'golem',
-  demon: 'boss_demon_king',
-  demon_lord: 'boss_demon_king',
-  abyss_knight: 'boss_lich',
-  gale_sentinel: null,
-  abyss_dragon: 'boss_fire_dragon',
+  orc: 'orc',
+  golem: 'golem',
+  boss_demon_king: 'boss_demon_king',
+  ghost: 'ghost',
+  fire_golem: 'fire_golem',
+  earth_golem: 'earth_golem',
+  demon: 'demon',
+  demon_lord: 'demon_lord',
+  abyss_knight: 'abyss_knight',
+  gale_sentinel: 'gale_sentinel',
+  abyss_dragon: 'abyss_dragon',
 }
 
 export function resolveHeroSheetSpec(jobId?: string | null): SpriteSheetSpec | null {
@@ -223,6 +317,15 @@ export function preloadAllSpriteSheets(): void {
   for (const spec of Object.values(MONSTER_SPRITE_SHEETS)) {
     getSheetImage(spec.sheetPath)
   }
+  for (const spec of Object.values(NPC_SPRITE_SHEETS)) {
+    getSheetImage(spec.sheetPath)
+  }
+}
+
+export function getNpcSheetFrame(npcId: string, frame: number): HTMLCanvasElement | null {
+  const spec = NPC_SPRITE_SHEETS[npcId as NpcSheetId]
+  if (!spec) return null
+  return sliceSheetFrame(spec, 0, Math.abs(frame) % 4, false)
 }
 
 export function sliceSheetFrame(

@@ -5,9 +5,11 @@ import {
   MAX_LEVEL,
   MAX_PLUS,
   MONSTERS,
+  STARTER_JOB_IDS,
   enhanceCost,
   enhanceRate,
   expToNext,
+  normalizeJobId,
   type ItemDef,
   type JobDef,
   type SkillDef,
@@ -605,7 +607,7 @@ export function currentMap(): MapDef {
   return MAPS[game.p?.mapId ?? 'town'] ?? MAPS.town
 }
 export function currentJob(): JobDef {
-  return JOBS[game.p?.jobId ?? 'novice'] ?? JOBS.novice
+  return JOBS[normalizeJobId(game.p?.jobId)]
 }
 
 export function itemPower(it: InvItem | null) {
@@ -617,7 +619,7 @@ export function itemPower(it: InvItem | null) {
 }
 
 export function getStats(p: SaveData = game.p!) {
-  const job = JOBS[p.jobId] ?? JOBS.novice
+  const job = JOBS[normalizeJobId(p.jobId)]
   const L = p.level
   const wAtk = itemPower(p.equipment.weapon)
   const aDef = (['armor', 'shoes', 'cloak', 'accessory'] as const).reduce((total, slot) => total + itemPower(p.equipment[slot]), 0)
@@ -1403,11 +1405,6 @@ export function castSkill(index: number) {
   const p = game.p
   if (!p || game.panel) return
   const job = currentJob()
-  if (job.id === 'gm' && p.gm && isCurrentAccountGm()) {
-    const gmSkill = GM_ACTIVE_SKILLS[index]
-    if (gmSkill) castGmSkill(gmSkill.skillKey)
-    return
-  }
   const skill = job.skills[index]
   if (!skill) return
   const skillLevel = p.skillLevels?.[skill.id] ?? 1
@@ -1699,7 +1696,7 @@ export function rebirth() {
     def: Math.max(0, before.def - baseDef),
   }
   p.rebirthCount = (p.rebirthCount ?? 0) + 1
-  p.jobId = 'novice'
+  p.jobId = 'swordsman'
   p.level = 1
   p.exp = 0
   p.hp = baseHp + p.rebirthBonus.maxHp
@@ -2411,14 +2408,25 @@ export async function claimDailyMissionReward(missionId: string): Promise<{ ok: 
 }
 
 export function availableJobs() {
-  const p = player()
-  return Object.values(JOBS).filter((j) => j.from === p.jobId || Boolean(j.alsoFrom?.includes(p.jobId)))
+  const current = currentJob()
+  return Object.values(JOBS).filter(
+    (j) =>
+      j.from === current.id ||
+      Boolean(j.alsoFrom?.includes(current.id)) ||
+      (current.tier === 1 && j.tier === 1 && j.id !== current.id),
+  )
 }
 
 export function changeJob(jobId: string) {
   const p = player()
+  const current = currentJob()
   const job = JOBS[jobId]
-  const canPromote = Boolean(job && (job.from === p.jobId || job.alsoFrom?.includes(p.jobId)))
+  const canPromote = Boolean(
+    job &&
+      (job.from === current.id ||
+        job.alsoFrom?.includes(current.id) ||
+        (current.tier === 1 && job.tier === 1 && job.id !== current.id)),
+  )
   if (!job || !canPromote) return say('error', 'ไม่สามารถเปลี่ยนเป็นอาชีพนี้ได้'), notify()
   if (p.level < job.reqLevel) return say('error', `ต้องการเลเวล ${job.reqLevel}`), notify()
   if (p.gold < job.cost) return say('error', 'เงินไม่พอ'), notify()
@@ -3799,7 +3807,7 @@ async function saveCloudGame(p: SaveData) {
         p.god = false
         p.invisible = false
         p.speed = 1
-        if (p.jobId === 'gm') p.jobId = 'novice'
+        p.jobId = normalizeJobId(p.jobId)
       } else {
         p.gameUid = PERMANENT_GM_GAME_UID
         p.uid = PERMANENT_GM_UID
@@ -4069,7 +4077,7 @@ export function loadGame(d: SaveData) {
   const p: SaveData = {
     version: 1,
     name: (typeof d.name === 'string' ? d.name.trim().slice(0, 16) : '') || 'นักผจญภัย',
-    jobId: typeof d.jobId === 'string' && JOBS[d.jobId] && (d.jobId !== 'gm' || gmAllowed) ? d.jobId : 'novice',
+    jobId: normalizeJobId(typeof d.jobId === 'string' ? d.jobId : 'swordsman'),
     level: finiteInt(d.level, 1, MAX_LEVEL, 1),
     exp: finiteInt(d.exp, 0, Number.MAX_SAFE_INTEGER, 0),
     hp: finiteInt(d.hp, 0, Number.MAX_SAFE_INTEGER, 1),
@@ -4125,15 +4133,18 @@ export function loadGame(d: SaveData) {
   if (game.offlineAfkReward) notify()
 }
 
-export function newGame(name: string) {
+export function newGame(name: string, starterJobId = 'swordsman') {
   const town = MAPS.town
   const gmAllowed = isCurrentAccountGm()
   const resolvedGameUid = gmAllowed ? PERMANENT_GM_GAME_UID : activeAccountGameUid
   const resolvedNumericUid = gmAllowed ? PERMANENT_GM_UID : activeAccountUid
+  const resolvedStarterJob = (STARTER_JOB_IDS as readonly string[]).includes(starterJobId)
+    ? starterJobId
+    : 'swordsman'
   const p: SaveData = {
     version: 1,
     name: name.trim().slice(0, 16) || 'นักผจญภัย',
-    jobId: 'novice',
+    jobId: resolvedStarterJob,
     level: 1,
     exp: 0,
     hp: 1,
