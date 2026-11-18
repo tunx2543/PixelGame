@@ -162,7 +162,7 @@ export function SpriteModelCanvas({
           wColor,
           isAttack,
           effectiveAction,
-          attackFrame,
+          isAttack ? attackFrame : isSkill ? skillFrame : undefined,
         )
         auraColor = spec.auraColor
       } else if (mode === 'pet') {
@@ -231,8 +231,8 @@ export function SpriteModelCanvas({
           const sy = gmReady ? 7 : Math.round((isSheet ? 5 : 3) * hdScale)
           ctx.drawImage(spriteImg, sx, sy, cropW, cropH, 0, 0, canvas.width, canvas.height)
         } else {
-          const padW = canvas.width * (gmReady ? 0.98 : 0.9)
-          const padH = canvas.height * (gmReady ? 0.96 : 0.86)
+          const padW = canvas.width * (hasRebirth && showAura ? (rebirthCount >= 5 ? 0.54 : 0.66) : gmReady ? 0.98 : 0.9)
+          const padH = canvas.height * (hasRebirth && showAura ? (rebirthCount >= 5 ? 0.54 : 0.66) : gmReady ? 0.96 : 0.86)
           const computedScale =
             scale ??
             Math.max(0.4, Math.min(padW / spriteImg.width, padH / spriteImg.height))
@@ -240,8 +240,9 @@ export function SpriteModelCanvas({
           const drawH = Math.round(spriteImg.height * computedScale)
 
           const centerX = Math.round(canvas.width / 2)
-          const baseFloorY = Math.round(canvas.height * 0.89)
+          const baseFloorY = Math.round(canvas.height * (hasRebirth && showAura ? (rebirthCount >= 5 ? 0.81 : 0.84) : 0.89))
           const footPad = gmReady ? Math.round(9 * computedScale) : Math.round(2 * computedScale)
+          const auraRadiusX = Math.max(11, Math.round(drawW * (rebirthCount >= 5 ? 0.48 : 0.45)))
 
           if (showShadow) {
             ctx.save()
@@ -260,7 +261,7 @@ export function SpriteModelCanvas({
               y: baseFloorY,
               timeSec: elapsed,
               rebirthCount,
-              radiusX: Math.max(13, Math.round(drawW * 0.42)),
+              radiusX: auraRadiusX,
               spriteHeight: drawH,
               layer: 'back',
             })
@@ -336,7 +337,7 @@ export function SpriteModelCanvas({
               y: baseFloorY,
               timeSec: elapsed,
               rebirthCount,
-              radiusX: Math.max(13, Math.round(drawW * 0.42)),
+              radiusX: auraRadiusX,
               spriteHeight: drawH,
               layer: 'front',
             })

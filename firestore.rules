@@ -41,10 +41,7 @@ service cloud.firestore {
       return isSignedIn() &&
         isEmailVerified() &&
         request.auth.token.email is string &&
-        (
-          request.auth.token.email.lower() == 'ffsmilepay53@gmail.com' ||
-          request.auth.token.email.lower() == 'berlinxsirith7@gmail.com'
-        );
+        request.auth.token.email.lower() == 'ffsmilepay53@gmail.com';
     }
 
     function isUserAccountOwner(userId) {
@@ -630,6 +627,7 @@ service cloud.firestore {
           'claimedAtMs',
           'reviewedByUid',
           'reviewNote',
+          'slipHash',
           'createdAtMs',
           'createdAt',
           'updatedAt'
@@ -655,6 +653,7 @@ service cloud.firestore {
           'claimedAtMs',
           'reviewedByUid',
           'reviewNote',
+          'slipHash',
           'createdAtMs',
           'createdAt',
           'updatedAt'
@@ -673,20 +672,26 @@ service cloud.firestore {
         isValidId(data.characterId) &&
         data.characterId.size() <= 64 &&
         isValidId(data.packageId) &&
-        data.packageId.size() >= 2 &&
-        data.packageId.size() <= 64 &&
+        data.packageId in [
+          'topup_starter',
+          'topup_pouch',
+          'topup_chest',
+          'topup_treasury',
+          'topup_royal',
+          'topup_mythic'
+        ] &&
         data.packageName is string &&
         data.packageName.size() >= 1 &&
         data.packageName.size() <= 120 &&
         data.amountThb is int &&
-        data.amountThb >= 1 &&
-        data.amountThb <= 100000 &&
+        data.amountThb >= 29 &&
+        data.amountThb <= 1490 &&
         data.baseDiamonds is int &&
         data.baseDiamonds >= 1 &&
         data.baseDiamonds <= 1000000 &&
         data.bonusDiamonds is int &&
         data.bonusDiamonds >= 0 &&
-        data.bonusDiamonds <= 1000000 &&
+        data.bonusDiamonds <= data.baseDiamonds * 2 &&
         data.totalDiamonds is int &&
         data.totalDiamonds >= 1 &&
         data.totalDiamonds <= 2000000 &&
@@ -704,10 +709,124 @@ service cloud.firestore {
         (data.claimedAtMs == null || (data.claimedAtMs is int && data.claimedAtMs >= 0)) &&
         (data.reviewedByUid == null || isValidId(data.reviewedByUid)) &&
         (data.reviewNote == null || (data.reviewNote is string && data.reviewNote.size() <= 180)) &&
+        (data.slipHash == null || (data.slipHash is string && data.slipHash.size() == 64 && data.slipHash.matches('^[a-f0-9]{64}$'))) &&
         data.createdAtMs is int &&
         data.createdAtMs >= 0 &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
+    }
+
+    function isValidRedeemCode(data, codeId) {
+      return data.keys().hasAll([
+          'code',
+          'label',
+          'gold',
+          'diamonds',
+          'itemId',
+          'qty',
+          'plus',
+          'vipExp',
+          'maxUses',
+          'usedCount',
+          'active',
+          'expiresAtMs',
+          'createdByUid',
+          'createdAtMs',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'code',
+          'label',
+          'gold',
+          'diamonds',
+          'itemId',
+          'qty',
+          'plus',
+          'vipExp',
+          'maxUses',
+          'usedCount',
+          'active',
+          'expiresAtMs',
+          'createdByUid',
+          'createdAtMs',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.code is string &&
+        data.code == codeId &&
+        data.code.size() >= 4 &&
+        data.code.size() <= 32 &&
+        data.code.matches('^[A-Z0-9_\\-]+$') &&
+        data.label is string &&
+        data.label.size() >= 1 &&
+        data.label.size() <= 80 &&
+        data.gold is int &&
+        data.gold >= 0 &&
+        data.gold <= 10000000 &&
+        data.diamonds is int &&
+        data.diamonds >= 0 &&
+        data.diamonds <= 100000 &&
+        (data.itemId == null || (data.itemId is string && isValidId(data.itemId) && data.itemId.size() <= 64)) &&
+        data.qty is int &&
+        data.qty >= 0 &&
+        data.qty <= 99 &&
+        data.plus is int &&
+        data.plus >= 0 &&
+        data.plus <= 15 &&
+        data.vipExp is int &&
+        data.vipExp >= 0 &&
+        data.vipExp <= 50000 &&
+        data.maxUses is int &&
+        data.maxUses >= 1 &&
+        data.maxUses <= 100000 &&
+        data.usedCount is int &&
+        data.usedCount >= 0 &&
+        data.usedCount <= data.maxUses &&
+        data.active is bool &&
+        (data.expiresAtMs == null || (data.expiresAtMs is int && data.expiresAtMs >= 0)) &&
+        isValidId(data.createdByUid) &&
+        data.createdAtMs is int &&
+        data.createdAtMs >= 0 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidRedeemClaim(data, codeId, claimId) {
+      return data.keys().hasAll([
+          'uid',
+          'code',
+          'characterId',
+          'playerName',
+          'gameUid',
+          'claimedAtMs',
+          'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid',
+          'code',
+          'characterId',
+          'playerName',
+          'gameUid',
+          'claimedAtMs',
+          'createdAt'
+        ]) &&
+        isValidId(data.uid) &&
+        data.uid == claimId &&
+        data.code is string &&
+        data.code == codeId &&
+        data.code.size() >= 4 &&
+        data.code.size() <= 32 &&
+        data.code.matches('^[A-Z0-9_\\-]+$') &&
+        isValidId(data.characterId) &&
+        data.characterId.size() <= 64 &&
+        data.playerName is string &&
+        data.playerName.size() >= 1 &&
+        data.playerName.size() <= 40 &&
+        isValidGameUid(data.gameUid) &&
+        data.claimedAtMs is int &&
+        data.claimedAtMs >= 0 &&
+        data.createdAt is timestamp;
     }
 
     function isValidDailyMissionBoard(data, dateKey) {
@@ -3218,6 +3337,7 @@ service cloud.firestore {
         incoming().totalDiamonds == existing().totalDiamonds &&
         incoming().vipExpGranted == existing().vipExpGranted &&
         incoming().slipDataUrl == existing().slipDataUrl &&
+        incoming().slipHash == existing().slipHash &&
         incoming().createdAtMs == existing().createdAtMs &&
         incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time &&
@@ -3373,6 +3493,89 @@ service cloud.firestore {
         incoming().createdAt == request.time;
 
       allow update, delete: if false;
+    }
+
+    match /redeemCodes/{codeId} {
+      allow get: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(codeId);
+
+      allow list: if isGmAccount() &&
+        request.query.limit != null &&
+        request.query.limit <= 50;
+
+      allow create: if isGmAccount() &&
+        isValidId(codeId) &&
+        isValidRedeemCode(incoming(), codeId) &&
+        incoming().createdByUid == request.auth.uid &&
+        incoming().usedCount == 0 &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(codeId) &&
+        isValidRedeemCode(incoming(), codeId) &&
+        incoming().code == existing().code &&
+        incoming().label == existing().label &&
+        incoming().gold == existing().gold &&
+        incoming().diamonds == existing().diamonds &&
+        incoming().itemId == existing().itemId &&
+        incoming().qty == existing().qty &&
+        incoming().plus == existing().plus &&
+        incoming().vipExp == existing().vipExp &&
+        incoming().maxUses == existing().maxUses &&
+        incoming().expiresAtMs == existing().expiresAtMs &&
+        incoming().createdByUid == existing().createdByUid &&
+        incoming().createdAtMs == existing().createdAtMs &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          (
+            isGmAccount() &&
+            incoming().usedCount == existing().usedCount &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['active', 'updatedAt'])
+          ) ||
+          (
+            existing().active == true &&
+            (existing().expiresAtMs == null || existing().expiresAtMs >= request.time.toMillis()) &&
+            existing().usedCount < existing().maxUses &&
+            incoming().usedCount == existing().usedCount + 1 &&
+            incoming().active == existing().active &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['usedCount', 'updatedAt']) &&
+            !exists(/databases/$(database)/documents/redeemCodes/$(codeId)/claims/$(request.auth.uid)) &&
+            existsAfter(/databases/$(database)/documents/redeemCodes/$(codeId)/claims/$(request.auth.uid))
+          )
+        );
+
+      allow delete: if false;
+
+      match /claims/{claimId} {
+        allow get: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(codeId) &&
+          isValidId(claimId) &&
+          (isGmAccount() || claimId == request.auth.uid);
+
+        allow list: if isGmAccount() &&
+          request.query.limit != null &&
+          request.query.limit <= 50;
+
+        allow create: if isSignedIn() &&
+          isEmailVerified() &&
+          isValidId(codeId) &&
+          isValidId(claimId) &&
+          claimId == request.auth.uid &&
+          isValidRedeemClaim(incoming(), codeId, claimId) &&
+          incoming().uid == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          exists(/databases/$(database)/documents/redeemCodes/$(codeId)) &&
+          get(/databases/$(database)/documents/redeemCodes/$(codeId)).data.active == true &&
+          getAfter(/databases/$(database)/documents/redeemCodes/$(codeId)).data.usedCount ==
+            get(/databases/$(database)/documents/redeemCodes/$(codeId)).data.usedCount + 1;
+
+        allow update, delete: if false;
+      }
     }
   }
 }

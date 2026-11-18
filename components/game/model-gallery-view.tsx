@@ -41,6 +41,7 @@ const ACTION_THAI: Record<SpriteAction, string> = {
 
 function getJobTraitTags(jobId: string): string[] {
   const map: Record<string, string[]> = {
+    novice: ['ผมน้ำตาลฟู + เสื้อคลุมฮู้ดสีขาว', 'สายสะพายหนังคาดเฉียง + กระเป๋าคาดเอว', 'รองเท้าบูทหนังพับขอบ + ไม้พลอง & วงเวทมือใหม่'],
     swordsman: ['นักดาบผมแดง + ผ้าคลุมเพลิง', 'เกราะเหล็กอัศวิน', 'ดาบ + ทักษะฟันกระแทก'],
     mage: ['หมวกจอมเวทปลายแหลม', 'อาภรณ์ม่วงดารา', 'คทาผลึกอัญมณีฟ้า'],
     archer: ['หมวกพรานขนนกมรกต', 'ซองธนูสะพายหลัง', 'คันธนู + ทักษะฝนธนู'],
@@ -125,7 +126,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
   const petModels = useMemo(() => getAllPetModels(), [])
 
   const [tab, setTab] = useState<'jobs' | 'monsters' | 'mounts' | 'pets'>('jobs')
-  const [selectedJobId, setSelectedJobId] = useState<string>('swordsman')
+  const [selectedJobId, setSelectedJobId] = useState<string>('novice')
   const [selectedMonsterId, setSelectedMonsterId] = useState<string>('abyss_dragon')
   const [selectedMountId, setSelectedMountId] = useState<string>('starlight_kirin')
   const [selectedPetId, setSelectedPetId] = useState<string>('phao_gold_naga')
@@ -275,7 +276,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
           <div className="mmorpg-showcase-card flex flex-col items-center justify-between p-2.5">
             <div className="flex w-full items-center justify-between text-[10px]">
               <span className="border border-primary/40 bg-primary/15 px-1.5 py-0.5 font-semibold text-primary">
-                {`คลาส ${selectedJobEntry.job.tier}`}
+                {selectedJobEntry.job.tier === 0 ? 'คลาส 0 (เริ่มต้น)' : `คลาส ${selectedJobEntry.job.tier}`}
               </span>
               <span className="text-accent">
                 {action === 'auto' ? ACTION_THAI[liveAutoPhase] : ACTION_THAI[action]}
@@ -363,7 +364,10 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                 <div className="flex flex-wrap gap-1" role="group" aria-label="ออร่าจุติในแกลเลอรี">
                   {[
                     { count: 0, label: 'ปกติ' },
-                    { count: 1, label: 'จุติ 1–4' },
+                    { count: 1, label: 'จุติ 1' },
+                    { count: 2, label: 'จุติ 2' },
+                    { count: 3, label: 'จุติ 3' },
+                    { count: 4, label: 'จุติ 4' },
                     { count: 5, label: 'จุติ 5' },
                     { count: 6, label: 'จุติ 6' },
                   ].map((tier) => (
@@ -759,7 +763,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
               >
                 <div className="flex w-full items-center justify-between text-[10px]">
                   <span className="font-semibold text-primary">
-                    {`T${job.tier}`}
+                    {job.tier === 0 ? 'T0 เริ่มต้น' : `T${job.tier}`}
                   </span>
                   <span className="font-mono text-muted-foreground">Lv.{job.reqLevel}</span>
                 </div>

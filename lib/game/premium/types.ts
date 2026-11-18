@@ -128,6 +128,9 @@ export interface AuditLogEntry {
     | 'PASS_ARCHIVE_CLAIM'
     | 'STORAGE_EXPAND'
     | 'FASHION_EQUIP'
+    | 'TOPUP_MILESTONE_CLAIM'
+    | 'DAILY_TOPUP_CLAIM'
+    | 'REDEEM_CODE'
   characterId: string
   actorUid: string
   actorRole: 'gm' | 'player'
@@ -223,4 +226,8 @@ export interface PremiumState {
   auditLogs: AuditLogEntry[]
   firstTopupPackages?: string[]
   topupOrders?: TopupOrderRecord[]
+  totalTopupThb?: number
+  claimedTopupMilestones?: string[]
+  lastDailyTopupDate?: string | null
+  claimedDailyTopupDate?: string | null
 }

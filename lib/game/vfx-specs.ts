@@ -1,74 +1,167 @@
 import type { SkillKind, WeaponType } from './data'
 
-export type RebirthVisualStyle = 'none' | 'sigil_ring' | 'crimson_wings' | 'celestial_crown'
+export type RebirthVisualStyle =
+  | 'none'
+  | 'origin_light'
+  | 'growth_surge'
+  | 'resolve_vortex'
+  | 'victory_prism'
+  | 'monarch_abyss'
+  | 'celestial_god'
 
 export interface RebirthAuraSpec {
   tier: number
   style: RebirthVisualStyle
   title: string
+  shortTitle: string
   subtitle: string
   primaryColor: string
   secondaryColor: string
   glowColor: string
+  coreAccentColor: string
   ringCount: number
   runeCount: number
+  ribbonCount: number
+  beamCount: number
+  spireCount: number
   hasWings: boolean
+  wingVariant: 'none' | 'monarch_violet' | 'celestial_gold'
   hasHaloCrown: boolean
   hasAstralPillar: boolean
   orbitShardCount: number
 }
 
-const REBIRTH_SIGIL_SPEC: Omit<RebirthAuraSpec, 'tier'> = {
-  style: 'sigil_ring',
-  title: 'วงแหวนแสงศักดิ์สิทธิ์ (จุติ 1–4)',
-  subtitle: 'วงแหวนอักขระฟ้าคู่พร้อมประกายวิญญาณหมุนรอบกาย',
-  primaryColor: '#38bdf8',
-  secondaryColor: '#bae6fd',
-  glowColor: '#0ea5e9',
-  ringCount: 2,
-  runeCount: 4,
-  hasWings: false,
-  hasHaloCrown: false,
-  hasAstralPillar: false,
-  orbitShardCount: 0,
-}
-
-const REBIRTH_CRIMSON_WINGS_SPEC: Omit<RebirthAuraSpec, 'tier'> = {
-  style: 'crimson_wings',
-  title: 'ปีกเพลิงเทวทูต (จุติ 5)',
-  subtitle: 'เปลี่ยนรูปเป็นปีกแสงสีชมพู-ม่วงและวงเวทหกแฉก',
-  primaryColor: '#e879f9',
-  secondaryColor: '#fb7185',
-  glowColor: '#d946ef',
-  ringCount: 2,
-  runeCount: 6,
-  hasWings: true,
-  hasHaloCrown: false,
-  hasAstralPillar: false,
-  orbitShardCount: 2,
-}
-
-const REBIRTH_CELESTIAL_SPEC: Omit<RebirthAuraSpec, 'tier'> = {
-  style: 'celestial_crown',
-  title: 'ราชันย์ดาราสวรรค์ (จุติ 6)',
-  subtitle: 'เสาแสงเทพ ปีกคู่ทองคำ-คราม มงกุฎแสง และผลึกดาราโคจร',
-  primaryColor: '#fde047',
-  secondaryColor: '#67e8f9',
-  glowColor: '#f59e0b',
-  ringCount: 3,
-  runeCount: 8,
-  hasWings: true,
-  hasHaloCrown: true,
-  hasAstralPillar: true,
-  orbitShardCount: 4,
+export const REBIRTH_TIER_SPECS: Record<number, RebirthAuraSpec> = {
+  1: {
+    tier: 1,
+    style: 'origin_light',
+    title: 'จุติ ระดับ 1 · แสงแห่งการเริ่มต้น',
+    shortTitle: 'แสงแห่งการเริ่มต้น',
+    subtitle: 'วงเวทฟ้าอ่อนและลำแสงเริ่มต้นพวยพุ่งจากพื้นพร้อมละอองดาว',
+    primaryColor: '#38bdf8',
+    secondaryColor: '#bae6fd',
+    glowColor: '#0284c7',
+    coreAccentColor: '#e0f2fe',
+    ringCount: 2,
+    runeCount: 4,
+    ribbonCount: 1,
+    beamCount: 4,
+    spireCount: 0,
+    hasWings: false,
+    wingVariant: 'none',
+    hasHaloCrown: false,
+    hasAstralPillar: true,
+    orbitShardCount: 0,
+  },
+  2: {
+    tier: 2,
+    style: 'growth_surge',
+    title: 'จุติ ระดับ 2 · พลังแห่งการเติบโต',
+    shortTitle: 'พลังแห่งการเติบโต',
+    subtitle: 'ริ้วแสงไขว้หมุนวนรอบกาย วงเวทเรืองรอง และผลึกครามลอยคู่',
+    primaryColor: '#38bdf8',
+    secondaryColor: '#e0f2fe',
+    glowColor: '#0ea5e9',
+    coreAccentColor: '#7dd3fc',
+    ringCount: 2,
+    runeCount: 6,
+    ribbonCount: 2,
+    beamCount: 6,
+    spireCount: 0,
+    hasWings: false,
+    wingVariant: 'none',
+    hasHaloCrown: false,
+    hasAstralPillar: true,
+    orbitShardCount: 2,
+  },
+  3: {
+    tier: 3,
+    style: 'resolve_vortex',
+    title: 'จุติ ระดับ 3 · พลังแห่งความมุ่งมั่น',
+    shortTitle: 'พลังแห่งความมุ่งมั่น',
+    subtitle: 'พายุคลื่นพลัง 3 ชั้นหมุนโอบล้อม พร้อมผลึกคราม 4 ชิ้นและวงเวทซ้อน',
+    primaryColor: '#60a5fa',
+    secondaryColor: '#dbeafe',
+    glowColor: '#2563eb',
+    coreAccentColor: '#93c5fd',
+    ringCount: 3,
+    runeCount: 8,
+    ribbonCount: 3,
+    beamCount: 8,
+    spireCount: 0,
+    hasWings: false,
+    wingVariant: 'none',
+    hasHaloCrown: false,
+    hasAstralPillar: true,
+    orbitShardCount: 4,
+  },
+  4: {
+    tier: 4,
+    style: 'victory_prism',
+    title: 'จุติ ระดับ 4 · พลังแห่งชัยชนะ',
+    shortTitle: 'พลังแห่งชัยชนะ',
+    subtitle: 'วงแหวนชัยชนะแกนแสงทอง-ฟ้า พลังเกลียวทรงกลม และผลึกแซฟไฟร์ 6 ชิ้น',
+    primaryColor: '#38bdf8',
+    secondaryColor: '#fde68a',
+    glowColor: '#3b82f6',
+    coreAccentColor: '#fef3c7',
+    ringCount: 3,
+    runeCount: 8,
+    ribbonCount: 4,
+    beamCount: 10,
+    spireCount: 0,
+    hasWings: false,
+    wingVariant: 'none',
+    hasHaloCrown: false,
+    hasAstralPillar: true,
+    orbitShardCount: 6,
+  },
+  5: {
+    tier: 5,
+    style: 'monarch_abyss',
+    title: 'จุติ ระดับ 5 · พลังแห่งราชันย์',
+    shortTitle: 'พลังแห่งราชันย์',
+    subtitle: 'ปีกขนนกม่วงทมิฬ มงกุฎอักขระราชันย์ และผลึกอเมทิสต์ปะทุรอบวงเวท',
+    primaryColor: '#a855f7',
+    secondaryColor: '#e879f9',
+    glowColor: '#7e22ce',
+    coreAccentColor: '#f5d0fe',
+    ringCount: 3,
+    runeCount: 6,
+    ribbonCount: 3,
+    beamCount: 8,
+    spireCount: 6,
+    hasWings: true,
+    wingVariant: 'monarch_violet',
+    hasHaloCrown: true,
+    hasAstralPillar: true,
+    orbitShardCount: 4,
+  },
+  6: {
+    tier: 6,
+    style: 'celestial_god',
+    title: 'จุติ ระดับ 6 · พลังแห่งเทพเจ้า',
+    shortTitle: 'พลังแห่งเทพเจ้า',
+    subtitle: 'ปีกเทพขาว-ทองสยายฟ้า วงแหวนกางเขนสุริยัน และศาสตราแสงทองคำรอบทิศ',
+    primaryColor: '#fbbf24',
+    secondaryColor: '#fef08a',
+    glowColor: '#f59e0b',
+    coreAccentColor: '#ffffff',
+    ringCount: 4,
+    runeCount: 8,
+    ribbonCount: 4,
+    beamCount: 10,
+    spireCount: 6,
+    hasWings: true,
+    wingVariant: 'celestial_gold',
+    hasHaloCrown: true,
+    hasAstralPillar: true,
+    orbitShardCount: 6,
+  },
 }
 
 /**
- * Maps rebirthCount to its visual aura form:
- * - 0: none
- * - 1..4: identical 'sigil_ring' pattern
- * - 5: evolved 'crimson_wings' pattern
- * - 6+: mythic 'celestial_crown' pattern
+ * Maps rebirthCount (0..6) to its distinct visual aura specification.
  */
 export function resolveRebirthAuraSpec(rebirthCount = 0): RebirthAuraSpec {
   const tier = Math.max(0, Math.min(6, Math.floor(rebirthCount || 0)))
@@ -77,25 +170,25 @@ export function resolveRebirthAuraSpec(rebirthCount = 0): RebirthAuraSpec {
       tier: 0,
       style: 'none',
       title: 'ยังไม่จุติ',
-      subtitle: 'เก็บเลเวลถึง 70 เพื่อปลดล็อกออร่าจุติ',
+      shortTitle: 'ปกติ',
+      subtitle: 'เก็บเลเวลถึง 70 เพื่อปลดล็อกออร่าจุติระดับ 1',
       primaryColor: '#94a3b8',
       secondaryColor: '#cbd5e1',
       glowColor: '#64748b',
+      coreAccentColor: '#e2e8f0',
       ringCount: 0,
       runeCount: 0,
+      ribbonCount: 0,
+      beamCount: 0,
+      spireCount: 0,
       hasWings: false,
+      wingVariant: 'none',
       hasHaloCrown: false,
       hasAstralPillar: false,
       orbitShardCount: 0,
     }
   }
-  if (tier <= 4) {
-    return { tier, ...REBIRTH_SIGIL_SPEC }
-  }
-  if (tier === 5) {
-    return { tier, ...REBIRTH_CRIMSON_WINGS_SPEC }
-  }
-  return { tier, ...REBIRTH_CELESTIAL_SPEC }
+  return REBIRTH_TIER_SPECS[tier] ?? REBIRTH_TIER_SPECS[6]
 }
 
 export type SkillVfxStyle =
@@ -129,16 +222,16 @@ export interface SkillVfxSpec {
 const SKILL_VFX_TABLE: Record<string, Omit<SkillVfxSpec, 'skillId'>> = {
   power: {
     style: 'heavy_cleave',
-    effectLabel: 'คลื่นฟาดแรงกระแทก',
-    primaryColor: '#ffe08a',
-    secondaryColor: '#ffffff',
+    effectLabel: 'คลื่นวายุฟาดพลังเริ่มต้น',
+    primaryColor: '#38bdf8',
+    secondaryColor: '#e0f2fe',
     iconPath: '/images/skills/whirl.png',
   },
   'first-aid': {
     style: 'holy_heal',
-    effectLabel: 'ละอองแสงฟื้นฟูพลังกาย',
-    primaryColor: '#80ed99',
-    secondaryColor: '#d8f3dc',
+    effectLabel: 'วงเวทประกายหัวใจฟื้นฟูพลังกาย',
+    primaryColor: '#f472b6',
+    secondaryColor: '#bae6fd',
     iconPath: '/images/skills/thunderstorm.png',
   },
   bash: {

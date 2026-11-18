@@ -228,7 +228,6 @@ export const JOB_TO_HERO_SHEET: Record<string, HeroSheetId> = {
   nekobaku: 'nekobaku',
   mamushi: 'mamushi',
   // Legacy aliases fallback cleanly
-  novice: 'swordsman',
   priest: 'cleric',
   high_priest: 'cleric',
   knight: 'templar',

@@ -117,7 +117,7 @@ export function PresenceSync() {
         game.party,
         game.onlinePlayers,
         activeFbUser?.uid ?? null,
-        game.p?.jobId ?? 'swordsman',
+        game.p?.jobId ?? 'novice',
         game.p?.mapId ?? null,
       )
       const roleChanged =
@@ -560,7 +560,7 @@ export function PresenceSync() {
           p.god = false
           p.invisible = false
           p.speed = 1
-          if (p.jobId === 'gm') p.jobId = 'swordsman'
+          if (p.jobId === 'gm') p.jobId = 'novice'
         }
         readyProfileUid = fbUser.uid
         lastKnownLocalMapId = p.mapId
@@ -802,7 +802,7 @@ export function PresenceSync() {
           player.god = false
           player.invisible = false
           player.speed = 1
-          if (player.jobId === 'gm') player.jobId = 'swordsman'
+          if (player.jobId === 'gm') player.jobId = 'novice'
           if (hadPrivileges) notify()
           lastSync = Date.now()
           return
@@ -815,7 +815,7 @@ export function PresenceSync() {
           player.god = false
           player.invisible = false
           player.speed = 1
-          if (player.jobId === 'gm') player.jobId = 'swordsman'
+          if (player.jobId === 'gm') player.jobId = 'novice'
           notify()
           boundUserId = null
           return
@@ -838,7 +838,7 @@ export function PresenceSync() {
           player.god = false
           player.invisible = false
           player.speed = 1
-          if (player.jobId === 'gm') player.jobId = 'swordsman'
+          if (player.jobId === 'gm') player.jobId = 'novice'
         }
         if (identityChanged) saveGame()
         const snapshot = currentSnapshot(data.user.id, uid)

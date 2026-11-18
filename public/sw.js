@@ -1,35 +1,36 @@
-const CACHE_NAME = 'pixel-quest-pwa-v2'
-const CORE_ASSETS = [
+const CACHE_VERSION = 'pixel-quest-pwa-v1';
+const APP_SHELL_CACHE = `${CACHE_VERSION}-shell`;
+const ASSET_CACHE = `${CACHE_VERSION}-assets`;
+
+const PRECACHE_URLS = [
   '/',
-  '/models',
-  '/class-selector',
   '/manifest.webmanifest',
+  '/icon.svg',
   '/pwa-192x192.png',
   '/pwa-512x512.png',
+  '/pwa-maskable-512x512.png',
   '/apple-icon.png',
-  '/icon.svg',
-]
+];
 
-function isDevHost(hostname) {
-  return (
-    hostname === 'localhost' ||
-    hostname === '127.0.0.1' ||
-    hostname.startsWith('ais-dev-')
-  )
-}
+const BYPASS_HOST_PATTERNS = [
+  'firestore.googleapis.com',
+  'identitytoolkit.googleapis.com',
+  'securetoken.googleapis.com',
+  'accounts.google.com',
+  'www.googleapis.com',
+  'api.stripe.com',
+  'checkout.stripe.com',
+];
 
 self.addEventListener('install', (event) => {
-  if (isDevHost(self.location.hostname)) {
-    event.waitUntil(self.skipWaiting())
-    return
-  }
   event.waitUntil(
     caches
-      .open(CACHE_NAME)
-      .then((cache) => cache.addAll(CORE_ASSETS).catch(() => undefined))
-      .then(() => self.skipWaiting()),
-  )
-})
+      .open(APP_SHELL_CACHE)
+      .then((cache) => cache.addAll(PRECACHE_URLS))
+      .then(() => self.skipWaiting())
+      .catch(() => self.skipWaiting()),
+  );
+});
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
@@ -38,65 +39,87 @@ self.addEventListener('activate', (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((key) => isDevHost(self.location.hostname) || key !== CACHE_NAME)
+            .filter(
+              (key) =>
+                key.startsWith('pixel-quest-pwa') &&
+                key !== APP_SHELL_CACHE &&
+                key !== ASSET_CACHE,
+            )
             .map((key) => caches.delete(key)),
         ),
       )
       .then(() => self.clients.claim()),
-  )
-})
+  );
+});
 
-function shouldBypassCache(url) {
-  if (isDevHost(url.hostname)) return true
-  if (url.origin !== self.location.origin) return true
-  if (url.pathname.startsWith('/api/')) return true
-  if (url.pathname.startsWith('/auth/')) return true
-  if (url.pathname.startsWith('/_next/')) return true
-  return false
+function shouldBypassRequest(url, request) {
+  if (request.method !== 'GET') return true;
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return true;
+  if (url.origin !== self.location.origin) {
+    return BYPASS_HOST_PATTERNS.some((host) => url.hostname.includes(host));
+  }
+  if (url.pathname.startsWith('/api/')) return true;
+  if (url.pathname.startsWith('/auth/')) return true;
+  if (url.pathname.includes('webpack-hmr')) return true;
+  return false;
 }
 
 self.addEventListener('fetch', (event) => {
-  const { request } = event
-  if (request.method !== 'GET') return
+  const { request } = event;
+  let url;
+  try {
+    url = new URL(request.url);
+  } catch {
+    return;
+  }
 
-  const url = new URL(request.url)
-  if (shouldBypassCache(url)) return
+  if (shouldBypassRequest(url, request)) {
+    return;
+  }
 
-  // Network-first for HTML page navigations so latest builds always load when online
-  if (request.mode === 'navigate') {
+  // Navigation requests: network-first with cached app shell fallback
+  if (request.mode === 'navigate' || request.headers.get('accept')?.includes('text/html')) {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          if (response && response.ok) {
-            const copy = response.clone()
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => undefined)
+          if (response && response.ok && url.origin === self.location.origin) {
+            const copy = response.clone();
+            caches.open(APP_SHELL_CACHE).then((cache) => cache.put(request, copy)).catch(() => undefined);
           }
-          return response
+          return response;
         })
-        .catch(() => caches.match(request).then((cached) => cached || caches.match('/'))),
-    )
-    return
+        .catch(async () => {
+          const cached = await caches.match(request);
+          if (cached) return cached;
+          const rootFallback = await caches.match('/');
+          return rootFallback || Response.error();
+        }),
+    );
+    return;
   }
 
-  // Network-first for static assets & images to prevent stale chunk hydration errors
+  // Static Next bundles, images, fonts, and sprites: stale-while-revalidate
   const isStaticAsset =
+    url.pathname.startsWith('/_next/static/') ||
+    url.pathname.startsWith('/assets/') ||
     url.pathname.startsWith('/images/') ||
-    url.pathname.endsWith('.png') ||
-    url.pathname.endsWith('.svg') ||
-    url.pathname.endsWith('.css') ||
-    url.pathname.endsWith('.woff2')
+    /\.(png|jpg|jpeg|webp|svg|ico|woff2?|css|js|webmanifest)$/i.test(url.pathname);
 
   if (isStaticAsset) {
     event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (response && response.ok) {
-            const copy = response.clone()
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => undefined)
-          }
-          return response
-        })
-        .catch(() => caches.match(request)),
-    )
+      caches.match(request).then((cached) => {
+        const networkPromise = fetch(request)
+          .then((response) => {
+            if (response && response.ok) {
+              const copy = response.clone();
+              caches.open(ASSET_CACHE).then((cache) => cache.put(request, copy)).catch(() => undefined);
+            }
+            return response;
+          })
+          .catch(() => cached || Response.error());
+
+        return cached || networkPromise;
+      }),
+    );
   }
-})
+});

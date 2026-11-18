@@ -5,7 +5,13 @@ import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from '@/lib/firebase/client'
 import { Eye, RotateCw } from 'lucide-react'
 import { ITEMS } from '@/lib/game/data'
-import { game, say, toggleZenHud, verifyStripeTopupAction } from '@/lib/game/engine'
+import {
+  checkPendingStripeTopupAction,
+  game,
+  say,
+  toggleZenHud,
+  verifyStripeTopupAction,
+} from '@/lib/game/engine'
 import { useUiLayout } from '@/lib/game/ui-layout'
 import { useGame } from '@/lib/game/use-game'
 import { CharacterBar } from './character-bar'
@@ -87,11 +93,17 @@ export function Game() {
       return
     }
 
-    if (!sessionId || handledTopupSessionRef.current === sessionId) return
-
     const tryVerify = () => {
       const user = auth.currentUser
-      if (!user || !user.emailVerified || handledTopupSessionRef.current === sessionId) return
+      if (!user || !user.emailVerified) return
+      if (!sessionId) {
+        if (handledTopupSessionRef.current !== 'checked_pending') {
+          handledTopupSessionRef.current = 'checked_pending'
+          void checkPendingStripeTopupAction()
+        }
+        return
+      }
+      if (handledTopupSessionRef.current === sessionId) return
       handledTopupSessionRef.current = sessionId
       void verifyStripeTopupAction({ sessionId }).then((res) => {
         cleanUrl()

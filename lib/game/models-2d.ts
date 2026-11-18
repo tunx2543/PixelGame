@@ -17,11 +17,13 @@ export type HatStyle =
   | 'crown'
   | 'mitre'
   | 'bandana'
+  | 'novice_bandana'
   | 'merchant_beret'
   | 'cat_hood'
 
 export type ArmorStyle =
   | 'tunic'
+  | 'novice_tunic'
   | 'brigandine'
   | 'plate'
   | 'paladin_plate'
@@ -124,6 +126,22 @@ export const MODEL_ACTIONS: readonly ModelAction[] = ['idle', 'walk', 'attack'] 
 export const HUMAN_MODEL_CANVAS_SIZE = { width: 42, height: 48 } as const
 
 export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
+  novice: {
+    jobId: 'novice',
+    name: JOBS.novice.name,
+    tier: 0,
+    hatStyle: 'none',
+    armorStyle: 'novice_tunic',
+    hairStyle: 'spiky',
+    canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
+    weapon: 'stick',
+    hatColor: '#7f5338',
+    scarfColor: '#784421',
+    backpack: false,
+    auraColor: '#60a5fa',
+    wingStyle: 'none',
+    animationFrames: { idle: 4, walk: 4, attack: 4 },
+  },
   swordsman: {
     jobId: 'swordsman',
     name: JOBS.swordsman.name,
@@ -508,7 +526,7 @@ export const MONSTER_MODEL_SPECS: Record<string, MonsterModelSpec> = Object.from
 )
 
 export function getJobModelSpec(jobId: string): JobModelSpec {
-  return JOB_MODEL_SPECS[jobId] ?? JOB_MODEL_SPECS.swordsman
+  return JOB_MODEL_SPECS[jobId] ?? JOB_MODEL_SPECS.novice
 }
 
 export function getMonsterModelSpec(defId?: string, sprite?: MonsterSprite, color?: string): MonsterModelSpec {

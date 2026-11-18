@@ -129,7 +129,7 @@ export function createDefaultEncounterSave(name = 'นักผจญภัย')
   const base: SaveData = {
     version: 1,
     name: name.trim().slice(0, 16) || 'นักผจญภัย',
-    jobId: 'swordsman',
+    jobId: 'novice',
     level: 1,
     exp: 0,
     hp: 1,

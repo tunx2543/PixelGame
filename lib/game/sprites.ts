@@ -872,10 +872,16 @@ function drawHatOrHair(
     return
   }
 
-  if (style === 'bandana') {
+  if (style === 'bandana' || style === 'novice_bandana') {
     drawBaseHair(true)
     s.rect(cx - 5, headTopY, 11, 2, hatCol)
     s.rect(cx - 4, headTopY, 9, 1, hatHi)
+    if (style === 'novice_bandana') {
+      // Cute Novice leaf sprout on crown
+      s.px(cx + 1, headTopY - 3, '#4ade80')
+      s.px(cx + 2, headTopY - 4, '#86efac')
+      s.px(cx + 3, headTopY - 4, '#4ade80')
+    }
     if (dir === 'side') {
       s.line(cx - 5, headTopY + 1, cx - 8, headTopY + 4, hatCol, 1)
       s.line(cx - 5, headTopY, cx - 8, headTopY + 2, hatDark, 1)
@@ -1078,14 +1084,14 @@ export function humanSprite(
   const action: 'idle' | 'walk' | 'attack' =
     requestedAction === 'skill' ? 'attack' : requestedAction
   const f = action === 'attack'
-    ? Math.abs(attackFrameOverride ?? (requestedAction === 'skill' ? 1 : frame)) % 4
+    ? Math.abs(attackFrameOverride ?? frame) % 4
     : action === 'walk'
       ? Math.abs(frame) % 6
       : frame === -1
         ? -1
         : Math.abs(frame) % 4
 
-  const key = `hd_ha48|${JSON.stringify(colors)}|${dir}|${action}|${f}|${weapon ?? 'none'}|${weaponColor}`
+  const key = `hd_ha48|${JSON.stringify(colors)}|${dir}|${requestedAction}|${f}|${weapon ?? 'none'}|${weaponColor}`
   return cached(key, () => {
     if (typeof document !== 'undefined') {
       return renderHdHumanSprite(colors, dir, f, weapon, weaponColor, attacking, requestedAction, attackFrameOverride)

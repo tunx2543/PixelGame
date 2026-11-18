@@ -20,6 +20,7 @@ import {
 import { isBgmMuted, toggleBgmMute } from '@/lib/game/bgm'
 import { useDailyMissions } from '@/lib/game/daily-missions'
 import {
+  ensurePremiumState,
   getInventoryCapacityBreakdown,
   isCurrentAccountGm,
   openPanel,
@@ -28,6 +29,8 @@ import {
   type PanelId,
 } from '@/lib/game/engine'
 import { getMenuIconUrl, type MenuIconId } from '@/lib/game/menu-icons'
+import { TOPUP_MILESTONES } from '@/lib/game/premium/topup'
+import { todayIsoDate } from '@/lib/game/rpg-systems'
 import { countClaimableQuests } from '@/lib/game/systems'
 import { resetUiLayout } from '@/lib/game/ui-layout'
 import { useGame } from '@/lib/game/use-game'
@@ -136,7 +139,7 @@ export function MenuDock({
   onToggleTouch?: () => void
   onOpenCheckin?: () => void
 }) {
-  const { p, partyInvites } = useGame()
+  const { p, partyInvites, topupBadge } = useGame()
   const dailyMissions = useDailyMissions()
   const [moreOpen, setMoreOpen] = useState(false)
   const [bgmMuted, setBgmMutedState] = useState(true)
@@ -168,6 +171,16 @@ export function MenuDock({
 
   if (!p) return null
 
+  const prem = ensurePremiumState(p)
+  const today = todayIsoDate()
+  const claimableMilestones = TOPUP_MILESTONES.filter(
+    (m) => (prem.totalTopupThb ?? 0) >= m.thresholdThb && !(prem.claimedTopupMilestones ?? []).includes(m.id),
+  ).length
+  const claimableDailyTopup = prem.lastDailyTopupDate === today && prem.claimedDailyTopupDate !== today ? 1 : 0
+  const isGmDev = Boolean(p.gm && isCurrentAccountGm())
+  const gemShopBadge =
+    topupBadge.approvedUnclaimed + (isGmDev ? topupBadge.gmPending : 0) + claimableMilestones + claimableDailyTopup
+
   const claimableQuests =
     countClaimableQuests(p.questState, p.towerState, p.petState, p.kills) + dailyMissions.claimableCount
   const statPoints = p.statPoints ?? 0
@@ -175,8 +188,7 @@ export function MenuDock({
   const invTotal = Math.max(1, getInventoryCapacityBreakdown(p).total)
   const bagPct = Math.min(100, Math.round((p.inventory.length / invTotal) * 100))
   const nextTowerFloor = (p.towerState?.highestFloor ?? 0) + 1
-  const isGmDev = Boolean(p.gm && isCurrentAccountGm())
-  const moreBadgeCount = partyInvites.length
+  const moreBadgeCount = partyInvites.length + gemShopBadge
 
   const openFromMenu = (panel: PanelId) => {
     openPanel(panel)
@@ -205,7 +217,9 @@ export function MenuDock({
                 ? skillPoints
                 : panel === 'quests'
                   ? claimableQuests
-                  : 0
+                  : panel === 'gem-shop'
+                    ? gemShopBadge
+                    : 0
 
           return (
             <button
@@ -423,6 +437,11 @@ export function MenuDock({
                 {panel === 'party' && partyInvites.length > 0 && (
                   <span className="absolute right-1 top-1 rounded-full bg-rose-600 px-1 text-[8px] font-bold text-white">
                     {partyInvites.length}
+                  </span>
+                )}
+                {panel === 'gem-shop' && gemShopBadge > 0 && (
+                  <span className="absolute right-1 top-1 rounded-full bg-rose-600 px-1 text-[8px] font-bold text-white">
+                    {gemShopBadge > 99 ? '99' : gemShopBadge}
                   </span>
                 )}
               </button>

@@ -2454,6 +2454,15 @@
           ],
           "maxLength": 180
         },
+        "slipHash": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}$"
+        },
         "createdAtMs": {
           "type": "integer",
           "minimum": 0
@@ -2488,6 +2497,7 @@
         "claimedAtMs",
         "reviewedByUid",
         "reviewNote",
+        "slipHash",
         "createdAtMs",
         "createdAt",
         "updatedAt"
@@ -2765,6 +2775,166 @@
         "expiresAtMs",
         "createdAt"
       ]
+    },
+    "RedeemCode": {
+      "title": "RedeemCode",
+      "description": "Promotional gift/redeem code created exclusively by GM ffsmilepay53@gmail.com.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 32,
+          "pattern": "^[A-Z0-9_\\-]+$"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "gold": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000000
+        },
+        "diamonds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "itemId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "qty": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 99
+        },
+        "plus": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15
+        },
+        "vipExp": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 50000
+        },
+        "maxUses": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        },
+        "usedCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "expiresAtMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "createdByUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAtMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "code",
+        "label",
+        "gold",
+        "diamonds",
+        "itemId",
+        "qty",
+        "plus",
+        "vipExp",
+        "maxUses",
+        "usedCount",
+        "active",
+        "expiresAtMs",
+        "createdByUid",
+        "createdAtMs",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "RedeemClaim": {
+      "title": "RedeemClaim",
+      "description": "Per-account atomic claim receipt enforcing 1-redemption-per-account on a RedeemCode.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "code": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 32,
+          "pattern": "^[A-Z0-9_\\-]+$"
+        },
+        "characterId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "playerName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "gameUid": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 8,
+          "pattern": "^[0-9]{4,8}$"
+        },
+        "claimedAtMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "code",
+        "characterId",
+        "playerName",
+        "gameUid",
+        "claimedAtMs",
+        "createdAt"
+      ]
     }
   },
   "firestore": {
@@ -2959,6 +3129,18 @@
         "$ref": "#/entities/ServerGiftDrop"
       },
       "description": "Server-wide GM gift drops & compensations claimable by verified players in mailbox."
+    },
+    "/redeemCodes/{codeId}": {
+      "schema": {
+        "$ref": "#/entities/RedeemCode"
+      },
+      "description": "GM promotional gift codes redeemable atomically once per verified user account."
+    },
+    "/redeemCodes/{codeId}/claims/{claimId}": {
+      "schema": {
+        "$ref": "#/entities/RedeemClaim"
+      },
+      "description": "Per-user atomic claim receipt subcollection preventing duplicate code redemptions."
     }
   }
 }

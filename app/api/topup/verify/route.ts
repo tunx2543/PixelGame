@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { resolveActorFromRequest } from '@/lib/server/premium-security'
 import { getStripeSecretKey, verifyAndFulfillStripePayment } from '@/lib/server/topup-gateway'
+import { listPendingStripeFulfillmentsForUid, markStripeWebhookOrderClaimed } from '@/lib/server/topup-store'
 
 export async function POST(req: Request) {
   try {
@@ -14,17 +15,42 @@ export async function POST(req: Request) {
         { status: 401 },
       )
     }
+
+    const body = (await req.json().catch(() => null)) as {
+      paymentIntentId?: unknown
+      sessionId?: unknown
+      checkPending?: unknown
+    } | null
+
+    if (body?.checkPending === true) {
+      const pending = listPendingStripeFulfillmentsForUid(auth.actor.uid)
+      if (pending.length === 0) {
+        return NextResponse.json({ ok: true, paid: false, message: 'ไม่มีรายการ Stripe ค้างรับ' })
+      }
+      const next = pending[0]
+      const result = await verifyAndFulfillStripePayment({
+        uid: auth.actor.uid,
+        sessionId: next.provider === 'stripe_checkout' ? next.gatewayRef : undefined,
+        paymentIntentId: next.provider === 'stripe_promptpay' ? next.gatewayRef : undefined,
+      })
+      if ('paid' in result && result.paid) {
+        markStripeWebhookOrderClaimed(next.gatewayRef, auth.actor.uid)
+      }
+      if (!('paid' in result)) {
+        if (result.status === 409) {
+          markStripeWebhookOrderClaimed(next.gatewayRef, auth.actor.uid)
+        }
+        return NextResponse.json({ ok: false, message: result.message }, { status: result.status })
+      }
+      return NextResponse.json(result)
+    }
+
     if (!getStripeSecretKey()) {
       return NextResponse.json(
         { ok: false, message: 'เซิร์ฟเวอร์ยังไม่ได้ตั้งค่า STRIPE_SECRET_KEY' },
         { status: 503 },
       )
     }
-
-    const body = (await req.json().catch(() => null)) as {
-      paymentIntentId?: unknown
-      sessionId?: unknown
-    } | null
 
     const result = await verifyAndFulfillStripePayment({
       uid: auth.actor.uid,
@@ -34,6 +60,10 @@ export async function POST(req: Request) {
 
     if (!('paid' in result)) {
       return NextResponse.json({ ok: false, message: result.message }, { status: result.status })
+    }
+
+    if (result.paid && result.order.gatewayRef) {
+      markStripeWebhookOrderClaimed(result.order.gatewayRef, auth.actor.uid)
     }
 
     return NextResponse.json(result)

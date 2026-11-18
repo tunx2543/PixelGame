@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Coins, Droplets, Footprints, Heart, Play, RotateCw, Shield, Sparkles, Swords, Target, Wand2, Zap } from 'lucide-react'
+import { Coins, Droplets, Footprints, Heart, Play, RotateCw, Shield, Sparkles, Sprout, Swords, Target, Wand2, Zap } from 'lucide-react'
 import { JOBS, type JobDef } from '@/lib/game/data'
 import { MODEL_DIRS, type ModelDir } from '@/lib/game/models-2d'
 import { getSkillIconPath, getSkillVfxSpec, resolveRebirthAuraSpec } from '@/lib/game/vfx-specs'
@@ -9,7 +9,7 @@ import { formatNum } from './format'
 import { SkillVfxPreview } from './skill-vfx-preview'
 import { SpriteModelCanvas, type PreviewAction } from './sprite-model-canvas'
 
-export type SelectableClassId = 'swordsman' | 'mage' | 'archer' | 'cleric' | 'merchant' | 'thief'
+export type SelectableClassId = 'novice' | 'swordsman' | 'mage' | 'archer' | 'cleric' | 'merchant' | 'thief'
 
 const DIR_LABELS: Record<ModelDir, string> = {
   down: 'หน้า',
@@ -40,6 +40,15 @@ export interface ComputedBaseStats {
 }
 
 export const CLASS_ROLE_OPTIONS: ClassRoleOption[] = [
+  {
+    id: 'novice',
+    englishName: 'Novice',
+    thaiName: 'ผู้ฝึกหัด',
+    tagline: 'คลาสเริ่มต้น Lv.1 คล่องตัวสมดุล พร้อมสกิลฟื้นฟูและฟาดพลัง',
+    accentClass: 'border-[#34d399]/70 bg-[#34d399]/15 text-[#6ee7b7]',
+    badgeClass: 'bg-[#34d399]/20 text-[#6ee7b7]',
+    job: JOBS.novice,
+  },
   {
     id: 'swordsman',
     englishName: 'Swordsman',
@@ -97,7 +106,7 @@ export const CLASS_ROLE_OPTIONS: ClassRoleOption[] = [
 ]
 
 export function calculateClassBaseStats(classId: string, level = 10): ComputedBaseStats {
-  const job = JOBS[classId] ?? JOBS.swordsman
+  const job = JOBS[classId] ?? JOBS.novice
   const safeLevel = Math.max(1, Math.min(999, Math.floor(level)))
   return {
     maxHp: Math.floor((80 + safeLevel * 22) * job.hpMul),
@@ -112,6 +121,7 @@ export function calculateClassBaseStats(classId: string, level = 10): ComputedBa
 }
 
 function ClassIcon({ classId, className }: { classId: SelectableClassId; className?: string }) {
+  if (classId === 'novice') return <Sprout className={className} aria-hidden />
   if (classId === 'swordsman') return <Swords className={className} aria-hidden />
   if (classId === 'mage') return <Wand2 className={className} aria-hidden />
   if (classId === 'cleric') return <Sparkles className={className} aria-hidden />
@@ -161,7 +171,7 @@ function StatMeter({
 
 export function CharacterClassSelector({
   value,
-  defaultClassId = 'swordsman',
+  defaultClassId = 'novice',
   level = 10,
   onClassChange,
 }: {
@@ -214,7 +224,7 @@ export function CharacterClassSelector({
         <div>
           <h2 className="text-base font-bold text-primary">เลือกสายอาชีพ (Character Class)</h2>
           <p className="text-xs text-muted-foreground">
-            สลับระหว่าง Swordsman, Mage, Archer, Cleric, Merchant และ Thief เพื่อปรับค่าสถานะพื้นฐานทันที
+            เริ่มจาก Novice (ผู้ฝึกหัด) หรือเปรียบเทียบ 6 อาชีพหลัก (Swordsman, Mage, Archer, Cleric, Merchant, Thief) เพื่อดูค่าสถานะทันที
           </p>
         </div>
 
@@ -420,7 +430,10 @@ export function CharacterClassSelector({
             <div className="flex flex-wrap items-center gap-1" role="group" aria-label="พรีวิวระดับออร่าจุติ">
               {[
                 { count: 0, label: 'ปกติ' },
-                { count: 1, label: 'จุติ 1–4' },
+                { count: 1, label: 'จุติ 1' },
+                { count: 2, label: 'จุติ 2' },
+                { count: 3, label: 'จุติ 3' },
+                { count: 4, label: 'จุติ 4' },
                 { count: 5, label: 'จุติ 5' },
                 { count: 6, label: 'จุติ 6' },
               ].map((tier) => {

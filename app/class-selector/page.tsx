@@ -12,8 +12,8 @@ import {
 import { CharacterStatus } from '@/components/game/character-status'
 
 export default function ClassSelectorPage() {
-  const [selectedClass, setSelectedClass] = useState<SelectableClassId>('swordsman')
-  const [level, setLevel] = useState<number>(10)
+  const [selectedClass, setSelectedClass] = useState<SelectableClassId>('novice')
+  const [level, setLevel] = useState<number>(1)
 
   const role = CLASS_ROLE_OPTIONS.find((r) => r.id === selectedClass) ?? CLASS_ROLE_OPTIONS[0]
   const stats = calculateClassBaseStats(selectedClass, level)
@@ -24,7 +24,7 @@ export default function ClassSelectorPage() {
         <div>
           <h1 className="text-lg font-bold text-primary">Character Class & Base Stats</h1>
           <p className="text-xs text-muted-foreground">
-            ทดลองสลับสายอาชีพ Swordsman / Mage / Archer / Cleric / Merchant / Thief เพื่อดูค่าสถานะและ HP/MP ที่เปลี่ยนแบบเรียลไทม์
+            ทดลองสลับสายอาชีพ Novice / Swordsman / Mage / Archer / Cleric / Merchant / Thief เพื่อดูโมเดล 2D และค่าสถานะแบบเรียลไทม์
           </p>
         </div>
 

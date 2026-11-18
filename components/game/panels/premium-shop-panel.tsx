@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   AlertCircle,
+  AlertTriangle,
   Archive,
   Award,
   Backpack,
@@ -15,6 +16,7 @@ import {
   ExternalLink,
   FlaskConical,
   Gem,
+  Gift,
   History,
   Lock,
   LogIn,
@@ -28,6 +30,7 @@ import {
   Sparkles,
   Store,
   Tag,
+  Trophy,
   Upload,
   UserCheck,
   Warehouse,
@@ -35,10 +38,17 @@ import {
 } from 'lucide-react'
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth'
 import { auth, signInWithGoogle } from '@/lib/firebase/client'
+import {
+  subscribeAllTopupSlipRequestsForGm,
+  subscribeMyTopupSlipRequests,
+} from '@/lib/firebase/topup-requests'
 import { isTopupAdminUser } from '@/lib/game/permissions'
 import {
+  claimApprovedManualTopupAction,
   claimBattlePassTierAction,
+  claimDailyTopupBonusAction,
   claimExpiredPassArchiveAction,
+  claimTopupMilestoneAction,
   claimVipDailyRewardAction,
   claimVipTierRewardAction,
   createTopupCheckoutAction,
@@ -52,7 +62,7 @@ import {
   getStorageCapacityBreakdown,
   openPanel,
   purchasePremiumProductAction,
-  claimApprovedManualTopupAction,
+  redeemGiftCodeAction,
   reviewSlipRequestAction,
   sandboxGrantDiamondsAction,
   saveMerchantQrSettingsAction,
@@ -63,6 +73,8 @@ import {
   type TopupGatewayStatus,
 } from '@/lib/game/engine'
 import {
+  DAILY_TOPUP_BONUS,
+  TOPUP_MILESTONES,
   TOPUP_PACKAGES,
   calculateTopupReward,
   compressImageFileToDataUrl,
@@ -277,6 +289,8 @@ export function PremiumShopPanel() {
   const [gmSavingShop, setGmSavingShop] = useState(false)
   const [showGmQrForm, setShowGmQrForm] = useState(false)
   const [previewSlipModal, setPreviewSlipModal] = useState<{ title: string; url: string } | null>(null)
+  const [redeemCodeInput, setRedeemCodeInput] = useState('')
+  const [redeemBusy, setRedeemBusy] = useState(false)
 
   useEffect(() => {
     const id = setInterval(() => setNowMs(Date.now()), 30_000)
@@ -316,6 +330,28 @@ export function PremiumShopPanel() {
 
   useEffect(() => {
     void refreshTopupCloudData(fbUser)
+    if (!fbUser || !fbUser.emailVerified) return
+
+    const mergeRows = (incoming: TopupSlipRequestRecord[], prev: TopupSlipRequestRecord[]) => {
+      const map = new Map<string, TopupSlipRequestRecord>()
+      for (const r of prev) map.set(r.requestId, r)
+      for (const r of incoming) map.set(r.requestId, r)
+      return Array.from(map.values()).sort((a, b) => b.createdAtMs - a.createdAtMs)
+    }
+
+    const unsubMine = subscribeMyTopupSlipRequests(fbUser.uid, (rows) => {
+      setMySlipRequests((prev) => mergeRows(rows, prev))
+    })
+    const unsubGm = isTopupAdminUser(fbUser)
+      ? subscribeAllTopupSlipRequestsForGm((rows) => {
+          setGmSlipQueue((prev) => mergeRows(rows, prev))
+        })
+      : () => {}
+
+    return () => {
+      unsubMine()
+      unsubGm()
+    }
   }, [fbUser?.uid, fbUser?.emailVerified])
 
   useEffect(() => {
@@ -632,6 +668,46 @@ export function PremiumShopPanel() {
       await refreshTopupCloudData(fbUser)
     } finally {
       setTopupLoading(false)
+    }
+  }
+
+  const handleClaimTopupMilestone = async (milestoneId: string) => {
+    if (inFlight) return
+    setInFlight(true)
+    try {
+      const res = await claimTopupMilestoneAction(milestoneId)
+      if (res.ok) playQuestClaimSfx(true)
+      setNotice({ ok: res.ok, text: res.message })
+    } finally {
+      setInFlight(false)
+    }
+  }
+
+  const handleClaimDailyTopup = async () => {
+    if (inFlight) return
+    setInFlight(true)
+    try {
+      const res = await claimDailyTopupBonusAction()
+      if (res.ok) playQuestClaimSfx(true)
+      setNotice({ ok: res.ok, text: res.message })
+    } finally {
+      setInFlight(false)
+    }
+  }
+
+  const handleRedeemCode = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (redeemBusy || !redeemCodeInput.trim()) return
+    setRedeemBusy(true)
+    try {
+      const res = await redeemGiftCodeAction(redeemCodeInput)
+      if (res.ok) {
+        playQuestClaimSfx(true)
+        setRedeemCodeInput('')
+      }
+      setNotice({ ok: res.ok, text: res.message })
+    } finally {
+      setRedeemBusy(false)
     }
   }
 
@@ -1230,6 +1306,137 @@ export function PremiumShopPanel() {
             </div>
           </div>
 
+          {/* Daily Top-up Bonus + Cumulative Milestones + Gift Code */}
+          <div className="grid gap-3 lg:grid-cols-3">
+            {/* Daily Top-up Bonus */}
+            <div className="flex flex-col justify-between gap-2.5 border-2 border-amber-400/40 bg-amber-950/15 p-3">
+              <div className="space-y-1">
+                <h3 className="flex items-center gap-1.5 text-xs font-bold text-amber-200">
+                  <Sparkles className="size-4 text-amber-300" aria-hidden />
+                  โบนัสเติมเงินรายวัน (Daily Bonus)
+                </h3>
+                <p className="text-[11px] text-muted-foreground">
+                  เติมแพ็กเกจใดก็ได้ในวันนี้ ({todayIso}) รับของแถมพิเศษฟรีวันละ 1 ครั้ง
+                </p>
+                <p className="border border-amber-400/30 bg-background/70 px-2 py-1 text-[11px] font-semibold text-amber-100">
+                  {DAILY_TOPUP_BONUS.label}
+                </p>
+              </div>
+              <PxButton
+                variant={prem.lastDailyTopupDate === todayIso && prem.claimedDailyTopupDate !== todayIso ? 'accent' : 'secondary'}
+                disabled={inFlight || prem.lastDailyTopupDate !== todayIso || prem.claimedDailyTopupDate === todayIso}
+                onClick={() => void handleClaimDailyTopup()}
+                className="w-full py-1.5 text-[11px]"
+              >
+                {prem.claimedDailyTopupDate === todayIso
+                  ? 'รับโบนัสวันนี้แล้ว'
+                  : prem.lastDailyTopupDate === todayIso
+                    ? 'รับโบนัสเติมเงินรายวันทันที!'
+                    : 'ยังไม่ได้เติมเงินในวันนี้'}
+              </PxButton>
+            </div>
+
+            {/* Redeem Gift Code */}
+            <form
+              onSubmit={(e) => void handleRedeemCode(e)}
+              className="flex flex-col justify-between gap-2.5 border-2 border-fuchsia-400/40 bg-fuchsia-950/15 p-3 lg:col-span-2"
+            >
+              <div className="space-y-1">
+                <h3 className="flex items-center gap-1.5 text-xs font-bold text-fuchsia-200">
+                  <Gift className="size-4 text-fuchsia-300" aria-hidden />
+                  แลกโค้ดรางวัล / กิฟต์โค้ด (Redeem Code)
+                </h3>
+                <p className="text-[11px] text-muted-foreground">
+                  นำโค้ดกิจกรรมจาก GM มากรอกเพื่อรับเพชร ทอง VIP EXP หรือไอเทมแรร์ (จำกัด 1 ครั้งต่อ 1 บัญชี Google)
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <input
+                  type="text"
+                  value={redeemCodeInput}
+                  onChange={(e) => setRedeemCodeInput(e.target.value.toUpperCase())}
+                  placeholder="กรอกโค้ด เช่น PIXEL2026..."
+                  maxLength={32}
+                  disabled={!fbUser?.emailVerified || redeemBusy}
+                  className="min-w-0 flex-1 border border-border bg-background px-3 py-1.5 font-mono text-xs uppercase text-foreground outline-none focus:border-fuchsia-400 disabled:opacity-50"
+                />
+                <PxButton
+                  type="submit"
+                  variant="accent"
+                  disabled={!fbUser?.emailVerified || redeemBusy || redeemCodeInput.trim().length < 4}
+                  className="px-4 py-1.5 text-xs"
+                >
+                  {redeemBusy ? 'กำลังตรวจสอบ...' : 'แลกโค้ดเลย'}
+                </PxButton>
+              </div>
+            </form>
+          </div>
+
+          {/* Cumulative Top-up Milestones */}
+          <div className="space-y-2.5 border-2 border-cyan-400/40 bg-cyan-950/15 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="flex items-center gap-1.5 text-xs font-bold text-cyan-200">
+                  <Trophy className="size-4 text-amber-300" aria-hidden />
+                  รางวัลยอดเติมเงินสะสม (Cumulative Milestones)
+                </h3>
+                <p className="text-[11px] text-muted-foreground">
+                  ยอดเติมสะสมรวมของตัวละครนี้:{' '}
+                  <strong className="text-emerald-300">฿{formatNum(prem.totalTopupThb ?? 0)}</strong>
+                </p>
+              </div>
+              <span className="border border-cyan-400/40 bg-background/70 px-2 py-0.5 text-[10px] font-bold text-cyan-200">
+                {(prem.claimedTopupMilestones ?? []).length}/{TOPUP_MILESTONES.length} ขั้น
+              </span>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+              {TOPUP_MILESTONES.map((tier) => {
+                const totalThb = prem.totalTopupThb ?? 0
+                const claimed = (prem.claimedTopupMilestones ?? []).includes(tier.id)
+                const reached = totalThb >= tier.thresholdThb
+                const pct = Math.min(100, Math.round((totalThb / tier.thresholdThb) * 100))
+                return (
+                  <div
+                    key={tier.id}
+                    className={cn(
+                      'flex flex-col justify-between gap-2 border p-2.5 text-[11px]',
+                      claimed
+                        ? 'border-emerald-400/50 bg-emerald-950/20'
+                        : reached
+                          ? 'border-amber-400/70 bg-amber-950/25'
+                          : 'border-border bg-background/70',
+                    )}
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="font-bold text-amber-200">฿{formatNum(tier.thresholdThb)}</span>
+                        <span className="font-mono text-[9px] text-muted-foreground">{pct}%</span>
+                      </div>
+                      <p className="font-semibold text-foreground">{tier.title}</p>
+                      <p className="text-[10px] leading-snug text-cyan-200">{tier.rewardLabel}</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="h-1.5 w-full overflow-hidden bg-muted">
+                        <div
+                          className={cn('h-full transition-all', reached ? 'bg-emerald-400' : 'bg-cyan-400')}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <PxButton
+                        variant={reached && !claimed ? 'accent' : 'secondary'}
+                        disabled={inFlight || !reached || claimed}
+                        onClick={() => void handleClaimTopupMilestone(tier.id)}
+                        className="w-full py-1 text-[10px]"
+                      >
+                        {claimed ? 'รับแล้ว' : reached ? 'กดรับรางวัล' : `ขาด ฿${formatNum(tier.thresholdThb - totalThb)}`}
+                      </PxButton>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
           {/* GM Slip Approval Queue */}
           {isGmUser && (
             <div className="space-y-2 border-2 border-amber-400/45 bg-amber-950/15 p-3">
@@ -1246,48 +1453,69 @@ export function PremiumShopPanel() {
                 <p className="py-3 text-center text-xs text-muted-foreground">ยังไม่มีสลิปที่ส่งเข้ามา</p>
               ) : (
                 <div className="max-h-64 space-y-2 overflow-y-auto">
-                  {gmSlipQueue.map((req) => (
-                    <div
-                      key={req.requestId}
-                      className="flex flex-wrap items-center justify-between gap-2 border border-border bg-background/80 p-2 text-[11px]"
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        {req.slipDataUrl && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setPreviewSlipModal({
-                                title: `รูปสลิปโอนเงิน · ${req.playerName} (฿${formatNum(req.amountThb)})`,
-                                url: req.slipDataUrl,
-                              })
-                            }
-                            className="shrink-0 border border-border bg-white p-0.5 hover:border-cyan-400"
-                            title="คลิกดูรูปสลิปขนาดใหญ่"
-                          >
-                            <img src={req.slipDataUrl} alt="Slip" className="size-12 object-cover" />
-                          </button>
-                        )}
-                        <div className="min-w-0">
-                          <p className="truncate font-bold text-foreground">
-                            {req.playerName} (#{req.gameUid}) · {req.packageName} · ฿{formatNum(req.amountThb)}
-                          </p>
-                          <p className="truncate text-[10px] text-cyan-200">
-                            +{formatNum(req.totalDiamonds)} D · {req.ownerEmail}
-                          </p>
-                          {req.slipNote && <p className="truncate text-[10px] text-muted-foreground">หมายเหตุ: {req.slipNote}</p>}
-                        </div>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-1.5">
-                        {req.status === 'pending' ? (
-                          <>
-                            <PxButton
-                              variant="accent"
-                              disabled={topupLoading}
-                              onClick={() => void handleGmReviewSlip(req, 'approved')}
-                              className="px-2 py-1 text-[10px]"
-                            >
-                              อนุมัติ
-                            </PxButton>
+                  {(() => {
+                    const hashCounts = new Map<string, number>()
+                    for (const row of gmSlipQueue) {
+                      if (row.slipHash) {
+                        hashCounts.set(row.slipHash, (hashCounts.get(row.slipHash) ?? 0) + 1)
+                      }
+                    }
+                    return gmSlipQueue.map((req) => {
+                      const isDupHash = Boolean(req.slipHash && (hashCounts.get(req.slipHash) ?? 0) > 1)
+                      return (
+                        <div
+                          key={req.requestId}
+                          className={cn(
+                            'flex flex-wrap items-center justify-between gap-2 border p-2 text-[11px]',
+                            isDupHash ? 'border-rose-400/70 bg-rose-950/20' : 'border-border bg-background/80',
+                          )}
+                        >
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            {req.slipDataUrl && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setPreviewSlipModal({
+                                    title: `รูปสลิปโอนเงิน · ${req.playerName} (฿${formatNum(req.amountThb)})`,
+                                    url: req.slipDataUrl,
+                                  })
+                                }
+                                className="shrink-0 border border-border bg-white p-0.5 hover:border-cyan-400"
+                                title="คลิกดูรูปสลิปขนาดใหญ่"
+                              >
+                                <img src={req.slipDataUrl} alt="Slip" className="size-12 object-cover" />
+                              </button>
+                            )}
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <p className="truncate font-bold text-foreground">
+                                  {req.playerName} (#{req.gameUid}) · {req.packageName} · ฿{formatNum(req.amountThb)}
+                                </p>
+                                {isDupHash && (
+                                  <span className="inline-flex items-center gap-1 border border-rose-400/70 bg-rose-500/20 px-1.5 py-0.5 text-[9px] font-bold text-rose-200">
+                                    <AlertTriangle className="size-3" aria-hidden />
+                                    สลิปแฮชซ้ำ!
+                                  </span>
+                                )}
+                              </div>
+                              <p className="truncate text-[10px] text-cyan-200">
+                                +{formatNum(req.totalDiamonds)} D · {req.ownerEmail}
+                                {req.slipHash ? ` · SHA:${req.slipHash.slice(0, 8)}` : ''}
+                              </p>
+                              {req.slipNote && <p className="truncate text-[10px] text-muted-foreground">หมายเหตุ: {req.slipNote}</p>}
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            {req.status === 'pending' ? (
+                              <>
+                                <PxButton
+                                  variant="accent"
+                                  disabled={topupLoading}
+                                  onClick={() => void handleGmReviewSlip(req, 'approved')}
+                                  className="px-2 py-1 text-[10px]"
+                                >
+                                  อนุมัติ
+                                </PxButton>
                             <PxButton
                               variant="secondary"
                               disabled={topupLoading}
@@ -1311,7 +1539,9 @@ export function PremiumShopPanel() {
                         )}
                       </div>
                     </div>
-                  ))}
+                      )
+                    })
+                  })()}
                 </div>
               )}
             </div>

@@ -40,10 +40,10 @@ export interface JobDef {
   skills: SkillDef[]
 }
 
-export const STARTER_JOB_IDS = ['swordsman', 'mage', 'archer', 'cleric', 'merchant', 'thief'] as const
+export const STARTER_JOB_IDS = ['novice'] as const
+export const TIER1_JOB_IDS = ['swordsman', 'mage', 'archer', 'cleric', 'merchant', 'thief'] as const
 
 const LEGACY_JOB_ALIASES: Record<string, string> = {
-  novice: 'swordsman',
   priest: 'cleric',
   high_priest: 'cleric',
   knight: 'templar',
@@ -56,11 +56,35 @@ const LEGACY_JOB_ALIASES: Record<string, string> = {
 }
 
 export const JOBS: Record<string, JobDef> = {
+  novice: {
+    id: 'novice',
+    name: 'ผู้ฝึกหัด (Novice)',
+    tier: 0,
+    from: null,
+    reqLevel: 1,
+    cost: 0,
+    description: 'นักผจญภัยมือใหม่ผู้เริ่มต้นการเดินทาง สวมเสื้อคลุมฮู้ดสีขาว สายสะพายหนัง และกระเป๋าคาดเอว สามารถเปลี่ยนเป็น 6 อาชีพหลักได้ที่หอปรมาจารย์อาร์ค',
+    hpMul: 1.0,
+    mpMul: 1.0,
+    atkMul: 1.0,
+    defMul: 1.0,
+    speedMul: 1.08,
+    attackSpeed: 0.56,
+    crit: 0.08,
+    range: 24,
+    ranged: false,
+    weaponTypes: ['stick', 'sword', 'dagger'],
+    colors: { hair: '#7f5338', body: '#f6f2ea', legs: '#3b3332', accent: '#8b522e', hat: '#7f5338' },
+    skills: [
+      { id: 'power', name: 'ฟาดพลังมือใหม่', mp: 5, mult: 2.1, cooldown: 1.8, kind: 'single', color: '#38bdf8' },
+      { id: 'first-aid', name: 'ปฐมพยาบาล', mp: 10, mult: 0.28, cooldown: 5, kind: 'heal', color: '#f472b6' },
+    ],
+  },
   swordsman: {
     id: 'swordsman',
     name: 'นักดาบ (Swordsman)',
     tier: 1,
-    from: null,
+    from: 'novice',
     reqLevel: 1,
     cost: 500,
     description: 'นักสู้ระยะประชิด พลังชีวิตและพลังป้องกันสูง',
@@ -84,7 +108,7 @@ export const JOBS: Record<string, JobDef> = {
     id: 'mage',
     name: 'นักเวท (Mage)',
     tier: 1,
-    from: null,
+    from: 'novice',
     reqLevel: 1,
     cost: 500,
     description: 'ผู้ใช้เวทมนตร์ระยะไกล พลังโจมตีเวทรุนแรง',
@@ -108,7 +132,7 @@ export const JOBS: Record<string, JobDef> = {
     id: 'archer',
     name: 'นักธนู (Archer)',
     tier: 1,
-    from: null,
+    from: 'novice',
     reqLevel: 1,
     cost: 500,
     description: 'นักแม่นธนู โจมตีไกลและรวดเร็ว',
@@ -132,7 +156,7 @@ export const JOBS: Record<string, JobDef> = {
     id: 'cleric',
     name: 'นักบวช (Cleric)',
     tier: 1,
-    from: null,
+    from: 'novice',
     reqLevel: 1,
     cost: 500,
     description: 'นักบวชแห่งแสง ใช้เวทฟื้นฟูพลังชีวิตและศรศักดิ์สิทธิ์',
@@ -157,7 +181,7 @@ export const JOBS: Record<string, JobDef> = {
     id: 'merchant',
     name: 'พ่อค้า (Merchant)',
     tier: 1,
-    from: null,
+    from: 'novice',
     goldBonus: 0.15,
     reqLevel: 1,
     cost: 500,
@@ -182,7 +206,7 @@ export const JOBS: Record<string, JobDef> = {
     id: 'thief',
     name: 'โจร (Thief)',
     tier: 1,
-    from: null,
+    from: 'novice',
     reqLevel: 1,
     cost: 500,
     description: 'ว่องไว คริติคอลสูง เคลื่อนที่เร็ว',
@@ -415,10 +439,10 @@ export const JOBS: Record<string, JobDef> = {
 }
 
 export function normalizeJobId(jobId?: string | null): string {
-  if (!jobId || typeof jobId !== 'string') return 'swordsman'
+  if (!jobId || typeof jobId !== 'string') return 'novice'
   if (JOBS[jobId]) return jobId
   const mapped = LEGACY_JOB_ALIASES[jobId]
-  return mapped && JOBS[mapped] ? mapped : 'swordsman'
+  return mapped && JOBS[mapped] ? mapped : 'novice'
 }
 
 export type ItemKind = 'consumable' | 'weapon' | 'armor' | 'material'

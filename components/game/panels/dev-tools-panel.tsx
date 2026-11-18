@@ -10,6 +10,7 @@ import {
   Flag,
   Flame,
   Gem,
+  Gift,
   Heart,
   Mail,
   Megaphone,
@@ -31,6 +32,12 @@ import {
 } from 'lucide-react'
 import { auth } from '@/lib/firebase/client'
 import { listPlayerReports, type PlayerReportRecord } from '@/lib/firebase/mmo-online'
+import {
+  createOrUpdateRedeemCodeForGm,
+  listRedeemCodesForGm,
+  toggleRedeemCodeActiveForGm,
+  type RedeemCodeRecord,
+} from '@/lib/firebase/redeem-codes'
 import firebaseConfig from '../../../firebase-applet-config.json'
 import { ITEMS, JOBS, MAX_LEVEL, MAX_PLUS, MONSTERS } from '@/lib/game/data'
 import { devCompleteAllDailyMissions, devRerollDailyMissions } from '@/lib/game/daily-missions'
@@ -129,6 +136,19 @@ export function DevToolsPanel() {
   const [sysStatus, setSysStatus] = useState<ServerSystemStatus | null>(null)
   const [sysLoading, setSysLoading] = useState(false)
 
+  // GM Redeem Code Manager state
+  const [redeemCodes, setRedeemCodes] = useState<RedeemCodeRecord[]>([])
+  const [rcCode, setRcCode] = useState('')
+  const [rcLabel, setRcLabel] = useState('โค้ดของขวัญ GM')
+  const [rcGold, setRcGold] = useState('10000')
+  const [rcDiamonds, setRcDiamonds] = useState('50')
+  const [rcVipExp, setRcVipExp] = useState('0')
+  const [rcItemId, setRcItemId] = useState('')
+  const [rcItemQty, setRcItemQty] = useState('1')
+  const [rcMaxUses, setRcMaxUses] = useState('100')
+  const [rcExpiresHours, setRcExpiresHours] = useState('168')
+  const [rcBusy, setRcBusy] = useState(false)
+
   const allItems = useMemo(() => {
     const q = itemQuery.trim().toLowerCase()
     const list = Object.values(ITEMS)
@@ -150,6 +170,15 @@ export function DevToolsPanel() {
       }
     } finally {
       setReportsLoading(false)
+    }
+  }, [])
+
+  const loadRedeemCodes = useCallback(async () => {
+    try {
+      const list = await listRedeemCodesForGm(40)
+      setRedeemCodes(list)
+    } catch {
+      // Non-blocking redeem list fetch
     }
   }, [])
 
@@ -177,10 +206,11 @@ export function DevToolsPanel() {
   useEffect(() => {
     if (tab === 'mod') {
       void loadReports()
+      void loadRedeemCodes()
     } else if (tab === 'system') {
       void loadSystemStatus()
     }
-  }, [tab, loadReports, loadSystemStatus])
+  }, [tab, loadReports, loadRedeemCodes, loadSystemStatus])
 
   if (!p || !p.gm || !isCurrentAccountGm()) {
     return (
@@ -746,6 +776,196 @@ export function DevToolsPanel() {
                     ? 'ส่งของขวัญให้ผู้เล่นทั้งเซิร์ฟเวอร์'
                     : 'ส่งจดหมายให้ผู้เล่นนี้'}
               </PxButton>
+            </form>
+
+            {/* Section A2: GM Redeem / Gift Code Manager */}
+            <form
+              className="space-y-2.5 border-2 border-fuchsia-400/45 bg-fuchsia-950/15 p-2.5"
+              onSubmit={async (e) => {
+                e.preventDefault()
+                if (rcBusy) return
+                setRcBusy(true)
+                try {
+                  const created = await createOrUpdateRedeemCodeForGm({
+                    code: rcCode,
+                    label: rcLabel,
+                    gold: Number(rcGold) || 0,
+                    diamonds: Number(rcDiamonds) || 0,
+                    vipExp: Number(rcVipExp) || 0,
+                    itemId: rcItemId || null,
+                    qty: Number(rcItemQty) || 1,
+                    maxUses: Number(rcMaxUses) || 100,
+                    expiresHours: Number(rcExpiresHours) || null,
+                  })
+                  setStatusMsg(`สร้างโค้ด ${created.code} สำเร็จ (ใช้ได้ ${created.maxUses} ครั้ง)`)
+                  setRcCode('')
+                  await loadRedeemCodes()
+                } catch (err) {
+                  setStatusMsg(err instanceof Error ? err.message : 'สร้างโค้ดรางวัลไม่สำเร็จ')
+                } finally {
+                  setRcBusy(false)
+                }
+              }}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="flex items-center gap-1.5 font-semibold text-fuchsia-200">
+                  <Gift className="size-3.5 text-fuchsia-300" aria-hidden />
+                  สร้างโค้ดรางวัล / กิฟต์โค้ด (Redeem Code Generator)
+                </p>
+                <PxButton type="button" variant="secondary" onClick={() => void loadRedeemCodes()}>
+                  <RefreshCw className="mr-1 inline size-3" aria-hidden />
+                  รีเฟรช
+                </PxButton>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-3">
+                <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                  <span>รหัสโค้ด (A-Z, 0-9)</span>
+                  <input
+                    value={rcCode}
+                    onChange={(e) => setRcCode(e.target.value.toUpperCase())}
+                    placeholder="เช่น PIXEL2026"
+                    maxLength={32}
+                    className="w-full border border-border bg-background px-2 py-1 font-mono text-xs uppercase text-foreground"
+                  />
+                </label>
+                <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                  <span>ชื่อกิจกรรม / คำอธิบาย</span>
+                  <input
+                    value={rcLabel}
+                    onChange={(e) => setRcLabel(e.target.value)}
+                    maxLength={80}
+                    className="w-full border border-border bg-background px-2 py-1 text-xs text-foreground"
+                  />
+                </label>
+                <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                  <span>แนบไอเทม</span>
+                  <select
+                    value={rcItemId}
+                    onChange={(e) => setRcItemId(e.target.value)}
+                    className="w-full border border-border bg-background px-1.5 py-1 text-xs text-foreground"
+                  >
+                    <option value="">ไม่แนบไอเทม</option>
+                    {giftItemOptions.map((it) => (
+                      <option key={it.id} value={it.id}>
+                        {it.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
+                <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                  <span>เพชร (D)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={rcDiamonds}
+                    onChange={(e) => setRcDiamonds(e.target.value)}
+                    className="w-full border border-border bg-background px-2 py-1 text-xs text-foreground"
+                  />
+                </label>
+                <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                  <span>ทอง (G)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={rcGold}
+                    onChange={(e) => setRcGold(e.target.value)}
+                    className="w-full border border-border bg-background px-2 py-1 text-xs text-foreground"
+                  />
+                </label>
+                <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                  <span>VIP EXP</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={rcVipExp}
+                    onChange={(e) => setRcVipExp(e.target.value)}
+                    className="w-full border border-border bg-background px-2 py-1 text-xs text-foreground"
+                  />
+                </label>
+                <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                  <span>จำนวนไอเทม</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={99}
+                    disabled={!rcItemId}
+                    value={rcItemQty}
+                    onChange={(e) => setRcItemQty(e.target.value)}
+                    className="w-full border border-border bg-background px-2 py-1 text-xs text-foreground disabled:opacity-45"
+                  />
+                </label>
+                <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                  <span>จำนวนสิทธิ์สูงสุด</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={rcMaxUses}
+                    onChange={(e) => setRcMaxUses(e.target.value)}
+                    className="w-full border border-border bg-background px-2 py-1 text-xs text-foreground"
+                  />
+                </label>
+                <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                  <span>หมดอายุ (ชม.)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={rcExpiresHours}
+                    onChange={(e) => setRcExpiresHours(e.target.value)}
+                    className="w-full border border-border bg-background px-2 py-1 text-xs text-foreground"
+                  />
+                </label>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <PxButton type="submit" variant="accent" disabled={rcBusy || rcCode.trim().length < 4}>
+                  <Gift className="mr-1 inline size-3.5" aria-hidden />
+                  {rcBusy ? 'กำลังสร้าง...' : 'บันทึกโค้ดรางวัล'}
+                </PxButton>
+                <span className="text-[10px] text-muted-foreground">
+                  โค้ดทั้งหมด: {redeemCodes.length} รายการ
+                </span>
+              </div>
+
+              {redeemCodes.length > 0 && (
+                <div className="max-h-40 space-y-1 overflow-y-auto border-t border-border/60 pt-2">
+                  {redeemCodes.map((rc) => (
+                    <div
+                      key={rc.code}
+                      className="flex flex-wrap items-center justify-between gap-2 border border-border bg-background/70 px-2 py-1 text-[11px]"
+                    >
+                      <div className="min-w-0">
+                        <span className="font-mono font-bold text-fuchsia-200">{rc.code}</span>
+                        <span className="ml-2 text-muted-foreground">{rc.label}</span>
+                        <p className="text-[10px] text-cyan-200">
+                          {rc.diamonds > 0 ? `+${formatNum(rc.diamonds)} D ` : ''}
+                          {rc.gold > 0 ? `+${formatNum(rc.gold)} G ` : ''}
+                          {rc.vipExp > 0 ? `+${rc.vipExp} VIP ` : ''}
+                          · ใช้แล้ว {rc.usedCount}/{rc.maxUses}
+                        </p>
+                      </div>
+                      <PxButton
+                        type="button"
+                        variant={rc.active ? 'secondary' : 'primary'}
+                        onClick={async () => {
+                          try {
+                            await toggleRedeemCodeActiveForGm(rc.code, !rc.active)
+                            setStatusMsg(`${rc.active ? 'ปิด' : 'เปิด'}ใช้งานโค้ด ${rc.code} แล้ว`)
+                            await loadRedeemCodes()
+                          } catch (err) {
+                            setStatusMsg(err instanceof Error ? err.message : 'เปลี่ยนสถานะโค้ดไม่สำเร็จ')
+                          }
+                        }}
+                      >
+                        {rc.active ? 'ปิดโค้ด' : 'เปิดใช้'}
+                      </PxButton>
+                    </div>
+                  ))}
+                </div>
+              )}
             </form>
 
             {/* Section B: GM Moderation Controls */}

@@ -2,10 +2,30 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { formatPromptPayTarget, type PromptPayShopSettings, type TopupSlipRequestRecord } from '@/lib/game/premium/topup'
 
+export interface PendingWebhookOrder {
+  gatewayRef: string
+  orderId: string
+  uid: string
+  characterId: string
+  packageId: string
+  packageName: string
+  provider: 'stripe_checkout' | 'stripe_promptpay'
+  amountThb: number
+  baseDiamonds: number
+  bonusDiamonds: number
+  totalDiamonds: number
+  vipExpGranted: number
+  status: 'paid' | 'failed'
+  claimed: boolean
+  createdAtMs: number
+}
+
 interface TopupStoreData {
   merchantQr: PromptPayShopSettings | null
   slipRequests: TopupSlipRequestRecord[]
   usedSlipRefs?: string[]
+  usedSlipHashes?: string[]
+  stripeFulfillments?: PendingWebhookOrder[]
 }
 
 const PRIMARY_DIR = path.join(process.cwd(), '.data')
@@ -47,6 +67,8 @@ function readStore(): TopupStoreData {
           merchantQr: parsed.merchantQr ?? DEFAULT_MERCHANT_QR,
           slipRequests: Array.isArray(parsed.slipRequests) ? parsed.slipRequests.slice(0, 200) : [],
           usedSlipRefs: Array.isArray(parsed.usedSlipRefs) ? parsed.usedSlipRefs.slice(-500) : [],
+          usedSlipHashes: Array.isArray(parsed.usedSlipHashes) ? parsed.usedSlipHashes.slice(-500) : [],
+          stripeFulfillments: Array.isArray(parsed.stripeFulfillments) ? parsed.stripeFulfillments.slice(-200) : [],
         }
         return memoryStore
       }
@@ -54,7 +76,13 @@ function readStore(): TopupStoreData {
       // Ignore corrupt/unreadable file and try fallback
     }
   }
-  memoryStore = { merchantQr: DEFAULT_MERCHANT_QR, slipRequests: [], usedSlipRefs: [] }
+  memoryStore = {
+    merchantQr: DEFAULT_MERCHANT_QR,
+    slipRequests: [],
+    usedSlipRefs: [],
+    usedSlipHashes: [],
+    stripeFulfillments: [],
+  }
   return memoryStore
 }
 
@@ -89,6 +117,77 @@ export function claimPersistentSlipRef(transRef: string): boolean {
     usedSlipRefs: [...existing, clean].slice(-500),
   })
   return true
+}
+
+export function isPersistentSlipHashUsed(slipHash: string | null | undefined): boolean {
+  const clean = typeof slipHash === 'string' ? slipHash.trim().toLowerCase() : ''
+  if (!clean || clean.length < 16) return false
+  const store = readStore()
+  if ((store.usedSlipHashes ?? []).includes(clean)) return true
+  return store.slipRequests.some(
+    (r) => r.slipHash?.toLowerCase() === clean && (r.status === 'pending' || r.status === 'approved'),
+  )
+}
+
+export function claimPersistentSlipHash(slipHash: string | null | undefined): boolean {
+  const clean = typeof slipHash === 'string' ? slipHash.trim().toLowerCase().slice(0, 128) : ''
+  if (!clean || clean.length < 16) return true
+  const store = readStore()
+  const existing = store.usedSlipHashes ?? []
+  if (existing.includes(clean)) return false
+  writeStore({
+    ...store,
+    usedSlipHashes: [...existing, clean].slice(-500),
+  })
+  return true
+}
+
+export function recordStripeWebhookFulfillment(order: PendingWebhookOrder): void {
+  const store = readStore()
+  const list = store.stripeFulfillments ?? []
+  const idx = list.findIndex((item) => item.gatewayRef === order.gatewayRef)
+  if (idx !== -1 && list[idx].claimed) {
+    return
+  }
+  const nextList =
+    idx !== -1
+      ? list.map((item, i) => (i === idx ? { ...order, claimed: item.claimed } : item))
+      : [order, ...list].slice(0, 200)
+  writeStore({
+    ...store,
+    stripeFulfillments: nextList,
+  })
+}
+
+export function markStripeWebhookFailed(gatewayRef: string): void {
+  const store = readStore()
+  const list = store.stripeFulfillments ?? []
+  const idx = list.findIndex((item) => item.gatewayRef === gatewayRef)
+  if (idx === -1) return
+  const nextList = list.map((item, i) => (i === idx ? { ...item, status: 'failed' as const } : item))
+  writeStore({
+    ...store,
+    stripeFulfillments: nextList,
+  })
+}
+
+export function listPendingStripeFulfillmentsForUid(uid: string): PendingWebhookOrder[] {
+  const store = readStore()
+  return (store.stripeFulfillments ?? []).filter(
+    (item) => item.uid === uid && item.status === 'paid' && !item.claimed,
+  )
+}
+
+export function markStripeWebhookOrderClaimed(gatewayRef: string, uid: string): void {
+  const store = readStore()
+  const list = store.stripeFulfillments ?? []
+  const idx = list.findIndex((item) => item.gatewayRef === gatewayRef && item.uid === uid)
+  if (idx === -1) return
+  const nextList = list.map((item, i) => (i === idx ? { ...item, claimed: true } : item))
+  writeStore({
+    ...store,
+    stripeFulfillments: nextList,
+  })
 }
 
 export function getStoredMerchantQr(): PromptPayShopSettings | null {

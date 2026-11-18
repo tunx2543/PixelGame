@@ -13,10 +13,23 @@ import {
   type DuelMatchRecord,
   type TradeSessionRecord,
 } from '@/lib/firebase/mmo-online'
+import {
+  subscribeAllTopupSlipRequestsForGm,
+  subscribeMyTopupSlipRequests,
+} from '@/lib/firebase/topup-requests'
 import { respondPartyInvite } from '@/lib/firebase/parties'
 import { getOptionalClient } from '@/lib/supabase/client'
-import { game, getStats, isPlayerBlocked, notify, openPanel } from '@/lib/game/engine'
+import {
+  game,
+  getStats,
+  isPlayerBlocked,
+  notify,
+  openPanel,
+  setTopupBadgeCounts,
+} from '@/lib/game/engine'
 import { createDuelFighter } from '@/lib/game/mmo-systems'
+import { isTopupAdminUser } from '@/lib/game/permissions'
+import type { TopupSlipRequestRecord } from '@/lib/game/premium/topup'
 import { respondFriendRequest } from '@/lib/game/social'
 import { useGame } from '@/lib/game/use-game'
 
@@ -26,6 +39,9 @@ export function SocialNotifications() {
   const [fbTrade, setFbTrade] = useState<TradeSessionRecord | null>(null)
   const [fbDuel, setFbDuel] = useState<DuelMatchRecord | null>(null)
   const [trade, setTrade] = useState<{ id: number; userId: string } | null>(null)
+  const [approvedSlips, setApprovedSlips] = useState<TopupSlipRequestRecord[]>([])
+  const [gmPendingSlips, setGmPendingSlips] = useState<TopupSlipRequestRecord[]>([])
+  const [slipBannerDismissed, setSlipBannerDismissed] = useState(false)
   const [partyBusy, setPartyBusy] = useState(false)
 
   useEffect(() => {
@@ -33,16 +49,26 @@ export function SocialNotifications() {
     let unsubWhispers = () => {}
     let unsubTrades = () => {}
     let unsubDuels = () => {}
+    let unsubMySlips = () => {}
+    let unsubGmSlips = () => {}
+    let latestApproved = 0
+    let latestGmPending = 0
 
     const unsubAuth = onAuthStateChanged(auth, (fbUser) => {
       unsubSocial()
       unsubWhispers()
       unsubTrades()
       unsubDuels()
+      unsubMySlips()
+      unsubGmSlips()
       unsubSocial = () => {}
       unsubWhispers = () => {}
       unsubTrades = () => {}
       unsubDuels = () => {}
+      unsubMySlips = () => {}
+      unsubGmSlips = () => {}
+      latestApproved = 0
+      latestGmPending = 0
 
       if (fbUser && fbUser.emailVerified) {
         unsubSocial = subscribeFriendSocialState(fbUser.uid, (snapshot) => {
@@ -69,10 +95,31 @@ export function SocialNotifications() {
           const pending = duels.find((d) => d.status === 'pending' && !isPlayerBlocked(d.challengerUid)) ?? null
           setFbDuel(pending)
         })
+        unsubMySlips = subscribeMyTopupSlipRequests(fbUser.uid, (rows) => {
+          const approved = rows.filter((r) => r.status === 'approved' && !r.claimed)
+          latestApproved = approved.length
+          setApprovedSlips(approved)
+          setTopupBadgeCounts(latestApproved, latestGmPending)
+          if (approved.length > 0) setSlipBannerDismissed(false)
+        })
+        if (isTopupAdminUser(fbUser)) {
+          unsubGmSlips = subscribeAllTopupSlipRequestsForGm((rows) => {
+            const pending = rows.filter((r) => r.status === 'pending')
+            latestGmPending = pending.length
+            setGmPendingSlips(pending)
+            setTopupBadgeCounts(latestApproved, latestGmPending)
+            if (pending.length > 0) setSlipBannerDismissed(false)
+          })
+        } else {
+          setGmPendingSlips([])
+        }
       } else {
         setRequest(null)
         setFbTrade(null)
         setFbDuel(null)
+        setApprovedSlips([])
+        setGmPendingSlips([])
+        setTopupBadgeCounts(0, 0)
       }
     })
 
@@ -107,14 +154,17 @@ export function SocialNotifications() {
       unsubWhispers()
       unsubTrades()
       unsubDuels()
+      unsubMySlips()
+      unsubGmSlips()
       unsubAuth()
       if (timer !== null) window.clearInterval(timer)
     }
   }, [])
 
   const partyInvite = game.partyInvites[0] ?? null
+  const showSlipNotif = !slipBannerDismissed && (approvedSlips.length > 0 || gmPendingSlips.length > 0)
 
-  if (!request && !trade && !fbTrade && !fbDuel && !partyInvite) return null
+  if (!request && !trade && !fbTrade && !fbDuel && !partyInvite && !showSlipNotif) return null
 
   const respond = async (decision: 'accepted' | 'declined') => {
     if (!request) return
@@ -242,6 +292,61 @@ export function SocialNotifications() {
 
   return (
     <div className="pointer-events-auto absolute right-2 top-2 z-50 w-[min(18rem,calc(100vw-1rem))] space-y-2" role="status">
+      {showSlipNotif && approvedSlips.length > 0 && (
+        <div className="rounded-xl border border-emerald-400/75 bg-background/95 p-3 shadow-2xl backdrop-blur">
+          <p className="text-[10px] font-bold tracking-[0.12em] text-emerald-300">GM อนุมัติสลิปเติมเงินแล้ว!</p>
+          <p className="mt-1 text-xs text-foreground">
+            คุณมี <strong className="text-cyan-200">{approvedSlips.length} รายการ</strong> พร้อมกดรับเพชรเข้าตัวละคร (+
+            {approvedSlips.reduce((sum, s) => sum + s.totalDiamonds, 0).toLocaleString()} D)
+          </p>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              className="pixel-button primary px-2 py-1.5 text-[10px]"
+              onClick={() => {
+                setSlipBannerDismissed(true)
+                openPanel('gem-shop')
+              }}
+            >
+              เปิดรับเพชรเลย
+            </button>
+            <button
+              type="button"
+              className="pixel-button secondary px-2 py-1.5 text-[10px]"
+              onClick={() => setSlipBannerDismissed(true)}
+            >
+              ซ่อนไว้ก่อน
+            </button>
+          </div>
+        </div>
+      )}
+      {showSlipNotif && gmPendingSlips.length > 0 && (
+        <div className="rounded-xl border border-amber-400/75 bg-background/95 p-3 shadow-2xl backdrop-blur">
+          <p className="text-[10px] font-bold tracking-[0.12em] text-amber-300">คิวสลิปรอ GM ตรวจสอบ</p>
+          <p className="mt-1 text-xs text-foreground">
+            มีผู้เล่นส่งสลิปโอนเงินเข้ามา <strong className="text-amber-200">{gmPendingSlips.length} รายการ</strong>
+          </p>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              className="pixel-button primary px-2 py-1.5 text-[10px]"
+              onClick={() => {
+                setSlipBannerDismissed(true)
+                openPanel('gem-shop')
+              }}
+            >
+              เปิดตรวจสลิป
+            </button>
+            <button
+              type="button"
+              className="pixel-button secondary px-2 py-1.5 text-[10px]"
+              onClick={() => setSlipBannerDismissed(true)}
+            >
+              ซ่อนไว้ก่อน
+            </button>
+          </div>
+        </div>
+      )}
       {partyInvite && (
         <div className="rounded-xl border border-purple-400/60 bg-background/95 p-3 shadow-2xl backdrop-blur">
           <p className="text-[10px] font-bold tracking-[0.15em] text-purple-300">คำเชิญเข้าปาร์ตี้</p>

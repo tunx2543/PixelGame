@@ -6,15 +6,22 @@ import {
   getDoc,
   getDocs,
   limit,
+  onSnapshot,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
   where,
+  type Unsubscribe,
 } from 'firebase/firestore'
 import { isGmAccountUser, normalizeGameUidInput } from '@/lib/game/permissions'
-import type { PromptPayShopSettings, TopupSlipRequestRecord } from '@/lib/game/premium/topup'
+import {
+  isValidTopupPackageReward,
+  type PromptPayShopSettings,
+  type TopupSlipRequestRecord,
+} from '@/lib/game/premium/topup'
 import { OperationType, auth, db, handleFirestoreError } from './client'
 
 function safeDocId(raw: string, fallback: string): string {
@@ -61,9 +68,10 @@ export async function savePromptPayShopSettings(input: {
   const nowMs = Date.now()
   const cleanPromptPayId = input.promptPayId.replace(/\D/g, '').slice(0, 32)
   const cleanAccountName = input.accountName.trim().slice(0, 80) || 'Pixel Quest Shop'
-  const cleanQr = input.customQrDataUrl && input.customQrDataUrl.length >= 20
-    ? input.customQrDataUrl.slice(0, 350000)
-    : null
+  const cleanQr =
+    input.customQrDataUrl && input.customQrDataUrl.length >= 20
+      ? input.customQrDataUrl.slice(0, 350000)
+      : null
 
   try {
     const existingSnap = await getDoc(ref)
@@ -131,6 +139,7 @@ export async function submitManualTopupSlipRequest(input: {
   vipExpGranted: number
   slipDataUrl: string
   slipNote?: string
+  slipHash?: string | null
 }): Promise<TopupSlipRequestRecord> {
   const currentUser = auth.currentUser
   if (!currentUser || !currentUser.emailVerified || !currentUser.email) {
@@ -140,9 +149,18 @@ export async function submitManualTopupSlipRequest(input: {
   const safeCharId = safeDocId(input.characterId, 'slot_1')
   const safePkgId = safeDocId(input.packageId, 'topup_starter')
   const safeGameUid = normalizeGameUidInput(input.gameUid) || '1000'
+  const amountThb = Math.max(1, Math.floor(input.amountThb))
   const baseDiamonds = Math.max(1, Math.floor(input.baseDiamonds))
   const bonusDiamonds = Math.max(0, Math.floor(input.bonusDiamonds))
   const totalDiamonds = baseDiamonds + bonusDiamonds
+  const vipExpGranted = Math.max(0, Math.floor(input.vipExpGranted))
+  if (!isValidTopupPackageReward(safePkgId, amountThb, baseDiamonds, bonusDiamonds, vipExpGranted)) {
+    throw new Error('ข้อมูลแพ็กเกจเติมเงินไม่ตรงตามตารางราคา')
+  }
+  const cleanHash =
+    typeof input.slipHash === 'string' && /^[a-fA-F0-9]{64}$/.test(input.slipHash.trim())
+      ? input.slipHash.trim().toLowerCase()
+      : null
   const nowMs = Date.now()
   const path = `topupSlipRequests/${safeReqId}`
 
@@ -155,11 +173,11 @@ export async function submitManualTopupSlipRequest(input: {
     characterId: safeCharId,
     packageId: safePkgId,
     packageName: input.packageName.trim().slice(0, 120) || 'Topup Package',
-    amountThb: Math.max(1, Math.floor(input.amountThb)),
+    amountThb,
     baseDiamonds,
     bonusDiamonds,
     totalDiamonds,
-    vipExpGranted: Math.max(0, Math.floor(input.vipExpGranted)),
+    vipExpGranted,
     slipDataUrl: input.slipDataUrl.slice(0, 350000),
     slipNote: (input.slipNote || '').trim().slice(0, 180),
     status: 'pending',
@@ -167,6 +185,7 @@ export async function submitManualTopupSlipRequest(input: {
     claimedAtMs: null,
     reviewedByUid: null,
     reviewNote: null,
+    slipHash: cleanHash,
     createdAtMs: nowMs,
   }
 
@@ -202,11 +221,12 @@ function mapSlipRequestDoc(id: string, data: Record<string, unknown>): TopupSlip
     vipExpGranted: Number(data.vipExpGranted ?? 0),
     slipDataUrl: String(data.slipDataUrl ?? ''),
     slipNote: String(data.slipNote ?? ''),
-    status: (data.status === 'approved' || data.status === 'rejected' ? data.status : 'pending'),
+    status: data.status === 'approved' || data.status === 'rejected' ? data.status : 'pending',
     claimed: Boolean(data.claimed),
     claimedAtMs: typeof data.claimedAtMs === 'number' ? data.claimedAtMs : null,
     reviewedByUid: typeof data.reviewedByUid === 'string' ? data.reviewedByUid : null,
     reviewNote: typeof data.reviewNote === 'string' ? data.reviewNote : null,
+    slipHash: typeof data.slipHash === 'string' ? data.slipHash : null,
     createdAtMs: Number(data.createdAtMs ?? 0),
   }
 }
@@ -231,6 +251,35 @@ export async function listMyTopupSlipRequests(userId: string): Promise<TopupSlip
   }
 }
 
+export function subscribeMyTopupSlipRequests(
+  userId: string,
+  onChange: (rows: TopupSlipRequestRecord[]) => void,
+): Unsubscribe {
+  const currentUser = auth.currentUser
+  if (!currentUser || !currentUser.emailVerified || currentUser.uid !== userId) {
+    onChange([])
+    return () => {}
+  }
+  const path = 'topupSlipRequests'
+  const q = query(collection(db, 'topupSlipRequests'), where('ownerId', '==', userId), limit(30))
+  return onSnapshot(
+    q,
+    (snap) => {
+      const rows = snap.docs
+        .map((d) => mapSlipRequestDoc(d.id, d.data()))
+        .sort((a, b) => b.createdAtMs - a.createdAtMs)
+      onChange(rows)
+    },
+    (error) => {
+      try {
+        handleFirestoreError(error, OperationType.LIST, path)
+      } catch {
+        // Non-fatal subscription fallback
+      }
+    },
+  )
+}
+
 export async function listAllTopupSlipRequestsForGm(maxRows = 40): Promise<TopupSlipRequestRecord[]> {
   const currentUser = auth.currentUser
   if (!currentUser || !isGmAccountUser(currentUser)) return []
@@ -247,6 +296,36 @@ export async function listAllTopupSlipRequestsForGm(maxRows = 40): Promise<Topup
     handleFirestoreError(error, OperationType.LIST, path)
     return []
   }
+}
+
+export function subscribeAllTopupSlipRequestsForGm(
+  onChange: (rows: TopupSlipRequestRecord[]) => void,
+  maxRows = 45,
+): Unsubscribe {
+  const currentUser = auth.currentUser
+  if (!currentUser || !isGmAccountUser(currentUser)) {
+    onChange([])
+    return () => {}
+  }
+  const path = 'topupSlipRequests'
+  const q = query(
+    collection(db, 'topupSlipRequests'),
+    orderBy('createdAtMs', 'desc'),
+    limit(Math.max(1, Math.min(50, maxRows))),
+  )
+  return onSnapshot(
+    q,
+    (snap) => {
+      onChange(snap.docs.map((d) => mapSlipRequestDoc(d.id, d.data())))
+    },
+    (error) => {
+      try {
+        handleFirestoreError(error, OperationType.LIST, path)
+      } catch {
+        // Non-fatal subscription fallback
+      }
+    },
+  )
 }
 
 export async function reviewTopupSlipRequest(
@@ -282,11 +361,20 @@ export async function markTopupSlipRequestClaimed(requestId: string): Promise<vo
   const safeReqId = safeDocId(requestId, '')
   if (!safeReqId) throw new Error('รหัสคำขอไม่ถูกต้อง')
   const path = `topupSlipRequests/${safeReqId}`
+  const ref = doc(db, 'topupSlipRequests', safeReqId)
   try {
-    await updateDoc(doc(db, 'topupSlipRequests', safeReqId), {
-      claimed: true,
-      claimedAtMs: Date.now(),
-      updatedAt: serverTimestamp(),
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(ref)
+      if (!snap.exists()) throw new Error('ไม่พบคำขอสลิปใน Firestore')
+      const d = snap.data()
+      if (d.ownerId !== currentUser.uid) throw new Error('คำขอนี้ไม่ใช่ของบัญชีคุณ')
+      if (d.status !== 'approved') throw new Error('คำขอนี้ยังไม่ได้รับการอนุมัติ')
+      if (d.claimed === true) throw new Error('รับเพชรจากคำขอนี้ไปแล้ว')
+      tx.update(ref, {
+        claimed: true,
+        claimedAtMs: Date.now(),
+        updatedAt: serverTimestamp(),
+      })
     })
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, path)

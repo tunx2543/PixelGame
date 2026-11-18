@@ -1,12 +1,20 @@
+import crypto from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { isTopupAdminEmail, normalizeGameUidInput } from '@/lib/game/permissions'
 import { calculateTopupReward, getTopupPackage, type TopupSlipRequestRecord } from '@/lib/game/premium/topup'
 import { makeServerTxId, resolveActorFromRequest } from '@/lib/server/premium-security'
 import {
   addStoredSlipRequest,
+  isPersistentSlipHashUsed,
   listAllStoredSlipRequests,
   listStoredSlipRequestsForOwner,
 } from '@/lib/server/topup-store'
+
+function computeDataUrlSha256(dataUrl: string): string {
+  const commaIdx = dataUrl.indexOf(',')
+  const payload = commaIdx !== -1 ? dataUrl.slice(commaIdx + 1) : dataUrl
+  return crypto.createHash('sha256').update(payload).digest('hex')
+}
 
 export async function GET(req: Request) {
   const auth = await resolveActorFromRequest(req)
@@ -38,6 +46,7 @@ export async function POST(req: Request) {
   }
 
   const body = (await req.json().catch(() => null)) as {
+    requestId?: unknown
     packageId?: unknown
     characterId?: unknown
     playerName?: unknown
@@ -45,6 +54,7 @@ export async function POST(req: Request) {
     isFirstPurchase?: unknown
     slipDataUrl?: unknown
     slipNote?: unknown
+    slipHash?: unknown
   } | null
 
   const packageId = typeof body?.packageId === 'string' ? body.packageId.trim() : ''
@@ -58,8 +68,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, message: 'รูปสลิปไม่ถูกต้องหรือขนาดใหญ่เกินไป' }, { status: 400 })
   }
 
+  const clientHash =
+    typeof body?.slipHash === 'string' && /^[a-fA-F0-9]{64}$/.test(body.slipHash.trim())
+      ? body.slipHash.trim().toLowerCase()
+      : null
+  const slipHash = clientHash || computeDataUrlSha256(slipDataUrl)
+
+  if (isPersistentSlipHashUsed(slipHash)) {
+    return NextResponse.json(
+      { ok: false, message: 'สลิปรูปนี้ถูกส่งเข้าระบบแล้ว (ตรวจพบแฮชสลิปซ้ำ ป้องกันการใช้สลิปเดิมซ้ำ)' },
+      { status: 409 },
+    )
+  }
+
   const reward = calculateTopupReward(pkg, Boolean(body?.isFirstPurchase))
-  const requestId = makeServerTxId('SLIP')
+  const rawReqId =
+    typeof body?.requestId === 'string' ? body.requestId.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) : ''
+  const requestId = rawReqId.length >= 6 ? rawReqId : makeServerTxId('SLIP')
   const record: TopupSlipRequestRecord = {
     requestId,
     ownerId: auth.actor.uid,
@@ -84,6 +109,7 @@ export async function POST(req: Request) {
     claimedAtMs: null,
     reviewedByUid: null,
     reviewNote: null,
+    slipHash,
     createdAtMs: Date.now(),
   }
 

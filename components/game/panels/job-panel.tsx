@@ -36,9 +36,29 @@ function StatBars({ job }: { job: JobDef }) {
 }
 
 function JobTree({ currentJobId }: { currentJobId: string }) {
+  const novice = JOBS.novice
   const roots = Object.values(JOBS).filter((j) => j.tier === 1)
   return (
-    <div className="grid grid-cols-2 gap-1.5 text-[11px] sm:grid-cols-3 md:grid-cols-6">
+    <div className="space-y-2 text-[11px]">
+      {novice && (
+        <div className="flex flex-col items-center">
+          <div
+            className={`flex items-center gap-2 border-2 bg-background px-3 py-1.5 ${
+              currentJobId === 'novice' ? 'border-primary' : 'border-border'
+            }`}
+          >
+            <div className="grid size-10 place-items-center border border-[#0e0f1a] bg-[#131726]">
+              <SpriteModelCanvas mode="job" id="novice" action="idle" dir="down" size={38} showAura={false} label={`โมเดล ${novice.name}`} />
+            </div>
+            <div className="text-left leading-tight">
+              <p className="font-semibold text-foreground">{novice.name}</p>
+              <p className="text-[10px] text-emerald-300">คลาสเริ่มต้น • Lv.1</p>
+            </div>
+          </div>
+          <p className="mt-0.5 text-primary">↓</p>
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 md:grid-cols-6">
       {roots.map((j) => {
         const nextJobs = Object.values(JOBS).filter(
           (nextJob) => nextJob.from === j.id || Boolean(nextJob.alsoFrom?.includes(j.id)),
@@ -75,6 +95,7 @@ function JobTree({ currentJobId }: { currentJobId: string }) {
           </div>
         )
       })}
+      </div>
     </div>
   )
 }
@@ -195,7 +216,7 @@ export function JobPanel() {
       )}
 
       <div className="mt-4">
-        <p className="mb-1.5 text-xs text-muted-foreground">สายอาชีพทั้งหมด (6 คลาสเริ่มต้น → 8 คลาส 2)</p>
+        <p className="mb-1.5 text-xs text-muted-foreground">สายอาชีพทั้งหมด (ผู้ฝึกหัด Novice → 6 คลาสหลัก → 8 คลาส 2)</p>
         <JobTree currentJobId={p.jobId} />
       </div>
     </PanelFrame>

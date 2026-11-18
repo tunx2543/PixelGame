@@ -57,6 +57,10 @@ export function createDefaultPremiumState(characterId = 'slot_1', initialBalance
     auditLogs: [],
     firstTopupPackages: [],
     topupOrders: [],
+    totalTopupThb: 0,
+    claimedTopupMilestones: [],
+    lastDailyTopupDate: null,
+    claimedDailyTopupDate: null,
   }
 }
 
@@ -161,6 +165,21 @@ export function sanitizePremiumState(
         .slice(0, MAX_AUDIT_LOGS_LOCAL)
     : []
 
+  const computedFromOrders = topupOrders.reduce((sum, ord) => sum + Math.max(0, Number(ord.amountThb) || 0), 0)
+  const rawTotalThb = Number(obj.totalTopupThb ?? 0)
+  const totalTopupThb = Math.max(computedFromOrders, Number.isFinite(rawTotalThb) ? Math.floor(rawTotalThb) : 0)
+  const claimedTopupMilestones = Array.isArray(obj.claimedTopupMilestones)
+    ? [...new Set(obj.claimedTopupMilestones.filter((id): id is string => typeof id === 'string'))].slice(0, 32)
+    : []
+  const lastDailyTopupDate =
+    typeof obj.lastDailyTopupDate === 'string' && /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(obj.lastDailyTopupDate)
+      ? obj.lastDailyTopupDate
+      : null
+  const claimedDailyTopupDate =
+    typeof obj.claimedDailyTopupDate === 'string' && /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(obj.claimedDailyTopupDate)
+      ? obj.claimedDailyTopupDate
+      : null
+
   return {
     version: 1,
     wallet,
@@ -172,6 +191,10 @@ export function sanitizePremiumState(
     auditLogs,
     firstTopupPackages,
     topupOrders,
+    totalTopupThb,
+    claimedTopupMilestones,
+    lastDailyTopupDate,
+    claimedDailyTopupDate,
   }
 }
 

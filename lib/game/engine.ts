@@ -183,8 +183,11 @@ import {
   sanitizePremiumState,
 } from './premium/wallet'
 import {
+  DAILY_TOPUP_BONUS,
+  TOPUP_MILESTONES,
   calculateTopupReward,
   compressImageFileToDataUrl,
+  computeFileSha256Hex,
   getTopupPackage,
   type TopupOrderRecord,
   type TopupPackage,
@@ -192,9 +195,15 @@ import {
   type TopupSlipRequestRecord,
 } from './premium/topup'
 import {
+  getPromptPayShopSettings,
+  listAllTopupSlipRequestsForGm,
+  listMyTopupSlipRequests,
   markTopupSlipRequestClaimed,
+  reviewTopupSlipRequest,
+  savePromptPayShopSettings,
   submitManualTopupSlipRequest,
 } from '@/lib/firebase/topup-requests'
+import { claimRedeemCodeInFirestore } from '@/lib/firebase/redeem-codes'
 import {
   isGatewayRefRecorded,
   recordDiamondTransaction,
@@ -757,8 +766,19 @@ export const game = {
   ultimateCharge: 0,
   offlineAfkReward: null as OfflineAfkSummary | null,
   invasion: null as null | { active: boolean; wave: number; maxWaves: number; rewardDiamonds: number },
+  topupBadge: { approvedUnclaimed: 0, gmPending: 0 },
   zenHud: false,
   version: 0,
+}
+
+export function setTopupBadgeCounts(approvedUnclaimed: number, gmPending: number) {
+  const nextApproved = Math.max(0, Math.floor(approvedUnclaimed))
+  const nextPending = Math.max(0, Math.floor(gmPending))
+  if (game.topupBadge.approvedUnclaimed === nextApproved && game.topupBadge.gmPending === nextPending) {
+    return
+  }
+  game.topupBadge = { approvedUnclaimed: nextApproved, gmPending: nextPending }
+  notify()
 }
 
 export type KillRewardToastItem = (typeof game.killToasts)[number]
@@ -2508,7 +2528,7 @@ export function rebirth() {
     def: Math.max(0, before.def - baseDef),
   }
   p.rebirthCount = (p.rebirthCount ?? 0) + 1
-  p.jobId = 'swordsman'
+  p.jobId = 'novice'
   p.level = 1
   p.exp = 0
   p.hp = baseHp + p.rebirthBonus.maxHp
@@ -2538,7 +2558,7 @@ export function rebirth() {
     max: 1.4,
   })
   addFloat(p.x, p.y - 42, `REBIRTH ${p.rebirthCount}`, rebirthAura.primaryColor, 15)
-  say('system', `จุติครั้งที่ ${p.rebirthCount} (${rebirthAura.title}) สำเร็จ! กลับไปเลเวล 1 และคงค่าสเตตัสเดิมไว้`)
+  say('system', `จุติครั้งที่ ${p.rebirthCount} (${rebirthAura.title}) สำเร็จ! กลับสู่ผู้ฝึกหัด (Novice) เลเวล 1 และคงค่าสเตตัสเดิมไว้`)
   saveGame()
   game.panel = null
   notify()
@@ -3403,6 +3423,7 @@ export function availableJobs() {
     (j) =>
       j.from === current.id ||
       Boolean(j.alsoFrom?.includes(current.id)) ||
+      (current.tier === 0 && j.tier === 1) ||
       (current.tier === 1 && j.tier === 1 && j.id !== current.id),
   )
 }
@@ -3415,6 +3436,7 @@ export function changeJob(jobId: string) {
     job &&
       (job.from === current.id ||
         job.alsoFrom?.includes(current.id) ||
+        (current.tier === 0 && job.tier === 1) ||
         (current.tier === 1 && job.tier === 1 && job.id !== current.id)),
   )
   if (!job || !canPromote) return say('error', 'ไม่สามารถเปลี่ยนเป็นอาชีพนี้ได้'), notify()
@@ -5210,6 +5232,9 @@ export async function applyVerifiedTopupAction(
     prem.firstTopupPackages.push(order.packageId)
   }
 
+  prem.totalTopupThb = Math.max(0, Math.floor((prem.totalTopupThb ?? 0) + Math.max(0, order.amountThb || 0)))
+  prem.lastDailyTopupDate = todayIsoDate()
+
   if (order.vipExpGranted > 0) {
     prem.vip.vipExp += order.vipExpGranted
     if (isVipActive(prem.vip)) {
@@ -5405,12 +5430,265 @@ function formatReadableTopupError(err: unknown, fallback: string): string {
   return raw || fallback
 }
 
+export async function checkPendingStripeTopupAction(): Promise<void> {
+  const fbUser = firebaseAuth.currentUser
+  if (!fbUser || !fbUser.emailVerified || !game.p) return
+  try {
+    const res = await callPremiumApi<{
+      paid?: boolean
+      order?: TopupOrderRecord
+      message?: string
+    }>('/api/topup/verify', { checkPending: true })
+    if (res.ok && res.data?.paid && res.data.order) {
+      await applyVerifiedTopupAction(res.data.order)
+    }
+  } catch {
+    // Non-blocking pending Stripe check
+  }
+}
+
+export async function claimTopupMilestoneAction(milestoneId: string): Promise<{ ok: boolean; message: string }> {
+  const p = player()
+  const prem = ensurePremiumState(p)
+  const tier = TOPUP_MILESTONES.find((m) => m.id === milestoneId)
+  if (!tier) {
+    return { ok: false, message: 'ไม่พบขั้นรางวัลสะสมยอดเติม' }
+  }
+  const claimed = prem.claimedTopupMilestones ?? []
+  if (claimed.includes(tier.id)) {
+    return { ok: false, message: 'รับรางวัลสะสมขั้นนี้ไปแล้ว' }
+  }
+  const totalTopupThb = Math.max(0, Math.floor(prem.totalTopupThb ?? 0))
+  if (totalTopupThb < tier.thresholdThb) {
+    return { ok: false, message: `ต้องเติมสะสมให้ครบ ฿${tier.thresholdThb.toLocaleString()} ก่อน` }
+  }
+  const lockKey = `topup_milestone:${tier.id}`
+  if (inFlightPremiumLocks.has(lockKey)) {
+    return { ok: false, message: 'กำลังดำเนินการรับรางวัลอยู่' }
+  }
+  inFlightPremiumLocks.add(lockKey)
+  try {
+    const reqId = generateUniqueTxId('MILESTONE')
+    const apiRes = await callPremiumApi<{
+      txId: string
+      requestId: string
+      actorUid: string
+      isGm: boolean
+      diamondDelta: number
+      timestampMs: number
+      serverVerified: boolean
+      serverSignature: string
+      message: string
+    }>('/api/premium/claim', {
+      claimType: 'topup_milestone',
+      characterId: prem.wallet.characterId,
+      requestId: reqId,
+      milestoneId: tier.id,
+      totalTopupThb,
+      claimedMilestones: claimed,
+    })
+    if (!apiRes.ok || !apiRes.data) {
+      return { ok: false, message: apiRes.message || 'ไม่สามารถรับรางวัลสะสมยอดเติมได้' }
+    }
+
+    if (!prem.claimedTopupMilestones) prem.claimedTopupMilestones = []
+    prem.claimedTopupMilestones.push(tier.id)
+    p.gold += tier.gold
+    if (tier.enhanceStones > 0) addItem('enhance_stone', tier.enhanceStones)
+    if (tier.vipExp > 0) {
+      prem.vip.vipExp += tier.vipExp
+      if (isVipActive(prem.vip)) {
+        prem.vip.vipLevel = Math.max(prem.vip.vipLevel, resolveVipLevelFromExp(prem.vip.vipExp)) as VipTierId
+      }
+    }
+    if (tier.fashionId && !prem.fashion.unlockedIds.includes(tier.fashionId)) {
+      prem.fashion.unlockedIds.push(tier.fashionId)
+    }
+
+    if (apiRes.data.diamondDelta > 0) {
+      commitDiamondDelta(p, apiRes.data.diamondDelta, {
+        source: 'topup_milestone',
+        note: `รางวัลเติมสะสม ฿${tier.thresholdThb.toLocaleString()} (${tier.title})`,
+        requestId: apiRes.data.requestId,
+        txId: apiRes.data.txId,
+        actorUid: apiRes.data.actorUid,
+        isGm: apiRes.data.isGm,
+        serverVerified: true,
+        serverSignature: apiRes.data.serverSignature,
+        timestampMs: apiRes.data.timestampMs,
+      })
+    }
+    logPremiumAudit(p, {
+      action: 'TOPUP_MILESTONE_CLAIM',
+      txId: apiRes.data.txId,
+      details: `รับรางวัลเติมสะสม ฿${tier.thresholdThb}: ${tier.rewardLabel}`,
+      verifiedByServer: true,
+    })
+    say('loot', `★ รับรางวัลเติมสะสม ฿${tier.thresholdThb.toLocaleString()} สำเร็จ: ${tier.rewardLabel}`)
+    saveGame()
+    notify()
+    return { ok: true, message: `รับรางวัล ${tier.title} สำเร็จ!` }
+  } finally {
+    inFlightPremiumLocks.delete(lockKey)
+  }
+}
+
+export async function claimDailyTopupBonusAction(): Promise<{ ok: boolean; message: string }> {
+  const p = player()
+  const prem = ensurePremiumState(p)
+  const today = todayIsoDate()
+  if (prem.lastDailyTopupDate !== today) {
+    return { ok: false, message: 'ต้องเติมเงินสำเร็จอย่างน้อย 1 บิลในวันนี้ก่อน' }
+  }
+  if (prem.claimedDailyTopupDate === today) {
+    return { ok: false, message: 'รับโบนัสเติมเงินรายวันของวันนี้ไปแล้ว' }
+  }
+  const lockKey = `daily_topup:${today}`
+  if (inFlightPremiumLocks.has(lockKey)) {
+    return { ok: false, message: 'กำลังดำเนินการรับโบนัสอยู่' }
+  }
+  inFlightPremiumLocks.add(lockKey)
+  try {
+    const reqId = generateUniqueTxId('DTOPUP')
+    const apiRes = await callPremiumApi<{
+      txId: string
+      requestId: string
+      actorUid: string
+      isGm: boolean
+      diamondDelta: number
+      timestampMs: number
+      serverVerified: boolean
+      serverSignature: string
+      message: string
+    }>('/api/premium/claim', {
+      claimType: 'daily_topup',
+      characterId: prem.wallet.characterId,
+      requestId: reqId,
+      todayIso: today,
+      lastDailyTopupDate: prem.lastDailyTopupDate,
+      claimedDailyTopupDate: prem.claimedDailyTopupDate,
+    })
+    if (!apiRes.ok || !apiRes.data) {
+      return { ok: false, message: apiRes.message || 'ไม่สามารถรับโบนัสเติมเงินรายวันได้' }
+    }
+
+    prem.claimedDailyTopupDate = today
+    p.gold += DAILY_TOPUP_BONUS.gold
+    if (DAILY_TOPUP_BONUS.enhanceStones > 0) addItem('enhance_stone', DAILY_TOPUP_BONUS.enhanceStones)
+    if (DAILY_TOPUP_BONUS.vipExp > 0) {
+      prem.vip.vipExp += DAILY_TOPUP_BONUS.vipExp
+      if (isVipActive(prem.vip)) {
+        prem.vip.vipLevel = Math.max(prem.vip.vipLevel, resolveVipLevelFromExp(prem.vip.vipExp)) as VipTierId
+      }
+    }
+    if (apiRes.data.diamondDelta > 0) {
+      commitDiamondDelta(p, apiRes.data.diamondDelta, {
+        source: 'daily_topup_bonus',
+        note: `โบนัสเติมเงินรายวัน (${today})`,
+        requestId: apiRes.data.requestId,
+        txId: apiRes.data.txId,
+        actorUid: apiRes.data.actorUid,
+        isGm: apiRes.data.isGm,
+        serverVerified: true,
+        serverSignature: apiRes.data.serverSignature,
+        timestampMs: apiRes.data.timestampMs,
+      })
+    }
+    logPremiumAudit(p, {
+      action: 'DAILY_TOPUP_CLAIM',
+      txId: apiRes.data.txId,
+      details: `รับโบนัสเติมเงินรายวัน (${today}): ${DAILY_TOPUP_BONUS.label}`,
+      verifiedByServer: true,
+    })
+    say('loot', `★ รับโบนัสเติมเงินรายวันสำเร็จ: ${DAILY_TOPUP_BONUS.label}`)
+    saveGame()
+    notify()
+    return { ok: true, message: `รับโบนัสเติมเงินรายวันสำเร็จ! (${DAILY_TOPUP_BONUS.label})` }
+  } finally {
+    inFlightPremiumLocks.delete(lockKey)
+  }
+}
+
+export async function redeemGiftCodeAction(rawCode: string): Promise<{ ok: boolean; message: string }> {
+  const p = player()
+  const prem = ensurePremiumState(p)
+  const cleanCode = rawCode.trim().toUpperCase()
+  if (cleanCode.length < 4) {
+    return { ok: false, message: 'กรุณากรอกโค้ดรางวัลอย่างน้อย 4 ตัวอักษร' }
+  }
+  const lockKey = `redeem:${cleanCode}`
+  if (inFlightPremiumLocks.has(lockKey)) {
+    return { ok: false, message: 'กำลังตรวจสอบโค้ดรางวัลอยู่' }
+  }
+  inFlightPremiumLocks.add(lockKey)
+  try {
+    const claimed = await claimRedeemCodeInFirestore(cleanCode, {
+      characterId: prem.wallet.characterId || getActiveCharacterSlot(),
+      playerName: p.name,
+      gameUid: p.gameUid,
+    })
+    const rewardParts: string[] = []
+    if (claimed.gold > 0) {
+      p.gold += claimed.gold
+      rewardParts.push(`${claimed.gold.toLocaleString()} G`)
+    }
+    if (claimed.diamonds > 0) {
+      commitDiamondDelta(p, claimed.diamonds, {
+        source: 'redeem_code',
+        note: `แลกโค้ดรางวัล ${claimed.code} (${claimed.label})`,
+        requestId: `REDEEM:${claimed.code}`,
+        serverVerified: true,
+      })
+      rewardParts.push(`${claimed.diamonds.toLocaleString()} D`)
+    }
+    if (claimed.vipExp > 0) {
+      prem.vip.vipExp += claimed.vipExp
+      if (isVipActive(prem.vip)) {
+        prem.vip.vipLevel = Math.max(prem.vip.vipLevel, resolveVipLevelFromExp(prem.vip.vipExp)) as VipTierId
+      }
+      rewardParts.push(`${claimed.vipExp} VIP EXP`)
+    }
+    if (claimed.itemId && claimed.qty > 0 && ITEMS[claimed.itemId]) {
+      addItem(claimed.itemId, claimed.qty, claimed.plus)
+      const itemName = ITEMS[claimed.itemId]?.name ?? claimed.itemId
+      rewardParts.push(`${itemName}${claimed.plus > 0 ? `+${claimed.plus}` : ''} x${claimed.qty}`)
+    }
+
+    const summaryText = rewardParts.join(' + ') || 'รางวัลพิเศษ'
+    logPremiumAudit(p, {
+      action: 'REDEEM_CODE',
+      details: `แลกโค้ด ${claimed.code}: ${summaryText}`,
+      verifiedByServer: true,
+    })
+    say('loot', `★ แลกโค้ดรางวัล ${claimed.code} สำเร็จ! ได้รับ ${summaryText}`)
+    saveGame()
+    notify()
+    return { ok: true, message: `แลกโค้ด ${claimed.code} สำเร็จ! รับ ${summaryText}` }
+  } catch (err) {
+    return {
+      ok: false,
+      message: formatReadableTopupError(err, 'ไม่สามารถใช้โค้ดรางวัลนี้ได้'),
+    }
+  } finally {
+    inFlightPremiumLocks.delete(lockKey)
+  }
+}
+
 export async function fetchMerchantQrSettingsAction(): Promise<{
   ok: boolean
   isAdmin: boolean
   settings: import('./premium/topup').PromptPayShopSettings | null
 }> {
-  const token = await firebaseAuth.currentUser?.getIdToken().catch(() => null)
+  const fbUser = firebaseAuth.currentUser
+  const isAdmin = isCurrentAccountGm()
+  if (fbUser && fbUser.emailVerified) {
+    const fsSettings = await getPromptPayShopSettings().catch(() => null)
+    if (fsSettings) {
+      return { ok: true, isAdmin, settings: fsSettings }
+    }
+  }
+
+  const token = await fbUser?.getIdToken().catch(() => null)
   const res = await fetch('/api/topup/merchant-qr', {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     cache: 'no-store',
@@ -5422,7 +5700,7 @@ export async function fetchMerchantQrSettingsAction(): Promise<{
   } | null
   return {
     ok: Boolean(res.ok && json?.ok),
-    isAdmin: Boolean(json?.isAdmin),
+    isAdmin: Boolean(json?.isAdmin || isAdmin),
     settings: json?.settings ?? null,
   }
 }
@@ -5433,12 +5711,31 @@ export async function saveMerchantQrSettingsAction(input: {
   customQrDataUrl: string | null
   enabled: boolean
 }): Promise<{ ok: boolean; message: string; settings?: import('./premium/topup').PromptPayShopSettings }> {
+  let fsSaved: import('./premium/topup').PromptPayShopSettings | null = null
+  let fsError: string | null = null
+
+  if (firebaseAuth.currentUser && isCurrentAccountGm()) {
+    try {
+      fsSaved = await savePromptPayShopSettings(input)
+    } catch (err) {
+      fsError = formatReadableTopupError(err, 'บันทึก QR บน Firestore ไม่สำเร็จ')
+    }
+  }
+
   const res = await callPremiumApi<{
     settings: import('./premium/topup').PromptPayShopSettings
     message: string
   }>('/api/topup/merchant-qr', input)
+
+  if (fsSaved) {
+    return {
+      ok: true,
+      message: res.data?.message || 'บันทึก QR Code / พร้อมเพย์ร้านค้าขึ้น Cloud สำเร็จ!',
+      settings: fsSaved,
+    }
+  }
   if (!res.ok || !res.data) {
-    return { ok: false, message: res.message || 'บันทึก QR พร้อมเพย์ไม่สำเร็จ' }
+    return { ok: false, message: fsError || res.message || 'บันทึก QR พร้อมเพย์ไม่สำเร็จ' }
   }
   return { ok: true, message: res.data.message, settings: res.data.settings }
 }
@@ -5448,23 +5745,40 @@ export async function fetchSlipRequestsAction(): Promise<{
   myRequests: TopupSlipRequestRecord[]
   adminQueue: TopupSlipRequestRecord[]
 }> {
-  const token = await firebaseAuth.currentUser?.getIdToken().catch(() => null)
-  if (!token) return { isAdmin: false, myRequests: [], adminQueue: [] }
-  const res = await fetch('/api/topup/slip-requests', {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: 'no-store',
-  })
-  const json = (await res.json().catch(() => null)) as {
-    ok?: boolean
-    isAdmin?: boolean
-    myRequests?: TopupSlipRequestRecord[]
-    adminQueue?: TopupSlipRequestRecord[]
-  } | null
-  if (!res.ok || !json?.ok) return { isAdmin: false, myRequests: [], adminQueue: [] }
+  const fbUser = firebaseAuth.currentUser
+  const token = await fbUser?.getIdToken().catch(() => null)
+  if (!fbUser || !fbUser.emailVerified || !token) {
+    return { isAdmin: false, myRequests: [], adminQueue: [] }
+  }
+  const isAdmin = isCurrentAccountGm()
+
+  const [fsMy, fsGm, apiRes] = await Promise.all([
+    listMyTopupSlipRequests(fbUser.uid).catch(() => [] as TopupSlipRequestRecord[]),
+    isAdmin ? listAllTopupSlipRequestsForGm(45).catch(() => [] as TopupSlipRequestRecord[]) : Promise.resolve([]),
+    fetch('/api/topup/slip-requests', {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: 'no-store',
+    })
+      .then((r) => r.json().catch(() => null))
+      .catch(() => null) as Promise<{
+      ok?: boolean
+      isAdmin?: boolean
+      myRequests?: TopupSlipRequestRecord[]
+      adminQueue?: TopupSlipRequestRecord[]
+    } | null>,
+  ])
+
+  const mergeLists = (primary: TopupSlipRequestRecord[], secondary: TopupSlipRequestRecord[]) => {
+    const map = new Map<string, TopupSlipRequestRecord>()
+    for (const row of secondary) map.set(row.requestId, row)
+    for (const row of primary) map.set(row.requestId, row)
+    return Array.from(map.values()).sort((a, b) => b.createdAtMs - a.createdAtMs)
+  }
+
   return {
-    isAdmin: Boolean(json.isAdmin),
-    myRequests: Array.isArray(json.myRequests) ? json.myRequests : [],
-    adminQueue: Array.isArray(json.adminQueue) ? json.adminQueue : [],
+    isAdmin: Boolean(isAdmin || apiRes?.isAdmin),
+    myRequests: mergeLists(fsMy, Array.isArray(apiRes?.myRequests) ? apiRes.myRequests : []),
+    adminQueue: isAdmin ? mergeLists(fsGm, Array.isArray(apiRes?.adminQueue) ? apiRes.adminQueue : []) : [],
   }
 }
 
@@ -5473,12 +5787,34 @@ export async function reviewSlipRequestAction(
   decision: 'approved' | 'rejected',
   reviewNote?: string,
 ): Promise<{ ok: boolean; message: string; request?: TopupSlipRequestRecord }> {
+  let fsOk = false
+  let fsError: string | null = null
+  if (firebaseAuth.currentUser && isCurrentAccountGm()) {
+    try {
+      await reviewTopupSlipRequest(requestId, decision, reviewNote)
+      fsOk = true
+    } catch (err) {
+      fsError = formatReadableTopupError(err, 'อัปเดตสถานะสลิปบน Firestore ไม่สำเร็จ')
+    }
+  }
+
   const res = await callPremiumApi<{
     request: TopupSlipRequestRecord
     message: string
   }>('/api/topup/slip-requests/review', { requestId, decision, reviewNote })
+
+  if (fsOk) {
+    return {
+      ok: true,
+      request: res.data?.request,
+      message:
+        decision === 'approved'
+          ? `อนุมัติคำขอ ${requestId} บน Firestore แล้ว`
+          : `ปฏิเสธคำขอ ${requestId} บน Firestore แล้ว`,
+    }
+  }
   if (!res.ok || !res.data) {
-    return { ok: false, message: res.message || 'อัปเดตสถานะสลิปไม่สำเร็จ' }
+    return { ok: false, message: fsError || res.message || 'อัปเดตสถานะสลิปไม่สำเร็จ' }
   }
   return { ok: true, message: res.data.message, request: res.data.request }
 }
@@ -5505,26 +5841,68 @@ export async function submitManualTopupSlipAction(
   inFlightPremiumLocks.add(lockKey)
   try {
     const isFirst = !(prem.firstTopupPackages ?? []).includes(pkg.packageId)
-    const slipDataUrl = await compressImageFileToDataUrl(file, 720, 280000)
+    const [slipHash, slipDataUrl] = await Promise.all([
+      computeFileSha256Hex(file),
+      compressImageFileToDataUrl(file, 720, 280000),
+    ])
+
+    if (slipHash) {
+      const existingMy = await listMyTopupSlipRequests(fbUser.uid).catch(() => [])
+      const dupMine = existingMy.some(
+        (r) => r.slipHash === slipHash && (r.status === 'pending' || r.status === 'approved'),
+      )
+      if (dupMine) {
+        return { ok: false, message: 'สลิปรูปนี้ถูกส่งตรวจสอบไปแล้ว (ป้องกันส่งสลิปเดิมซ้ำ)' }
+      }
+    }
+
+    const requestId = generateUniqueTxId('SLIP')
+    const reward = calculateTopupReward(pkg, isFirst)
+    const characterId = prem.wallet.characterId || getActiveCharacterSlot()
+
     const res = await callPremiumApi<{
       request: TopupSlipRequestRecord
       message: string
     }>('/api/topup/slip-requests', {
+      requestId,
       packageId: pkg.packageId,
-      characterId: prem.wallet.characterId || getActiveCharacterSlot(),
+      characterId,
       playerName: p.name,
       gameUid: p.gameUid,
       isFirstPurchase: isFirst,
       slipDataUrl,
       slipNote,
+      slipHash,
     })
     if (!res.ok || !res.data) {
       return { ok: false, message: res.message || 'ส่งสลิปไม่สำเร็จ กรุณาลองใหม่' }
     }
+
+    const savedReq = res.data.request
+    try {
+      await submitManualTopupSlipRequest({
+        requestId: savedReq.requestId,
+        playerName: savedReq.playerName,
+        gameUid: savedReq.gameUid,
+        characterId: savedReq.characterId,
+        packageId: savedReq.packageId,
+        packageName: savedReq.packageName,
+        amountThb: savedReq.amountThb,
+        baseDiamonds: savedReq.baseDiamonds,
+        bonusDiamonds: savedReq.bonusDiamonds,
+        vipExpGranted: reward.vipExp,
+        slipDataUrl,
+        slipNote,
+        slipHash: savedReq.slipHash ?? slipHash,
+      })
+    } catch {
+      // Server store still holds request even if Firestore rules reject or offline
+    }
+
     say('system', `ส่งสลิปเติมเงิน ${pkg.name} (฿${pkg.priceThb}) แล้ว — รอแอดมินตรวจสอบ`)
     return {
       ok: true,
-      request: res.data.request,
+      request: savedReq,
       message: res.data.message,
     }
   } catch (err) {
@@ -5559,6 +5937,17 @@ export async function claimApprovedManualTopupAction(
     if (!res.ok || !res.data?.order) {
       return { ok: false, message: res.message || 'ไม่สามารถรับเพชรจากคำขอที่อนุมัติได้' }
     }
+
+    try {
+      await markTopupSlipRequestClaimed(req.requestId)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : ''
+      if (msg.includes('รับเพชรจากคำขอนี้ไปแล้ว') || msg.includes('ยังไม่ได้รับการอนุมัติ')) {
+        return { ok: false, message: msg }
+      }
+      // If document only existed in server volatile store, proceed with server-signed order
+    }
+
     return await applyVerifiedTopupAction(res.data.order)
   } catch (err) {
     return {
@@ -6298,7 +6687,7 @@ export function loadGame(d: SaveData) {
   const p: SaveData = {
     version: 1,
     name: (typeof d.name === 'string' ? d.name.trim().slice(0, 16) : '') || 'นักผจญภัย',
-    jobId: normalizeJobId(typeof d.jobId === 'string' ? d.jobId : 'swordsman'),
+    jobId: normalizeJobId(typeof d.jobId === 'string' ? d.jobId : 'novice'),
     level: finiteInt(d.level, 1, MAX_LEVEL, 1),
     exp: finiteInt(d.exp, 0, Number.MAX_SAFE_INTEGER, 0),
     hp: finiteInt(d.hp, 0, Number.MAX_SAFE_INTEGER, 1),
@@ -6367,14 +6756,14 @@ export function loadGame(d: SaveData) {
   if (game.offlineAfkReward) notify()
 }
 
-export function newGame(name: string, starterJobId = 'swordsman') {
+export function newGame(name: string, starterJobId = 'novice') {
   const town = MAPS.town
   const gmAllowed = isCurrentAccountGm()
   const resolvedGameUid = gmAllowed ? PERMANENT_GM_GAME_UID : activeAccountGameUid
   const resolvedNumericUid = gmAllowed ? PERMANENT_GM_UID : activeAccountUid
   const resolvedStarterJob = (STARTER_JOB_IDS as readonly string[]).includes(starterJobId)
     ? starterJobId
-    : 'swordsman'
+    : 'novice'
   const p: SaveData = {
     version: 1,
     name: name.trim().slice(0, 16) || 'นักผจญภัย',

@@ -7,6 +7,7 @@ import {
   verifyBattlePassUnlockOrClaim,
   verifyVipRewardClaim,
 } from '@/lib/server/premium-security'
+import { DAILY_TOPUP_BONUS, TOPUP_MILESTONES } from '@/lib/game/premium/topup'
 import type { VipState } from '@/lib/game/premium/types'
 
 export async function POST(req: Request) {
@@ -95,6 +96,43 @@ export async function POST(req: Request) {
       diamondDelta = Math.max(0, Math.min(500, Math.floor(Number(body.archiveDiamonds ?? 0) || 0)))
       source = 'battle_pass_archive'
       message = 'ยืนยันการรับรางวัล Battle Pass ค้างรับ'
+    } else if (body.claimType === 'topup_milestone') {
+      const milestoneId = typeof (body as Record<string, unknown>).milestoneId === 'string'
+        ? String((body as Record<string, unknown>).milestoneId).trim()
+        : ''
+      const totalTopupThb = Math.max(0, Math.floor(Number((body as Record<string, unknown>).totalTopupThb ?? 0) || 0))
+      const claimedIds = Array.isArray((body as Record<string, unknown>).claimedMilestones)
+        ? ((body as Record<string, unknown>).claimedMilestones as unknown[]).filter((x): x is string => typeof x === 'string')
+        : []
+      const tier = TOPUP_MILESTONES.find((m) => m.id === milestoneId)
+      if (!tier) {
+        return NextResponse.json({ ok: false, message: 'ไม่พบขั้นรางวัลสะสมยอดเติม' }, { status: 404 })
+      }
+      if (totalTopupThb < tier.thresholdThb) {
+        return NextResponse.json({ ok: false, message: `ยอดเติมสะสมยังไม่ถึง ฿${tier.thresholdThb}` }, { status: 400 })
+      }
+      if (claimedIds.includes(tier.id)) {
+        return NextResponse.json({ ok: false, message: 'รับรางวัลขั้นนี้ไปแล้ว' }, { status: 409 })
+      }
+      diamondDelta = tier.diamonds
+      source = 'topup_milestone'
+      message = `ยืนยันรางวัลสะสม ฿${tier.thresholdThb}`
+    } else if (body.claimType === 'daily_topup') {
+      const todayIso =
+        typeof body.todayIso === 'string' && /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(body.todayIso)
+          ? body.todayIso
+          : new Date().toISOString().slice(0, 10)
+      const lastTopupDate = String((body as Record<string, unknown>).lastDailyTopupDate ?? '')
+      const claimedDailyDate = String((body as Record<string, unknown>).claimedDailyTopupDate ?? '')
+      if (lastTopupDate !== todayIso) {
+        return NextResponse.json({ ok: false, message: 'ยังไม่มีการเติมเงินสำเร็จในวันนี้' }, { status: 400 })
+      }
+      if (claimedDailyDate === todayIso) {
+        return NextResponse.json({ ok: false, message: 'รับโบนัสเติมเงินรายวันของวันนี้ไปแล้ว' }, { status: 409 })
+      }
+      diamondDelta = DAILY_TOPUP_BONUS.diamonds
+      source = 'daily_topup_bonus'
+      message = 'ยืนยันโบนัสเติมเงินรายวัน'
     } else {
       return NextResponse.json({ ok: false, message: 'ไม่รองรับประเภทคำขอนี้' }, { status: 400 })
     }

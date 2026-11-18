@@ -68,7 +68,7 @@ export const WINDOW_META: Record<PanelId, { title: string; defaultW: number; def
   job: { title: 'เปลี่ยนอาชีพ', defaultW: 680, defaultH: 540 },
   storage: { title: 'คลังเก็บของ', defaultW: 640, defaultH: 500 },
   gacha: { title: 'สุ่มกาชา', defaultW: 640, defaultH: 520 },
-  rebirth: { title: 'จุติ (Rebirth)', defaultW: 600, defaultH: 480 },
+  rebirth: { title: 'จุติ (Rebirth)', defaultW: 680, defaultH: 560 },
   trade: { title: 'แลกเปลี่ยนผู้เล่น', defaultW: 620, defaultH: 500 },
   'gm-summon': { title: 'เสกไอเทม GM', defaultW: 640, defaultH: 500 },
   'dev-tools': { title: 'Dev Console', defaultW: 680, defaultH: 540 },

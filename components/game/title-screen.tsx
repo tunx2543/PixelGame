@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { onAuthStateChanged, type User } from 'firebase/auth'
-import { AlertTriangle, Plus, Trash2, UploadCloud, UserCheck, X } from 'lucide-react'
+import { AlertTriangle, Plus, RotateCw, Sparkles, Sprout, Trash2, UploadCloud, UserCheck, X } from 'lucide-react'
 import { auth } from '@/lib/firebase/client'
 import {
   CHARACTER_SLOTS,
@@ -14,7 +14,8 @@ import {
   type UserAccountIdentity,
 } from '@/lib/firebase/characters'
 import { PERMANENT_GM_UID } from '@/lib/game/permissions'
-import { JOBS, normalizeJobId, STARTER_JOB_IDS } from '@/lib/game/data'
+import { JOBS, normalizeJobId } from '@/lib/game/data'
+import { MODEL_DIRS, type ModelDir } from '@/lib/game/models-2d'
 import {
   SAVE_KEY,
   deleteAccountCharacter,
@@ -38,7 +39,7 @@ import { MAPS } from '@/lib/game/maps'
 import { AccountPanel } from './account-panel'
 import { formatNum, formatPlayTime } from './format'
 import { PWAInstallButton } from './pwa-controls'
-import { SpriteModelCanvas } from './sprite-model-canvas'
+import { SpriteModelCanvas, type PreviewAction } from './sprite-model-canvas'
 
 export function TitleScreen() {
   const { kickedNotice } = useGame()
@@ -49,7 +50,8 @@ export function TitleScreen() {
   const [recoverableSaves, setRecoverableSaves] = useState<RecoverableLocalSave[]>([])
   const [mode, setMode] = useState<'list' | 'new'>('list')
   const [name, setName] = useState('')
-  const [starterJobId, setStarterJobId] = useState<string>('swordsman')
+  const [noviceAction, setNoviceAction] = useState<PreviewAction>('auto')
+  const [noviceDir, setNoviceDir] = useState<ModelDir>('down')
   const [selectedSlotForNew, setSelectedSlotForNew] = useState<CharacterSlotId>('slot_1')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [isLoadingSave, setIsLoadingSave] = useState(true)
@@ -192,7 +194,7 @@ export function TitleScreen() {
       setActiveCharacterSlot('slot_1')
       if (guestSave) deleteSave()
     }
-    newGame(name, starterJobId)
+    newGame(name, 'novice')
     setName('')
   }
 
@@ -541,37 +543,80 @@ export function TitleScreen() {
                 autoFocus
                 className="rounded-lg border-2 border-[#c9963b]/60 bg-[#1a1314] px-3 py-2 text-foreground outline-none focus:border-amber-400"
               />
-              <div>
-                <p className="mb-1.5 text-xs text-muted-foreground">เลือกอาชีพเริ่มต้น (6 คลาสหลัก)</p>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {STARTER_JOB_IDS.map((jid) => {
-                    const j = JOBS[jid]
-                    const picked = starterJobId === jid
-                    return (
-                      <button
-                        key={jid}
-                        type="button"
-                        onClick={() => setStarterJobId(jid)}
-                        aria-pressed={picked}
-                        className={`flex flex-col items-center gap-1 rounded-md border-2 p-1.5 text-center transition-colors ${
-                          picked
-                            ? 'border-amber-400 bg-amber-500/15 text-amber-200'
-                            : 'border-[#c9963b]/35 bg-[#1a1314]/80 text-muted-foreground hover:border-amber-400/60 hover:text-foreground'
-                        }`}
-                      >
-                        <SpriteModelCanvas
-                          mode="job"
-                          id={jid}
-                          action={picked ? 'auto' : 'idle'}
-                          dir="down"
-                          size={44}
-                          showAura={false}
-                          label={j.name}
-                        />
-                        <span className="w-full truncate text-[10px] font-semibold">{j.name}</span>
-                      </button>
-                    )
-                  })}
+              <div className="rounded-lg border-2 border-[#c9963b]/60 bg-[#1a1314]/90 p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-300">
+                    <Sprout className="size-3.5 text-emerald-400" aria-hidden />
+                    คลาสเริ่มต้น: {JOBS.novice.name}
+                  </span>
+                  <span className="border border-emerald-400/40 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">
+                    Tier 0 • Lv.1
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <div className="flex flex-col items-center gap-1.5">
+                    <div className="grid size-24 place-items-center rounded-lg border-2 border-[#d4a348]/80 bg-[#0b0f21]/90 shadow-inner">
+                      <SpriteModelCanvas
+                        mode="job"
+                        id="novice"
+                        action={noviceAction}
+                        dir={noviceDir}
+                        size={86}
+                        showAura={false}
+                        label="โมเดลตัวละคร Novice"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const idx = MODEL_DIRS.indexOf(noviceDir)
+                        setNoviceDir(MODEL_DIRS[(idx + 1) % MODEL_DIRS.length])
+                      }}
+                      className="pixel-btn inline-flex items-center gap-1 bg-secondary px-2 py-0.5 text-[10px] text-foreground hover:brightness-110"
+                    >
+                      <RotateCw className="size-2.5" aria-hidden />
+                      หมุนตัวละคร
+                    </button>
+                  </div>
+
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <p className="text-[11px] leading-relaxed text-foreground/90">
+                      เริ่มต้นการผจญภัยด้วยตัวละคร <span className="font-semibold text-amber-200">Novice</span>{' '}
+                      เสื้อคลุมฮู้ดสีขาว สายสะพายหนัง กระเป๋าคาดเอว และไม้พลอง พร้อมสกิล{' '}
+                      <span className="text-sky-300">ฟาดพลังมือใหม่</span> &amp;{' '}
+                      <span className="text-pink-300">ปฐมพยาบาล</span>
+                    </p>
+                    <p className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <Sparkles className="size-3 shrink-0 text-amber-300" aria-hidden />
+                      เปลี่ยนเป็น 6 อาชีพหลักได้ที่หอปรมาจารย์อาร์คในเมือง (500 G)
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {(
+                        [
+                          ['auto', 'วนลูป'],
+                          ['idle', 'ยืน'],
+                          ['walk', 'เดิน'],
+                          ['attack', 'ตี'],
+                          ['skill', 'สกิล'],
+                        ] as Array<[PreviewAction, string]>
+                      ).map(([act, lbl]) => (
+                        <button
+                          key={act}
+                          type="button"
+                          onClick={() => setNoviceAction(act)}
+                          aria-pressed={noviceAction === act}
+                          className={`pixel-btn px-2 py-0.5 text-[10px] ${
+                            noviceAction === act
+                              ? 'bg-amber-400 font-bold text-[#241409]'
+                              : 'bg-secondary text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          {lbl}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
               {!user && guestSave && (

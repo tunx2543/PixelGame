@@ -233,7 +233,112 @@ export interface TopupSlipRequestRecord {
   claimedAtMs: number | null
   reviewedByUid: string | null
   reviewNote: string | null
+  slipHash?: string | null
   createdAtMs: number
+}
+
+export interface TopupMilestoneDef {
+  id: string
+  thresholdThb: number
+  title: string
+  rewardLabel: string
+  diamonds: number
+  gold: number
+  enhanceStones: number
+  vipExp: number
+  fashionId?: string
+}
+
+export const TOPUP_MILESTONES: TopupMilestoneDef[] = [
+  {
+    id: 'milestone_29',
+    thresholdThb: 29,
+    title: 'นักผจญภัยผู้สนับสนุน',
+    rewardLabel: '30 D + 15,000 G + หินตีบวก x5',
+    diamonds: 30,
+    gold: 15000,
+    enhanceStones: 5,
+    vipExp: 20,
+  },
+  {
+    id: 'milestone_100',
+    thresholdThb: 100,
+    title: 'ผู้พิทักษ์แห่งแสง',
+    rewardLabel: '80 D + 40,000 G + หินตีบวก x12 + 50 VIP EXP',
+    diamonds: 80,
+    gold: 40000,
+    enhanceStones: 12,
+    vipExp: 50,
+  },
+  {
+    id: 'milestone_300',
+    thresholdThb: 300,
+    title: 'ขุนพลออโรร่า',
+    rewardLabel: '200 D + 100,000 G + หินตีบวก x25 + 120 VIP EXP',
+    diamonds: 200,
+    gold: 100000,
+    enhanceStones: 25,
+    vipExp: 120,
+  },
+  {
+    id: 'milestone_600',
+    thresholdThb: 600,
+    title: 'ราชันย์คริสตัล',
+    rewardLabel: '450 D + 250,000 G + หินตีบวก x45 + 250 VIP EXP',
+    diamonds: 450,
+    gold: 250000,
+    enhanceStones: 45,
+    vipExp: 250,
+  },
+  {
+    id: 'milestone_1500',
+    thresholdThb: 1500,
+    title: 'ตำนานผู้ค้ำจุนโลก',
+    rewardLabel: '1,200 D + 600,000 G + หินตีบวก x90 + 600 VIP EXP',
+    diamonds: 1200,
+    gold: 600000,
+    enhanceStones: 90,
+    vipExp: 600,
+  },
+]
+
+export const DAILY_TOPUP_BONUS = {
+  diamonds: 25,
+  gold: 10000,
+  enhanceStones: 3,
+  vipExp: 15,
+  label: '25 D + 10,000 G + หินตีบวก x3 + 15 VIP EXP',
+} as const
+
+export function isValidTopupPackageReward(
+  packageId: string,
+  amountThb: number,
+  baseDiamonds: number,
+  bonusDiamonds: number,
+  vipExpGranted: number,
+): boolean {
+  const pkg = getTopupPackage(packageId)
+  if (!pkg) return false
+  if (amountThb !== pkg.priceThb) return false
+  if (baseDiamonds !== pkg.baseDiamonds) return false
+  const allowedNormal = pkg.bonusDiamonds
+  const allowedFirst = pkg.bonusDiamonds + pkg.baseDiamonds
+  if (bonusDiamonds !== allowedNormal && bonusDiamonds !== allowedFirst) return false
+  if (vipExpGranted !== pkg.vipExp) return false
+  return true
+}
+
+export async function computeFileSha256Hex(file: File): Promise<string | null> {
+  if (typeof window === 'undefined' || !window.crypto?.subtle) return null
+  try {
+    const buf = await file.arrayBuffer()
+    const digest = await window.crypto.subtle.digest('SHA-256', buf)
+    return Array.from(new Uint8Array(digest))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')
+  } catch {
+    return null
+  }
 }
 
 /**

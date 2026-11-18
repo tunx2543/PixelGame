@@ -654,7 +654,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         weaponDrawColor,
         attacking,
         action,
-        atkFrame,
+        attacking ? atkFrame : castingSkill ? skillFrame : undefined,
       )
       const isGmEpic = img.dataset?.gmReady === '1'
       const drawScale = (isGmEpic ? 50 : 33) / Math.max(1, img.height)

@@ -16,11 +16,369 @@ export interface RebirthAuraDrawOptions {
   layer?: 'all' | 'back' | 'front'
 }
 
+function drawStarSparkle(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  color: string,
+  alpha: number,
+) {
+  if (alpha <= 0.02) return
+  const r = Math.max(1.4, size)
+  const arm = r * 1.45
+  ctx.save()
+  ctx.globalAlpha = alpha
+  ctx.fillStyle = color
+  ctx.beginPath()
+  ctx.moveTo(x, y - arm)
+  ctx.lineTo(x + r * 0.28, y - r * 0.28)
+  ctx.lineTo(x + arm, y)
+  ctx.lineTo(x + r * 0.28, y + r * 0.28)
+  ctx.lineTo(x, y + arm)
+  ctx.lineTo(x - r * 0.28, y + r * 0.28)
+  ctx.lineTo(x - arm, y)
+  ctx.lineTo(x - r * 0.28, y - r * 0.28)
+  ctx.closePath()
+  ctx.fill()
+  ctx.restore()
+}
+
+function drawFloatingCrystal(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  outerColor: string,
+  innerColor: string,
+  tilt: number,
+  alpha: number,
+) {
+  if (alpha <= 0.02) return
+  const w = Math.max(2, size * 0.54)
+  const h = Math.max(3.4, size * 0.95)
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.rotate(tilt)
+  ctx.globalAlpha = alpha
+  ctx.fillStyle = outerColor
+  ctx.beginPath()
+  ctx.moveTo(0, -h)
+  ctx.lineTo(w, 0)
+  ctx.lineTo(0, h)
+  ctx.lineTo(-w, 0)
+  ctx.closePath()
+  ctx.fill()
+
+  // Bright top-left facet highlight
+  ctx.fillStyle = innerColor
+  ctx.globalAlpha = alpha * 0.85
+  ctx.beginPath()
+  ctx.moveTo(0, -h * 0.86)
+  ctx.lineTo(w * 0.45, -h * 0.04)
+  ctx.lineTo(0, h * 0.48)
+  ctx.lineTo(-w * 0.62, 0)
+  ctx.closePath()
+  ctx.fill()
+  ctx.restore()
+}
+
+function drawCrystalSpire(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  groundY: number,
+  w: number,
+  h: number,
+  darkColor: string,
+  midColor: string,
+  highlightColor: string,
+  tilt: number,
+  alpha: number,
+) {
+  if (alpha <= 0.02) return
+  ctx.save()
+  ctx.translate(x, groundY)
+  ctx.rotate(tilt)
+  ctx.globalAlpha = alpha
+
+  // Main spire body
+  ctx.fillStyle = darkColor
+  ctx.beginPath()
+  ctx.moveTo(-w * 0.55, 0)
+  ctx.lineTo(-w * 0.35, -h * 0.65)
+  ctx.lineTo(0, -h)
+  ctx.lineTo(w * 0.4, -h * 0.58)
+  ctx.lineTo(w * 0.55, 0)
+  ctx.closePath()
+  ctx.fill()
+
+  // Luminous mid facet
+  ctx.fillStyle = midColor
+  ctx.beginPath()
+  ctx.moveTo(0, -h)
+  ctx.lineTo(w * 0.38, -h * 0.58)
+  ctx.lineTo(w * 0.12, 0)
+  ctx.lineTo(-w * 0.14, 0)
+  ctx.closePath()
+  ctx.fill()
+
+  // Crisp highlight edge
+  ctx.strokeStyle = highlightColor
+  ctx.lineWidth = Math.max(0.9, w * 0.16)
+  ctx.beginPath()
+  ctx.moveTo(-w * 0.35, -h * 0.65)
+  ctx.lineTo(0, -h)
+  ctx.lineTo(w * 0.38, -h * 0.58)
+  ctx.stroke()
+  ctx.restore()
+}
+
+function drawSwirlRibbonHalf(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  tilt: number,
+  primaryColor: string,
+  coreColor: string,
+  lineW: number,
+  half: 'back' | 'front',
+  alpha: number,
+) {
+  const start = half === 'back' ? Math.PI * 1.04 : -0.04
+  const end = half === 'back' ? Math.PI * 1.96 : Math.PI * 1.04
+
+  ctx.save()
+  ctx.globalAlpha = alpha * (half === 'back' ? 0.58 : 0.9)
+  ctx.strokeStyle = primaryColor
+  ctx.lineWidth = lineW
+  ctx.lineCap = 'round'
+  ctx.beginPath()
+  ctx.ellipse(cx, cy, rx, ry, tilt, start, end)
+  ctx.stroke()
+
+  ctx.globalAlpha = alpha * (half === 'back' ? 0.42 : 0.85)
+  ctx.strokeStyle = coreColor
+  ctx.lineWidth = Math.max(0.8, lineW * 0.42)
+  ctx.beginPath()
+  ctx.ellipse(cx, cy, rx, ry, tilt, start, end)
+  ctx.stroke()
+  ctx.restore()
+}
+
+function drawDetailedWings(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  wingBaseY: number,
+  rx: number,
+  h: number,
+  t: number,
+  variant: 'monarch_violet' | 'celestial_gold',
+  alphaScale: number,
+) {
+  const flap = Math.sin(t * (variant === 'celestial_gold' ? 3.2 : 3.6)) * (h * 0.045)
+  ctx.save()
+
+  if (variant === 'monarch_violet') {
+    const wingSpan = rx * 1.65
+    ctx.shadowColor = '#a855f7'
+    ctx.shadowBlur = Math.max(6, rx * 0.72)
+
+    for (const side of [-1, 1] as const) {
+      // 5 dramatic dark-violet monarch feathers curving outward & downward
+      for (let f = 0; f < 5; f++) {
+        const ratio = f / 4
+        const spread = 1 - ratio * 0.34
+        const tipX = x + side * wingSpan * spread
+        const tipY = wingBaseY - h * (0.28 - ratio * 0.32) + flap * (1 + ratio * 0.25)
+        const ctrlX = x + side * wingSpan * (0.58 - ratio * 0.14)
+        const ctrlY = wingBaseY - h * (0.42 - ratio * 0.28) + flap * 0.6
+
+        ctx.globalAlpha = (0.86 - ratio * 0.12) * alphaScale
+        ctx.fillStyle = f % 2 === 0 ? '#4c1d95' : '#2e1065'
+        ctx.strokeStyle = f < 2 ? '#e879f9' : '#a855f7'
+        ctx.lineWidth = Math.max(0.9, rx * 0.07)
+
+        ctx.beginPath()
+        ctx.moveTo(x + side * rx * 0.16, wingBaseY + ratio * h * 0.1)
+        ctx.quadraticCurveTo(ctrlX, ctrlY, tipX, tipY)
+        ctx.quadraticCurveTo(
+          x + side * wingSpan * (0.44 - ratio * 0.09),
+          wingBaseY + h * (0.14 + ratio * 0.12),
+          x + side * rx * 0.14,
+          wingBaseY + h * (0.08 + ratio * 0.08),
+        )
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+      }
+
+      // Glowing violet upper wing crest rib
+      ctx.globalAlpha = 0.92 * alphaScale
+      ctx.strokeStyle = '#f5d0fe'
+      ctx.lineWidth = Math.max(1.1, rx * 0.09)
+      ctx.beginPath()
+      ctx.moveTo(x + side * rx * 0.14, wingBaseY)
+      ctx.quadraticCurveTo(
+        x + side * wingSpan * 0.52,
+        wingBaseY - h * 0.38 + flap * 0.6,
+        x + side * wingSpan * 0.95,
+        wingBaseY - h * 0.24 + flap,
+      )
+      ctx.stroke()
+    }
+  } else {
+    // Tier 6: Radiant White-Gold Celestial Angel Wings
+    const wingSpan = rx * 1.82
+    ctx.shadowColor = '#fbbf24'
+    ctx.shadowBlur = Math.max(8, rx * 0.85)
+
+    for (const side of [-1, 1] as const) {
+      // Back golden aura fan
+      ctx.globalAlpha = 0.42 * alphaScale
+      ctx.fillStyle = '#fbbf24'
+      ctx.beginPath()
+      ctx.moveTo(x + side * rx * 0.15, wingBaseY)
+      ctx.quadraticCurveTo(
+        x + side * wingSpan * 0.62,
+        wingBaseY - h * 0.62 + flap,
+        x + side * wingSpan * 1.04,
+        wingBaseY - h * 0.32 + flap,
+      )
+      ctx.quadraticCurveTo(
+        x + side * wingSpan * 0.65,
+        wingBaseY + h * 0.22,
+        x + side * rx * 0.15,
+        wingBaseY + h * 0.14,
+      )
+      ctx.closePath()
+      ctx.fill()
+
+      // 5 primary soaring white-cream angel wing feathers + golden trim
+      for (let f = 0; f < 5; f++) {
+        const ratio = f / 4
+        const spread = 1 - ratio * 0.3
+        const tipX = x + side * wingSpan * spread
+        const tipY = wingBaseY - h * (0.46 - ratio * 0.42) + flap * (1 - ratio * 0.2)
+        const ctrlX = x + side * wingSpan * (0.58 - ratio * 0.1)
+        const ctrlY = wingBaseY - h * (0.55 - ratio * 0.32) + flap * 0.65
+
+        ctx.globalAlpha = (0.94 - ratio * 0.1) * alphaScale
+        ctx.fillStyle = f < 3 ? '#fffbeb' : '#fef08a'
+        ctx.strokeStyle = '#fbbf24'
+        ctx.lineWidth = Math.max(0.9, rx * 0.065)
+
+        ctx.beginPath()
+        ctx.moveTo(x + side * rx * 0.15, wingBaseY + ratio * h * 0.08)
+        ctx.quadraticCurveTo(ctrlX, ctrlY, tipX, tipY)
+        ctx.quadraticCurveTo(
+          x + side * wingSpan * (0.42 - ratio * 0.08),
+          wingBaseY + h * (0.04 + ratio * 0.14),
+          x + side * rx * 0.14,
+          wingBaseY + h * (0.07 + ratio * 0.07),
+        )
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+      }
+    }
+  }
+
+  ctx.restore()
+}
+
+function drawCrownHalo(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  headY: number,
+  rx: number,
+  h: number,
+  t: number,
+  variant: 'monarch_violet' | 'celestial_gold',
+  alphaScale: number,
+) {
+  const bob = Math.sin(t * 3.1) * (h * 0.025)
+  ctx.save()
+
+  if (variant === 'monarch_violet') {
+    const cy = headY + h * 0.08 + bob
+    const archR = rx * 0.78
+    ctx.shadowColor = '#c084fc'
+    ctx.shadowBlur = Math.max(6, rx * 0.65)
+    ctx.globalAlpha = 0.88 * alphaScale
+    ctx.strokeStyle = '#d8b4fe'
+    ctx.lineWidth = Math.max(1.3, rx * 0.1)
+
+    // Gothic royal crown crest arch behind head
+    ctx.beginPath()
+    ctx.arc(x, cy + archR * 0.35, archR, Math.PI * 1.15, Math.PI * 1.85)
+    ctx.stroke()
+
+    ctx.strokeStyle = '#a855f7'
+    ctx.lineWidth = Math.max(0.9, rx * 0.06)
+    ctx.beginPath()
+    ctx.arc(x, cy + archR * 0.35, archR * 0.78, Math.PI * 1.18, Math.PI * 1.82)
+    ctx.stroke()
+
+    // 3 royal diamond crown prongs
+    for (const offsetAng of [-0.42, 0, 0.42]) {
+      const ang = -Math.PI / 2 + offsetAng
+      const px = x + Math.cos(ang) * archR * 1.06
+      const py = cy + archR * 0.35 + Math.sin(ang) * archR * 1.06
+      drawFloatingCrystal(ctx, px, py, Math.max(2.6, rx * 0.22), '#a855f7', '#f5d0fe', offsetAng * 0.8, 0.92 * alphaScale)
+    }
+  } else {
+    // Tier 6: Golden Sun-Cross Celestial Halo
+    const cy = headY - h * 0.02 + bob
+    const ringR = Math.max(4, rx * 0.42)
+    ctx.shadowColor = '#fbbf24'
+    ctx.shadowBlur = Math.max(8, rx * 0.75)
+
+    // Outer radiant sun ring
+    ctx.globalAlpha = 0.94 * alphaScale
+    ctx.strokeStyle = '#fbbf24'
+    ctx.lineWidth = Math.max(1.4, rx * 0.11)
+    ctx.beginPath()
+    ctx.arc(x, cy, ringR, 0, Math.PI * 2)
+    ctx.stroke()
+
+    // Inner bright halo ring
+    ctx.strokeStyle = '#ffffff'
+    ctx.lineWidth = Math.max(0.9, rx * 0.055)
+    ctx.beginPath()
+    ctx.arc(x, cy, ringR * 0.7, 0, Math.PI * 2)
+    ctx.stroke()
+
+    // Cardinal celestial cross rays
+    const ray = ringR * 1.65
+    ctx.fillStyle = '#fef08a'
+    ctx.beginPath()
+    ctx.moveTo(x, cy - ray)
+    ctx.lineTo(x + ringR * 0.22, cy - ringR * 0.22)
+    ctx.lineTo(x + ray, cy)
+    ctx.lineTo(x + ringR * 0.22, cy + ringR * 0.22)
+    ctx.lineTo(x, cy + ray)
+    ctx.lineTo(x - ringR * 0.22, cy + ringR * 0.22)
+    ctx.lineTo(x - ray, cy)
+    ctx.lineTo(x - ringR * 0.22, cy - ringR * 0.22)
+    ctx.closePath()
+    ctx.fill()
+
+    drawStarSparkle(ctx, x, cy, ringR * 0.55, '#ffffff', 0.98 * alphaScale)
+  }
+
+  ctx.restore()
+}
+
 /**
- * Draws the 3-tier rebirth visual aura:
- * - Rebirth 1-4: Radiant cyan dual sigil floor rings + 4 rotating runes + rising spirit motes
- * - Rebirth 5: Luminous crimson-magenta twin seraph wings + 6-point hexagram circle + rose embers
- * - Rebirth 6: Mythic celestial pillar + 4-wing gold-cyan seraph + floating halo crown + orbiting astral shards
+ * Draws the 6 distinct rebirth visual aura tiers matching the ascension progression:
+ * - Tier 1: Light blue magic circle, gentle vertical light rays, 1 orbit ring & star sparkles
+ * - Tier 2: Double arcane circle, vertical beams, 2 diagonal energy ribbons & 2 floating crystals
+ * - Tier 3: Triple layered circle, dense aura beams, 3 vortex ribbons & 4 floating crystals
+ * - Tier 4: Radiant blue-gold magic circle, intense energy sphere & 6 floating crystals
+ * - Tier 5: Violet monarch wings, crown crest halo, erupting amethyst crystal spires & purple wisps
+ * - Tier 6: Radiant white-gold celestial seraph wings, sun-cross halo & golden crystal light blades
  */
 export function drawRebirthAura(
   ctx: CanvasRenderingContext2D,
@@ -32,237 +390,247 @@ export function drawRebirthAura(
   const layer = opts.layer ?? 'all'
   const t = opts.timeSec
   const rx = opts.radiusX ?? 12
-  const ry = Math.max(3.2, rx * 0.34)
+  const ry = Math.max(3.4, rx * 0.35)
   const h = opts.spriteHeight ?? Math.round(rx * 2.5)
   const aScale = opts.alphaScale ?? 1
-  const groundY = opts.y - Math.max(1, h * 0.08)
+  const groundY = opts.y - Math.max(1, h * 0.06)
+  const tier = spec.tier
+  const circleScale = 1 + (tier - 1) * 0.075
+  const cRx = rx * circleScale
+  const cRy = ry * circleScale
 
   ctx.save()
 
-  // ---------------- BACK LAYER (floor sigils, light pillar, seraph wings) ----------------
+  // ---------------- BACK LAYER (ground magic circle, light beams, wings, back ribbons, back spires) ----------------
   if (layer === 'all' || layer === 'back') {
-    if (spec.style === 'sigil_ring') {
-      const pulse = (0.62 + Math.sin(t * 5.2) * 0.16) * aScale
-      ctx.globalAlpha = pulse
-      ctx.strokeStyle = spec.primaryColor
-      ctx.shadowColor = spec.glowColor
-      ctx.shadowBlur = Math.max(4, rx * 0.55)
-      ctx.lineWidth = Math.max(1.2, rx * 0.11)
+    const pulse = (0.7 + Math.sin(t * 4.4) * 0.14) * aScale
 
-      ctx.beginPath()
-      ctx.ellipse(opts.x, groundY, rx, ry, t * 0.45, 0, Math.PI * 2)
-      ctx.stroke()
+    // Soft elliptical aura floor glow
+    ctx.save()
+    ctx.translate(opts.x, groundY)
+    ctx.scale(1, cRy / Math.max(1, cRx))
+    const floorGlow = ctx.createRadialGradient(0, 0, cRx * 0.1, 0, 0, cRx * 1.15)
+    floorGlow.addColorStop(0, tier === 6 ? 'rgba(254, 240, 138, 0.42)' : tier === 5 ? 'rgba(216, 180, 254, 0.36)' : 'rgba(125, 211, 252, 0.32)')
+    floorGlow.addColorStop(0.65, tier === 6 ? 'rgba(251, 191, 36, 0.18)' : tier === 5 ? 'rgba(168, 85, 247, 0.2)' : 'rgba(56, 189, 248, 0.16)')
+    floorGlow.addColorStop(1, 'rgba(0, 0, 0, 0)')
+    ctx.globalAlpha = pulse
+    ctx.fillStyle = floorGlow
+    ctx.beginPath()
+    ctx.arc(0, 0, cRx * 1.15, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
 
-      ctx.globalAlpha = pulse * 0.72
+    // Vertical celestial light column & rising curtain rays
+    if (spec.hasAstralPillar) {
+      const colH = h * (0.95 + tier * 0.08)
+      const colW = cRx * (0.95 + tier * 0.06)
+      const colGrad = ctx.createLinearGradient(opts.x, groundY - colH, opts.x, groundY)
+      colGrad.addColorStop(0, 'rgba(255, 255, 255, 0)')
+      colGrad.addColorStop(0.55, tier === 6 ? 'rgba(253, 224, 71, 0.16)' : tier === 5 ? 'rgba(192, 132, 252, 0.18)' : 'rgba(125, 211, 252, 0.16)')
+      colGrad.addColorStop(1, tier === 6 ? 'rgba(251, 191, 36, 0.3)' : tier === 5 ? 'rgba(168, 85, 247, 0.28)' : 'rgba(56, 189, 248, 0.26)')
+      ctx.globalAlpha = (0.45 + tier * 0.07) * aScale
+      ctx.fillStyle = colGrad
+      ctx.fillRect(Math.round(opts.x - colW * 0.5), Math.round(groundY - colH), Math.round(colW), Math.round(colH))
+
+      // Crisp rising vertical light rays
       ctx.strokeStyle = spec.secondaryColor
-      ctx.lineWidth = Math.max(1, rx * 0.08)
-      ctx.beginPath()
-      ctx.ellipse(opts.x, groundY, rx * 0.72, ry * 0.72, -t * 0.7, 0, Math.PI * 2)
-      ctx.stroke()
-
-      // 4 rotating diamond runes on outer sigil ring
-      ctx.fillStyle = spec.secondaryColor
-      const runeSize = Math.max(1.8, rx * 0.15)
-      for (let i = 0; i < spec.runeCount; i++) {
-        const ang = t * 1.4 + (i * Math.PI * 2) / spec.runeCount
-        const px = opts.x + Math.cos(ang) * rx
-        const py = groundY + Math.sin(ang) * ry
-        ctx.fillRect(Math.round(px - runeSize / 2), Math.round(py - runeSize / 2), Math.round(runeSize), Math.round(runeSize))
-      }
-    } else if (spec.style === 'crimson_wings') {
-      const flap = Math.sin(t * 4.2) * (h * 0.06)
-      const wingSpan = rx * 1.45
-      const wingBaseY = opts.y - h * 0.56
-      ctx.shadowColor = spec.glowColor
-      ctx.shadowBlur = Math.max(6, rx * 0.7)
-
-      // Twin luminous crimson-magenta seraph wings behind torso
-      for (const side of [-1, 1] as const) {
-        for (let feather = 0; feather < 3; feather++) {
-          const spread = 1 - feather * 0.22
-          const tipX = opts.x + side * wingSpan * spread
-          const tipY = wingBaseY - h * (0.28 - feather * 0.12) + flap * (1 + feather * 0.25)
-          ctx.globalAlpha = (0.48 - feather * 0.08) * aScale
-          ctx.fillStyle = feather === 0 ? spec.secondaryColor : spec.primaryColor
-          ctx.beginPath()
-          ctx.moveTo(opts.x + side * rx * 0.18, wingBaseY + feather * (h * 0.07))
-          ctx.quadraticCurveTo(
-            opts.x + side * wingSpan * 0.62 * spread,
-            tipY - h * 0.08,
-            tipX,
-            tipY + h * 0.14,
-          )
-          ctx.quadraticCurveTo(
-            opts.x + side * wingSpan * 0.45 * spread,
-            wingBaseY + h * (0.14 + feather * 0.05),
-            opts.x + side * rx * 0.16,
-            wingBaseY + h * 0.1 + feather * (h * 0.05),
-          )
-          ctx.closePath()
-          ctx.fill()
-        }
-      }
-
-      // 6-point hexagram floor circle
-      ctx.globalAlpha = 0.72 * aScale
-      ctx.strokeStyle = spec.primaryColor
-      ctx.lineWidth = Math.max(1.4, rx * 0.11)
-      ctx.beginPath()
-      ctx.ellipse(opts.x, groundY, rx * 1.08, ry * 1.08, 0, 0, Math.PI * 2)
-      ctx.stroke()
-
-      ctx.strokeStyle = spec.secondaryColor
-      ctx.lineWidth = Math.max(1, rx * 0.07)
-      for (const phaseOffset of [0, Math.PI / 3]) {
+      ctx.lineWidth = Math.max(0.8, rx * 0.055)
+      for (let b = 0; b < spec.beamCount; b++) {
+        const bxNorm = ((b / Math.max(1, spec.beamCount - 1)) - 0.5) * 1.45
+        const bx = opts.x + bxNorm * cRx * 0.72
+        const phase = (t * 0.8 + b * 0.37) % 1
+        const beamH = h * (0.55 + Math.sin(t * 2.5 + b) * 0.18)
+        const baseY = groundY - phase * h * 0.12
+        ctx.globalAlpha = (0.24 + Math.sin(phase * Math.PI) * 0.28) * aScale
         ctx.beginPath()
-        for (let p = 0; p <= 3; p++) {
-          const ang = t * 0.9 + phaseOffset + (p * Math.PI * 2) / 3
-          const px = opts.x + Math.cos(ang) * rx * 0.96
-          const py = groundY + Math.sin(ang) * ry * 0.96
-          if (p === 0) ctx.moveTo(px, py)
+        ctx.moveTo(bx, baseY)
+        ctx.lineTo(bx, baseY - beamH)
+        ctx.stroke()
+      }
+    }
+
+    // Concentric arcane ground rings + geometric star polygons
+    ctx.shadowColor = spec.glowColor
+    ctx.shadowBlur = Math.max(5, rx * (0.45 + tier * 0.07))
+
+    ctx.globalAlpha = (0.76 + tier * 0.03) * aScale
+    ctx.strokeStyle = spec.primaryColor
+    ctx.lineWidth = Math.max(1.2, rx * 0.1)
+    ctx.beginPath()
+    ctx.ellipse(opts.x, groundY, cRx, cRy, 0, 0, Math.PI * 2)
+    ctx.stroke()
+
+    ctx.globalAlpha = 0.72 * aScale
+    ctx.strokeStyle = tier === 4 ? '#fef08a' : spec.secondaryColor
+    ctx.lineWidth = Math.max(0.9, rx * 0.065)
+    ctx.beginPath()
+    ctx.ellipse(opts.x, groundY, cRx * 0.74, cRy * 0.74, 0, 0, Math.PI * 2)
+    ctx.stroke()
+
+    if (spec.ringCount >= 3) {
+      ctx.globalAlpha = 0.65 * aScale
+      ctx.strokeStyle = spec.coreAccentColor
+      ctx.lineWidth = Math.max(0.8, rx * 0.05)
+      ctx.beginPath()
+      ctx.ellipse(opts.x, groundY, cRx * 0.5, cRy * 0.5, 0, 0, Math.PI * 2)
+      ctx.stroke()
+    }
+
+    // Star / Hexagram / Octagram geometry inside floor circle for Tier 3+
+    if (tier >= 3) {
+      const polySides = tier === 5 ? 3 : 4
+      const offsets = tier === 5 ? [0, Math.PI / 3] : [0, Math.PI / 4]
+      ctx.globalAlpha = (tier >= 5 ? 0.62 : 0.45) * aScale
+      ctx.strokeStyle = tier === 4 ? '#fef08a' : spec.secondaryColor
+      ctx.lineWidth = Math.max(0.8, rx * 0.055)
+      for (const off of offsets) {
+        ctx.beginPath()
+        for (let k = 0; k <= polySides; k++) {
+          const ang = t * 0.48 + off + (k * Math.PI * 2) / polySides
+          const px = opts.x + Math.cos(ang) * cRx * 0.88
+          const py = groundY + Math.sin(ang) * cRy * 0.88
+          if (k === 0) ctx.moveTo(px, py)
           else ctx.lineTo(px, py)
         }
         ctx.stroke()
       }
-    } else if (spec.style === 'celestial_crown') {
-      const pulse = 0.78 + Math.sin(t * 4.8) * 0.18
+    }
 
-      // Vertical radiant astral pillar behind sprite
-      const pillarGrad = ctx.createLinearGradient(opts.x, opts.y - h * 1.35, opts.x, groundY + ry)
-      pillarGrad.addColorStop(0, 'rgba(253, 224, 71, 0)')
-      pillarGrad.addColorStop(0.35, 'rgba(103, 232, 249, 0.22)')
-      pillarGrad.addColorStop(0.75, 'rgba(253, 224, 71, 0.34)')
-      pillarGrad.addColorStop(1, 'rgba(253, 224, 71, 0)')
-      ctx.globalAlpha = pulse * aScale
-      ctx.fillStyle = pillarGrad
-      ctx.fillRect(Math.round(opts.x - rx * 0.7), Math.round(opts.y - h * 1.3), Math.round(rx * 1.4), Math.round(h * 1.38))
+    // Rotating perimeter sigil ticks
+    ctx.fillStyle = spec.coreAccentColor
+    const tickSize = Math.max(1.6, rx * 0.13)
+    for (let i = 0; i < spec.runeCount; i++) {
+      const ang = t * 0.9 + (i * Math.PI * 2) / spec.runeCount
+      const px = opts.x + Math.cos(ang) * cRx * 0.96
+      const py = groundY + Math.sin(ang) * cRy * 0.96
+      ctx.globalAlpha = 0.82 * aScale
+      ctx.fillRect(Math.round(px - tickSize / 2), Math.round(py - tickSize / 2), Math.round(tickSize), Math.round(tickSize))
+    }
 
-      // 4-wing golden-prism celestial seraph wings
-      const flap = Math.sin(t * 3.8) * (h * 0.055)
-      const wingSpan = rx * 1.72
-      const wingY = opts.y - h * 0.62
-      ctx.shadowColor = spec.glowColor
-      ctx.shadowBlur = Math.max(8, rx * 0.85)
-      for (const side of [-1, 1] as const) {
-        // Upper golden wing
-        ctx.globalAlpha = 0.62 * aScale
-        ctx.fillStyle = spec.primaryColor
-        ctx.beginPath()
-        ctx.moveTo(opts.x + side * rx * 0.16, wingY)
-        ctx.quadraticCurveTo(
-          opts.x + side * wingSpan * 0.68,
-          wingY - h * 0.44 + flap,
-          opts.x + side * wingSpan,
-          wingY - h * 0.18 + flap,
-        )
-        ctx.quadraticCurveTo(
-          opts.x + side * wingSpan * 0.5,
-          wingY + h * 0.1,
-          opts.x + side * rx * 0.16,
-          wingY + h * 0.12,
-        )
-        ctx.closePath()
-        ctx.fill()
+    // Wings behind character (Tier 5 dark-violet monarch / Tier 6 white-gold seraphim)
+    if (spec.hasWings && spec.wingVariant !== 'none') {
+      drawDetailedWings(ctx, opts.x, opts.y - h * 0.56, rx, h, t, spec.wingVariant, aScale)
+    }
 
-        // Lower prism cyan wing
-        ctx.globalAlpha = 0.45 * aScale
-        ctx.fillStyle = spec.secondaryColor
-        ctx.beginPath()
-        ctx.moveTo(opts.x + side * rx * 0.16, wingY + h * 0.09)
-        ctx.quadraticCurveTo(
-          opts.x + side * wingSpan * 0.56,
-          wingY + h * 0.02 - flap * 0.6,
-          opts.x + side * wingSpan * 0.82,
-          wingY + h * 0.25 - flap * 0.6,
-        )
-        ctx.quadraticCurveTo(
-          opts.x + side * wingSpan * 0.42,
-          wingY + h * 0.28,
-          opts.x + side * rx * 0.16,
-          wingY + h * 0.2,
-        )
-        ctx.closePath()
-        ctx.fill()
+    // Back crystal spires / light blades on far half of circle (Tier 5 & 6)
+    if (spec.spireCount > 0) {
+      for (let i = 0; i < spec.spireCount; i++) {
+        const ang = (i * Math.PI * 2) / spec.spireCount + (tier === 5 ? 0.35 : 0.25)
+        if (Math.sin(ang) >= 0) continue
+        const sx = opts.x + Math.cos(ang) * cRx * 1.02
+        const sy = groundY + Math.sin(ang) * cRy * 1.02
+        const spireH = h * (0.28 + (i % 2) * 0.14)
+        const spireW = Math.max(3, rx * 0.26)
+        const tilt = Math.cos(ang) * 0.16
+        if (tier === 5) {
+          drawCrystalSpire(ctx, sx, sy, spireW, spireH, '#3b0764', '#9333ea', '#f5d0fe', tilt, 0.85 * aScale)
+        } else {
+          drawCrystalSpire(ctx, sx, sy, spireW * 0.85, spireH * 1.15, '#b45309', '#fbbf24', '#ffffff', tilt * 0.4, 0.85 * aScale)
+        }
       }
+    }
 
-      // Double golden astrolabe floor rings
-      ctx.globalAlpha = 0.88 * aScale
-      ctx.strokeStyle = spec.primaryColor
-      ctx.lineWidth = Math.max(1.6, rx * 0.13)
-      ctx.beginPath()
-      ctx.ellipse(opts.x, groundY, rx * 1.24, ry * 1.24, 0, 0, Math.PI * 2)
-      ctx.stroke()
-
-      ctx.globalAlpha = 0.68 * aScale
-      ctx.strokeStyle = spec.secondaryColor
-      ctx.lineWidth = Math.max(1.1, rx * 0.08)
-      ctx.beginPath()
-      ctx.ellipse(opts.x, groundY, rx * 0.9, ry * 0.9, t * 0.65, 0, Math.PI * 2)
-      ctx.stroke()
+    // Back halves of swirling diagonal orbital energy ribbons
+    for (let r = 0; r < spec.ribbonCount; r++) {
+      const sign = r % 2 === 0 ? 1 : -1
+      const tilt = sign * (0.26 + r * 0.14) + Math.sin(t * 1.5 + r) * 0.08
+      const rRx = cRx * (0.86 + (r % 2) * 0.18)
+      const rRy = Math.max(3.5, rRx * (0.28 + (r % 3) * 0.06))
+      const rCy = opts.y - h * (0.32 + (r / Math.max(1, spec.ribbonCount)) * 0.42)
+      const lineW = Math.max(1.2, rx * (0.09 + tier * 0.008))
+      drawSwirlRibbonHalf(
+        ctx,
+        opts.x,
+        rCy,
+        rRx,
+        rRy,
+        tilt,
+        r === spec.ribbonCount - 1 && tier === 4 ? '#fde68a' : spec.primaryColor,
+        spec.coreAccentColor,
+        lineW,
+        'back',
+        aScale,
+      )
     }
   }
 
-  // ---------------- FRONT LAYER (rising motes, halo crown, orbiting astral shards) ----------------
+  // ---------------- FRONT LAYER (halo crown, front ribbons, front spires, floating crystals, star sparkles) ----------------
   if (layer === 'all' || layer === 'front') {
-    if (spec.style === 'sigil_ring') {
-      ctx.fillStyle = spec.secondaryColor
-      ctx.shadowColor = spec.glowColor
-      ctx.shadowBlur = Math.max(3, rx * 0.35)
-      const speck = Math.max(1.5, rx * 0.12)
-      for (let i = 0; i < 4; i++) {
-        const phase = (t * 0.85 + i * 0.25) % 1
-        const px = opts.x + Math.sin(t * 2 + i * 1.7) * rx * 0.68
-        const py = groundY - phase * h * 0.85
-        ctx.globalAlpha = Math.sin(phase * Math.PI) * 0.72 * aScale
-        ctx.fillRect(Math.round(px - speck / 2), Math.round(py - speck / 2), Math.round(speck), Math.round(speck))
+    // Crown / Celestial Sun-Cross Halo (Tier 5 & Tier 6)
+    if (spec.hasHaloCrown && spec.wingVariant !== 'none') {
+      drawCrownHalo(ctx, opts.x, opts.y - h * 1.02, rx, h, t, spec.wingVariant, aScale)
+    }
+
+    // Front halves of swirling orbital energy ribbons
+    ctx.shadowColor = spec.glowColor
+    ctx.shadowBlur = Math.max(4, rx * 0.5)
+    for (let r = 0; r < spec.ribbonCount; r++) {
+      const sign = r % 2 === 0 ? 1 : -1
+      const tilt = sign * (0.26 + r * 0.14) + Math.sin(t * 1.5 + r) * 0.08
+      const rRx = cRx * (0.86 + (r % 2) * 0.18)
+      const rRy = Math.max(3.5, rRx * (0.28 + (r % 3) * 0.06))
+      const rCy = opts.y - h * (0.32 + (r / Math.max(1, spec.ribbonCount)) * 0.42)
+      const lineW = Math.max(1.2, rx * (0.09 + tier * 0.008))
+      drawSwirlRibbonHalf(
+        ctx,
+        opts.x,
+        rCy,
+        rRx,
+        rRy,
+        tilt,
+        r === spec.ribbonCount - 1 && tier === 4 ? '#fde68a' : spec.primaryColor,
+        spec.coreAccentColor,
+        lineW,
+        'front',
+        aScale,
+      )
+    }
+
+    // Front crystal spires / light blades on bottom edge of circle (Tier 5 & Tier 6)
+    if (spec.spireCount > 0) {
+      for (let i = 0; i < spec.spireCount; i++) {
+        const ang = (i * Math.PI * 2) / spec.spireCount + (tier === 5 ? 0.35 : 0.25)
+        if (Math.sin(ang) < 0) continue
+        const sx = opts.x + Math.cos(ang) * cRx * 1.02
+        const sy = groundY + Math.sin(ang) * cRy * 1.02
+        const spireH = h * (0.25 + (i % 2) * 0.13)
+        const spireW = Math.max(3, rx * 0.26)
+        const tilt = Math.cos(ang) * 0.16
+        if (tier === 5) {
+          drawCrystalSpire(ctx, sx, sy, spireW, spireH, '#3b0764', '#9333ea', '#f5d0fe', tilt, 0.94 * aScale)
+        } else {
+          drawCrystalSpire(ctx, sx, sy, spireW * 0.85, spireH * 1.1, '#b45309', '#fbbf24', '#ffffff', tilt * 0.4, 0.94 * aScale)
+        }
       }
-    } else if (spec.style === 'crimson_wings') {
-      ctx.shadowColor = spec.glowColor
-      ctx.shadowBlur = Math.max(4, rx * 0.45)
-      const ember = Math.max(2, rx * 0.15)
-      for (let i = 0; i < 6; i++) {
-        const phase = (t * 1.15 + i / 6) % 1
-        const ang = t * 2.2 + (i * Math.PI) / 3
-        const px = opts.x + Math.cos(ang) * rx * (0.95 - phase * 0.3)
-        const py = groundY - phase * h * 1.02
-        ctx.globalAlpha = Math.sin(phase * Math.PI) * 0.85 * aScale
-        ctx.fillStyle = i % 2 === 0 ? spec.secondaryColor : spec.primaryColor
-        ctx.fillRect(Math.round(px - ember / 2), Math.round(py - ember / 2), Math.round(ember), Math.round(ember))
-      }
-    } else if (spec.style === 'celestial_crown') {
-      const haloY = opts.y - h * 0.98 + Math.sin(t * 3.2) * (h * 0.03)
-      const haloRx = rx * 0.62
-      const haloRy = Math.max(2.2, haloRx * 0.34)
-      ctx.shadowColor = spec.glowColor
-      ctx.shadowBlur = Math.max(7, rx * 0.75)
+    }
 
-      // Radiant golden celestial crown halo floating above head
-      ctx.globalAlpha = 0.92 * aScale
-      ctx.strokeStyle = spec.primaryColor
-      ctx.lineWidth = Math.max(1.5, rx * 0.12)
-      ctx.beginPath()
-      ctx.ellipse(opts.x, haloY, haloRx, haloRy, 0, 0, Math.PI * 2)
-      ctx.stroke()
-
-      ctx.strokeStyle = '#ffffff'
-      ctx.lineWidth = Math.max(1, rx * 0.06)
-      ctx.beginPath()
-      ctx.ellipse(opts.x, haloY, haloRx * 0.74, haloRy * 0.74, 0, 0, Math.PI * 2)
-      ctx.stroke()
-
-      // Orbiting celestial star shards
-      const shardSize = Math.max(2.2, rx * 0.18)
+    // Floating faceted crystals (Tier 2: 2, Tier 3: 4, Tier 4: 6, Tier 5: 4, Tier 6: 6)
+    if (spec.orbitShardCount > 0) {
+      const cSize = Math.max(2.8, rx * (0.22 + (tier >= 4 ? 0.04 : 0)))
       for (let i = 0; i < spec.orbitShardCount; i++) {
-        const ang = t * 2.4 + (i * Math.PI * 2) / spec.orbitShardCount
-        const sx = opts.x + Math.cos(ang) * rx * 1.25
-        const sy = opts.y - h * 0.48 + Math.sin(ang) * (h * 0.18)
-        ctx.globalAlpha = (Math.sin(ang) > -0.25 ? 0.95 : 0.4) * aScale
-        ctx.fillStyle = i % 2 === 0 ? '#ffffff' : spec.secondaryColor
-        ctx.fillRect(Math.round(sx - shardSize / 2), Math.round(sy - shardSize / 2), Math.round(shardSize), Math.round(shardSize))
-        ctx.fillStyle = spec.primaryColor
-        ctx.fillRect(Math.round(sx - shardSize * 0.8), Math.round(sy - 0.5), Math.round(shardSize * 1.6), 1.5)
-        ctx.fillRect(Math.round(sx - 0.5), Math.round(sy - shardSize * 0.8), 1.5, Math.round(shardSize * 1.6))
+        const side = i % 2 === 0 ? -1 : 1
+        const slot = Math.floor(i / 2)
+        const totalSlots = Math.ceil(spec.orbitShardCount / 2)
+        const heightFrac = totalSlots === 1 ? 0.56 : 0.34 + (slot / Math.max(1, totalSlots - 1)) * 0.44
+        const arcOffset = totalSlots === 1 ? 1.08 : 1.02 + Math.sin((slot / Math.max(1, totalSlots - 1)) * Math.PI) * 0.2
+        const cx = opts.x + side * cRx * arcOffset + Math.cos(t * 1.9 + i) * rx * 0.06
+        const cy = opts.y - h * heightFrac + Math.sin(t * 2.8 + i * 1.4) * (h * 0.04)
+        const outerCol = tier === 6 ? '#fbbf24' : tier === 5 ? '#9333ea' : '#2563eb'
+        const innerCol = tier === 6 ? '#ffffff' : tier === 5 ? '#f5d0fe' : '#bae6fd'
+        drawFloatingCrystal(ctx, cx, cy, cSize, outerCol, innerCol, side * 0.08, 0.92 * aScale)
       }
+    }
+
+    // Twinkling 4-point star sparkles rising around character
+    const sparkCount = 4 + tier * 2
+    const sparkSize = Math.max(1.5, rx * 0.13)
+    for (let i = 0; i < sparkCount; i++) {
+      const phase = (t * (0.7 + (i % 3) * 0.18) + i / sparkCount) % 1
+      const spreadX = Math.sin(i * 2.17 + t * 0.9) * cRx * 0.92
+      const py = groundY - phase * h * 1.15
+      const fade = Math.sin(phase * Math.PI)
+      const col = i % 3 === 0 ? '#ffffff' : spec.secondaryColor
+      drawStarSparkle(ctx, opts.x + spreadX, py, sparkSize * (0.75 + (i % 2) * 0.35), col, fade * 0.88 * aScale)
     }
   }
 

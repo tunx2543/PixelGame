@@ -182,19 +182,24 @@ function drawHdWeapon(
     ctx.fill()
     ctx.stroke()
   } else if (weapon === 'stick') {
+    // Classic carved wooden adventurer staff matching the Novice weapon sheet
     ctx.strokeStyle = HD_INK
     ctx.lineWidth = 2.2
-    ctx.fillStyle = gradVert(ctx, 0, -3, 3, hi, dark)
+    ctx.fillStyle = gradVert(ctx, 0, -3.5, 3.5, '#b87d48', '#6b411e')
     ctx.beginPath()
-    ctx.roundRect(-10, -2.5, 42, 5, 2.5)
+    ctx.roundRect(-12, -2.5, 45, 5, 2.5)
     ctx.fill()
     ctx.stroke()
-    // Cute leaf sprout
-    ctx.fillStyle = '#4ade80'
+    // Gnarled oak knob & carved grip rings
+    ctx.fillStyle = '#9c6334'
     ctx.beginPath()
-    ctx.ellipse(29, -6, 5, 2.8, -0.5, 0, Math.PI * 2)
+    ctx.ellipse(33, -0.5, 5.2, 4.4, 0.15, 0, Math.PI * 2)
     ctx.fill()
     ctx.stroke()
+    ctx.fillStyle = '#5c3618'
+    ctx.fillRect(-1, -2.8, 3, 5.6)
+    ctx.fillRect(6, -2.8, 3, 5.6)
+    ctx.fillRect(24, -2.8, 3, 5.6)
   } else if (weapon === 'staff') {
     ctx.strokeStyle = HD_INK
     ctx.lineWidth = 2.2
@@ -257,6 +262,7 @@ function drawHdHatAndHair(
   headR: number,
   sideDir: 'down' | 'up' | 'side',
   colors: HumanColors,
+  tailSway = 0,
 ) {
   if (colors.skeleton) return
   const hair = colors.hair
@@ -304,28 +310,34 @@ function drawHdHatAndHair(
         ctx.moveTo(cx - headR - 3, headTopY + headR * 0.9)
         ctx.quadraticCurveTo(cx - headR - 5, headTopY - 2, cx - headR * 0.55, headTopY - 5)
         if (hairStyle === 'spiky') {
-          ctx.lineTo(cx - 8, headTopY - 12)
-          ctx.lineTo(cx - 2, headTopY - 6)
-          ctx.lineTo(cx + 5, headTopY - 13)
-          ctx.lineTo(cx + 9, headTopY - 5)
+          ctx.lineTo(cx - 12, headTopY - 11)
+          ctx.lineTo(cx - 6, headTopY - 7)
+          ctx.lineTo(cx - 1, headTopY - 14)
+          ctx.lineTo(cx + 5, headTopY - 7)
+          ctx.lineTo(cx + 12, headTopY - 12)
+          ctx.lineTo(cx + 14, headTopY - 5)
         } else {
           ctx.quadraticCurveTo(cx, headTopY - 11, cx + headR * 0.55, headTopY - 5)
         }
         ctx.quadraticCurveTo(cx + headR + 5, headTopY - 2, cx + headR + 3, headTopY + headR * 0.9)
-        // Forehead bangs
-        ctx.lineTo(cx + headR * 0.65, headTopY + headR * 0.58)
-        ctx.lineTo(cx + 5, headTopY + headR * 0.95)
-        ctx.lineTo(cx, headTopY + headR * 0.52)
-        ctx.lineTo(cx - 7, headTopY + headR * 0.95)
-        ctx.lineTo(cx - headR * 0.65, headTopY + headR * 0.55)
+        // Fluffy layered anime forehead bangs
+        ctx.lineTo(cx + headR * 0.72, headTopY + headR * 0.62)
+        ctx.lineTo(cx + 8, headTopY + headR * 1.0)
+        ctx.lineTo(cx + 3, headTopY + headR * 0.58)
+        ctx.lineTo(cx - 2, headTopY + headR * 1.02)
+        ctx.lineTo(cx - 8, headTopY + headR * 0.58)
+        ctx.lineTo(cx - 14, headTopY + headR * 0.96)
+        ctx.lineTo(cx - headR * 0.72, headTopY + headR * 0.56)
         ctx.closePath()
       } else {
         // Side view facing right
         ctx.moveTo(cx - headR - 4, headTopY + headR * 1.15)
-        ctx.quadraticCurveTo(cx - headR - 5, headTopY - 5, cx - 2, headTopY - 8)
+        ctx.quadraticCurveTo(cx - headR - 6, headTopY - 5, cx - 2, headTopY - 9)
         if (hairStyle === 'spiky') {
-          ctx.lineTo(cx + 5, headTopY - 12)
-          ctx.lineTo(cx + 8, headTopY - 5)
+          ctx.lineTo(cx + 4, headTopY - 13)
+          ctx.lineTo(cx + 8, headTopY - 6)
+          ctx.lineTo(cx + 15, headTopY - 10)
+          ctx.lineTo(cx + 14, headTopY - 4)
         }
         ctx.quadraticCurveTo(cx + headR + 4, headTopY - 2, cx + headR + 2, headTopY + headR * 0.65)
         ctx.lineTo(cx + 6, headTopY + headR * 0.5)
@@ -362,17 +374,111 @@ function drawHdHatAndHair(
     return
   }
 
-  if (style === 'bandana') {
+  if (style === 'bandana' || style === 'novice_bandana') {
     paintHairCrown(true)
     ctx.save()
     ctx.strokeStyle = HD_INK
     ctx.lineWidth = 2.4
     ctx.fillStyle = gradVert(ctx, cx, headTopY + 3, headTopY + 12, hatHi, hatDark)
     ctx.beginPath()
-    ctx.roundRect(cx - headR - 1, headTopY + 3, headR * 2 + 2, 8, 4)
+    ctx.roundRect(cx - headR - 1, headTopY + 3, headR * 2 + 2, 8.5, 4)
     ctx.fill()
     ctx.stroke()
-    if (sideDir === 'side' || sideDir === 'up') {
+
+    if (style === 'novice_bandana') {
+      // Gold forehead adventurer emblem on down/side
+      if (sideDir === 'down') {
+        ctx.fillStyle = '#fef08a'
+        ctx.beginPath()
+        ctx.roundRect(cx - 5, headTopY + 4, 10, 6.5, 2)
+        ctx.fill()
+        ctx.stroke()
+      } else if (sideDir === 'side') {
+        ctx.fillStyle = '#fef08a'
+        ctx.beginPath()
+        ctx.roundRect(cx + headR - 8, headTopY + 4.5, 7, 5.5, 2)
+        ctx.fill()
+        ctx.stroke()
+      }
+
+      // Fluttering twin headband tails
+      if (sideDir === 'side') {
+        ctx.fillStyle = hatCol
+        ctx.beginPath()
+        ctx.moveTo(cx - headR + 1, headTopY + 6)
+        ctx.quadraticCurveTo(cx - headR - 10, headTopY + 6 + tailSway, cx - headR - 18, headTopY + 12 + tailSway * 1.3)
+        ctx.lineTo(cx - headR - 14, headTopY + 18 + tailSway * 1.2)
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+
+        ctx.fillStyle = hatDark
+        ctx.beginPath()
+        ctx.moveTo(cx - headR + 2, headTopY + 9)
+        ctx.quadraticCurveTo(cx - headR - 8, headTopY + 14 + tailSway, cx - headR - 13, headTopY + 21 + tailSway)
+        ctx.lineTo(cx - headR - 7, headTopY + 22 + tailSway)
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+      } else if (sideDir === 'up') {
+        // Knot + twin tails bouncing behind the head
+        ctx.fillStyle = hatCol
+        ctx.beginPath()
+        ctx.moveTo(cx - 2, headTopY + 8)
+        ctx.lineTo(cx - 12 - tailSway * 0.5, headTopY + 20 + Math.abs(tailSway))
+        ctx.lineTo(cx - 5 - tailSway * 0.4, headTopY + 22 + Math.abs(tailSway))
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.moveTo(cx + 2, headTopY + 8)
+        ctx.lineTo(cx + 12 + tailSway * 0.5, headTopY + 20 - tailSway * 0.4)
+        ctx.lineTo(cx + 5 + tailSway * 0.4, headTopY + 22 - tailSway * 0.4)
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+        ctx.fillStyle = hatHi
+        ctx.beginPath()
+        ctx.arc(cx, headTopY + 7, 4.5, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+      } else {
+        // Subtle peeking headband ribbons on front view
+        ctx.fillStyle = hatDark
+        ctx.beginPath()
+        ctx.moveTo(cx - headR, headTopY + 8)
+        ctx.lineTo(cx - headR - 6, headTopY + 15 + tailSway * 0.5)
+        ctx.lineTo(cx - headR - 2, headTopY + 17 + tailSway * 0.5)
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+      }
+
+      // Iconic Novice green leaf sprout on crown!
+      const sproutX = sideDir === 'side' ? cx - 2 : cx + 4
+      const sproutY = headTopY - 6
+      const tilt = tailSway * 0.04
+      ctx.save()
+      ctx.translate(sproutX, sproutY)
+      ctx.rotate(tilt)
+      ctx.strokeStyle = HD_INK
+      ctx.lineWidth = 2.2
+      ctx.beginPath()
+      ctx.moveTo(0, 4)
+      ctx.quadraticCurveTo(1, -4, 3, -9)
+      ctx.stroke()
+      ctx.fillStyle = '#4ade80'
+      ctx.beginPath()
+      ctx.ellipse(8, -10, 7, 3.6, -0.45, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+      ctx.fillStyle = '#86efac'
+      ctx.beginPath()
+      ctx.ellipse(-4, -8, 5, 2.8, 0.55, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+      ctx.restore()
+    } else if (sideDir === 'side' || sideDir === 'up') {
       ctx.beginPath()
       ctx.moveTo(cx - headR + 2, headTopY + 6)
       ctx.lineTo(cx - headR - 10, headTopY + 14)
@@ -534,11 +640,13 @@ export function renderHdHumanSprite(
   attackFrameOverride?: number,
 ): HTMLCanvasElement {
   const action: SpriteAction = attacking ? 'attack' : actionOverride ?? (frame > 0 ? 'walk' : 'idle')
+  const isSkill = action === 'skill'
+  const isAtk = action === 'attack'
   const f =
-    action === 'attack'
+    isAtk || isSkill
       ? Math.abs(attackFrameOverride ?? frame) % 4
       : action === 'walk'
-        ? Math.abs(frame) % 6
+        ? Math.abs(frame) % 4
         : frame === -1
           ? -1
           : Math.abs(frame) % 4
@@ -553,11 +661,16 @@ export function renderHdHumanSprite(
   const bodyHi = shadeCol(body, 0.25)
   const bodyDark = shadeCol(body, -0.28)
   const legs = colors.legs
-  const boot = colors.armorStyle === 'plate' || colors.armorStyle === 'paladin_plate' ? '#64748b' : '#59331f'
+  const boot =
+    colors.armorStyle === 'plate' || colors.armorStyle === 'paladin_plate'
+      ? '#64748b'
+      : colors.armorStyle === 'novice_tunic'
+        ? '#6f4126'
+        : '#59331f'
   const bootDark = shadeCol(boot, -0.3)
-  const blink = !attacking && f === -1
+  const blink = !attacking && !isSkill && f === -1
 
-  // Walk/Idle/Attack kinematics
+  // Walk/Idle/Attack/Skill kinematics
   let bob = 0
   let stepL = 0
   let stepR = 0
@@ -565,34 +678,52 @@ export function renderHdHumanSprite(
   let liftR = 0
   let armSwing = 0
   let lunge = 0
+  let tailSway = 0
   let wAngle = weapon === 'staff' ? -1.15 : weapon === 'bow' ? 0 : -0.45
 
   if (action === 'idle') {
-    bob = f === 1 ? 2 : f === 3 ? -1 : 0
+    const breathSeq = [0, 1.8, 0.6, -0.8]
+    const idx = f < 0 ? 0 : f % 4
+    bob = breathSeq[idx]
+    tailSway = [0, 1.8, 0.5, -1.6][idx]
+    armSwing = [0, 1.5, 0, -1.5][idx]
   } else if (action === 'walk') {
-    const seq = [
-      { bob: 0, sL: -9, sR: 9, lL: 0, lR: 3, arm: 10 },
-      { bob: -4, sL: -3, sR: 3, lL: 6, lR: 0, arm: 4 },
-      { bob: 0, sL: 9, sR: -9, lL: 3, lR: 0, arm: -10 },
-      { bob: 0, sL: 9, sR: -9, lL: 0, lR: 3, arm: -10 },
-      { bob: -4, sL: 3, sR: -3, lL: 0, lR: 6, arm: -4 },
-      { bob: 0, sL: -9, sR: 9, lL: 3, lR: 0, arm: 10 },
-    ][f % 6]
-    bob = seq.bob
-    stepL = seq.sL
-    stepR = seq.sR
-    liftL = seq.lL
-    liftR = seq.lR
-    armSwing = seq.arm
-    wAngle += seq.arm * 0.03
+    const seq4 = [
+      { bob: 0, sL: -10, sR: 10, lL: 0, lR: 3.5, arm: 11, sway: 4 },
+      { bob: -4.5, sL: -1, sR: 1, lL: 6.5, lR: 0, arm: 2, sway: 6.5 },
+      { bob: 0, sL: 10, sR: -10, lL: 3.5, lR: 0, arm: -11, sway: 4.5 },
+      { bob: -4.5, sL: 1, sR: -1, lL: 0, lR: 6.5, arm: -2, sway: 6.5 },
+    ][f % 4]
+    bob = seq4.bob
+    stepL = seq4.sL
+    stepR = seq4.sR
+    liftL = seq4.lL
+    liftR = seq4.lR
+    armSwing = seq4.arm
+    tailSway = seq4.sway
+    wAngle += seq4.arm * 0.032
+  } else if (isSkill) {
+    // Dedicated energetic 4-frame Skill animation (charge -> hero leap -> burst -> land)
+    const skillFrames = [
+      { bob: 3, lunge: -2, wa: -0.95, arm: -6, sway: -2 },
+      { bob: -7, lunge: 4, wa: -1.9, arm: -14, sway: 7 },
+      { bob: -4.5, lunge: 7, wa: -1.55, arm: -10, sway: 8.5 },
+      { bob: 1, lunge: 2, wa: -0.7, arm: 2, sway: 2 },
+    ][f % 4]
+    bob = skillFrames.bob
+    lunge = skillFrames.lunge
+    wAngle = skillFrames.wa
+    armSwing = skillFrames.arm
+    tailSway = skillFrames.sway
   } else {
-    // Attack / skill pose
-    const atkAngles = [-1.45, 0.25, 0.95, 0.1]
-    const atkLunge = [-3, 9, 12, 3]
-    bob = f === 1 ? -4 : 1
+    // Attack pose (windup -> lunge slash -> follow-through -> recover)
+    const atkAngles = [-1.62, 0.28, 1.02, 0.08]
+    const atkLunge = [-4, 10, 13, 3]
+    bob = f === 1 ? -4 : f === 2 ? -1 : 1
     lunge = atkLunge[f % 4]
     wAngle = atkAngles[f % 4]
-    armSwing = f === 0 ? -10 : 12
+    armSwing = f === 0 ? -12 : f === 3 ? 4 : 13
+    tailSway = f === 0 ? -4 : f === 1 || f === 2 ? 7.5 : 2
   }
 
   ctx.save()
@@ -609,6 +740,26 @@ export function renderHdHumanSprite(
   const headCenterY = 58 + bob
   const headTopY = headCenterY - headR
   const sideDir = dir === 'left' || dir === 'right' ? 'side' : dir
+
+  // Skill ground magic circle (behind character)
+  if (isSkill) {
+    ctx.save()
+    const ringScale = f === 0 ? 0.75 : f === 1 ? 1.02 : f === 2 ? 1.18 : 0.88
+    const ringAlpha = f === 3 ? 0.42 : 0.85
+    ctx.globalAlpha = ringAlpha
+    const isNovice = colors.jobId === 'novice'
+    ctx.strokeStyle = isNovice ? '#38bdf8' : (colors.auraColor ?? '#38bdf8')
+    ctx.lineWidth = 3.2
+    ctx.beginPath()
+    ctx.ellipse(cx, footY + 1, 38 * ringScale, 12 * ringScale, 0, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.strokeStyle = isNovice ? '#f472b6' : '#fde047'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.ellipse(cx, footY + 1, 25 * ringScale, 8 * ringScale, 0, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.restore()
+  }
 
   // Halo (Cleric / Paladin / Seraph)
   if (colors.halo) {
@@ -639,6 +790,37 @@ export function renderHdHumanSprite(
     ctx.restore()
   }
 
+  // Adventurer Backpack on side view (behind torso)
+  if (colors.backpack && sideDir === 'side') {
+    const bpX = cx - 30
+    const bpY = torsoTopY + 10
+    ctx.save()
+    ctx.strokeStyle = HD_INK
+    ctx.lineWidth = 2.4
+    // Rolled travel bedroll / map scroll on top
+    ctx.fillStyle = '#e7dec8'
+    ctx.beginPath()
+    ctx.roundRect(bpX - 2, bpY - 6, 18, 9, 4)
+    ctx.fill()
+    ctx.stroke()
+    // Leather pack body
+    ctx.fillStyle = gradVert(ctx, bpX, bpY, bpY + 30, '#a47148', '#6b4226')
+    ctx.beginPath()
+    ctx.roundRect(bpX - 3, bpY + 1, 20, 28, 6)
+    ctx.fill()
+    ctx.stroke()
+    // Flap + gold clasp
+    ctx.fillStyle = '#c89b6e'
+    ctx.beginPath()
+    ctx.roundRect(bpX - 3, bpY + 1, 20, 11, 5)
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = '#fbbf24'
+    ctx.fillRect(bpX + 4, bpY + 9, 6, 5)
+    ctx.strokeRect(bpX + 4, bpY + 9, 6, 5)
+    ctx.restore()
+  }
+
   // Cape behind body (visible down/side/up)
   if (colors.cape) {
     ctx.save()
@@ -646,7 +828,7 @@ export function renderHdHumanSprite(
     ctx.strokeStyle = HD_INK
     ctx.lineWidth = 2.6
     ctx.beginPath()
-    const capeDx = sideDir === 'side' ? -18 : 0
+    const capeDx = sideDir === 'side' ? -18 - tailSway * 0.6 : 0
     ctx.moveTo(cx - 18, torsoTopY + 10)
     ctx.lineTo(cx + 18, torsoTopY + 10)
     ctx.lineTo(cx + 26 + capeDx, hipY + 18)
@@ -675,21 +857,30 @@ export function renderHdHumanSprite(
   // Boots & Legs
   const paintLeg = (lx: number, offsetX: number, lift: number, darkSide = false) => {
     const fx = lx + (sideDir === 'side' ? offsetX : 0)
-    const fy = footY - lift - (sideDir !== 'side' ? Math.max(0, offsetX * 0.45) : 0)
+    const fy = footY - lift - (sideDir !== 'side' ? Math.max(0, offsetX * 0.38) : 0)
     ctx.save()
     ctx.strokeStyle = HD_INK
     ctx.lineWidth = 2.6
     ctx.fillStyle = darkSide ? shadeCol(legs, -0.22) : legs
     ctx.beginPath()
-    ctx.roundRect(fx - 7, hipY - 2, 14, fy - hipY - 4, 5)
+    ctx.roundRect(fx - 7.5, hipY - 2, 15, fy - hipY - 4, 5)
     ctx.fill()
     ctx.stroke()
-    // Cuffed Boot
-    ctx.fillStyle = gradVert(ctx, fx, fy - 14, fy, boot, bootDark)
+    // Cuffed Boot (taller leather cuff with buckle for Novice)
+    const isNoviceBoot = colors.armorStyle === 'novice_tunic'
+    const bootH = isNoviceBoot ? 17 : 14
+    ctx.fillStyle = gradVert(ctx, fx, fy - bootH, fy, boot, bootDark)
     ctx.beginPath()
-    ctx.roundRect(fx - 9, fy - 14, sideDir === 'side' ? 21 : 18, 14, 5)
+    ctx.roundRect(fx - 9, fy - bootH, sideDir === 'side' ? 21 : 18, bootH, 5)
     ctx.fill()
     ctx.stroke()
+    // Turned-over cuff band
+    ctx.fillStyle = isNoviceBoot ? '#a47148' : shadeCol(boot, 0.28)
+    ctx.fillRect(fx - 7.5, fy - bootH, sideDir === 'side' ? 18 : 15, isNoviceBoot ? 5 : 3.5)
+    if (isNoviceBoot) {
+      ctx.fillStyle = '#fbbf24'
+      ctx.fillRect(fx - 1.5, fy - bootH + 7, 4, 3)
+    }
     ctx.restore()
   }
   if (sideDir === 'side') {
@@ -702,7 +893,7 @@ export function renderHdHumanSprite(
 
   // Weapon behind torso if facing up
   if (sideDir === 'up') {
-    drawHdWeapon(ctx, cx + 22, torsoTopY + 22, weapon, weaponColor, wAngle - 0.7, action, f, colors.jobId)
+    drawHdWeapon(ctx, cx + 22, torsoTopY + 22 + (isSkill ? -10 : 0), weapon, weaponColor, wAngle - 0.7, action, f, colors.jobId)
   }
 
   // Back arm on side view
@@ -733,16 +924,91 @@ export function renderHdHumanSprite(
   ctx.fill()
   ctx.stroke()
 
-  // Sash / Belt & Collar Detail matching Reference Hero!
-  ctx.fillStyle = colors.scarf ?? colors.accent
-  if (sideDir !== 'up') {
-    // Crisp anime crossed sash or chest emblem
+  if (colors.armorStyle === 'novice_tunic') {
+    // Inner dark brown tunic vest peeking through split front hem
+    if (sideDir === 'down') {
+      ctx.fillStyle = '#4a3731'
+      ctx.beginPath()
+      ctx.moveTo(cx - 5, hipY - 7)
+      ctx.lineTo(cx + 5, hipY - 7)
+      ctx.lineTo(cx + 8, hipY + 7)
+      ctx.lineTo(cx - 8, hipY + 7)
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+    }
+
+    // Folded white/cream hoodie cowl around shoulders
+    ctx.fillStyle = gradVert(ctx, cx, torsoTopY, torsoTopY + 14, '#efe9dc', '#cfc5b4')
+    ctx.beginPath()
+    if (sideDir === 'up') {
+      ctx.roundRect(cx - 19, torsoTopY + 3, 38, 17, 7)
+    } else {
+      ctx.ellipse(cx, torsoTopY + 9, 19, 7.5, 0, 0, Math.PI * 2)
+    }
+    ctx.fill()
+    ctx.stroke()
+
+    // Crossbody brown leather chest strap + gold buckle (front/side/up)
+    ctx.fillStyle = '#784421'
+    ctx.strokeStyle = HD_INK
+    ctx.lineWidth = 2.2
+    if (sideDir === 'down') {
+      ctx.beginPath()
+      ctx.moveTo(cx + 12, torsoTopY + 6)
+      ctx.lineTo(cx + 18, torsoTopY + 8)
+      ctx.lineTo(cx - 14, hipY - 5)
+      ctx.lineTo(cx - 20, hipY - 7)
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+      ctx.fillStyle = '#fbbf24'
+      ctx.fillRect(cx + 1, torsoTopY + 14, 6.5, 6.5)
+      ctx.strokeRect(cx + 1, torsoTopY + 14, 6.5, 6.5)
+    } else if (sideDir === 'up') {
+      ctx.beginPath()
+      ctx.moveTo(cx - 12, torsoTopY + 11)
+      ctx.lineTo(cx - 6, torsoTopY + 11)
+      ctx.lineTo(cx + 18, hipY - 6)
+      ctx.lineTo(cx + 12, hipY - 6)
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+    } else {
+      ctx.beginPath()
+      ctx.roundRect(cx - 4, torsoTopY + 9, 8, 28, 2)
+      ctx.fill()
+      ctx.stroke()
+      ctx.fillStyle = '#fbbf24'
+      ctx.fillRect(cx - 3, torsoTopY + 16, 6, 6)
+      ctx.strokeRect(cx - 3, torsoTopY + 16, 6, 6)
+    }
+
+    // Hanging brown leather hip pouch on waist
+    const pouchX = sideDir === 'down' ? cx - 22 : sideDir === 'up' ? cx + 10 : cx - 10
+    const pouchY = hipY - 2 + Math.round(tailSway * 0.2)
+    ctx.fillStyle = gradVert(ctx, pouchX, pouchY, pouchY + 14, '#a6663a', '#6e3f24')
+    ctx.beginPath()
+    ctx.roundRect(pouchX, pouchY, 13, 14, 4)
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = '#c48252'
+    ctx.beginPath()
+    ctx.roundRect(pouchX, pouchY, 13, 6.5, 3)
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = '#fbbf24'
+    ctx.fillRect(pouchX + 5, pouchY + 5, 3, 3)
+  }
+
+  // Sash / Belt & Collar Detail
+  if (sideDir !== 'up' && colors.armorStyle !== 'novice_tunic') {
+    ctx.strokeStyle = colors.scarf ?? colors.accent
+    ctx.lineWidth = 5.5
     ctx.beginPath()
     ctx.moveTo(cx - 16, torsoTopY + 6)
-    ctx.lineTo(cx, torsoTopY + 26)
+    ctx.lineTo(cx, torsoTopY + 25)
     ctx.lineTo(cx + 16, torsoTopY + 6)
-    ctx.lineWidth = 5
-    ctx.strokeStyle = colors.scarf ?? colors.accent
     ctx.stroke()
   }
   ctx.fillStyle = '#5c3d2e'
@@ -754,6 +1020,47 @@ export function renderHdHumanSprite(
   ctx.fillRect(cx - 5, hipY - 9, 10, 9)
   ctx.strokeRect(cx - 5, hipY - 9, 10, 9)
   ctx.restore()
+
+  // Full Adventurer Backpack on 'up' (back) view
+  if (colors.backpack && sideDir === 'up') {
+    const bpY = torsoTopY + 8
+    ctx.save()
+    ctx.strokeStyle = HD_INK
+    ctx.lineWidth = 2.5
+    // Rolled blanket/map scroll across top
+    ctx.fillStyle = '#e7dec8'
+    ctx.beginPath()
+    ctx.roundRect(cx - 19, bpY - 4, 38, 10, 5)
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = '#ef4444'
+    ctx.fillRect(cx - 12, bpY - 4, 4, 10)
+    ctx.fillRect(cx + 8, bpY - 4, 4, 10)
+    // Main leather satchel
+    ctx.fillStyle = gradVert(ctx, cx, bpY + 4, bpY + 38, '#a47148', '#6b4226')
+    ctx.beginPath()
+    ctx.roundRect(cx - 17, bpY + 4, 34, 32, 8)
+    ctx.fill()
+    ctx.stroke()
+    // Top flap + brass buckles
+    ctx.fillStyle = '#c89b6e'
+    ctx.beginPath()
+    ctx.roundRect(cx - 17, bpY + 4, 34, 14, 6)
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = '#fbbf24'
+    ctx.fillRect(cx - 10, bpY + 14, 5, 5)
+    ctx.strokeRect(cx - 10, bpY + 14, 5, 5)
+    ctx.fillRect(cx + 5, bpY + 14, 5, 5)
+    ctx.strokeRect(cx + 5, bpY + 14, 5, 5)
+    // Cute hanging green starter potion flask on right side
+    ctx.fillStyle = '#4ade80'
+    ctx.beginPath()
+    ctx.arc(cx + 17, bpY + 28, 4.5, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+    ctx.restore()
+  }
 
   // Head
   ctx.save()
@@ -797,6 +1104,8 @@ export function renderHdHumanSprite(
     ctx.beginPath()
     if (attacking) {
       ctx.ellipse(cx, headCenterY + 15, 4, 3.2, 0, 0, Math.PI * 2)
+    } else if (isSkill) {
+      ctx.arc(cx, headCenterY + 12, 5.2, 0.1, Math.PI - 0.1)
     } else {
       ctx.arc(cx, headCenterY + 12, 4.5, 0.2, Math.PI - 0.2)
     }
@@ -815,13 +1124,13 @@ export function renderHdHumanSprite(
   }
 
   // Hair & Hat over head
-  drawHdHatAndHair(ctx, cx, headTopY, headR, sideDir, colors)
+  drawHdHatAndHair(ctx, cx, headTopY, headR, sideDir, colors, tailSway)
 
   // Front Arm + Weapon
   const armX = sideDir === 'side' ? cx - 6 - armSwing * 0.45 : cx + 22
-  const armY = torsoTopY + 14
+  const armY = torsoTopY + 14 + (isSkill && (f === 1 || f === 2) ? -8 : 0)
   const handX = sideDir === 'side' ? armX + 4 : cx + 25
-  const handY = armY + 24 + (action === 'attack' ? -10 : 0)
+  const handY = armY + 24 + (isAtk ? -10 : isSkill ? -14 : 0)
 
   ctx.save()
   ctx.strokeStyle = HD_INK
@@ -831,6 +1140,14 @@ export function renderHdHumanSprite(
   ctx.roundRect(armX - 6, armY, 13, 25, 6)
   ctx.fill()
   ctx.stroke()
+  if (colors.armorStyle === 'novice_tunic') {
+    // Brown leather adventurer wrist bracer cuff
+    ctx.fillStyle = '#6f4126'
+    ctx.beginPath()
+    ctx.roundRect(armX - 6.5, armY + 14, 14, 7, 3)
+    ctx.fill()
+    ctx.stroke()
+  }
   ctx.fillStyle = skin
   ctx.beginPath()
   ctx.arc(handX, handY, 6.8, 0, Math.PI * 2)
@@ -841,6 +1158,55 @@ export function renderHdHumanSprite(
   if (sideDir !== 'up') {
     const drawAngle = sideDir === 'down' ? wAngle + 0.55 : wAngle
     drawHdWeapon(ctx, handX, handY, weapon, weaponColor, drawAngle, action, f, colors.jobId)
+  }
+
+  // Attack swing arc & impact star (Novice uses bright sky-blue/white crescent wind slash)
+  if (isAtk && (f === 1 || f === 2)) {
+    ctx.save()
+    ctx.globalAlpha = f === 1 ? 0.9 : 0.7
+    ctx.strokeStyle = colors.jobId === 'novice' ? '#38bdf8' : '#fef08a'
+    ctx.lineWidth = f === 1 ? 5.5 : 3.8
+    const arcCx = sideDir === 'down' ? cx + 10 : cx + 16
+    const arcCy = torsoTopY + 24
+    ctx.beginPath()
+    ctx.arc(arcCx, arcCy, 34, -0.95, 0.85)
+    ctx.stroke()
+    ctx.strokeStyle = '#ffffff'
+    ctx.lineWidth = 2.2
+    ctx.beginPath()
+    ctx.arc(arcCx, arcCy, 38, -0.75, 0.65)
+    ctx.stroke()
+    ctx.restore()
+  }
+
+  // Skill sparkle particles & floating 4-point star emblem
+  if (isSkill && (f === 1 || f === 2)) {
+    ctx.save()
+    const isNovice = colors.jobId === 'novice'
+    const sparkOffsets = [
+      { dx: -36, dy: -22, r: 5.5, col: isNovice ? '#7dd3fc' : '#fde047' },
+      { dx: 38, dy: -30, r: 6.5, col: isNovice ? '#f472b6' : '#4ade80' },
+      { dx: -28, dy: 16, r: 4.5, col: isNovice ? '#c084fc' : '#86efac' },
+      { dx: 34, dy: 10, r: 5, col: '#fef08a' },
+    ]
+    for (let i = 0; i < sparkOffsets.length; i++) {
+      const sp = sparkOffsets[i]
+      const sx = cx + sp.dx + (f === 2 ? (i % 2 === 0 ? -5 : 5) : 0)
+      const sy = torsoTopY + sp.dy + (f === 2 ? -6 : 0)
+      ctx.fillStyle = sp.col
+      ctx.beginPath()
+      ctx.moveTo(sx, sy - sp.r)
+      ctx.lineTo(sx + sp.r * 0.35, sy - sp.r * 0.35)
+      ctx.lineTo(sx + sp.r, sy)
+      ctx.lineTo(sx + sp.r * 0.35, sy + sp.r * 0.35)
+      ctx.lineTo(sx, sy + sp.r)
+      ctx.lineTo(sx - sp.r * 0.35, sy + sp.r * 0.35)
+      ctx.lineTo(sx - sp.r, sy)
+      ctx.lineTo(sx - sp.r * 0.35, sy - sp.r * 0.35)
+      ctx.closePath()
+      ctx.fill()
+    }
+    ctx.restore()
   }
 
   // Shield on off-hand (Swordsman / Knight / Paladin)

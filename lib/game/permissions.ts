@@ -1,7 +1,7 @@
 import type { User } from 'firebase/auth'
 
 export const GM_EMAIL = 'ffsmilepay53@gmail.com'
-export const TOPUP_ADMIN_EMAILS = ['ffsmilepay53@gmail.com', 'berlinxsirith7@gmail.com'] as const
+export const TOPUP_ADMIN_EMAILS = ['ffsmilepay53@gmail.com'] as const
 export const PERMANENT_GM_GAME_UID = '0000'
 export const PERMANENT_GM_UID = 0
 
