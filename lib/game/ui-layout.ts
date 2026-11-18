@@ -29,6 +29,7 @@ export interface UiPreferences {
   dockMode: DockMode
   hotkeyPreset: HotkeyPreset
   compactHud: boolean
+  autoHideCombatHud: boolean
 }
 
 export interface UiLayoutSnapshot {
@@ -50,6 +51,7 @@ const DEFAULT_PREFERENCES: UiPreferences = {
   dockMode: 'auto',
   hotkeyPreset: 'f-keys',
   compactHud: false,
+  autoHideCombatHud: true,
 }
 
 export const WINDOW_META: Record<PanelId, { title: string; defaultW: number; defaultH: number }> = {

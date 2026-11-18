@@ -52,7 +52,6 @@ function JobTree({ currentJobId }: { currentJobId: string }) {
             <p className="font-semibold text-foreground">{j.name}</p>
             <p className="text-muted-foreground">
               Lv.{j.reqLevel}
-              {j.origin === 'lumivara' ? ' · ★' : ''}
             </p>
             {nextJobs.length > 0 && <p className="my-0.5 text-primary">↓</p>}
             <div className="flex flex-col gap-1">
@@ -68,7 +67,6 @@ function JobTree({ currentJobId }: { currentJobId: string }) {
                     <p className="truncate text-foreground">{nextJob.name}</p>
                     <p className="text-[10px] text-muted-foreground">
                       Lv.{nextJob.reqLevel}
-                      {nextJob.origin === 'lumivara' ? ' · Lumivara' : ''}
                     </p>
                   </div>
                 </div>
@@ -159,11 +157,6 @@ export function JobPanel() {
                     <div>
                       <div className="flex flex-wrap items-center gap-1.5">
                         <p className="text-base text-foreground">{j.name}</p>
-                        {j.origin === 'lumivara' && (
-                          <span className="border border-amber-400/50 bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold text-amber-200">
-                            ★ Lumivara
-                          </span>
-                        )}
                         {j.goldBonus ? (
                           <span className="border border-gold/50 bg-gold/10 px-1.5 py-0.5 text-[9px] font-bold text-gold">
                             +{Math.round(j.goldBonus * 100)}% Gold

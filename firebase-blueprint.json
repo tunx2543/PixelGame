@@ -2492,6 +2492,279 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "WorldAnnouncement": {
+      "title": "WorldAnnouncement",
+      "description": "Server-wide GM announcement banner broadcasted in real time to all connected players across every map.",
+      "type": "object",
+      "properties": {
+        "announcementId": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "authorGameUid": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 8,
+          "pattern": "^[0-9]{4,8}$"
+        },
+        "body": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "createdAtMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "expiresAtMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "announcementId",
+        "authorUid",
+        "authorName",
+        "authorGameUid",
+        "body",
+        "createdAtMs",
+        "expiresAtMs",
+        "createdAt"
+      ]
+    },
+    "GmDirective": {
+      "title": "GmDirective",
+      "description": "Targeted GM summon/pull directive sending a player to the GM's current map and coordinates.",
+      "type": "object",
+      "properties": {
+        "directiveId": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "summon",
+            "mute",
+            "unmute",
+            "kick"
+          ]
+        },
+        "fromUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "fromName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "fromGameUid": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 8,
+          "pattern": "^[0-9]{4,8}$"
+        },
+        "targetUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "targetGameUid": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 8,
+          "pattern": "^[0-9]{4,8}$"
+        },
+        "targetName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "mapId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "durationMin": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1440
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 120
+        },
+        "createdAtMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "consumed": {
+          "type": "boolean"
+        },
+        "consumedAtMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "directiveId",
+        "action",
+        "fromUid",
+        "fromName",
+        "fromGameUid",
+        "targetUid",
+        "targetGameUid",
+        "targetName",
+        "mapId",
+        "x",
+        "y",
+        "durationMin",
+        "reason",
+        "createdAtMs",
+        "consumed",
+        "consumedAtMs",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ServerGiftDrop": {
+      "title": "ServerGiftDrop",
+      "description": "Server-wide GM compensation or event gift drop claimable once per character in the mailbox.",
+      "type": "object",
+      "properties": {
+        "dropId": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "authorGameUid": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 8,
+          "pattern": "^[0-9]{4,8}$"
+        },
+        "subject": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "body": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "gold": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000000
+        },
+        "diamonds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "itemId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "qty": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999
+        },
+        "plus": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20
+        },
+        "createdAtMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "expiresAtMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "dropId",
+        "authorUid",
+        "authorName",
+        "authorGameUid",
+        "subject",
+        "body",
+        "gold",
+        "diamonds",
+        "itemId",
+        "qty",
+        "plus",
+        "createdAtMs",
+        "expiresAtMs",
+        "createdAt"
+      ]
     }
   },
   "firestore": {
@@ -2668,6 +2941,24 @@
         "$ref": "#/entities/TopupSlipRequest"
       },
       "description": "Manual PromptPay slip verification requests reviewed by GM and claimed by player."
+    },
+    "/worldAnnouncements/{announcementId}": {
+      "schema": {
+        "$ref": "#/entities/WorldAnnouncement"
+      },
+      "description": "Server-wide GM announcements displayed to all connected players in real time."
+    },
+    "/gmDirectives/{directiveId}": {
+      "schema": {
+        "$ref": "#/entities/GmDirective"
+      },
+      "description": "Targeted GM summon/mute/kick directives scoped strictly to GM sender and target player."
+    },
+    "/serverGiftDrops/{dropId}": {
+      "schema": {
+        "$ref": "#/entities/ServerGiftDrop"
+      },
+      "description": "Server-wide GM gift drops & compensations claimable by verified players in mailbox."
     }
   }
 }

@@ -108,7 +108,7 @@ export function renderPanelById(id: PanelId, g: ReturnType<typeof useGame>): Rea
       return <GuidePanel />
     case 'models':
       return (
-        <PanelFrame title="คลังโมเดล 2D & แอนิเมชั่น" subtitle="พรีวิวโมเดลครบ 21 อาชีพ (รวม Lumivara), 17 มอนสเตอร์, 5 สัตว์ขี่ และ 10 สัตว์เลี้ยง/ผอบ">
+        <PanelFrame title="คลังโมเดล 2D & แอนิเมชั่น" subtitle="พรีวิวโมเดลครบทุกอาชีพ, 17 มอนสเตอร์, 5 สัตว์ขี่ และ 10 สัตว์เลี้ยง/ผอบ">
           <ModelGalleryView compact />
         </PanelFrame>
       )

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { getOptionalClient } from '@/lib/supabase/client'
 import { ITEMS } from '@/lib/game/data'
-import { addItem, closePanel, game, notify, saveGame } from '@/lib/game/engine'
+import { addItem, broadcastWorldNewsAction, closePanel, game, notify, saveGame } from '@/lib/game/engine'
 import { useGame } from '@/lib/game/use-game'
 import { PanelFrame, PxButton } from './panels'
 
@@ -73,7 +73,11 @@ export function GachaPanel() {
           // Local save already persisted the rolled item.
         }
       })()
-      setResult(`${ITEMS[picked.itemId]?.name ?? picked.itemId} (${picked.rarity})`)
+      const pickedName = ITEMS[picked.itemId]?.name ?? picked.itemId
+      if (picked.rarity === 'แรร์') {
+        void broadcastWorldNewsAction('gacha', `${current.name} สุ่มกาชาได้รับไอเทมแรร์ "${pickedName}"!`)
+      }
+      setResult(`${pickedName} (${picked.rarity})`)
       setRolling(false)
     }, 420)
   }

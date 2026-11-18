@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { onAuthStateChanged, type User } from 'firebase/auth'
-import { Plus, Trash2, UploadCloud, UserCheck } from 'lucide-react'
+import { AlertTriangle, Plus, Trash2, UploadCloud, UserCheck, X } from 'lucide-react'
 import { auth } from '@/lib/firebase/client'
 import {
   CHARACTER_SLOTS,
@@ -20,17 +20,20 @@ import {
   deleteAccountCharacter,
   deleteSave,
   flushCloudSave,
+  game,
   listAccountCharacters,
   listRecoverableLocalSaves,
   loadCloudGame,
   loadGame,
   newGame,
+  notify,
   readSave,
   setActiveCharacterSlot,
   setGameAccountIdentity,
   type RecoverableLocalSave,
   type SaveData,
 } from '@/lib/game/engine'
+import { useGame } from '@/lib/game/use-game'
 import { MAPS } from '@/lib/game/maps'
 import { AccountPanel } from './account-panel'
 import { formatNum, formatPlayTime } from './format'
@@ -38,6 +41,7 @@ import { PWAInstallButton } from './pwa-controls'
 import { SpriteModelCanvas } from './sprite-model-canvas'
 
 export function TitleScreen() {
+  const { kickedNotice } = useGame()
   const [user, setUser] = useState<User | null>(null)
   const [accountIdentity, setAccountIdentity] = useState<UserAccountIdentity | null>(null)
   const [cloudChars, setCloudChars] = useState<CloudCharacterRecord[]>([])
@@ -327,6 +331,29 @@ export function TitleScreen() {
             HD Hand-Drawn Fantasy RPG • ผจญภัยโลกแฟนตาซี 2D
           </p>
         </div>
+
+        {kickedNotice && (
+          <div className="pixel-panel flex w-full items-start justify-between gap-2 border-destructive/70 bg-destructive/15 p-3 text-xs text-destructive">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+              <div>
+                <p className="font-bold">คุณถูก GM ตัดการเชื่อมต่อออกจากเกม</p>
+                <p className="mt-0.5 text-[11px] text-foreground/90">{kickedNotice}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                game.kickedNotice = null
+                notify()
+              }}
+              aria-label="ปิดการแจ้งเตือน"
+              className="shrink-0 p-0.5 text-muted-foreground hover:text-foreground"
+            >
+              <X className="size-4" aria-hidden />
+            </button>
+          </div>
+        )}
 
         <AccountPanel onAuthSuccess={handleAuthSuccess} />
 

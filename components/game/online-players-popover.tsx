@@ -1,13 +1,13 @@
 'use client'
 
 import { useState } from 'react'
-import { Crown, MapPin, Radio, Swords, UserPlus, Users, X } from 'lucide-react'
+import { ArrowDownToLine, Crown, MapPin, Navigation, Radio, Swords, UserPlus, Users, UserX, VolumeX, X } from 'lucide-react'
 import { auth as firebaseAuth } from '@/lib/firebase/client'
 import { sendFriendRequestByGameUid } from '@/lib/firebase/friends'
 import { invitePlayerToPartyAutoCreate } from '@/lib/firebase/parties'
 import { formatPresenceStatusLabel, type PresenceStatus } from '@/lib/firebase/presence-helpers'
 import { JOBS } from '@/lib/game/data'
-import { currentMap, game, getStats, notify } from '@/lib/game/engine'
+import { currentMap, game, getStats, gmKickPlayer, gmMutePlayer, gmSummonPlayer, gmWarpToPlayer, isCurrentAccountGm, notify } from '@/lib/game/engine'
 import { MAPS, TILE } from '@/lib/game/maps'
 import { formatGameUid } from '@/lib/game/permissions'
 import { useGame } from '@/lib/game/use-game'
@@ -35,6 +35,7 @@ export function OnlinePlayersPopover() {
   const activeMap = currentMap()
   const fbUser = firebaseAuth.currentUser
   const isSignedIn = Boolean(fbUser && fbUser.emailVerified)
+  const isGm = Boolean(game.p.gm && isCurrentAccountGm())
 
   const sortedPlayers = [...game.onlinePlayers]
     .filter((other) => !other.invisible)
@@ -90,6 +91,62 @@ export function OnlinePlayersPopover() {
       }
     } catch {
       setFeedback({ type: 'error', text: 'ชวนเข้าปาร์ตี้ไม่สำเร็จ กรุณาลองใหม่' })
+    } finally {
+      setBusyUid(null)
+    }
+  }
+
+  const handleGmWarp = async (other: (typeof sortedPlayers)[number]) => {
+    setBusyUid(`warp:${other.userId}`)
+    setFeedback(null)
+    try {
+      const result = await gmWarpToPlayer(other)
+      setFeedback({ type: result.ok ? 'ok' : 'error', text: result.message })
+      if (result.ok) {
+        game.onlinePanelOpen = false
+        notify()
+      }
+    } catch {
+      setFeedback({ type: 'error', text: 'วาร์ปไปหาผู้เล่นไม่สำเร็จ' })
+    } finally {
+      setBusyUid(null)
+    }
+  }
+
+  const handleGmSummon = async (other: (typeof sortedPlayers)[number]) => {
+    setBusyUid(`summon:${other.userId}`)
+    setFeedback(null)
+    try {
+      const result = await gmSummonPlayer(other)
+      setFeedback({ type: result.ok ? 'ok' : 'error', text: result.message })
+    } catch {
+      setFeedback({ type: 'error', text: 'ดึงตัวผู้เล่นมาหาไม่สำเร็จ' })
+    } finally {
+      setBusyUid(null)
+    }
+  }
+
+  const handleGmMute = async (other: (typeof sortedPlayers)[number]) => {
+    setBusyUid(`mute:${other.userId}`)
+    setFeedback(null)
+    try {
+      const result = await gmMutePlayer(other.gameUid ?? other.userId, 15, 'GM ใบ้แชทชั่วคราว')
+      setFeedback({ type: result.ok ? 'ok' : 'error', text: result.message })
+    } catch {
+      setFeedback({ type: 'error', text: 'ใบ้แชทผู้เล่นไม่สำเร็จ' })
+    } finally {
+      setBusyUid(null)
+    }
+  }
+
+  const handleGmKick = async (other: (typeof sortedPlayers)[number]) => {
+    setBusyUid(`kick:${other.userId}`)
+    setFeedback(null)
+    try {
+      const result = await gmKickPlayer(other.gameUid ?? other.userId, 'GM ตัดการเชื่อมต่อ')
+      setFeedback({ type: result.ok ? 'ok' : 'error', text: result.message })
+    } catch {
+      setFeedback({ type: 'error', text: 'เตะผู้เล่นไม่สำเร็จ' })
     } finally {
       setBusyUid(null)
     }
@@ -205,7 +262,51 @@ export function OnlinePlayersPopover() {
                     )}
                   </div>
 
-                  <div className="flex shrink-0 items-center gap-1">
+                  <div className="flex flex-wrap shrink-0 items-center justify-end gap-1">
+                    {isGm && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={busyUid === `warp:${other.userId}`}
+                          onClick={() => void handleGmWarp(other)}
+                          className="pixel-btn inline-flex items-center gap-1 bg-amber-500/25 px-2 py-1 text-[10px] font-semibold text-amber-200 hover:bg-amber-500/35 disabled:opacity-50"
+                          aria-label={`วาร์ปไปหา ${other.displayName}`}
+                        >
+                          <Navigation className="size-2.5" aria-hidden />
+                          วาร์ปไปหา
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busyUid === `summon:${other.userId}`}
+                          onClick={() => void handleGmSummon(other)}
+                          className="pixel-btn inline-flex items-center gap-1 bg-amber-400/25 px-2 py-1 text-[10px] font-semibold text-yellow-200 hover:bg-amber-400/35 disabled:opacity-50"
+                          aria-label={`ดึง ${other.displayName} มาหา`}
+                        >
+                          <ArrowDownToLine className="size-2.5" aria-hidden />
+                          ดึงมาหา
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busyUid === `mute:${other.userId}`}
+                          onClick={() => void handleGmMute(other)}
+                          className="pixel-btn inline-flex items-center gap-1 bg-rose-500/20 px-2 py-1 text-[10px] font-semibold text-rose-200 hover:bg-rose-500/30 disabled:opacity-50"
+                          aria-label={`ใบ้แชท ${other.displayName} 15 นาที`}
+                        >
+                          <VolumeX className="size-2.5" aria-hidden />
+                          ใบ้ 15น.
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busyUid === `kick:${other.userId}`}
+                          onClick={() => void handleGmKick(other)}
+                          className="pixel-btn inline-flex items-center gap-1 bg-destructive/25 px-2 py-1 text-[10px] font-semibold text-destructive hover:bg-destructive/35 disabled:opacity-50"
+                          aria-label={`เตะ ${other.displayName}`}
+                        >
+                          <UserX className="size-2.5" aria-hidden />
+                          เตะ
+                        </button>
+                      </>
+                    )}
                     {isSameMap && (
                       <button
                         type="button"

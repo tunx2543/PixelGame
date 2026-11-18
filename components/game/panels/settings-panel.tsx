@@ -198,6 +198,17 @@ export function SettingsPanel() {
 
             <button
               type="button"
+              onClick={() => updateUiPref('autoHideCombatHud', !layout.preferences.autoHideCombatHud)}
+              className="flex items-center justify-between rounded border border-border bg-background/60 px-2.5 py-2 text-left hover:border-primary/60"
+            >
+              <span>ซ่อนเควสต์/GM อัตโนมัติตอนต่อสู้บนมือถือ</span>
+              <span className={`font-bold ${layout.preferences.autoHideCombatHud ? 'text-emerald-300' : 'text-muted-foreground'}`}>
+                {layout.preferences.autoHideCombatHud ? 'เปิด (จอโล่ง)' : 'ปิด (แสดงตลอด)'}
+              </span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => window.dispatchEvent(new CustomEvent('pixelquest:toggle-touch'))}
               className="flex items-center justify-between rounded border border-border bg-background/60 px-2.5 py-2 text-left hover:border-primary/60"
             >

@@ -1,24 +1,36 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  ArrowDownToLine,
+  Ban,
+  CheckCircle2,
   Compass,
   Crown,
+  Flag,
   Flame,
   Gem,
   Heart,
+  Mail,
   Megaphone,
+  Navigation,
   PackagePlus,
   RefreshCw,
   Save,
+  Send,
   Shield,
+  ShieldAlert,
   Skull,
   Sparkles,
   Swords,
   Terminal,
+  UserX,
+  VolumeX,
+  XCircle,
   Zap,
 } from 'lucide-react'
 import { auth } from '@/lib/firebase/client'
+import { listPlayerReports, type PlayerReportRecord } from '@/lib/firebase/mmo-online'
 import firebaseConfig from '../../../firebase-applet-config.json'
 import { ITEMS, JOBS, MAX_LEVEL, MAX_PLUS, MONSTERS } from '@/lib/game/data'
 import { devCompleteAllDailyMissions, devRerollDailyMissions } from '@/lib/game/daily-missions'
@@ -40,17 +52,40 @@ import {
   devTeleport,
   getActiveCharacterSlot,
   getStats,
+  gmBroadcastGiftAll,
+  gmKickPlayer,
+  gmMutePlayer,
+  gmSendSingleGiftMail,
+  gmSummonPlayer,
+  gmUnmutePlayer,
+  gmWarpToPlayer,
   isCurrentAccountGm,
   openPanel,
   saveGame,
 } from '@/lib/game/engine'
 import { MAPS, MAP_ORDER, TILE } from '@/lib/game/maps'
 import { GM_EMAIL, PERMANENT_GM_GAME_UID } from '@/lib/game/permissions'
+import { createBan } from '@/lib/game/social'
 import { useGame } from '@/lib/game/use-game'
 import { formatNum } from '../format'
 import { PanelFrame, PxButton } from './panels'
 
-type DevTab = 'player' | 'world' | 'items' | 'system'
+type DevTab = 'player' | 'world' | 'items' | 'mod' | 'system'
+
+interface ServerSystemStatus {
+  firebaseProjectId: string
+  firestoreDatabaseId: string
+  topup: {
+    stripeConfigured: boolean
+    stripeWebhookConfigured: boolean
+    slipOkConfigured: boolean
+    easySlipConfigured: boolean
+    promptPayConfigured: boolean
+    merchantQrReady: boolean
+    premiumSecretConfigured: boolean
+    appUrlConfigured: boolean
+  }
+}
 
 export function DevToolsPanel() {
   const g = useGame()
@@ -66,7 +101,33 @@ export function DevToolsPanel() {
   const [itemQty, setItemQty] = useState(1)
   const [itemPlus, setItemPlus] = useState(0)
   const [announceText, setAnnounceText] = useState('')
+  const [targetPlayerQuery, setTargetPlayerQuery] = useState('')
   const [statusMsg, setStatusMsg] = useState('')
+
+  // GM Mail & Compensation state
+  const [giftMode, setGiftMode] = useState<'all' | 'single'>('all')
+  const [giftTargetQuery, setGiftTargetQuery] = useState('')
+  const [giftSubject, setGiftSubject] = useState('ชดเชยเซิร์ฟเวอร์จากทีมงาน GM')
+  const [giftBody, setGiftBody] = useState('ขอบคุณทุกท่านที่ร่วมผจญภัยใน Pixel Quest!')
+  const [giftGold, setGiftGold] = useState('5000')
+  const [giftDiamonds, setGiftDiamonds] = useState('30')
+  const [giftItemId, setGiftItemId] = useState<string>('')
+  const [giftItemQty, setGiftItemQty] = useState('1')
+  const [giftItemPlus, setGiftItemPlus] = useState('0')
+  const [giftBusy, setGiftBusy] = useState(false)
+
+  // GM Moderation & Reports state
+  const [modTargetQuery, setModTargetQuery] = useState('')
+  const [modMuteMinutes, setModMuteMinutes] = useState(15)
+  const [modReason, setModReason] = useState('')
+  const [modBusy, setModBusy] = useState(false)
+  const [reports, setReports] = useState<PlayerReportRecord[]>([])
+  const [reportsLoading, setReportsLoading] = useState(false)
+  const [reportsError, setReportsError] = useState('')
+
+  // System Readiness Diagnostics state
+  const [sysStatus, setSysStatus] = useState<ServerSystemStatus | null>(null)
+  const [sysLoading, setSysLoading] = useState(false)
 
   const allItems = useMemo(() => {
     const q = itemQuery.trim().toLowerCase()
@@ -74,6 +135,52 @@ export function DevToolsPanel() {
     if (!q) return list.slice(0, 36)
     return list.filter((it) => it.id.toLowerCase().includes(q) || it.name.toLowerCase().includes(q)).slice(0, 48)
   }, [itemQuery])
+
+  const giftItemOptions = useMemo(() => Object.values(ITEMS).slice(0, 120), [])
+
+  const loadReports = useCallback(async () => {
+    setReportsLoading(true)
+    setReportsError('')
+    try {
+      const res = await listPlayerReports(40)
+      if (res.ok) {
+        setReports(res.reports)
+      } else {
+        setReportsError(res.error ?? 'ไม่สามารถโหลดรายงานผู้เล่นได้')
+      }
+    } finally {
+      setReportsLoading(false)
+    }
+  }, [])
+
+  const loadSystemStatus = useCallback(async () => {
+    const user = auth.currentUser
+    if (!user) return
+    setSysLoading(true)
+    try {
+      const token = await user.getIdToken()
+      const res = await fetch('/api/gm/system-status', {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      })
+      const json = (await res.json().catch(() => null)) as (ServerSystemStatus & { ok?: boolean }) | null
+      if (res.ok && json?.ok) {
+        setSysStatus(json)
+      }
+    } catch {
+      // Non-blocking diagnostics refresh
+    } finally {
+      setSysLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (tab === 'mod') {
+      void loadReports()
+    } else if (tab === 'system') {
+      void loadSystemStatus()
+    }
+  }, [tab, loadReports, loadSystemStatus])
 
   if (!p || !p.gm || !isCurrentAccountGm()) {
     return (
@@ -92,6 +199,44 @@ export function DevToolsPanel() {
 
   const s = getStats(p)
   const fbUser = auth.currentUser
+
+  const handleSendGiftMail = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (giftBusy) return
+    setGiftBusy(true)
+    try {
+      const payload = {
+        subject: giftSubject,
+        body: giftBody,
+        gold: Math.max(0, Math.floor(Number(giftGold) || 0)),
+        diamonds: Math.max(0, Math.floor(Number(giftDiamonds) || 0)),
+        itemId: giftItemId || null,
+        qty: giftItemId ? Math.max(1, Math.min(999, Math.floor(Number(giftItemQty) || 1))) : 0,
+        plus: giftItemId ? Math.max(0, Math.min(MAX_PLUS, Math.floor(Number(giftItemPlus) || 0))) : 0,
+      }
+      const res =
+        giftMode === 'all'
+          ? await gmBroadcastGiftAll(payload)
+          : await gmSendSingleGiftMail({
+              ...payload,
+              targetQuery: giftTargetQuery,
+            })
+      setStatusMsg(res.message)
+    } finally {
+      setGiftBusy(false)
+    }
+  }
+
+  const runModAction = async (fn: () => Promise<{ message: string }>) => {
+    if (modBusy) return
+    setModBusy(true)
+    try {
+      const res = await fn()
+      setStatusMsg(res.message)
+    } finally {
+      setModBusy(false)
+    }
+  }
 
   return (
     <PanelFrame
@@ -125,12 +270,13 @@ export function DevToolsPanel() {
           </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-1.5">
+        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-5">
           {(
             [
               ['player', 'ตัวละคร', Swords],
               ['world', 'แมพ/มอน', Compass],
               ['items', 'ไอเทม/ภารกิจ', PackagePlus],
+              ['mod', 'จดหมาย/ดูแล', ShieldAlert],
               ['system', 'ระบบ/ประกาศ', Terminal],
             ] as const
           ).map(([id, label, Icon]) => (
@@ -151,7 +297,9 @@ export function DevToolsPanel() {
         </div>
 
         {statusMsg && (
-          <p className="border border-accent/50 bg-accent/10 px-2.5 py-1.5 text-[11px] text-accent">{statusMsg}</p>
+          <p className="border border-accent/50 bg-accent/10 px-2.5 py-1.5 text-[11px] text-accent" role="status">
+            {statusMsg}
+          </p>
         )}
 
         {tab === 'player' && (
@@ -434,6 +582,324 @@ export function DevToolsPanel() {
           </div>
         )}
 
+        {tab === 'mod' && (
+          <div className="space-y-3">
+            {/* Section A: GM Mail / Compensation & Server Gift Drop */}
+            <form onSubmit={handleSendGiftMail} className="space-y-2 border-2 border-border bg-muted/50 p-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="flex items-center gap-1.5 font-semibold text-primary">
+                  <Mail className="size-3.5" aria-hidden />
+                  ส่งจดหมายของขวัญ / ชดเชยเข้ากล่องจดหมาย
+                </p>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGiftSubject('ชดเชยเซิร์ฟเวอร์จากทีมงาน GM')
+                      setGiftBody('ขออภัยในความไม่สะดวก รับรางวัลชดเชยได้เลย!')
+                      setGiftGold('5000')
+                      setGiftDiamonds('30')
+                      setGiftItemId('enhance_stone')
+                      setGiftItemQty('5')
+                      setGiftItemPlus('0')
+                    }}
+                    className="border border-amber-400/50 bg-amber-400/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 hover:bg-amber-400/25"
+                  >
+                    สูตรชดเชยด่วน
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGiftSubject('ของขวัญกิจกรรมพิเศษ Pixel Quest!')
+                      setGiftBody('สุขสันต์วันพิเศษ ขอให้สนุกกับการผจญภัย!')
+                      setGiftGold('10000')
+                      setGiftDiamonds('50')
+                      setGiftItemId('enhance_stone')
+                      setGiftItemQty('10')
+                      setGiftItemPlus('0')
+                    }}
+                    className="border border-cyan-400/50 bg-cyan-400/15 px-2 py-0.5 text-[10px] font-semibold text-cyan-200 hover:bg-cyan-400/25"
+                  >
+                    สูตรกิจกรรม
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setGiftMode('all')}
+                  className={`border px-2 py-1.5 text-[11px] font-semibold ${
+                    giftMode === 'all'
+                      ? 'border-amber-400 bg-amber-400/20 text-amber-200'
+                      : 'border-border bg-background/70 text-muted-foreground'
+                  }`}
+                >
+                  แจกผู้เล่นทั้งเซิร์ฟเวอร์ (Global Drop)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGiftMode('single')}
+                  className={`border px-2 py-1.5 text-[11px] font-semibold ${
+                    giftMode === 'single'
+                      ? 'border-primary bg-primary/20 text-primary'
+                      : 'border-border bg-background/70 text-muted-foreground'
+                  }`}
+                >
+                  ส่งเฉพาะรายคน (ระบุชื่อ / UID)
+                </button>
+              </div>
+
+              {giftMode === 'single' && (
+                <input
+                  value={giftTargetQuery}
+                  onChange={(e) => setGiftTargetQuery(e.target.value)}
+                  placeholder="ชื่อตัวละคร หรือ Game UID ผู้รับ (เช่น 1001)..."
+                  className="w-full border border-border bg-background px-2 py-1.5 text-foreground outline-none focus:border-primary"
+                />
+              )}
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                <input
+                  value={giftSubject}
+                  onChange={(e) => setGiftSubject(e.target.value)}
+                  maxLength={60}
+                  placeholder="หัวข้อจดหมาย..."
+                  className="border border-border bg-background px-2 py-1 text-foreground outline-none focus:border-primary"
+                />
+                <input
+                  value={giftBody}
+                  onChange={(e) => setGiftBody(e.target.value)}
+                  maxLength={200}
+                  placeholder="ข้อความแนบท้าย..."
+                  className="border border-border bg-background px-2 py-1 text-foreground outline-none focus:border-primary"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                  <span>ทอง (Gold)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={giftGold}
+                    onChange={(e) => setGiftGold(e.target.value)}
+                    className="w-full border border-border bg-background px-2 py-1 text-xs text-foreground"
+                  />
+                </label>
+                <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                  <span>เพชร (Diamonds)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={giftDiamonds}
+                    onChange={(e) => setGiftDiamonds(e.target.value)}
+                    className="w-full border border-border bg-background px-2 py-1 text-xs text-foreground"
+                  />
+                </label>
+                <label className="col-span-2 space-y-0.5 text-[10px] text-muted-foreground sm:col-span-1">
+                  <span>แนบไอเทม</span>
+                  <select
+                    value={giftItemId}
+                    onChange={(e) => setGiftItemId(e.target.value)}
+                    className="w-full border border-border bg-background px-1.5 py-1 text-xs text-foreground"
+                  >
+                    <option value="">ไม่แนบไอเทม</option>
+                    {giftItemOptions.map((it) => (
+                      <option key={it.id} value={it.id}>
+                        {it.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                  <span>จำนวน</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={999}
+                    disabled={!giftItemId}
+                    value={giftItemQty}
+                    onChange={(e) => setGiftItemQty(e.target.value)}
+                    className="w-full border border-border bg-background px-2 py-1 text-xs text-foreground disabled:opacity-45"
+                  />
+                </label>
+                <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                  <span>บวก (+)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={MAX_PLUS}
+                    disabled={!giftItemId}
+                    value={giftItemPlus}
+                    onChange={(e) => setGiftItemPlus(e.target.value)}
+                    className="w-full border border-border bg-background px-2 py-1 text-xs text-foreground disabled:opacity-45"
+                  />
+                </label>
+              </div>
+
+              <PxButton type="submit" variant="accent" disabled={giftBusy}>
+                <Send className="mr-1 inline size-3.5" aria-hidden />
+                {giftBusy
+                  ? 'กำลังส่ง...'
+                  : giftMode === 'all'
+                    ? 'ส่งของขวัญให้ผู้เล่นทั้งเซิร์ฟเวอร์'
+                    : 'ส่งจดหมายให้ผู้เล่นนี้'}
+              </PxButton>
+            </form>
+
+            {/* Section B: GM Moderation Controls */}
+            <div className="space-y-2 border-2 border-border bg-muted/50 p-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="flex items-center gap-1.5 font-semibold text-primary">
+                  <ShieldAlert className="size-3.5" aria-hidden />
+                  จัดการผู้เล่น (ใบ้แชท / เตะ / แบน)
+                </p>
+                <span className="font-mono text-[10px] text-muted-foreground">/mute · /unmute · /kick · /ban</span>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <input
+                  value={modTargetQuery}
+                  onChange={(e) => setModTargetQuery(e.target.value)}
+                  placeholder="ชื่อตัวละคร หรือ UID เป้าหมาย..."
+                  className="border border-border bg-background px-2 py-1 text-foreground outline-none focus:border-primary"
+                />
+                <input
+                  value={modReason}
+                  onChange={(e) => setModReason(e.target.value)}
+                  maxLength={120}
+                  placeholder="เหตุผล (เช่น สแปมแชท / ตรวจสอบบัญชี)..."
+                  className="border border-border bg-background px-2 py-1 text-foreground outline-none focus:border-primary"
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] text-muted-foreground">ระยะใบ้:</span>
+                {[5, 15, 60, 1440].map((min) => (
+                  <button
+                    key={min}
+                    type="button"
+                    onClick={() => setModMuteMinutes(min)}
+                    className={`border px-2 py-0.5 text-[10px] ${
+                      modMuteMinutes === min
+                        ? 'border-rose-400 bg-rose-500/20 font-bold text-rose-200'
+                        : 'border-border bg-background text-muted-foreground'
+                    }`}
+                  >
+                    {min >= 60 ? `${min / 60} ชม.` : `${min} นาที`}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                <PxButton
+                  variant="secondary"
+                  disabled={modBusy || !modTargetQuery.trim()}
+                  onClick={() => void runModAction(() => gmMutePlayer(modTargetQuery, modMuteMinutes, modReason))}
+                >
+                  <VolumeX className="mr-1 inline size-3.5" aria-hidden />
+                  ใบ้แชท ({modMuteMinutes >= 60 ? `${modMuteMinutes / 60} ชม.` : `${modMuteMinutes} น.`})
+                </PxButton>
+                <PxButton
+                  variant="primary"
+                  disabled={modBusy || !modTargetQuery.trim()}
+                  onClick={() => void runModAction(() => gmUnmutePlayer(modTargetQuery))}
+                >
+                  ปลดใบ้แชท
+                </PxButton>
+                <PxButton
+                  variant="danger"
+                  disabled={modBusy || !modTargetQuery.trim()}
+                  onClick={() => void runModAction(() => gmKickPlayer(modTargetQuery, modReason))}
+                >
+                  <UserX className="mr-1 inline size-3.5" aria-hidden />
+                  เตะออกจากเกม (Kick)
+                </PxButton>
+                <PxButton
+                  variant="danger"
+                  disabled={modBusy || !modTargetQuery.trim()}
+                  onClick={() =>
+                    void runModAction(() => createBan(modTargetQuery, 3600, modReason || 'GM แบนชั่วคราว 1 ชม.'))
+                  }
+                >
+                  <Ban className="mr-1 inline size-3.5" aria-hidden />
+                  แบน 1 ชม.
+                </PxButton>
+              </div>
+            </div>
+
+            {/* Section C: Player Reports Viewer */}
+            <div className="space-y-2 border-2 border-border bg-muted/50 p-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <p className="flex items-center gap-1.5 font-semibold text-primary">
+                  <Flag className="size-3.5" aria-hidden />
+                  รายงานผู้เล่นจากในเกม ({reports.length})
+                </p>
+                <PxButton variant="secondary" disabled={reportsLoading} onClick={() => void loadReports()}>
+                  <RefreshCw className={`mr-1 inline size-3 ${reportsLoading ? 'animate-spin' : ''}`} aria-hidden />
+                  รีเฟรช
+                </PxButton>
+              </div>
+              {reportsError && <p className="text-[11px] text-destructive">{reportsError}</p>}
+              {!reportsLoading && reports.length === 0 && !reportsError ? (
+                <p className="border border-border/60 bg-background/50 p-3 text-center text-[11px] text-muted-foreground">
+                  ยังไม่มีรายการรายงานผู้เล่นเข้ามา
+                </p>
+              ) : (
+                <div className="max-h-48 space-y-1.5 overflow-y-auto">
+                  {reports.map((rep) => (
+                    <div
+                      key={rep.reportId}
+                      className="flex flex-wrap items-center justify-between gap-2 border border-border bg-background/70 p-2 text-[11px]"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-foreground">
+                          {rep.targetName}{' '}
+                          <span className="font-mono text-[10px] text-primary">#{rep.targetGameUid}</span>
+                          <span className="ml-2 text-[10px] font-normal text-muted-foreground">
+                            {new Date(rep.createdAtMs).toLocaleString('th-TH')}
+                          </span>
+                        </p>
+                        <p className="text-rose-300">เหตุผล: {rep.reason}</p>
+                        {rep.details && <p className="text-[10px] text-muted-foreground">{rep.details}</p>}
+                      </div>
+                      <div className="flex flex-wrap shrink-0 gap-1">
+                        <PxButton
+                          variant="secondary"
+                          onClick={() => void gmWarpToPlayer(rep.targetGameUid).then((r) => setStatusMsg(r.message))}
+                        >
+                          วาร์ปดู
+                        </PxButton>
+                        <PxButton
+                          variant="secondary"
+                          onClick={() =>
+                            void runModAction(() => gmMutePlayer(rep.targetGameUid, 15, rep.reason))
+                          }
+                        >
+                          ใบ้ 15น.
+                        </PxButton>
+                        <PxButton
+                          variant="danger"
+                          onClick={() => void runModAction(() => gmKickPlayer(rep.targetGameUid, rep.reason))}
+                        >
+                          เตะออก
+                        </PxButton>
+                        <PxButton
+                          variant="primary"
+                          onClick={() => {
+                            setModTargetQuery(rep.targetGameUid)
+                            setModReason(rep.reason)
+                          }}
+                        >
+                          เลือก
+                        </PxButton>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {tab === 'system' && (
           <div className="space-y-3">
             <form
@@ -441,25 +907,198 @@ export function DevToolsPanel() {
               onSubmit={(e) => {
                 e.preventDefault()
                 devBroadcastAnnouncement(announceText)
-                setStatusMsg('ส่งประกาศ GM บนหน้าจอเรียบร้อย')
+                setStatusMsg('ส่งประกาศ GM ถึงผู้เล่นทั้งเซิร์ฟเวอร์เรียบร้อย')
                 setAnnounceText('')
               }}
             >
-              <p className="font-semibold text-primary">ประกาศ GM ด้านบนหน้าจอ</p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-semibold text-primary">ประกาศ GM ทั้งเซิร์ฟเวอร์ (ทุกคนเห็นทุกแมพ)</p>
+                <span className="font-mono text-[10px] text-amber-300">/announce หรือ /ประกาศ</span>
+              </div>
               <div className="flex gap-1.5">
                 <input
                   value={announceText}
                   onChange={(e) => setAnnounceText(e.target.value)}
                   maxLength={200}
-                  placeholder="พิมพ์ข้อความประกาศถึงผู้เล่น..."
+                  placeholder="พิมพ์ข้อความประกาศถึงผู้เล่นทุกคนในเซิร์ฟเวอร์..."
                   className="min-w-0 flex-1 border border-border bg-background px-2 py-1.5 text-foreground outline-none focus:border-primary"
                 />
                 <PxButton type="submit">
                   <Megaphone className="mr-1 inline size-3.5" aria-hidden />
-                  ประกาศ
+                  ประกาศทั้งเซิร์ฟ
                 </PxButton>
               </div>
             </form>
+
+            <div className="space-y-2 border-2 border-border bg-muted/50 p-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-semibold text-primary">วาร์ปไปหา / ดึงตัวผู้เล่นอื่นมาหา</p>
+                <span className="font-mono text-[10px] text-cyan-300">/goto · /pull · /tp</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                <input
+                  value={targetPlayerQuery}
+                  onChange={(e) => setTargetPlayerQuery(e.target.value)}
+                  placeholder="ระบุชื่อตัวละคร หรือ UID (เช่น 1001)..."
+                  className="min-w-0 flex-1 border border-border bg-background px-2 py-1.5 text-foreground outline-none focus:border-primary"
+                />
+                <PxButton
+                  variant="secondary"
+                  onClick={() => {
+                    void gmWarpToPlayer(targetPlayerQuery).then((res) => setStatusMsg(res.message))
+                  }}
+                >
+                  <Navigation className="mr-1 inline size-3.5" aria-hidden />
+                  วาร์ปไปหา
+                </PxButton>
+                <PxButton
+                  variant="accent"
+                  onClick={() => {
+                    void gmSummonPlayer(targetPlayerQuery).then((res) => setStatusMsg(res.message))
+                  }}
+                >
+                  <ArrowDownToLine className="mr-1 inline size-3.5" aria-hidden />
+                  ดึงมาหา
+                </PxButton>
+              </div>
+              {g.onlinePlayers.filter((other) => !other.invisible).length > 0 && (
+                <div className="max-h-36 space-y-1 overflow-y-auto border-t border-border/60 pt-2">
+                  {g.onlinePlayers
+                    .filter((other) => !other.invisible)
+                    .map((other) => {
+                      const mapName = MAPS[other.mapId]?.name ?? other.mapId
+                      const tx = Math.floor(other.x / TILE)
+                      const ty = Math.floor(other.y / TILE)
+                      return (
+                        <div
+                          key={other.userId}
+                          className="flex flex-wrap items-center justify-between gap-2 border border-border bg-background/70 px-2 py-1"
+                        >
+                          <div className="min-w-0">
+                            <span className="font-semibold text-foreground">{other.displayName}</span>
+                            <span className="ml-1.5 font-mono text-[10px] text-primary">
+                              #{other.gameUid ?? '----'}
+                            </span>
+                            <span className="ml-2 text-[10px] text-muted-foreground">
+                              {mapName} ({tx}, {ty})
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap shrink-0 gap-1">
+                            <PxButton
+                              variant="secondary"
+                              onClick={() => {
+                                void gmWarpToPlayer(other).then((res) => setStatusMsg(res.message))
+                              }}
+                            >
+                              <Navigation className="mr-1 inline size-3" aria-hidden />
+                              วาร์ปไป
+                            </PxButton>
+                            <PxButton
+                              variant="accent"
+                              onClick={() => {
+                                void gmSummonPlayer(other).then((res) => setStatusMsg(res.message))
+                              }}
+                            >
+                              <ArrowDownToLine className="mr-1 inline size-3" aria-hidden />
+                              ดึงมา
+                            </PxButton>
+                            <PxButton
+                              variant="secondary"
+                              onClick={() => {
+                                void gmMutePlayer(other.gameUid ?? other.userId, 15, 'GM ใบ้แชท').then((res) =>
+                                  setStatusMsg(res.message),
+                                )
+                              }}
+                            >
+                              <VolumeX className="mr-1 inline size-3" aria-hidden />
+                              ใบ้ 15น.
+                            </PxButton>
+                            <PxButton
+                              variant="danger"
+                              onClick={() => {
+                                void gmKickPlayer(other.gameUid ?? other.userId, 'GM ตัดการเชื่อมต่อ').then((res) =>
+                                  setStatusMsg(res.message),
+                                )
+                              }}
+                            >
+                              <UserX className="mr-1 inline size-3" aria-hidden />
+                              เตะ
+                            </PxButton>
+                          </div>
+                        </div>
+                      )
+                    })}
+                </div>
+              )}
+            </div>
+
+            {/* Server Readiness Checklist */}
+            <div className="space-y-2 border-2 border-border bg-muted/50 p-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-semibold text-primary">ความพร้อมระบบชำระเงิน & เซิร์ฟเวอร์ (Readiness Checklist)</p>
+                <PxButton variant="secondary" disabled={sysLoading} onClick={() => void loadSystemStatus()}>
+                  <RefreshCw className={`mr-1 inline size-3 ${sysLoading ? 'animate-spin' : ''}`} aria-hidden />
+                  ตรวจสอบ
+                </PxButton>
+              </div>
+              {sysStatus ? (
+                <div className="grid grid-cols-1 gap-1.5 text-[11px] sm:grid-cols-2">
+                  {[
+                    {
+                      label: 'QR พร้อมเพย์ร้านค้า (PromptPay / SCB QR)',
+                      ok: sysStatus.topup.merchantQrReady,
+                      hint: sysStatus.topup.merchantQrReady ? 'พร้อมให้ลูกค้าสแกนโอนแล้ว' : 'ยังไม่ตั้งค่า QR',
+                    },
+                    {
+                      label: 'ตรวจสลิปอัตโนมัติ (SlipOK)',
+                      ok: sysStatus.topup.slipOkConfigured,
+                      hint: sysStatus.topup.slipOkConfigured ? 'SLIPOK พร้อมทำงาน' : 'ยังไม่ใส่ SLIPOK_API_KEY / BRANCH_ID',
+                    },
+                    {
+                      label: 'ตรวจสลิปอัตโนมัติ (EasySlip)',
+                      ok: sysStatus.topup.easySlipConfigured,
+                      hint: sysStatus.topup.easySlipConfigured ? 'EASYSLIP พร้อมทำงาน' : 'ยังไม่ใส่ EASYSLIP_API_KEY',
+                    },
+                    {
+                      label: 'Stripe บัตรเครดิต / QR',
+                      ok: sysStatus.topup.stripeConfigured,
+                      hint: sysStatus.topup.stripeConfigured ? 'STRIPE_SECRET_KEY พร้อมทำงาน' : 'ยังไม่ใส่ STRIPE_SECRET_KEY',
+                    },
+                    {
+                      label: 'Stripe Webhook Secret',
+                      ok: sysStatus.topup.stripeWebhookConfigured,
+                      hint: sysStatus.topup.stripeWebhookConfigured ? 'ตั้งค่าแล้ว' : 'ยังไม่ใส่ STRIPE_WEBHOOK_SECRET',
+                    },
+                    {
+                      label: 'ลายเซ็นเพชรเซิร์ฟเวอร์ (PREMIUM_TX_SECRET)',
+                      ok: sysStatus.topup.premiumSecretConfigured,
+                      hint: sysStatus.topup.premiumSecretConfigured ? 'Production Secret พร้อม' : 'ใช้ Dev Fallback ชั่วคราว',
+                    },
+                  ].map((item) => (
+                    <div
+                      key={item.label}
+                      className={`flex items-start gap-2 border px-2.5 py-1.5 ${
+                        item.ok
+                          ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
+                          : 'border-border bg-background/70 text-muted-foreground'
+                      }`}
+                    >
+                      {item.ok ? (
+                        <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald-400" aria-hidden />
+                      ) : (
+                        <XCircle className="mt-0.5 size-3.5 shrink-0 text-amber-400" aria-hidden />
+                      )}
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-foreground">{item.label}</p>
+                        <p className="truncate text-[10px]">{item.hint}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[11px] text-muted-foreground">กำลังดึงสถานะความพร้อมจากเซิร์ฟเวอร์...</p>
+              )}
+            </div>
 
             <div className="space-y-2 border-2 border-border bg-muted/50 p-2.5">
               <div className="flex items-center justify-between">

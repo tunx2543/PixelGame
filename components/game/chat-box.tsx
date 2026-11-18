@@ -1,14 +1,14 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronUp, MessageSquare } from 'lucide-react'
+import { ChevronDown, ChevronUp, MessageSquare, VolumeX } from 'lucide-react'
 import { auth as firebaseAuth } from '@/lib/firebase/client'
 import {
   sendWorldChatMessage,
   subscribeWorldChatMessages,
   type WorldChatMessageRecord,
 } from '@/lib/firebase/mmo-online'
-import { game, notify, submitChat, type ChatType } from '@/lib/game/engine'
+import { game, getActiveMuteRemainingSec, notify, submitChat, type ChatType } from '@/lib/game/engine'
 import {
   CHAT_CHANNEL_META,
   filterBlockedMessages,
@@ -63,11 +63,21 @@ export function ChatBox({ offsetTouch = false }: { offsetTouch?: boolean }) {
   const [remoteMessages, setRemoteMessages] = useState<WorldChatMessageRecord[]>([])
   const listRef = useRef<HTMLDivElement>(null)
 
+  const [nowMs, setNowMs] = useState(() => Date.now())
   const activeChannel = g.chatChannel
   const selfUid = firebaseAuth.currentUser?.uid ?? 'guest_player'
   const currentMapId = g.p?.mapId ?? 'town'
   const currentPartyId = g.party?.partyId ?? null
   const blockedUids = g.p?.blockedUids
+  const mutedUntilMs = g.p?.mutedUntilMs ?? 0
+  const muteRemainingSec = mutedUntilMs > nowMs && !g.p?.gm ? Math.ceil((mutedUntilMs - nowMs) / 1000) : 0
+
+  useEffect(() => {
+    if (mutedUntilMs <= Date.now() || g.p?.gm) return
+    setNowMs(Date.now())
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [mutedUntilMs, g.p?.gm])
 
   useEffect(() => {
     const onOpenChat = () => setIsOpen(true)
@@ -136,6 +146,14 @@ export function ChatBox({ offsetTouch = false }: { offsetTouch?: boolean }) {
     if (!raw || !g.p) return
     const targetChannel: Exclude<ChatChannel, 'all'> =
       activeChannel === 'all' ? 'world' : activeChannel
+
+    const activeMuteSec = getActiveMuteRemainingSec()
+    if (!raw.startsWith('/') && activeMuteSec > 0) {
+      submitChat(raw, targetChannel)
+      setText('')
+      ;(document.activeElement as HTMLElement | null)?.blur()
+      return
+    }
 
     submitChat(raw, targetChannel)
     if (!raw.startsWith('/')) {
@@ -249,6 +267,15 @@ export function ChatBox({ offsetTouch = false }: { offsetTouch?: boolean }) {
               ))
             )}
           </div>
+          {muteRemainingSec > 0 && (
+            <div className="flex items-center gap-1.5 border-t border-destructive/40 bg-destructive/15 px-2 py-1 text-[10px] font-semibold text-destructive">
+              <VolumeX className="size-3 shrink-0" aria-hidden />
+              <span className="truncate">
+                ถูก GM ใบ้แชทอีก {Math.floor(muteRemainingSec / 60)}:{String(muteRemainingSec % 60).padStart(2, '0')} นาที
+                {g.p?.muteReason ? ` (${g.p.muteReason})` : ''}
+              </span>
+            </div>
+          )}
           <form className="flex border-t border-border" onSubmit={handleSubmit}>
             <label htmlFor="chat-input" className="sr-only">
               พิมพ์ข้อความแชท
@@ -267,7 +294,11 @@ export function ChatBox({ offsetTouch = false }: { offsetTouch?: boolean }) {
               }}
               maxLength={140}
               autoComplete="off"
-              placeholder={`พิมพ์ในช่อง${activeChannel === 'all' ? 'โลก' : (CHAT_CHANNEL_META.find((c) => c.id === activeChannel)?.label ?? '')}...`}
+              placeholder={
+                muteRemainingSec > 0
+                  ? 'ถูกใบ้แชทชั่วคราว (ใช้ /help ได้)...'
+                  : `พิมพ์ในช่อง${activeChannel === 'all' ? 'โลก' : (CHAT_CHANNEL_META.find((c) => c.id === activeChannel)?.label ?? '')}...`
+              }
               className="min-w-0 flex-1 bg-transparent px-2 py-1 text-xs text-foreground outline-none placeholder:text-muted-foreground"
             />
             <button type="submit" className="px-2.5 py-1 text-xs font-semibold text-primary hover:bg-secondary">

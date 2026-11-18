@@ -59,6 +59,7 @@ export function Game() {
   const [touchOverride, setTouchOverride] = useState<boolean | null>(null)
   const [narrowPortrait, setNarrowPortrait] = useState(false)
   const [portraitDismissed, setPortraitDismissed] = useState(false)
+  const [mobileCombatReveal, setMobileCombatReveal] = useState(false)
   const handledTopupSessionRef = useRef<string | null>(null)
   const isPlaying = Boolean(g.p)
 
@@ -133,6 +134,12 @@ export function Game() {
   const isMobileViewport = uiLayout.viewport.width < 768
   const isShortViewport = uiLayout.viewport.height < 560
   const isNarrowTouch = showTouch && uiLayout.viewport.width < 620
+  const isCombatActive = g.combatT < 4 || g.autoFarm
+  const isMobileCleanCombat =
+    (showTouch || isMobileViewport || isShortViewport) &&
+    uiLayout.preferences.autoHideCombatHud &&
+    isCombatActive
+  const hideLeftSecondaryHud = isMobileCleanCombat && !mobileCombatReveal
 
   return (
     <div className="relative h-full w-full select-none overflow-hidden">
@@ -143,18 +150,28 @@ export function Game() {
 
         {/* ZONE 1 & 3: มุมซ้ายบน (Profile, HP/MP/EXP, Gold/Diamond/CP) + ด้านซ้าย (Quest Tracker) */}
         <div className="pointer-events-none absolute left-1.5 top-1.5 z-20 flex w-[10.25rem] flex-col gap-0.5 sm:left-2 sm:top-2 sm:w-[11.25rem] sm:gap-1 lg:w-[14rem]">
-          <CharacterBar compact={isCompactHud} />
-          <Hud compact={isCompactHud} slim={isShortViewport} />
-          {!g.zenHud && (
+          <CharacterBar compact={isCompactHud || isMobileCleanCombat} />
+          <Hud compact={isCompactHud || isMobileCleanCombat} slim={isShortViewport || isMobileCleanCombat} />
+          {!g.zenHud && !hideLeftSecondaryHud && (
             <>
               <QuestTrackerWidget compactViewport={isShortViewport} />
               <GmToolsWidget />
             </>
           )}
+          {!g.zenHud && isMobileCleanCombat && (
+            <button
+              type="button"
+              onClick={() => setMobileCombatReveal((v) => !v)}
+              className="pointer-events-auto pixel-panel flex w-fit items-center gap-1 px-2 py-0.5 text-[9px] font-semibold text-amber-200/90 shadow hover:text-foreground"
+            >
+              <Eye className="size-2.5" aria-hidden />
+              {hideLeftSecondaryHud ? 'แสดงภารกิจ' : 'ย่อหน้าจอสู้'}
+            </button>
+          )}
         </div>
 
-        {/* ZONE 2 & 4: มุมบนขวา (Primary Menu Dock) + ด้านขวา (Minimap, Friends, Party, World Info) */}
-        <div className="pointer-events-none absolute right-2 top-2 z-20 flex flex-col items-end gap-1">
+        {/* ZONE 2 & 4: มุมบนขวา (เมนูไอคอนลอยเรียงซ้ายของ Minimap + Minimap/World Info ขวาสุด) */}
+        <div className="pointer-events-none absolute right-2 top-1.5 z-20 flex flex-col items-end gap-1 sm:top-2 sm:flex-row sm:items-start sm:justify-end sm:gap-2.5">
           {g.zenHud ? (
             <button
               type="button"

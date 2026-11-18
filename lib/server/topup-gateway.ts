@@ -11,11 +11,12 @@ import {
   type TopupProvider,
 } from '@/lib/game/premium/topup'
 import { claimServerRequestId, makeServerTxId, signPremiumTx } from './premium-security'
-import { getStoredMerchantQr } from './topup-store'
+import { claimPersistentSlipRef, getStoredMerchantQr, isPersistentSlipRefUsed } from './topup-store'
 
 export interface TopupGatewayPublicConfig {
   stripeEnabled: boolean
   slipVerifyEnabled: boolean
+  slipProvider: 'slipok' | 'easyslip' | null
   promptPayQrEnabled: boolean
   promptPayMaskedId: string | null
   merchantAccountName: string | null
@@ -51,23 +52,47 @@ export function getSlipOkConfig(): { apiKey: string; branchId: string } | null {
   return { apiKey, branchId }
 }
 
+export function getEasySlipConfig(): { apiKey: string } | null {
+  const apiKey = process.env.EASYSLIP_API_KEY?.trim()
+  if (!apiKey) return null
+  return { apiKey }
+}
+
 export function getTopupGatewayPublicConfig(): TopupGatewayPublicConfig {
   const ppId = getPromptPayId()
   const slipOk = getSlipOkConfig()
+  const easySlip = getEasySlipConfig()
   const stored = getStoredMerchantQr()
   const hasCustomQr = Boolean(stored?.enabled && stored.customQrDataUrl)
   const hasDefaultScbQr = Boolean(
     hasCustomQr && stored?.customQrDataUrl?.includes('Moment_1794989254278_6a17875f'),
   )
+  const slipProvider: 'slipok' | 'easyslip' | null = slipOk ? 'slipok' : easySlip ? 'easyslip' : null
   return {
     stripeEnabled: Boolean(getStripeSecretKey()),
-    slipVerifyEnabled: Boolean(ppId && slipOk),
+    slipVerifyEnabled: Boolean((ppId || hasCustomQr) && slipProvider),
+    slipProvider,
     promptPayQrEnabled: Boolean(ppId || hasCustomQr),
     promptPayMaskedId: ppId ? maskPromptPayId(ppId) : hasDefaultScbQr ? 'xxx-xxx-6682 (SCB)' : null,
     merchantAccountName: stored?.enabled ? stored.accountName : null,
     merchantCustomQrUrl: hasCustomQr ? (stored?.customQrDataUrl ?? null) : null,
     currency: 'THB',
     packages: TOPUP_PACKAGES,
+  }
+}
+
+export function getServerTopupDiagnostics() {
+  const ppId = getPromptPayId()
+  const stored = getStoredMerchantQr()
+  return {
+    stripeConfigured: Boolean(getStripeSecretKey()),
+    stripeWebhookConfigured: Boolean(getStripeWebhookSecret()),
+    slipOkConfigured: Boolean(getSlipOkConfig()),
+    easySlipConfigured: Boolean(getEasySlipConfig()),
+    promptPayConfigured: Boolean(ppId),
+    merchantQrReady: Boolean(ppId || (stored?.enabled && stored.customQrDataUrl)),
+    premiumSecretConfigured: Boolean(process.env.PREMIUM_TX_SECRET?.trim()),
+    appUrlConfigured: Boolean(process.env.NEXT_PUBLIC_APP_URL?.trim()),
   }
 }
 
@@ -421,12 +446,26 @@ export async function verifyBankSlipWithSlipOk(input: {
   mimeType: string
 }): Promise<{ ok: true; order: TopupOrderRecord; message: string } | { ok: false; status: number; message: string }> {
   const slipOk = getSlipOkConfig()
+  const easySlip = getEasySlipConfig()
   const ppId = getPromptPayId()
-  if (!slipOk || !ppId) {
+  const stored = getStoredMerchantQr()
+  const hasCustomQr = Boolean(stored?.enabled && stored.customQrDataUrl)
+  const hasDefaultScbQr = Boolean(
+    hasCustomQr && stored?.customQrDataUrl?.includes('Moment_1794989254278_6a17875f'),
+  )
+
+  if (!slipOk && !easySlip) {
     return {
       ok: false,
       status: 503,
-      message: 'ระบบตรวจสลิปธนาคารยังไม่ได้ตั้งค่า SLIPOK_API_KEY / SLIPOK_BRANCH_ID / PROMPTPAY_ID บนเซิร์ฟเวอร์',
+      message: 'ระบบตรวจสลิปอัตโนมัติยังไม่ได้ตั้งค่า SLIPOK_API_KEY / SLIPOK_BRANCH_ID หรือ EASYSLIP_API_KEY บนเซิร์ฟเวอร์',
+    }
+  }
+  if (!ppId && !hasCustomQr) {
+    return {
+      ok: false,
+      status: 503,
+      message: 'ร้านค้ายังไม่ได้ตั้งค่า PROMPTPAY_ID หรือรูป QR รับเงิน',
     }
   }
 
@@ -435,42 +474,90 @@ export async function verifyBankSlipWithSlipOk(input: {
     return { ok: false, status: 400, message: 'ไม่พบแพ็กเกจเติมเงินที่เลือก' }
   }
 
-  const form = new FormData()
   const blob = new Blob([Buffer.from(input.imageBytes)], { type: input.mimeType || 'image/jpeg' })
-  form.append('files', blob, input.fileName || 'slip.jpg')
-  form.append('log', 'true')
-  form.append('amount', String(pkg.priceThb))
+  let transRef = ''
+  let paidAmount = 0
+  let receiverVal = ''
 
-  const res = await fetch(`https://api.slipok.com/api/line/apikey/${encodeURIComponent(slipOk.branchId)}`, {
-    method: 'POST',
-    headers: {
-      'x-authorization': slipOk.apiKey,
-    },
-    body: form,
-    cache: 'no-store',
-  })
+  if (slipOk) {
+    const form = new FormData()
+    form.append('files', blob, input.fileName || 'slip.jpg')
+    form.append('log', 'true')
+    form.append('amount', String(pkg.priceThb))
 
-  const json = (await res.json().catch(() => null)) as {
-    success?: boolean
-    message?: string
-    code?: number
-    data?: {
+    const res = await fetch(`https://api.slipok.com/api/line/apikey/${encodeURIComponent(slipOk.branchId)}`, {
+      method: 'POST',
+      headers: {
+        'x-authorization': slipOk.apiKey,
+      },
+      body: form,
+      cache: 'no-store',
+    })
+
+    const json = (await res.json().catch(() => null)) as {
       success?: boolean
-      transRef?: string
-      amount?: number
-      receiver?: { proxy?: { value?: string }; account?: { value?: string } }
-    }
-  } | null
+      message?: string
+      data?: {
+        transRef?: string
+        amount?: number
+        receiver?: { proxy?: { value?: string }; account?: { value?: string } }
+      }
+    } | null
 
-  if (!res.ok || !json?.success || !json.data?.transRef) {
-    return {
-      ok: false,
-      status: 400,
-      message: json?.message || 'ตรวจสลิปไม่ผ่าน หรือสลิปนี้ถูกใช้งานไปแล้ว',
+    if (!res.ok || !json?.success || !json.data?.transRef) {
+      return {
+        ok: false,
+        status: 400,
+        message: json?.message || 'ตรวจสลิปไม่ผ่าน หรือสลิปนี้ถูกใช้งานไปแล้ว',
+      }
     }
+    transRef = json.data.transRef.trim().slice(0, 120)
+    paidAmount = Number(json.data.amount ?? 0)
+    receiverVal = (json.data.receiver?.proxy?.value || json.data.receiver?.account?.value || '').replace(/\D/g, '')
+  } else if (easySlip) {
+    const form = new FormData()
+    form.append('file', blob, input.fileName || 'slip.jpg')
+
+    const res = await fetch('https://developer.easyslip.com/api/v1/verify', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${easySlip.apiKey}`,
+      },
+      body: form,
+      cache: 'no-store',
+    })
+
+    const json = (await res.json().catch(() => null)) as {
+      status?: number
+      message?: string
+      data?: {
+        transRef?: string
+        amount?: { amount?: number }
+        receiver?: {
+          account?: {
+            proxy?: { account?: string }
+            bank?: { account?: string }
+          }
+        }
+      }
+    } | null
+
+    if (!res.ok || json?.status !== 200 || !json.data?.transRef) {
+      return {
+        ok: false,
+        status: 400,
+        message: json?.message || 'EasySlip ตรวจสลิปไม่ผ่าน กรุณาตรวจสอบรูปสลิปอีกครั้ง',
+      }
+    }
+    transRef = json.data.transRef.trim().slice(0, 120)
+    paidAmount = Number(json.data.amount?.amount ?? 0)
+    receiverVal = (
+      json.data.receiver?.account?.proxy?.account ||
+      json.data.receiver?.account?.bank?.account ||
+      ''
+    ).replace(/\D/g, '')
   }
 
-  const paidAmount = Number(json.data.amount ?? 0)
   if (!Number.isFinite(paidAmount) || paidAmount < pkg.priceThb) {
     return {
       ok: false,
@@ -479,8 +566,7 @@ export async function verifyBankSlipWithSlipOk(input: {
     }
   }
 
-  const expectedDigits = ppId.replace(/\D/g, '')
-  const receiverVal = (json.data.receiver?.proxy?.value || json.data.receiver?.account?.value || '').replace(/\D/g, '')
+  const expectedDigits = ppId ? ppId.replace(/\D/g, '') : hasDefaultScbQr ? '6682' : ''
   if (receiverVal && expectedDigits.length >= 4 && !receiverVal.endsWith(expectedDigits.slice(-4))) {
     return {
       ok: false,
@@ -489,8 +575,7 @@ export async function verifyBankSlipWithSlipOk(input: {
     }
   }
 
-  const transRef = json.data.transRef.trim().slice(0, 120)
-  if (!claimServerRequestId(`SLIP:${transRef}`, input.uid)) {
+  if (isPersistentSlipRefUsed(transRef) || !claimServerRequestId(`SLIP:${transRef}`, input.uid) || !claimPersistentSlipRef(transRef)) {
     return { ok: false, status: 409, message: 'สลิปนี้ถูกใช้เติมเงินไปแล้ว (ป้องกันสลิปซ้ำ)' }
   }
 

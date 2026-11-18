@@ -318,11 +318,6 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                   <p className="text-xs text-muted-foreground">{selectedJobEntry.job.description}</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                  {selectedJobEntry.job.origin === 'lumivara' && (
-                    <span className="border border-amber-400/50 bg-amber-500/15 px-2 py-0.5 font-semibold text-amber-200">
-                      ★ Lumivara Online
-                    </span>
-                  )}
                   <span className="border border-border bg-background px-2 py-0.5 text-accent">
                     {selectedJobEntry.job.ranged ? 'โจมตีระยะไกล' : 'โจมตีระยะประชิด'}
                   </span>

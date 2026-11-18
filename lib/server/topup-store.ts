@@ -5,6 +5,7 @@ import { formatPromptPayTarget, type PromptPayShopSettings, type TopupSlipReques
 interface TopupStoreData {
   merchantQr: PromptPayShopSettings | null
   slipRequests: TopupSlipRequestRecord[]
+  usedSlipRefs?: string[]
 }
 
 const PRIMARY_DIR = path.join(process.cwd(), '.data')
@@ -45,6 +46,7 @@ function readStore(): TopupStoreData {
         memoryStore = {
           merchantQr: parsed.merchantQr ?? DEFAULT_MERCHANT_QR,
           slipRequests: Array.isArray(parsed.slipRequests) ? parsed.slipRequests.slice(0, 200) : [],
+          usedSlipRefs: Array.isArray(parsed.usedSlipRefs) ? parsed.usedSlipRefs.slice(-500) : [],
         }
         return memoryStore
       }
@@ -52,7 +54,7 @@ function readStore(): TopupStoreData {
       // Ignore corrupt/unreadable file and try fallback
     }
   }
-  memoryStore = { merchantQr: DEFAULT_MERCHANT_QR, slipRequests: [] }
+  memoryStore = { merchantQr: DEFAULT_MERCHANT_QR, slipRequests: [], usedSlipRefs: [] }
   return memoryStore
 }
 
@@ -68,6 +70,25 @@ function writeStore(next: TopupStoreData): void {
       // Memory store still holds current state
     }
   }
+}
+
+export function isPersistentSlipRefUsed(transRef: string): boolean {
+  const clean = transRef.trim()
+  if (!clean) return false
+  return (readStore().usedSlipRefs ?? []).includes(clean)
+}
+
+export function claimPersistentSlipRef(transRef: string): boolean {
+  const clean = transRef.trim().slice(0, 120)
+  if (!clean) return false
+  const store = readStore()
+  const existing = store.usedSlipRefs ?? []
+  if (existing.includes(clean)) return false
+  writeStore({
+    ...store,
+    usedSlipRefs: [...existing, clean].slice(-500),
+  })
+  return true
 }
 
 export function getStoredMerchantQr(): PromptPayShopSettings | null {

@@ -25,9 +25,31 @@ import {
   subscribeMyPartyState,
   syncMyPartyMemberSnapshot,
 } from '@/lib/firebase/parties'
+import {
+  ackGmDirective,
+  pollServerGmEvents,
+  subscribeIncomingGmDirectives,
+  subscribeWorldAnnouncements,
+  type GmDirectiveRecord,
+  type WorldAnnouncementRecord,
+} from '@/lib/firebase/gm-events'
 import { createClient } from '@/lib/supabase/client'
 import { isGmAccountUser, PERMANENT_GM_GAME_UID, PERMANENT_GM_UID } from '@/lib/game/permissions'
-import { game, getStats, notify, resolveGameUid, saveGame, say, setGameAccountIdentity, subscribe } from '@/lib/game/engine'
+import {
+  applyGmKickDirective,
+  applyGmMuteDirective,
+  applyGmSummonWarp,
+  applyGmUnmuteDirective,
+  game,
+  getStats,
+  notify,
+  receiveRemoteAnnouncement,
+  resolveGameUid,
+  saveGame,
+  say,
+  setGameAccountIdentity,
+  subscribe,
+} from '@/lib/game/engine'
 
 let lastPrivateMessageId = 0
 
@@ -42,15 +64,23 @@ export function PresenceSync() {
     let unsubFbPresence: (() => void) | null = null
     let unsubFbParty: (() => void) | null = null
     let unsubFbPartyInvites: (() => void) | null = null
+    let unsubFbAnnouncements: (() => void) | null = null
+    let unsubFbDirectives: (() => void) | null = null
     let subscribedPartyUid: string | null = null
+    let subscribedGmEventsUid: string | null = null
     let fbPublishInFlight = false
     let lastFbPublishAt = 0
     let lastFbPruneAt = 0
+    let lastGmRelayPollAt = 0
+    let lastGmRelaySinceMs = Math.max(0, Date.now() - 15_000)
+    let gmRelayPollInFlight = false
     let hasPublishedFbPresence = false
     let profileSyncInFlight = false
     let lastProfileRetryAt = 0
     let partySyncInFlight = false
     let lastPartySyncAt = 0
+    const handledDirectiveIds = new Set<string>()
+    const seenGiftDropIds = new Set<string>()
     let lastPartySent = {
       partyId: '',
       mapId: '',
@@ -163,6 +193,58 @@ export function PresenceSync() {
       }
     }
 
+    const stopFbGmEvents = () => {
+      if (unsubFbAnnouncements) {
+        unsubFbAnnouncements()
+        unsubFbAnnouncements = null
+      }
+      if (unsubFbDirectives) {
+        unsubFbDirectives()
+        unsubFbDirectives = null
+      }
+      subscribedGmEventsUid = null
+    }
+
+    const handleIncomingAnnouncement = (ann: WorldAnnouncementRecord) => {
+      if (stopped || !game.p) return
+      receiveRemoteAnnouncement({
+        id: ann.announcementId,
+        body: ann.body,
+        authorId: ann.authorUid,
+        authorName: ann.authorName,
+        expiresAtMs: ann.expiresAtMs,
+        variant: ann.variant,
+        category: ann.category,
+      })
+    }
+
+    const handleIncomingDirective = (directive: GmDirectiveRecord) => {
+      if (stopped || !game.p || handledDirectiveIds.has(directive.directiveId)) return
+      handledDirectiveIds.add(directive.directiveId)
+      if (handledDirectiveIds.size > 100) {
+        const oldest = handledDirectiveIds.values().next().value
+        if (oldest) handledDirectiveIds.delete(oldest)
+      }
+      if (directive.action === 'summon') {
+        applyGmSummonWarp(directive.mapId, directive.x, directive.y, directive.fromName)
+        void publishFbPresenceIfNeeded(true)
+      } else if (directive.action === 'mute') {
+        applyGmMuteDirective(directive.durationMin ?? 15, directive.reason ?? '', directive.fromName)
+      } else if (directive.action === 'unmute') {
+        applyGmUnmuteDirective(directive.fromName)
+      } else if (directive.action === 'kick') {
+        void ackGmDirective(directive.directiveId)
+        const uid = activeFbUser?.uid
+        if (uid && hasPublishedFbPresence) {
+          hasPublishedFbPresence = false
+          void removeWorldPresence(uid)
+        }
+        applyGmKickDirective(directive.reason ?? '', directive.fromName)
+        return
+      }
+      void ackGmDirective(directive.directiveId)
+    }
+
     const stopFbPresence = (deleteDocForUid?: string | null) => {
       if (unsubFbPresence) {
         unsubFbPresence()
@@ -171,6 +253,7 @@ export function PresenceSync() {
       subscribedFbUid = null
       fbRemotePlayers.clear()
       stopFbParty()
+      stopFbGmEvents()
       if (deleteDocForUid && hasPublishedFbPresence) {
         hasPublishedFbPresence = false
         void removeWorldPresence(deleteDocForUid)
@@ -239,6 +322,18 @@ export function PresenceSync() {
           if (stopped) return
           game.partyInvites = invites
           notify()
+        })
+      }
+
+      if (subscribedGmEventsUid !== user.uid || !unsubFbAnnouncements || !unsubFbDirectives) {
+        if (unsubFbAnnouncements) unsubFbAnnouncements()
+        if (unsubFbDirectives) unsubFbDirectives()
+        subscribedGmEventsUid = user.uid
+        unsubFbAnnouncements = subscribeWorldAnnouncements((ann) => {
+          handleIncomingAnnouncement(ann)
+        })
+        unsubFbDirectives = subscribeIncomingGmDirectives(user.uid, (directive) => {
+          handleIncomingDirective(directive)
         })
       }
     }
@@ -516,6 +611,30 @@ export function PresenceSync() {
       }
 
       const now = Date.now()
+      if (!gmRelayPollInFlight && now - lastGmRelayPollAt >= 2_500) {
+        gmRelayPollInFlight = true
+        lastGmRelayPollAt = now
+        void pollServerGmEvents(lastGmRelaySinceMs)
+          .then((res) => {
+            if (!res || stopped || !game.p) return
+            for (const ann of res.announcements) handleIncomingAnnouncement(ann)
+            for (const dir of res.directives) handleIncomingDirective(dir)
+            const claimedSet = new Set(game.p.claimedGiftDropIds ?? [])
+            const nowCheck = Date.now()
+            for (const drop of res.giftDrops) {
+              if (!drop?.dropId || seenGiftDropIds.has(drop.dropId)) continue
+              seenGiftDropIds.add(drop.dropId)
+              if (drop.expiresAtMs > nowCheck && !claimedSet.has(drop.dropId)) {
+                say('system', `🎁 มีของขวัญทั้งเซิร์ฟ "${drop.subject}" รอให้กดรับในกล่องจดหมาย!`)
+                notify()
+              }
+            }
+            lastGmRelaySinceMs = Math.max(0, res.serverTimeMs - 14_000)
+          })
+          .finally(() => {
+            gmRelayPollInFlight = false
+          })
+      }
       if (fbRemotePlayers.size > 0 && now - lastFbPruneAt >= 1000) {
         lastFbPruneAt = now
         const before = fbRemotePlayers.size

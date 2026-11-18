@@ -29,6 +29,20 @@ import {
   type CloudCharacterRecord,
 } from '@/lib/firebase/characters'
 import type { PartyInviteRecord, PartyRecord } from '@/lib/firebase/party-helpers'
+import {
+  publishServerGiftDrop,
+  publishWorldAnnouncement,
+  publishWorldNewsBroadcast,
+  resolveModerationTarget,
+  resolveOnlinePlayerTarget,
+  sendGmModerationDirective,
+  sendGmSummonDirective,
+  type ResolvedOnlinePlayerTarget,
+  type ServerGiftDropRecord,
+  type WorldAnnouncementVariant,
+  type WorldNewsCategory,
+} from '@/lib/firebase/gm-events'
+import { gmSendMailGiftToTarget } from '@/lib/firebase/rpg-online'
 import { cancelTradeRequest, createBan, createTrade, publishAnnouncement, sendFriendRequest, sendWhisper } from './social'
 import { isGmAccountUser, PERMANENT_GM_GAME_UID, PERMANENT_GM_UID } from './permissions'
 import {
@@ -395,6 +409,9 @@ export interface SaveData {
   premium?: PremiumState
   blockedUids?: string[]
   appliedTradeIds?: string[]
+  mutedUntilMs?: number
+  muteReason?: string
+  claimedGiftDropIds?: string[]
 }
 
 const inFlightPremiumLocks = new Set<string>()
@@ -695,7 +712,15 @@ export const game = {
   itemCd: {} as Record<string, number>,
   blockingUi: false,
   bubble: null as null | { text: string; until: number },
-  announcement: null as null | { body: string; authorId: string; until: number },
+  announcement: null as null | {
+    body: string
+    authorId: string
+    authorName?: string
+    until: number
+    variant?: WorldAnnouncementVariant
+    category?: WorldNewsCategory
+  },
+  kickedNotice: null as string | null,
   lootToast: null as null | { itemId: string; until: number },
   killToasts: [] as Array<{
     id: number
@@ -1478,6 +1503,41 @@ export function getMapMinLevel(map: MapDef): number {
   return match ? Math.max(1, Number(match[1])) : 1
 }
 
+function findWalkableTileNear(
+  map: MapDef,
+  worldX?: number,
+  worldY?: number,
+  preferAdjacent = false,
+): { tx: number; ty: number } {
+  let targetTx = map.spawn.x
+  let targetTy = map.spawn.y
+  if (typeof worldX !== 'number' || typeof worldY !== 'number' || !Number.isFinite(worldX) || !Number.isFinite(worldY)) {
+    return { tx: targetTx, ty: targetTy }
+  }
+  const baseTx = Math.max(1, Math.min(map.width - 2, Math.floor(worldX / TILE)))
+  const baseTy = Math.max(1, Math.min(map.height - 2, Math.floor(worldY / TILE)))
+  const startRadius = preferAdjacent ? 1 : 0
+  for (let radius = startRadius; radius <= 4; radius++) {
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        if (preferAdjacent && radius === 1 && dx === 0 && dy === 0) continue
+        const tx = baseTx + dx
+        const ty = baseTy + dy
+        if (tx < 1 || ty < 1 || tx >= map.width - 1 || ty >= map.height - 1) continue
+        const px = (tx + 0.5) * TILE
+        const py = (ty + 0.5) * TILE
+        if (!boxBlocked(map, px, py)) {
+          return { tx, ty }
+        }
+      }
+    }
+  }
+  if (preferAdjacent && !boxBlocked(map, (baseTx + 0.5) * TILE, (baseTy + 0.5) * TILE)) {
+    return { tx: baseTx, ty: baseTy }
+  }
+  return { tx: targetTx, ty: targetTy }
+}
+
 export function warpToMapLocation(
   mapId: string,
   worldX?: number,
@@ -1495,35 +1555,366 @@ export function warpToMapLocation(
     return { ok: false, message: msg }
   }
 
-  let targetTx = map.spawn.x
-  let targetTy = map.spawn.y
-  if (typeof worldX === 'number' && typeof worldY === 'number' && Number.isFinite(worldX) && Number.isFinite(worldY)) {
-    const baseTx = Math.max(1, Math.min(map.width - 2, Math.floor(worldX / TILE)))
-    const baseTy = Math.max(1, Math.min(map.height - 2, Math.floor(worldY / TILE)))
-    let found = false
-    for (let radius = 0; radius <= 4 && !found; radius++) {
-      for (let dy = -radius; dy <= radius && !found; dy++) {
-        for (let dx = -radius; dx <= radius && !found; dx++) {
-          const tx = baseTx + dx
-          const ty = baseTy + dy
-          if (tx < 1 || ty < 1 || tx >= map.width - 1 || ty >= map.height - 1) continue
-          const px = (tx + 0.5) * TILE
-          const py = (ty + 0.5) * TILE
-          if (!boxBlocked(map, px, py)) {
-            targetTx = tx
-            targetTy = ty
-            found = true
-          }
-        }
-      }
-    }
-  }
+  const { tx: targetTx, ty: targetTy } = findWalkableTileNear(map, worldX, worldY, false)
 
   changeMap(mapId, targetTx, targetTy)
   game.partyPanelOpen = false
   addEffect({ type: 'ring', x: p.x, y: p.y, r: 22, color: '#4cc9f0', max: 0.45 })
   notify()
   return { ok: true, message: `วาร์ปตามปาร์ตี้ไปยัง ${map.name} แล้ว` }
+}
+
+export function applyGmSummonWarp(
+  mapId: string,
+  worldX: number,
+  worldY: number,
+  fromName = 'GM',
+): { ok: boolean; message: string } {
+  const p = game.p
+  if (!p) return { ok: false, message: 'ยังไม่ได้เลือกตัวละคร' }
+  const map = MAPS[mapId]
+  if (!map) return { ok: false, message: 'ไม่พบแผนที่เป้าหมาย' }
+
+  game.autoFarm = false
+  game.keys.clear()
+  game.attackHeld = false
+  game.socialTargetId = null
+  game.socialTargetMeta = null
+  game.onlinePanelOpen = false
+  game.partyPanelOpen = false
+
+  const { tx, ty } = findWalkableTileNear(map, worldX, worldY, true)
+  changeMap(mapId, tx, ty)
+  addEffect({ type: 'ring', x: p.x, y: p.y, r: 26, color: '#ffd166', max: 0.6 })
+  const msg = `GM ${fromName} ได้ดึงตัวคุณมายัง ${map.name} (${tx}, ${ty})!`
+  say('gm', msg, undefined, { channel: 'world' })
+  saveGame()
+  notify()
+  return { ok: true, message: msg }
+}
+
+function toTargetInput(targetOrQuery: string | RemotePlayer): string {
+  if (typeof targetOrQuery === 'string') return targetOrQuery.trim()
+  return targetOrQuery.userId
+}
+
+export async function gmWarpToPlayer(
+  targetOrQuery: string | RemotePlayer,
+): Promise<{ ok: boolean; message: string }> {
+  const p = game.p
+  if (!p || !p.gm || !isCurrentAccountGm()) {
+    return { ok: false, message: 'คำสั่งนี้สงวนเฉพาะบัญชี GM สูงสุดเท่านั้น' }
+  }
+
+  let target: ResolvedOnlinePlayerTarget | null = null
+  if (typeof targetOrQuery !== 'string') {
+    target = {
+      userId: targetOrQuery.userId,
+      gameUid: targetOrQuery.gameUid ?? String(targetOrQuery.uid ?? 1000).padStart(4, '0'),
+      displayName: targetOrQuery.displayName,
+      mapId: targetOrQuery.mapId,
+      x: targetOrQuery.x,
+      y: targetOrQuery.y,
+      level: targetOrQuery.level,
+    }
+  } else {
+    const resolved = await resolveOnlinePlayerTarget(toTargetInput(targetOrQuery), game.onlinePlayers)
+    if (!resolved.target) {
+      const errMsg = resolved.error ?? 'ไม่พบผู้เล่นออนไลน์เป้าหมาย'
+      say('error', errMsg)
+      notify()
+      return { ok: false, message: errMsg }
+    }
+    target = resolved.target
+  }
+
+  const map = MAPS[target.mapId]
+  if (!map) {
+    const errMsg = `ไม่พบแผนที่ ${target.mapId} ของผู้เล่น ${target.displayName}`
+    say('error', errMsg)
+    notify()
+    return { ok: false, message: errMsg }
+  }
+
+  game.autoFarm = false
+  game.keys.clear()
+  game.attackHeld = false
+  const { tx, ty } = findWalkableTileNear(map, target.x, target.y, true)
+  changeMap(map.id, tx, ty)
+  addEffect({ type: 'ring', x: p.x, y: p.y, r: 24, color: '#38bdf8', max: 0.55 })
+  const msg = `[GM] วาร์ปไปหา ${target.displayName} (#${target.gameUid}) ที่ ${map.name} (${tx}, ${ty}) แล้ว`
+  say('gm', msg)
+  saveGame()
+  notify()
+  return { ok: true, message: msg }
+}
+
+export async function gmSummonPlayer(
+  targetOrQuery: string | RemotePlayer,
+): Promise<{ ok: boolean; message: string }> {
+  const p = game.p
+  if (!p || !p.gm || !isCurrentAccountGm()) {
+    return { ok: false, message: 'คำสั่งนี้สงวนเฉพาะบัญชี GM สูงสุดเท่านั้น' }
+  }
+
+  let target: ResolvedOnlinePlayerTarget | null = null
+  if (typeof targetOrQuery !== 'string') {
+    target = {
+      userId: targetOrQuery.userId,
+      gameUid: targetOrQuery.gameUid ?? String(targetOrQuery.uid ?? 1000).padStart(4, '0'),
+      displayName: targetOrQuery.displayName,
+      mapId: targetOrQuery.mapId,
+      x: targetOrQuery.x,
+      y: targetOrQuery.y,
+      level: targetOrQuery.level,
+    }
+  } else {
+    const resolved = await resolveOnlinePlayerTarget(toTargetInput(targetOrQuery), game.onlinePlayers)
+    if (!resolved.target) {
+      const errMsg = resolved.error ?? 'ไม่พบผู้เล่นออนไลน์เป้าหมาย'
+      say('error', errMsg)
+      notify()
+      return { ok: false, message: errMsg }
+    }
+    target = resolved.target
+  }
+
+  const res = await sendGmSummonDirective({
+    target,
+    fromName: p.name,
+    fromGameUid: p.gameUid ?? PERMANENT_GM_GAME_UID,
+    mapId: p.mapId,
+    x: p.x,
+    y: p.y,
+  })
+  say(res.ok ? 'gm' : 'error', res.message)
+  notify()
+  return { ok: res.ok, message: res.message }
+}
+
+export function getActiveMuteRemainingSec(): number {
+  const p = game.p
+  if (!p || p.gm || isCurrentAccountGm()) return 0
+  const until = p.mutedUntilMs ?? 0
+  const now = Date.now()
+  if (until > now) {
+    return Math.ceil((until - now) / 1000)
+  }
+  if (until > 0) {
+    p.mutedUntilMs = 0
+    p.muteReason = ''
+  }
+  return 0
+}
+
+export function applyGmMuteDirective(durationMin: number, reason: string, fromName?: string) {
+  const p = game.p
+  if (!p || p.gm || isCurrentAccountGm()) return
+  const safeMin = Math.max(1, Math.min(1440, Math.floor(durationMin || 15)))
+  p.mutedUntilMs = Date.now() + safeMin * 60_000
+  p.muteReason = reason.trim().slice(0, 120)
+  say(
+    'error',
+    `คุณถูก GM ${fromName || 'GM'} ใบ้แชท ${safeMin} นาที${p.muteReason ? ` (เหตุผล: ${p.muteReason})` : ''}`,
+  )
+  saveGame()
+  notify()
+}
+
+export function applyGmUnmuteDirective(fromName?: string) {
+  const p = game.p
+  if (!p) return
+  p.mutedUntilMs = 0
+  p.muteReason = ''
+  say('system', `GM ${fromName || 'GM'} ปลดสถานะใบ้แชทให้คุณแล้ว`)
+  saveGame()
+  notify()
+}
+
+export function applyGmKickDirective(reason: string, fromName?: string) {
+  const p = game.p
+  if (!p || p.gm || isCurrentAccountGm()) return
+  const cleanReason = reason.trim().slice(0, 120) || 'ทีมงานดำเนินการตรวจสอบบัญชีชั่วคราว'
+  game.kickedNotice = `โดย GM ${fromName || 'GM'} • เหตุผล: ${cleanReason}`
+  quitToTitle()
+}
+
+export async function gmMutePlayer(
+  targetQuery: string,
+  durationMin = 15,
+  reason = '',
+): Promise<{ ok: boolean; message: string }> {
+  const p = game.p
+  if (!p || !p.gm || !isCurrentAccountGm()) {
+    return { ok: false, message: 'คำสั่งนี้สงวนเฉพาะบัญชี GM สูงสุดเท่านั้น' }
+  }
+  const resolved = await resolveModerationTarget(toTargetInput(targetQuery), game.onlinePlayers)
+  if (!resolved.target) {
+    const errMsg = resolved.error ?? 'ไม่พบบัญชีผู้เล่นเป้าหมาย'
+    say('error', errMsg)
+    notify()
+    return { ok: false, message: errMsg }
+  }
+  const res = await sendGmModerationDirective({
+    action: 'mute',
+    target: resolved.target,
+    fromName: p.name,
+    durationMin,
+    reason,
+  })
+  say(res.ok ? 'gm' : 'error', res.message)
+  notify()
+  return { ok: res.ok, message: res.message }
+}
+
+export async function gmUnmutePlayer(targetQuery: string): Promise<{ ok: boolean; message: string }> {
+  const p = game.p
+  if (!p || !p.gm || !isCurrentAccountGm()) {
+    return { ok: false, message: 'คำสั่งนี้สงวนเฉพาะบัญชี GM สูงสุดเท่านั้น' }
+  }
+  const resolved = await resolveModerationTarget(toTargetInput(targetQuery), game.onlinePlayers)
+  if (!resolved.target) {
+    const errMsg = resolved.error ?? 'ไม่พบบัญชีผู้เล่นเป้าหมาย'
+    say('error', errMsg)
+    notify()
+    return { ok: false, message: errMsg }
+  }
+  const res = await sendGmModerationDirective({
+    action: 'unmute',
+    target: resolved.target,
+    fromName: p.name,
+  })
+  say(res.ok ? 'gm' : 'error', res.message)
+  notify()
+  return { ok: res.ok, message: res.message }
+}
+
+export async function gmKickPlayer(
+  targetQuery: string,
+  reason = '',
+): Promise<{ ok: boolean; message: string }> {
+  const p = game.p
+  if (!p || !p.gm || !isCurrentAccountGm()) {
+    return { ok: false, message: 'คำสั่งนี้สงวนเฉพาะบัญชี GM สูงสุดเท่านั้น' }
+  }
+  const resolved = await resolveModerationTarget(toTargetInput(targetQuery), game.onlinePlayers)
+  if (!resolved.target) {
+    const errMsg = resolved.error ?? 'ไม่พบบัญชีผู้เล่นเป้าหมาย'
+    say('error', errMsg)
+    notify()
+    return { ok: false, message: errMsg }
+  }
+  const res = await sendGmModerationDirective({
+    action: 'kick',
+    target: resolved.target,
+    fromName: p.name,
+    reason,
+  })
+  say(res.ok ? 'gm' : 'error', res.message)
+  notify()
+  return { ok: res.ok, message: res.message }
+}
+
+export async function gmSendSingleGiftMail(input: {
+  targetQuery: string
+  subject: string
+  body: string
+  gold: number
+  diamonds: number
+  itemId: string | null
+  qty: number
+  plus: number
+}): Promise<{ ok: boolean; message: string }> {
+  const p = game.p
+  if (!p || !p.gm || !isCurrentAccountGm()) {
+    return { ok: false, message: 'สงวนเฉพาะบัญชี GM สูงสุดเท่านั้น' }
+  }
+  if (input.itemId && !ITEMS[input.itemId]) {
+    return { ok: false, message: `ไม่พบไอเทมไอดี ${input.itemId}` }
+  }
+  const res = await gmSendMailGiftToTarget({
+    targetQuery: input.targetQuery,
+    senderName: p.name,
+    subject: input.subject,
+    body: input.body,
+    gold: input.gold,
+    diamonds: input.diamonds,
+    itemId: input.itemId,
+    qty: input.qty,
+    plus: input.plus,
+  })
+  if (!res.ok) {
+    const msg = res.error ?? 'ส่งจดหมายไม่สำเร็จ'
+    say('error', msg)
+    notify()
+    return { ok: false, message: msg }
+  }
+  const msg = `ส่งของขวัญทางจดหมายให้ ${res.targetLabel ?? input.targetQuery} สำเร็จ!`
+  say('gm', msg)
+  notify()
+  return { ok: true, message: msg }
+}
+
+export async function gmBroadcastGiftAll(input: {
+  subject: string
+  body: string
+  gold: number
+  diamonds: number
+  itemId: string | null
+  qty: number
+  plus: number
+  expiresHours?: number
+}): Promise<{ ok: boolean; message: string }> {
+  const p = game.p
+  if (!p || !p.gm || !isCurrentAccountGm()) {
+    return { ok: false, message: 'สงวนเฉพาะบัญชี GM สูงสุดเท่านั้น' }
+  }
+  if (input.itemId && !ITEMS[input.itemId]) {
+    return { ok: false, message: `ไม่พบไอเทมไอดี ${input.itemId}` }
+  }
+  const res = await publishServerGiftDrop({
+    authorName: p.name,
+    subject: input.subject,
+    body: input.body,
+    gold: input.gold,
+    diamonds: input.diamonds,
+    itemId: input.itemId,
+    qty: input.qty,
+    plus: input.plus,
+    expiresHours: input.expiresHours,
+  })
+  say(res.ok ? 'gm' : 'error', res.message)
+  notify()
+  return { ok: res.ok, message: res.message }
+}
+
+export function claimServerGiftDropAction(drop: ServerGiftDropRecord): { ok: boolean; message: string } {
+  const p = player()
+  if (drop.expiresAtMs <= Date.now()) {
+    return { ok: false, message: 'ของขวัญกิจกรรมนี้หมดอายุแล้ว' }
+  }
+  const claimed = (p.claimedGiftDropIds ??= [])
+  if (claimed.includes(drop.dropId)) {
+    return { ok: false, message: 'คุณรับของขวัญเซิร์ฟเวอร์รายการนี้ไปแล้ว' }
+  }
+  if (drop.itemId && ITEMS[drop.itemId] && (drop.qty ?? 1) > 0) {
+    if (!addItem(drop.itemId, drop.qty || 1, drop.plus || 0)) {
+      return { ok: false, message: 'กระเป๋าเต็ม กรุณาเคลียร์ช่องก่อนรับของขวัญ' }
+    }
+  }
+  if (drop.gold > 0) p.gold += drop.gold
+  if (drop.diamonds > 0) {
+    commitDiamondDelta(p, drop.diamonds, {
+      source: 'gm_server_gift',
+      note: `รับรางวัลเซิร์ฟเวอร์: ${drop.subject}`,
+      requestId: drop.dropId,
+      isGm: true,
+    })
+  }
+  p.claimedGiftDropIds = [...claimed.slice(-39), drop.dropId]
+  saveGame()
+  notify()
+  return { ok: true, message: `รับของขวัญทั้งเซิร์ฟ "${drop.subject}" เข้าตัวละครเรียบร้อย!` }
 }
 
 /* ---------------- combat ---------------- */
@@ -1722,7 +2113,14 @@ function killMonster(m: Monster) {
     if (Math.random() < d.chance) {
       dropItem(d.itemId, 1, m.x, m.y)
       droppedItems.push({ itemId: d.itemId, qty: 1 })
-      say('loot', `${ITEMS[d.itemId]?.name ?? d.itemId} ตกพื้น`)
+      const droppedDef = ITEMS[d.itemId]
+      say('loot', `${droppedDef?.name ?? d.itemId} ตกพื้น`)
+      if ((def.boss || m.isWorldBoss) && droppedDef && (droppedDef.kind === 'weapon' || droppedDef.kind === 'armor')) {
+        void broadcastWorldNewsAction(
+          'rare_drop',
+          `${p.name} ได้รับไอเทมบอสระดับแรร์ "${droppedDef.name}" จาก ${m.worldBossName ?? def.name}!`,
+        )
+      }
     }
   }
   pushKillToast({
@@ -1734,7 +2132,13 @@ function killMonster(m: Monster) {
     items: droppedItems,
     duration: 3.4,
   })
-  if (def.boss || m.isWorldBoss) say('system', `★ ${p.name} ได้ปราบ ${m.worldBossName ?? def.name} สำเร็จ! ★`)
+  if (def.boss || m.isWorldBoss) {
+    say('system', `★ ${p.name} ได้ปราบ ${m.worldBossName ?? def.name} สำเร็จ! ★`)
+    void broadcastWorldNewsAction(
+      'boss_kill',
+      `${p.name} พิชิตบอส ${m.worldBossName ?? def.name} ลงได้สำเร็จ!`,
+    )
+  }
 }
 
 export function gainExp(n: number) {
@@ -2431,18 +2835,107 @@ export function devSetTowerFloor(highestFloor: number) {
   notify()
 }
 
+const seenRemoteAnnouncementIds = new Set<string>()
+
+export function receiveRemoteAnnouncement(input: {
+  id: string
+  body: string
+  authorId: string
+  authorName?: string
+  expiresAtMs?: number
+  variant?: WorldAnnouncementVariant
+  category?: WorldNewsCategory
+}) {
+  if (seenRemoteAnnouncementIds.has(input.id)) return
+  seenRemoteAnnouncementIds.add(input.id)
+  if (seenRemoteAnnouncementIds.size > 100) {
+    const oldest = seenRemoteAnnouncementIds.values().next().value
+    if (oldest) seenRemoteAnnouncementIds.delete(oldest)
+  }
+
+  const now = Date.now()
+  const until = typeof input.expiresAtMs === 'number' && input.expiresAtMs > now ? input.expiresAtMs : now + 12_000
+  const variant: WorldAnnouncementVariant = input.variant === 'news' ? 'news' : 'gm'
+  const authorLabel = input.authorName?.trim() || (variant === 'news' ? 'ข่าวเซิร์ฟ' : 'GM')
+  game.announcement = {
+    body: input.body,
+    authorId: input.authorId,
+    authorName: authorLabel,
+    until,
+    variant,
+    category: input.category ?? (variant === 'news' ? 'enhance' : 'gm'),
+  }
+  const selfUid = firebaseAuth.currentUser?.uid
+  if (!selfUid || input.authorId !== selfUid) {
+    say(
+      variant === 'news' ? 'system' : 'gm',
+      variant === 'news' ? `[ข่าวเซิร์ฟ] ${input.body}` : `[ประกาศเซิร์ฟ · ${authorLabel}] ${input.body}`,
+      undefined,
+      { channel: 'world' },
+    )
+  }
+  notify()
+}
+
+let lastWorldNewsSentAt = 0
+
+export async function broadcastWorldNewsAction(
+  category: Exclude<WorldNewsCategory, 'gm'>,
+  rawBody: string,
+) {
+  const p = game.p
+  if (!p) return
+  const body = rawBody.trim().slice(0, 240)
+  if (!body) return
+  const now = Date.now()
+  if (now - lastWorldNewsSentAt < 2500) return
+  lastWorldNewsSentAt = now
+
+  const selfUid = firebaseAuth.currentUser?.uid ?? 'local-player'
+  game.announcement = {
+    body,
+    authorId: selfUid,
+    authorName: p.name,
+    until: now + 9_500,
+    variant: 'news',
+    category,
+  }
+  say('system', `[ข่าวเซิร์ฟ] ${body}`, undefined, { channel: 'world' })
+  notify()
+
+  const id = await publishWorldNewsBroadcast({
+    category,
+    body,
+    actorName: p.name,
+  })
+  if (id) seenRemoteAnnouncementIds.add(id)
+}
+
 export function devBroadcastAnnouncement(rawBody: string) {
   const p = player()
   if (!p.gm || !isCurrentAccountGm()) return
   const body = rawBody.trim().slice(0, 240)
   if (!body) return
+  const selfUid = firebaseAuth.currentUser?.uid ?? 'gm-0000'
   game.announcement = {
     body,
-    authorId: firebaseAuth.currentUser?.uid ?? 'gm-0000',
+    authorId: selfUid,
+    authorName: p.name,
     until: Date.now() + 12_000,
+    variant: 'gm',
+    category: 'gm',
   }
-  say('gm', `[ประกาศ GM] ${body}`)
+  say('gm', `[ประกาศเซิร์ฟ · ${p.name}] ${body}`, undefined, { channel: 'world' })
   notify()
+  void publishWorldAnnouncement({
+    body,
+    authorName: p.name,
+    authorGameUid: p.gameUid ?? PERMANENT_GM_GAME_UID,
+    mapId: p.mapId,
+    jobId: p.jobId,
+  }).then((res) => {
+    if (res.announcementId) seenRemoteAnnouncementIds.add(res.announcementId)
+  })
 }
 
 interface WindowBridge {
@@ -2667,6 +3160,9 @@ export function enhance(id: string): EnhanceResult {
     res = { result: 'success', message: `ตีบวกสำเร็จ! ${def.name} +${it.plus}` }
     say('system', res.message)
     if (it.plus >= 7) say('gm', `ประกาศ: ${p.name} ตีบวก ${def.name} ได้ +${it.plus}!`)
+    if (it.plus >= 10) {
+      void broadcastWorldNewsAction('enhance', `${p.name} ตีบวก ${def.name} สำเร็จระดับ +${it.plus}!`)
+    }
   } else if (it.plus >= 6) {
     it.plus--
     res = { result: 'down', message: `ตีบวกล้มเหลว! ระดับลดลงเป็น +${it.plus}` }
@@ -4641,6 +5137,7 @@ export function equipFashionAction(slot: FashionSlot, fashionId: string | null):
 export interface TopupGatewayStatus {
   stripeEnabled: boolean
   slipVerifyEnabled: boolean
+  slipProvider: 'slipok' | 'easyslip' | null
   promptPayQrEnabled: boolean
   promptPayMaskedId: string | null
   merchantAccountName: string | null
@@ -4657,6 +5154,7 @@ export async function fetchTopupGatewayConfig(): Promise<TopupGatewayStatus | nu
     return {
       stripeEnabled: Boolean(json.stripeEnabled),
       slipVerifyEnabled: Boolean(json.slipVerifyEnabled),
+      slipProvider: json.slipProvider === 'slipok' || json.slipProvider === 'easyslip' ? json.slipProvider : null,
       promptPayQrEnabled: Boolean(json.promptPayQrEnabled),
       promptPayMaskedId: json.promptPayMaskedId ?? null,
       merchantAccountName: json.merchantAccountName ?? null,
@@ -5078,8 +5576,15 @@ export function submitChat(raw: string, channelOverride?: ChatChannel) {
   if (!p) return
   const text = raw.trim().slice(0, 140)
   if (!text) return
-  if (text.startsWith('/')) runCommand(text)
-  else {
+  if (text.startsWith('/')) {
+    runCommand(text)
+  } else {
+    const muteSec = getActiveMuteRemainingSec()
+    if (muteSec > 0) {
+      say('error', `คุณถูกใบ้แชทอยู่ เหลืออีก ${Math.ceil(muteSec / 60)} นาที${p.muteReason ? ` (${p.muteReason})` : ''}`)
+      notify()
+      return
+    }
     const ch = channelOverride && channelOverride !== 'all' ? channelOverride : game.chatChannel === 'all' ? 'world' : game.chatChannel
     say('player', text, p.name, { channel: ch, senderUid: firebaseAuth.currentUser?.uid, senderGameUid: p.gameUid })
     game.bubble = { text, until: game.time + 4 }
@@ -5100,17 +5605,23 @@ const GM_HELP = [
   '/allweapons - เสกอาวุธทั้งหมดที่อาชีพนี้ใช้ได้',
   '/items - รายการไอดีไอเทม',
   '/stone <เลข> - เสกหินตีบวก',
-  '/tp <แมพ> - วาร์ป (town, meadow, forest, cave, volcano)',
+  '/tp <แมพ|ชื่อ/UID> - วาร์ปไปแมพ หรือวาร์ปไปหาผู้เล่นอื่น',
+  '/goto <ชื่อ/UID> (หรือ /warp, /วาป) - วาร์ปไปหาผู้เล่นอื่น',
+  '/pull <ชื่อ/UID> (หรือ /summon, /bring, /ดึง) - ดึงผู้เล่นอื่นมาหาเรา',
+  '/announce <ข้อความ> (หรือ /bc, /a, /ประกาศ, /gmchat) - ประกาศให้เห็นทั้งเซิร์ฟเวอร์',
+  '/mute <ชื่อ/UID> [นาที] [เหตุผล] - ใบ้แชทผู้เล่น',
+  '/unmute <ชื่อ/UID> - ปลดใบ้แชทผู้เล่น',
+  '/kick <ชื่อ/UID> [เหตุผล] - เตะผู้เล่นออกจากเกม',
+  '/giftall <ทอง> <เพชร> <ข้อความ> - ส่งของขวัญทางจดหมายให้ทั้งเซิร์ฟ',
   '/heal - ฟื้นฟู HP/MP เต็ม',
   '/god - เปิด/ปิดอมตะ',
   '/speed <0.5-5> - ความเร็ว',
   '/killall - ฆ่ามอนในแมพ',
   '/spawn <ไอดี> [จำนวน] - เรียกมอนสเตอร์',
   '/mobs - รายการไอดีมอนสเตอร์',
-  '/job <ไอดี> - เปลี่ยนอาชีพทันที',
+  '/job <ไอดี> - เปี่ยนอาชีพทันที',
   '/jobs - รายการไอดีอาชีพ',
   '/ban (UID)_(วินาที)_(เหตุผล) - แบนผู้เล่น เช่น /ban 0001_3600_ใช้บอท',
-  '/gmchat <ข้อความ> - ประกาศแถบด้านบน',
   '/closegm - ปิดโหมด GM ชั่วคราว',
 ]
 
@@ -5244,10 +5755,54 @@ function runCommand(text: string) {
       say('gm', `เสกหินตีบวก x${n}`)
     },
     '/tp': () => {
-      const id = args[0]
-      const map = id ? MAPS[id] : null
-      if (!map) return say('error', `แมพที่มี: ${MAP_ORDER.join(', ')}`)
-      changeMap(map.id, map.spawn.x, map.spawn.y)
+      const target = args.join(' ').trim()
+      if (!target) return say('error', `ใช้ /tp <ชื่อแมพ> หรือ /tp <ชื่อผู้เล่น|UID> (แมพ: ${MAP_ORDER.join(', ')})`)
+      const map = MAPS[target]
+      if (map) {
+        changeMap(map.id, map.spawn.x, map.spawn.y)
+        return
+      }
+      void gmWarpToPlayer(target)
+    },
+    '/goto': () => {
+      const target = args.join(' ').trim()
+      if (!target) return say('error', 'ใช้ /goto <ชื่อผู้เล่น หรือ UID>')
+      void gmWarpToPlayer(target)
+    },
+    '/warp': () => {
+      const target = args.join(' ').trim()
+      if (!target) return say('error', 'ใช้ /warp <ชื่อผู้เล่น หรือ UID>')
+      void gmWarpToPlayer(target)
+    },
+    '/tpplayer': () => {
+      const target = args.join(' ').trim()
+      if (!target) return say('error', 'ใช้ /tpplayer <ชื่อผู้เล่น หรือ UID>')
+      void gmWarpToPlayer(target)
+    },
+    '/วาป': () => {
+      const target = args.join(' ').trim()
+      if (!target) return say('error', 'ใช้ /วาป <ชื่อผู้เล่น หรือ UID>')
+      void gmWarpToPlayer(target)
+    },
+    '/summon': () => {
+      const target = args.join(' ').trim()
+      if (!target) return say('error', 'ใช้ /summon <ชื่อผู้เล่น หรือ UID>')
+      void gmSummonPlayer(target)
+    },
+    '/pull': () => {
+      const target = args.join(' ').trim()
+      if (!target) return say('error', 'ใช้ /pull <ชื่อผู้เล่น หรือ UID>')
+      void gmSummonPlayer(target)
+    },
+    '/bring': () => {
+      const target = args.join(' ').trim()
+      if (!target) return say('error', 'ใช้ /bring <ชื่อผู้เล่น หรือ UID>')
+      void gmSummonPlayer(target)
+    },
+    '/ดึง': () => {
+      const target = args.join(' ').trim()
+      if (!target) return say('error', 'ใช้ /ดึง <ชื่อผู้เล่น หรือ UID>')
+      void gmSummonPlayer(target)
     },
     '/heal': () => {
       const s = getStats()
@@ -5315,6 +5870,61 @@ function runCommand(text: string) {
       const body = args.join(' ').trim()
       if (!body) return say('error', 'ใช้ /gmchat <ข้อความ>')
       devBroadcastAnnouncement(body)
+    },
+    '/announce': () => {
+      const body = args.join(' ').trim()
+      if (!body) return say('error', 'ใช้ /announce <ข้อความ>')
+      devBroadcastAnnouncement(body)
+    },
+    '/bc': () => {
+      const body = args.join(' ').trim()
+      if (!body) return say('error', 'ใช้ /bc <ข้อความ>')
+      devBroadcastAnnouncement(body)
+    },
+    '/a': () => {
+      const body = args.join(' ').trim()
+      if (!body) return say('error', 'ใช้ /a <ข้อความ>')
+      devBroadcastAnnouncement(body)
+    },
+    '/ประกาศ': () => {
+      const body = args.join(' ').trim()
+      if (!body) return say('error', 'ใช้ /ประกาศ <ข้อความ>')
+      devBroadcastAnnouncement(body)
+    },
+    '/mute': () => {
+      const target = args[0]
+      if (!target) return say('error', 'ใช้ /mute <ชื่อ|UID> [นาที] [เหตุผล]')
+      const maybeMinutes = Number(args[1])
+      const hasMinutes = args[1] !== undefined && Number.isFinite(maybeMinutes) && maybeMinutes > 0
+      const durationMin = hasMinutes ? Math.min(1440, Math.floor(maybeMinutes)) : 15
+      const reason = (hasMinutes ? args.slice(2) : args.slice(1)).join(' ').trim()
+      void gmMutePlayer(target, durationMin, reason)
+    },
+    '/unmute': () => {
+      const target = args[0]
+      if (!target) return say('error', 'ใช้ /unmute <ชื่อ|UID>')
+      void gmUnmutePlayer(target)
+    },
+    '/kick': () => {
+      const target = args[0]
+      if (!target) return say('error', 'ใช้ /kick <ชื่อ|UID> [เหตุผล]')
+      const reason = args.slice(1).join(' ').trim()
+      void gmKickPlayer(target, reason)
+    },
+    '/giftall': () => {
+      const gold = Math.max(0, Math.floor(num(0, 0)))
+      const diamonds = Math.max(0, Math.floor(num(1, 0)))
+      const text = args.slice(2).join(' ').trim() || 'ของขวัญพิเศษจาก GM'
+      if (gold === 0 && diamonds === 0) return say('error', 'ใช้ /giftall <ทอง> <เพชร> <ข้อความ>')
+      void gmBroadcastGiftAll({
+        subject: 'ของขวัญพิเศษจาก GM',
+        body: text,
+        gold,
+        diamonds,
+        itemId: null,
+        qty: 0,
+        plus: 0,
+      })
     },
     '/closegm': () => {
       p.gm = false
@@ -5744,6 +6354,11 @@ export function loadGame(d: SaveData) {
     }),
     blockedUids: Array.isArray(d.blockedUids) ? [...new Set(d.blockedUids.filter((x): x is string => typeof x === 'string').slice(0, 50))] : [],
     appliedTradeIds: Array.isArray(d.appliedTradeIds) ? [...new Set(d.appliedTradeIds.filter((x): x is string => typeof x === 'string').slice(-40))] : [],
+    mutedUntilMs: typeof d.mutedUntilMs === 'number' && Number.isFinite(d.mutedUntilMs) ? Math.max(0, d.mutedUntilMs) : 0,
+    muteReason: typeof d.muteReason === 'string' ? d.muteReason.slice(0, 120) : '',
+    claimedGiftDropIds: Array.isArray(d.claimedGiftDropIds)
+      ? [...new Set(d.claimedGiftDropIds.filter((x): x is string => typeof x === 'string').slice(-50))]
+      : [],
   }
   if (p.hp <= 0) p.hp = getStats(p).maxHp
   const prevSavedAt = p.savedAt

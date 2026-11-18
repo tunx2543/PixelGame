@@ -1214,6 +1214,108 @@ export async function sendMailGiftByGameUid(input: {
   return { ok: true }
 }
 
+export async function gmSendMailGiftToTarget(input: {
+  targetQuery: string
+  senderName: string
+  subject: string
+  body: string
+  gold: number
+  diamonds?: number
+  itemId?: string | null
+  qty?: number
+  plus?: number
+}): Promise<{ ok: boolean; targetLabel?: string; error?: string }> {
+  const user = auth.currentUser
+  if (!isSignedInVerified() || !user) {
+    return { ok: false, error: 'กรุณาเข้าสู่ระบบบัญชี GM ที่ยืนยันตัวตนแล้ว' }
+  }
+  const q = input.targetQuery.trim()
+  if (!q) {
+    return { ok: false, error: 'กรุณาระบุชื่อตัวละคร หรือ Game UID ของผู้เล่นเป้าหมาย' }
+  }
+
+  let targetUid: string | null = null
+  let targetLabel = q
+  const cleanDigits = q.replace(/^#/, '')
+  const normalizedGameUid = /^\d{1,8}$/.test(cleanDigits) ? cleanDigits.padStart(4, '0') : null
+
+  try {
+    if (normalizedGameUid) {
+      const uidSnap = await getDoc(doc(db, 'playerUids', normalizedGameUid))
+      if (uidSnap.exists()) {
+        const d = uidSnap.data() as { ownerId?: string; characterName?: string; displayName?: string }
+        if (d.ownerId) {
+          targetUid = d.ownerId
+          targetLabel = `${d.characterName || d.displayName || 'นักผจญภัย'} (#${normalizedGameUid})`
+        }
+      }
+    }
+
+    if (!targetUid) {
+      const lower = cleanDigits.toLowerCase()
+      const [presDocs, lbDocs] = await Promise.all([
+        getDocs(query(collection(db, 'worldPresence'), limit(60))).catch(() => null),
+        getDocs(query(collection(db, 'leaderboard'), limit(60))).catch(() => null),
+      ])
+      const presRows = presDocs ? presDocs.docs.map((d) => d.data() as { userId?: string; gameUid?: string; displayName?: string }) : []
+      const lbRows = lbDocs ? lbDocs.docs.map((d) => d.data() as { userId?: string; gameUid?: string; name?: string }) : []
+
+      const presHit =
+        presRows.find((r) => r.userId?.toLowerCase() === lower) ??
+        presRows.find((r) => r.displayName?.trim().toLowerCase() === lower) ??
+        presRows.find((r) => r.displayName?.trim().toLowerCase().includes(lower))
+
+      if (presHit?.userId) {
+        targetUid = presHit.userId
+        targetLabel = `${presHit.displayName || 'นักผจญภัย'}${presHit.gameUid ? ` (#${presHit.gameUid})` : ''}`
+      } else {
+        const lbHit =
+          lbRows.find((r) => r.userId?.toLowerCase() === lower) ??
+          lbRows.find((r) => r.name?.trim().toLowerCase() === lower) ??
+          lbRows.find((r) => r.name?.trim().toLowerCase().includes(lower))
+        if (lbHit?.userId) {
+          targetUid = lbHit.userId
+          targetLabel = `${lbHit.name || 'นักผจญภัย'}${lbHit.gameUid ? ` (#${lbHit.gameUid})` : ''}`
+        }
+      }
+    }
+  } catch {
+    return { ok: false, error: 'ไม่สามารถค้นหาข้อมูลผู้เล่นเป้าหมายได้ในขณะนี้' }
+  }
+
+  if (!targetUid) {
+    return { ok: false, error: `ไม่พบผู้เล่น "${q}" ในระบบ (แนะนำให้ใช้ Game UID 4-8 หลัก)` }
+  }
+
+  const mailId = `gmmail_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
+  const payload: MailMessageRecord = {
+    mailId,
+    senderUid: user.uid,
+    senderName: (input.senderName || 'GM').trim().slice(0, 24) || 'GM',
+    senderGameUid: '0000',
+    subject: input.subject.trim().slice(0, 64) || 'ของขวัญจากทีมงาน GM',
+    body: input.body.trim().slice(0, 240) || 'ทีมงานได้ส่งรางวัลเข้ากล่องจดหมายของคุณแล้ว!',
+    gold: Math.max(0, Math.min(10_000_000, Math.floor(input.gold))),
+    diamonds: Math.max(0, Math.min(100_000, Math.floor(input.diamonds ?? 0))),
+    itemId: input.itemId ?? null,
+    qty: Math.max(0, Math.min(999, Math.floor(input.qty ?? 0))),
+    plus: Math.max(0, Math.min(20, Math.floor(input.plus ?? 0))),
+    claimed: false,
+    createdAtMs: Date.now(),
+  }
+
+  try {
+    await setDoc(doc(db, 'users', targetUid, 'mailbox', mailId), {
+      ...payload,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+    return { ok: true, targetLabel }
+  } catch {
+    return { ok: false, error: `ส่งจดหมายให้ ${targetLabel} ไม่สำเร็จ (ตรวจสอบสิทธิ์หรือบัญชีปลายทาง)` }
+  }
+}
+
 export async function markMailClaimed(mailId: string): Promise<void> {
   const user = auth.currentUser
   const uid = user?.uid ?? 'guest_player'

@@ -1746,6 +1746,191 @@ service cloud.firestore {
         data.updatedAt is timestamp;
     }
 
+    function isValidWorldAnnouncement(data, announcementId) {
+      return data.keys().hasAll([
+          'announcementId',
+          'authorUid',
+          'authorName',
+          'authorGameUid',
+          'body',
+          'createdAtMs',
+          'expiresAtMs',
+          'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'announcementId',
+          'authorUid',
+          'authorName',
+          'authorGameUid',
+          'body',
+          'createdAtMs',
+          'expiresAtMs',
+          'createdAt'
+        ]) &&
+        isValidId(data.announcementId) &&
+        data.announcementId == announcementId &&
+        data.announcementId.size() <= 64 &&
+        isValidId(data.authorUid) &&
+        data.authorName is string &&
+        data.authorName.size() >= 1 &&
+        data.authorName.size() <= 24 &&
+        isValidGameUid(data.authorGameUid) &&
+        data.body is string &&
+        data.body.size() >= 1 &&
+        data.body.size() <= 240 &&
+        data.createdAtMs is int &&
+        data.createdAtMs >= 0 &&
+        data.expiresAtMs is int &&
+        data.expiresAtMs >= data.createdAtMs &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidGmDirective(data, directiveId) {
+      return data.keys().hasAll([
+          'directiveId',
+          'action',
+          'fromUid',
+          'fromName',
+          'fromGameUid',
+          'targetUid',
+          'targetGameUid',
+          'targetName',
+          'mapId',
+          'x',
+          'y',
+          'durationMin',
+          'reason',
+          'createdAtMs',
+          'consumed',
+          'consumedAtMs',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'directiveId',
+          'action',
+          'fromUid',
+          'fromName',
+          'fromGameUid',
+          'targetUid',
+          'targetGameUid',
+          'targetName',
+          'mapId',
+          'x',
+          'y',
+          'durationMin',
+          'reason',
+          'createdAtMs',
+          'consumed',
+          'consumedAtMs',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.directiveId) &&
+        data.directiveId == directiveId &&
+        data.directiveId.size() <= 64 &&
+        data.action in ['summon', 'mute', 'unmute', 'kick'] &&
+        isValidId(data.fromUid) &&
+        data.fromName is string &&
+        data.fromName.size() >= 1 &&
+        data.fromName.size() <= 24 &&
+        isValidGameUid(data.fromGameUid) &&
+        isValidId(data.targetUid) &&
+        data.fromUid != data.targetUid &&
+        isValidGameUid(data.targetGameUid) &&
+        data.targetName is string &&
+        data.targetName.size() >= 1 &&
+        data.targetName.size() <= 24 &&
+        data.mapId is string &&
+        data.mapId.size() >= 1 &&
+        data.mapId.size() <= 32 &&
+        data.mapId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.x is number &&
+        data.x >= 0 &&
+        data.x <= 5000 &&
+        data.y is number &&
+        data.y >= 0 &&
+        data.y <= 5000 &&
+        data.durationMin is int &&
+        data.durationMin >= 0 &&
+        data.durationMin <= 1440 &&
+        data.reason is string &&
+        data.reason.size() <= 120 &&
+        data.createdAtMs is int &&
+        data.createdAtMs >= 0 &&
+        data.consumed is bool &&
+        (data.consumedAtMs == null || (data.consumedAtMs is int && data.consumedAtMs >= 0)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidServerGiftDrop(data, dropId) {
+      return data.keys().hasAll([
+          'dropId',
+          'authorUid',
+          'authorName',
+          'authorGameUid',
+          'subject',
+          'body',
+          'gold',
+          'diamonds',
+          'itemId',
+          'qty',
+          'plus',
+          'createdAtMs',
+          'expiresAtMs',
+          'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'dropId',
+          'authorUid',
+          'authorName',
+          'authorGameUid',
+          'subject',
+          'body',
+          'gold',
+          'diamonds',
+          'itemId',
+          'qty',
+          'plus',
+          'createdAtMs',
+          'expiresAtMs',
+          'createdAt'
+        ]) &&
+        isValidId(data.dropId) &&
+        data.dropId == dropId &&
+        data.dropId.size() <= 64 &&
+        isValidId(data.authorUid) &&
+        data.authorName is string &&
+        data.authorName.size() >= 1 &&
+        data.authorName.size() <= 24 &&
+        isValidGameUid(data.authorGameUid) &&
+        data.subject is string &&
+        data.subject.size() >= 1 &&
+        data.subject.size() <= 64 &&
+        data.body is string &&
+        data.body.size() >= 1 &&
+        data.body.size() <= 240 &&
+        data.gold is int &&
+        data.gold >= 0 &&
+        data.gold <= 10000000 &&
+        data.diamonds is int &&
+        data.diamonds >= 0 &&
+        data.diamonds <= 100000 &&
+        (data.itemId == null || isValidId(data.itemId)) &&
+        data.qty is int &&
+        data.qty >= 0 &&
+        data.qty <= 999 &&
+        data.plus is int &&
+        data.plus >= 0 &&
+        data.plus <= 20 &&
+        data.createdAtMs is int &&
+        data.createdAtMs >= 0 &&
+        data.expiresAtMs is int &&
+        data.expiresAtMs >= data.createdAtMs &&
+        data.createdAt is timestamp;
+    }
+
     match /playerUids/{gameUid} {
       allow get: if isSignedIn() && isEmailVerified() && isValidGameUid(gameUid);
       allow list: if false;
@@ -3088,6 +3273,103 @@ service cloud.firestore {
         isValidPlayerReport(incoming(), reportId) &&
         incoming().reporterUid == request.auth.uid &&
         incoming().targetUid != request.auth.uid &&
+        incoming().createdAt == request.time;
+
+      allow update, delete: if false;
+    }
+
+    match /worldAnnouncements/{announcementId} {
+      allow get: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(announcementId);
+
+      allow list: if isSignedIn() &&
+        isEmailVerified() &&
+        resource.data.createdAtMs >= 0 &&
+        request.query.limit != null &&
+        request.query.limit <= 20;
+
+      allow create: if isGmAccount() &&
+        isValidId(announcementId) &&
+        isValidWorldAnnouncement(incoming(), announcementId) &&
+        incoming().authorUid == request.auth.uid &&
+        incoming().authorGameUid == '0000' &&
+        incoming().createdAt == request.time;
+
+      allow update, delete: if false;
+    }
+
+    match /gmDirectives/{directiveId} {
+      allow get: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(directiveId) &&
+        (
+          resource == null ||
+          isGmAccount() ||
+          existing().targetUid == request.auth.uid
+        );
+
+      allow list: if isSignedIn() &&
+        isEmailVerified() &&
+        (existing().targetUid == request.auth.uid || existing().fromUid == request.auth.uid) &&
+        request.query.limit != null &&
+        request.query.limit <= 20;
+
+      allow create: if isGmAccount() &&
+        isValidId(directiveId) &&
+        isValidGmDirective(incoming(), directiveId) &&
+        incoming().fromUid == request.auth.uid &&
+        incoming().fromGameUid == '0000' &&
+        incoming().consumed == false &&
+        incoming().consumedAtMs == null &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(directiveId) &&
+        isValidGmDirective(incoming(), directiveId) &&
+        existing().targetUid == request.auth.uid &&
+        existing().consumed == false &&
+        incoming().consumed == true &&
+        incoming().consumedAtMs is int &&
+        incoming().directiveId == existing().directiveId &&
+        incoming().action == existing().action &&
+        incoming().fromUid == existing().fromUid &&
+        incoming().fromGameUid == existing().fromGameUid &&
+        incoming().fromName == existing().fromName &&
+        incoming().targetUid == existing().targetUid &&
+        incoming().targetGameUid == existing().targetGameUid &&
+        incoming().targetName == existing().targetName &&
+        incoming().mapId == existing().mapId &&
+        incoming().x == existing().x &&
+        incoming().y == existing().y &&
+        incoming().durationMin == existing().durationMin &&
+        incoming().reason == existing().reason &&
+        incoming().createdAtMs == existing().createdAtMs &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['consumed', 'consumedAtMs', 'updatedAt']);
+
+      allow delete: if false;
+    }
+
+    match /serverGiftDrops/{dropId} {
+      allow get: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(dropId);
+
+      allow list: if isSignedIn() &&
+        isEmailVerified() &&
+        resource.data.createdAtMs >= 0 &&
+        request.query.limit != null &&
+        request.query.limit <= 20;
+
+      allow create: if isGmAccount() &&
+        isValidId(dropId) &&
+        isValidServerGiftDrop(incoming(), dropId) &&
+        incoming().authorUid == request.auth.uid &&
+        incoming().authorGameUid == '0000' &&
         incoming().createdAt == request.time;
 
       allow update, delete: if false;

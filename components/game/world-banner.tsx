@@ -1,6 +1,6 @@
 'use client'
 
-import { Flame, Moon, Skull, Sun, Users, Utensils } from 'lucide-react'
+import { Flame, Megaphone, Moon, Skull, Sparkles, Sun, Users, Utensils } from 'lucide-react'
 import { currentMap, game, notify, openPanel } from '@/lib/game/engine'
 import { getActiveFoodBuffBonuses, getWorldTimePhase, sanitizeExtV2 } from '@/lib/game/extended-systems'
 import { getFieldBossForMap } from '@/lib/game/mmo-systems'
@@ -28,9 +28,30 @@ export function WorldBanner() {
   return (
     <>
       {announcement && (
-        <aside className="pointer-events-none fixed left-1/2 top-12 z-30 w-[min(90vw,30rem)] -translate-x-1/2 border border-yellow-300/50 bg-black/85 px-3 py-1.5 text-center shadow-xl">
-          <div className="text-[9px] font-bold tracking-[0.18em] text-yellow-300">ประกาศจาก GM</div>
-          <div className="mt-0.5 truncate text-xs font-semibold text-white">{announcement.body}</div>
+        <aside
+          className={`pointer-events-none fixed left-1/2 top-12 z-30 w-[min(92vw,32rem)] -translate-x-1/2 border-2 bg-black/90 px-3.5 py-2 text-center shadow-2xl ${
+            announcement.variant === 'news'
+              ? 'border-cyan-300/80'
+              : 'border-yellow-300/75'
+          }`}
+        >
+          <div
+            className={`flex items-center justify-center gap-1.5 text-[10px] font-bold tracking-[0.14em] ${
+              announcement.variant === 'news' ? 'text-cyan-300' : 'text-yellow-300'
+            }`}
+          >
+            {announcement.variant === 'news' ? (
+              <Sparkles className="size-3.5 shrink-0 text-cyan-300" aria-hidden />
+            ) : (
+              <Megaphone className="size-3.5 shrink-0 text-yellow-300" aria-hidden />
+            )}
+            <span>
+              {announcement.variant === 'news'
+                ? `ข่าวเซิร์ฟเวอร์${announcement.authorName ? ` · ${announcement.authorName}` : ''}`
+                : `ประกาศจาก GM${announcement.authorName ? ` · ${announcement.authorName}` : ''}`}
+            </span>
+          </div>
+          <div className="mt-0.5 break-words text-xs font-semibold text-white">{announcement.body}</div>
         </aside>
       )}
       <div

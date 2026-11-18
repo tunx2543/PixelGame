@@ -981,7 +981,9 @@ export function PremiumShopPanel() {
                     )}
                   >
                     ตรวจสลิป:{' '}
-                    {gatewayConfig?.slipVerifyEnabled ? 'อัตโนมัติ (SlipOK)' : 'ส่งสลิปให้ GM อนุมัติ'}
+                    {gatewayConfig?.slipVerifyEnabled
+                      ? `อัตโนมัติ (${gatewayConfig.slipProvider === 'easyslip' ? 'EasySlip' : 'SlipOK'})`
+                      : 'ส่งสลิปให้ GM อนุมัติ'}
                   </span>
                   <span
                     className={cn(
@@ -2463,7 +2465,7 @@ export function PremiumShopPanel() {
                           (shopSettings?.promptPayId ? maskPromptPayId(shopSettings.promptPayId) : 'QR ร้านค้า')}
                         {' · '}
                         {activeIntent.provider === 'promptpay_slip'
-                          ? 'ตรวจสลิปอัตโนมัติทันที (SlipOK)'
+                          ? `ตรวจสลิปอัตโนมัติทันที (${gatewayConfig?.slipProvider === 'easyslip' ? 'EasySlip' : 'SlipOK'})`
                           : 'ส่งสลิปให้ GM ตรวจสอบเพื่ออนุมัติรับเพชร'}
                       </p>
                     </div>

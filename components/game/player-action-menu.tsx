@@ -1,10 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { X } from 'lucide-react'
+import { ArrowDownToLine, Flag, Navigation, UserX, VolumeX, X } from 'lucide-react'
 import { auth as firebaseAuth } from '@/lib/firebase/client'
 import { invitePlayerToPartyAutoCreate } from '@/lib/firebase/parties'
-import { createDuelChallenge } from '@/lib/firebase/mmo-online'
+import { createDuelChallenge, submitPlayerReport } from '@/lib/firebase/mmo-online'
 import { formatPresenceStatusLabel } from '@/lib/firebase/presence-helpers'
 import { MAPS, TILE } from '@/lib/game/maps'
 import { createDuelFighter } from '@/lib/game/mmo-systems'
@@ -14,14 +14,25 @@ import {
   blockPlayerAction,
   game,
   getStats,
+  gmKickPlayer,
+  gmMutePlayer,
+  gmSummonPlayer,
+  gmWarpToPlayer,
+  isCurrentAccountGm,
   isPlayerBlocked,
   notify,
   openPanel,
   unblockPlayerAction,
 } from '@/lib/game/engine'
 
+const REPORT_REASONS = ['ใช้คำหยาบคาย / ก่อกวนแชท', 'สงสัยใช้โปรแกรมช่วยเล่น / บอท', 'หลอกลวง / แอบอ้างทีมงาน', 'พฤติกรรมไม่เหมาะสมอื่นๆ']
+
 export function PlayerActionMenu() {
   const [copied, setCopied] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
+  const [reportReason, setReportReason] = useState(REPORT_REASONS[0])
+  const [reportDetails, setReportDetails] = useState('')
+  const [reporting, setReporting] = useState(false)
   if (!game.socialTargetId) return null
 
   const target = game.remotePlayers.find((player) => player.userId === game.socialTargetId)
@@ -31,11 +42,36 @@ export function PlayerActionMenu() {
     ? game.onlinePlayers.find((player) => player.userId === game.socialTargetId && !player.invisible)
     : null
   if (!target && !fallback) return null
+  const isGm = Boolean(game.p?.gm && isCurrentAccountGm())
 
   const closeMenu = () => {
+    setReportOpen(false)
+    setReportDetails('')
     game.socialTargetId = null
     game.socialTargetMeta = null
     notify()
+  }
+
+  const handleSendReport = async (targetUid: string, targetGameUid: string, targetName: string) => {
+    if (reporting) return
+    setReporting(true)
+    try {
+      const res = await submitPlayerReport({
+        targetUid,
+        targetGameUid,
+        targetName,
+        reason: reportReason,
+        details: reportDetails,
+      })
+      game.chat.push({ id: Date.now(), type: res.ok ? 'system' : 'error', text: res.message })
+      if (res.ok) {
+        closeMenu()
+      } else {
+        notify()
+      }
+    } finally {
+      setReporting(false)
+    }
   }
 
   const run = (task: Promise<{ message: string }>) => {
@@ -181,6 +217,42 @@ export function PlayerActionMenu() {
           >
             ท้า PvP
           </button>
+          {isGm && (
+            <>
+              <button
+                type="button"
+                className="pixel-button secondary inline-flex items-center justify-center gap-1 px-2 py-1.5 text-[10px] text-amber-300"
+                onClick={() => void gmWarpToPlayer(liveRemoteAnywhere ?? fallback.userId).finally(closeMenu)}
+              >
+                <Navigation className="size-3" aria-hidden />
+                วาร์ปไปหา
+              </button>
+              <button
+                type="button"
+                className="pixel-button secondary inline-flex items-center justify-center gap-1 px-2 py-1.5 text-[10px] text-yellow-200"
+                onClick={() => void gmSummonPlayer(liveRemoteAnywhere ?? fallback.userId).finally(closeMenu)}
+              >
+                <ArrowDownToLine className="size-3" aria-hidden />
+                ดึงมาหา
+              </button>
+              <button
+                type="button"
+                className="pixel-button secondary inline-flex items-center justify-center gap-1 px-2 py-1.5 text-[10px] text-rose-300"
+                onClick={() => void gmMutePlayer(fallback.gameUid ?? fallback.userId, 15, 'GM ใบ้แชท 15 นาที').finally(closeMenu)}
+              >
+                <VolumeX className="size-3" aria-hidden />
+                ใบ้ 15น.
+              </button>
+              <button
+                type="button"
+                className="pixel-button secondary inline-flex items-center justify-center gap-1 px-2 py-1.5 text-[10px] text-destructive"
+                onClick={() => void gmKickPlayer(fallback.gameUid ?? fallback.userId, 'GM ตัดการเชื่อมต่อ').finally(closeMenu)}
+              >
+                <UserX className="size-3" aria-hidden />
+                เตะออก
+              </button>
+            </>
+          )}
           {fallback.gameUid && (
             <button
               type="button"
@@ -203,12 +275,50 @@ export function PlayerActionMenu() {
           </button>
           <button
             type="button"
+            className="pixel-button secondary inline-flex items-center justify-center gap-1 px-2 py-1.5 text-[10px] text-rose-300"
+            onClick={() => setReportOpen((v) => !v)}
+          >
+            <Flag className="size-3" aria-hidden />
+            รายงานผู้เล่น
+          </button>
+          <button
+            type="button"
             className="pixel-button secondary px-2 py-1.5 text-[10px]"
             onClick={closeMenu}
           >
             ปิด
           </button>
         </div>
+        {reportOpen && (
+          <div className="mt-2 space-y-1.5 border-t border-border pt-2 text-[10px]">
+            <select
+              value={reportReason}
+              onChange={(e) => setReportReason(e.target.value)}
+              className="w-full border border-border bg-background px-1.5 py-1 text-foreground"
+            >
+              {REPORT_REASONS.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+            <input
+              value={reportDetails}
+              onChange={(e) => setReportDetails(e.target.value)}
+              maxLength={200}
+              placeholder="รายละเอียดเพิ่มเติม (ไม่บังคับ)..."
+              className="w-full border border-border bg-background px-1.5 py-1 text-foreground outline-none focus:border-primary"
+            />
+            <button
+              type="button"
+              disabled={reporting}
+              onClick={() => void handleSendReport(fallback.userId, fallback.gameUid ?? '1000', fallback.displayName)}
+              className="pixel-button danger w-full py-1 text-[10px] disabled:opacity-50"
+            >
+              {reporting ? 'กำลังส่งรายงาน...' : 'ยืนยันส่งรายงานให้ GM'}
+            </button>
+          </div>
+        )}
       </div>
     )
   }
@@ -305,18 +415,92 @@ export function PlayerActionMenu() {
         >
           ท้า Live PvP
         </button>
+        {isGm && (
+          <>
+            <button
+              type="button"
+              className="pixel-button secondary inline-flex items-center justify-center gap-1 px-1 py-2 text-[10px] text-amber-300"
+              onClick={() => void gmWarpToPlayer(target).finally(closeMenu)}
+            >
+              <Navigation className="size-3" aria-hidden />
+              วาร์ปไปหา
+            </button>
+            <button
+              type="button"
+              className="pixel-button secondary inline-flex items-center justify-center gap-1 px-1 py-2 text-[10px] text-yellow-200"
+              onClick={() => void gmSummonPlayer(target).finally(closeMenu)}
+            >
+              <ArrowDownToLine className="size-3" aria-hidden />
+              ดึงมาหา
+            </button>
+            <button
+              type="button"
+              className="pixel-button secondary inline-flex items-center justify-center gap-1 px-1 py-2 text-[10px] text-rose-300"
+              onClick={() => void gmMutePlayer(targetGameUid, 15, 'GM ใบ้แชท 15 นาที').finally(closeMenu)}
+            >
+              <VolumeX className="size-3" aria-hidden />
+              ใบ้ 15น.
+            </button>
+            <button
+              type="button"
+              className="pixel-button secondary inline-flex items-center justify-center gap-1 px-1 py-2 text-[10px] text-destructive"
+              onClick={() => void gmKickPlayer(targetGameUid, 'GM ตัดการเชื่อมต่อ').finally(closeMenu)}
+            >
+              <UserX className="size-3" aria-hidden />
+              เตะออก
+            </button>
+          </>
+        )}
         <button
           type="button"
-          className="pixel-button secondary col-span-2 px-1 py-1.5 text-[10px] text-amber-300"
+          className="pixel-button secondary px-1 py-1.5 text-[10px] text-amber-300"
           onClick={() => {
             const res = blocked ? unblockPlayerAction(target.userId) : blockPlayerAction(target.userId)
             game.chat.push({ id: Date.now(), type: 'system', text: res.message })
             closeMenu()
           }}
         >
-          {blocked ? 'ปลดบล็อกผู้เล่น' : 'บล็อกผู้เล่น / ปิดกั้นข้อความ'}
+          {blocked ? 'ปลดบล็อก' : 'บล็อกผู้เล่น'}
+        </button>
+        <button
+          type="button"
+          className="pixel-button secondary inline-flex items-center justify-center gap-1 px-1 py-1.5 text-[10px] text-rose-300"
+          onClick={() => setReportOpen((v) => !v)}
+        >
+          <Flag className="size-3" aria-hidden />
+          รายงาน
         </button>
       </div>
+      {reportOpen && (
+        <div className="mt-2 space-y-1.5 border-t border-border pt-2 text-[10px]">
+          <select
+            value={reportReason}
+            onChange={(e) => setReportReason(e.target.value)}
+            className="w-full border border-border bg-background px-1.5 py-1 text-foreground"
+          >
+            {REPORT_REASONS.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+          <input
+            value={reportDetails}
+            onChange={(e) => setReportDetails(e.target.value)}
+            maxLength={200}
+            placeholder="รายละเอียดเพิ่มเติม (ไม่บังคับ)..."
+            className="w-full border border-border bg-background px-1.5 py-1 text-foreground outline-none focus:border-primary"
+          />
+          <button
+            type="button"
+            disabled={reporting}
+            onClick={() => void handleSendReport(target.userId, targetGameUid, target.displayName)}
+            className="pixel-button danger w-full py-1 text-[10px] disabled:opacity-50"
+          >
+            {reporting ? 'กำลังส่งรายงาน...' : 'ยืนยันส่งรายงานให้ GM'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

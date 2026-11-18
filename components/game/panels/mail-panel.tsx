@@ -1,9 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { CheckCheck, Coins, Gem, Gift, Mail, Send, Trash2 } from 'lucide-react'
+import { CheckCheck, Coins, Gem, Gift, Mail, Megaphone, Send, Trash2 } from 'lucide-react'
 import { ITEMS } from '@/lib/game/data'
 import { auth } from '@/lib/firebase/client'
+import { fetchActiveServerGiftDrops, type ServerGiftDropRecord } from '@/lib/firebase/gm-events'
 import {
   deleteMailEntry,
   fetchMailbox,
@@ -13,6 +14,7 @@ import {
 } from '@/lib/firebase/rpg-online'
 import {
   claimMailboxRewardAction,
+  claimServerGiftDropAction,
   deductGoldForMailGiftAction,
 } from '@/lib/game/engine'
 import { playQuestClaimSfx } from '@/lib/game/sfx'
@@ -25,6 +27,7 @@ export function MailPanel() {
   const { p } = useGame()
   const [tab, setTab] = useState<'inbox' | 'send'>('inbox')
   const [mails, setMails] = useState<MailMessageRecord[]>([])
+  const [serverDrops, setServerDrops] = useState<ServerGiftDropRecord[]>([])
   const [targetUid, setTargetUid] = useState('')
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
@@ -33,8 +36,12 @@ export function MailPanel() {
   const [busy, setBusy] = useState(false)
 
   const refreshMail = useCallback(async () => {
-    const list = await fetchMailbox(auth.currentUser?.uid)
+    const [list, drops] = await Promise.all([
+      fetchMailbox(auth.currentUser?.uid),
+      fetchActiveServerGiftDrops(),
+    ])
     setMails(list)
+    setServerDrops(drops)
   }, [])
 
   useEffect(() => {
@@ -42,7 +49,11 @@ export function MailPanel() {
   }, [refreshMail])
 
   if (!p) return null
+  const claimedSet = new Set(p.claimedGiftDropIds ?? [])
   const unclaimed = mails.filter((m) => !m.claimed)
+  const unclaimedDrops = serverDrops.filter((d) => !claimedSet.has(d.dropId) && d.expiresAtMs > Date.now())
+  const totalUnclaimed = unclaimed.length + unclaimedDrops.length
+  const totalInboxCount = mails.length + serverDrops.length
 
   const handleClaim = async (m: MailMessageRecord) => {
     if (m.claimed || busy) return
@@ -66,10 +77,24 @@ export function MailPanel() {
     await refreshMail()
   }
 
+  const handleClaimDrop = (drop: ServerGiftDropRecord) => {
+    if (busy || claimedSet.has(drop.dropId)) return
+    setBusy(true)
+    const res = claimServerGiftDropAction(drop)
+    if (res.ok) playQuestClaimSfx(true)
+    setNotice(res.message)
+    setBusy(false)
+  }
+
   const handleClaimAll = async () => {
-    if (unclaimed.length === 0 || busy) return
+    if (totalUnclaimed === 0 || busy) return
     setBusy(true)
     let claimedCount = 0
+    for (const drop of unclaimedDrops) {
+      const res = claimServerGiftDropAction(drop)
+      if (!res.ok) break
+      claimedCount += 1
+    }
     for (const m of unclaimed) {
       const res = claimMailboxRewardAction({
         gold: m.gold,
@@ -83,7 +108,7 @@ export function MailPanel() {
       claimedCount += 1
     }
     if (claimedCount > 0) playQuestClaimSfx(true)
-    setNotice(claimedCount > 0 ? `รับของขวัญจากจดหมาย ${claimedCount} ฉบับแล้ว!` : 'กระเป๋าเต็ม')
+    setNotice(claimedCount > 0 ? `รับของขวัญจากจดหมาย ${claimedCount} รายการแล้ว!` : 'กระเป๋าเต็ม')
     setBusy(false)
     await refreshMail()
   }
@@ -128,13 +153,13 @@ export function MailPanel() {
   return (
     <PanelFrame
       title="กล่องจดหมาย & ส่งของขวัญ"
-      subtitle={`จดหมายที่ยังไม่ได้รับ ${unclaimed.length} ฉบับ · UID ของคุณคือ #${p.gameUid ?? '1000'}`}
+      subtitle={`จดหมายที่ยังไม่ได้รับ ${totalUnclaimed} รายการ · UID ของคุณคือ #${p.gameUid ?? '1000'}`}
     >
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-border/70 pb-2.5">
         <div className="flex gap-2">
           <PxButton variant={tab === 'inbox' ? 'primary' : 'secondary'} onClick={() => setTab('inbox')}>
             <span className="flex items-center gap-1.5">
-              <Mail className="size-3.5" aria-hidden /> กล่องจดหมาย ({mails.length})
+              <Mail className="size-3.5" aria-hidden /> กล่องจดหมาย ({totalInboxCount})
             </span>
           </PxButton>
           <PxButton variant={tab === 'send' ? 'primary' : 'secondary'} onClick={() => setTab('send')}>
@@ -143,10 +168,10 @@ export function MailPanel() {
             </span>
           </PxButton>
         </div>
-        {tab === 'inbox' && unclaimed.length > 0 && (
+        {tab === 'inbox' && totalUnclaimed > 0 && (
           <PxButton variant="accent" disabled={busy} onClick={handleClaimAll}>
             <span className="flex items-center gap-1.5">
-              <CheckCheck className="size-3.5" aria-hidden /> รับทั้งหมด ({unclaimed.length})
+              <CheckCheck className="size-3.5" aria-hidden /> รับทั้งหมด ({totalUnclaimed})
             </span>
           </PxButton>
         )}
@@ -160,7 +185,65 @@ export function MailPanel() {
 
       {tab === 'inbox' && (
         <div className="space-y-2">
-          {mails.length === 0 ? (
+          {serverDrops.map((drop) => {
+            const isClaimed = claimedSet.has(drop.dropId)
+            return (
+              <div
+                key={drop.dropId}
+                className={`flex flex-wrap items-center justify-between gap-3 border p-3 text-xs ${
+                  isClaimed
+                    ? 'border-border/50 bg-background/40 opacity-75'
+                    : 'border-amber-400/70 bg-amber-400/10'
+                }`}
+              >
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Megaphone className={`size-4 shrink-0 ${isClaimed ? 'text-muted-foreground' : 'text-amber-300'}`} aria-hidden />
+                    <span className="border border-amber-400/60 bg-amber-400/20 px-1.5 py-0.5 text-[9px] font-bold text-amber-200">
+                      แจกทั้งเซิร์ฟ
+                    </span>
+                    <p className="truncate font-bold text-foreground">{drop.subject}</p>
+                    <span className="text-[10px] text-muted-foreground">
+                      จาก GM {drop.authorName}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">{drop.body}</p>
+                  <div className="flex flex-wrap items-center gap-3 pt-1 text-[11px] tabular-nums">
+                    {drop.gold > 0 && (
+                      <span className="flex items-center gap-1 text-gold">
+                        <Coins className="size-3" aria-hidden /> +{formatNum(drop.gold)} G
+                      </span>
+                    )}
+                    {drop.diamonds > 0 && (
+                      <span className="flex items-center gap-1 text-cyan-300">
+                        <Gem className="size-3" aria-hidden /> +{formatNum(drop.diamonds)} เพชร
+                      </span>
+                    )}
+                    {drop.itemId && ITEMS[drop.itemId] && (
+                      <span className="flex items-center gap-1 text-emerald-300">
+                        <ItemIcon itemId={drop.itemId} size={18} />
+                        {ITEMS[drop.itemId].name}
+                        {drop.plus > 0 ? ` +${drop.plus}` : ''} x{drop.qty || 1}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {!isClaimed ? (
+                    <PxButton variant="accent" disabled={busy} onClick={() => handleClaimDrop(drop)}>
+                      รับของขวัญ
+                    </PxButton>
+                  ) : (
+                    <span className="border border-border/60 px-2 py-1 text-[10px] text-muted-foreground">
+                      รับแล้ว
+                    </span>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+
+          {mails.length === 0 && serverDrops.length === 0 ? (
             <p className="border border-border/70 bg-background/50 p-4 text-center text-xs text-muted-foreground">
               กล่องจดหมายว่างเปล่า
             </p>
@@ -195,7 +278,8 @@ export function MailPanel() {
                     {m.itemId && ITEMS[m.itemId] && (
                       <span className="flex items-center gap-1 text-emerald-300">
                         <ItemIcon itemId={m.itemId} size={18} />
-                        {ITEMS[m.itemId].name} x{m.qty || 1}
+                        {ITEMS[m.itemId].name}
+                        {m.plus > 0 ? ` +${m.plus}` : ''} x{m.qty || 1}
                       </span>
                     )}
                   </div>

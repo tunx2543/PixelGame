@@ -1293,3 +1293,49 @@ export async function submitPlayerReport(input: {
     return { ok: false, message: 'ส่งรายงานไม่สำเร็จ กรุณาลองใหม่อีกครั้ง' }
   }
 }
+
+export interface PlayerReportRecord {
+  reportId: string
+  reporterUid: string
+  targetUid: string
+  targetGameUid: string
+  targetName: string
+  reason: string
+  details: string
+  createdAtMs: number
+}
+
+export async function listPlayerReports(maxRows = 40): Promise<{
+  ok: boolean
+  reports: PlayerReportRecord[]
+  error?: string
+}> {
+  const user = auth.currentUser
+  if (!isSignedInVerified() || !user || !isGmAccountUser(user)) {
+    return { ok: false, reports: [], error: 'เฉพาะ GM เท่านั้นที่เปิดดูรายงานผู้เล่นได้' }
+  }
+  try {
+    const safeLimit = Math.max(1, Math.min(50, Math.floor(maxRows)))
+    const q = query(
+      collection(db, 'playerReports'),
+      orderBy('createdAtMs', 'desc'),
+      limit(safeLimit),
+    )
+    const snap = await getDocs(q)
+    const reports = snap.docs
+      .map((d) => d.data() as PlayerReportRecord)
+      .filter((r) => r && typeof r.reportId === 'string')
+    return { ok: true, reports }
+  } catch (error) {
+    try {
+      handleFirestoreError(error, OperationType.LIST, 'playerReports')
+    } catch {
+      // Logged structured error cleanly
+    }
+    return {
+      ok: false,
+      reports: [],
+      error: 'ไม่สามารถโหลดรายการรายงานผู้เล่นได้ในขณะนี้',
+    }
+  }
+}
