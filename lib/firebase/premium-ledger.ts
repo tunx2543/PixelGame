@@ -114,8 +114,8 @@ export async function recordTopupOrder(
       vipExpGranted: Math.max(0, Math.floor(order.vipExpGranted)),
       status: 'credited',
       txId: safeTxId,
-      serverVerified: true,
-      serverSignature: String(order.serverSignature || '').slice(0, 64),
+      serverVerified: Boolean(order.serverVerified),
+      serverSignature: order.serverSignature ? String(order.serverSignature).slice(0, 64) : null,
       createdAtMs: Math.max(0, Math.floor(order.createdAtMs || Date.now())),
       createdAt: serverTimestamp(),
     })

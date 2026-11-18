@@ -2186,7 +2186,8 @@
           "enum": [
             "stripe_promptpay",
             "stripe_checkout",
-            "promptpay_slip"
+            "promptpay_slip",
+            "promptpay_manual_gm"
           ]
         },
         "gatewayRef": {
@@ -2235,8 +2236,10 @@
           "type": "boolean"
         },
         "serverSignature": {
-          "type": "string",
-          "minLength": 16,
+          "type": [
+            "string",
+            "null"
+          ],
           "maxLength": 64
         },
         "createdAtMs": {
@@ -2267,6 +2270,227 @@
         "serverSignature",
         "createdAtMs",
         "createdAt"
+      ]
+    },
+    "PromptPayShopSettings": {
+      "title": "PromptPayShopSettings",
+      "description": "Public merchant PromptPay receiving configuration managed by GM.",
+      "type": "object",
+      "properties": {
+        "settingId": {
+          "type": "string",
+          "enum": [
+            "promptpay"
+          ]
+        },
+        "promptPayId": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "accountName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "customQrDataUrl": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 350000
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "updatedByUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAtMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "updatedAtMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "settingId",
+        "promptPayId",
+        "accountName",
+        "customQrDataUrl",
+        "enabled",
+        "updatedByUid",
+        "createdAtMs",
+        "updatedAtMs",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "TopupSlipRequest": {
+      "title": "TopupSlipRequest",
+      "description": "Player-submitted bank transfer slip waiting for GM approval and diamond claim.",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerEmail": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 320
+        },
+        "playerName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "gameUid": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 8,
+          "pattern": "^[0-9]{4,8}$"
+        },
+        "characterId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "packageId": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "packageName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "amountThb": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        },
+        "baseDiamonds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "bonusDiamonds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "totalDiamonds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2000000
+        },
+        "vipExpGranted": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "slipDataUrl": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 350000
+        },
+        "slipNote": {
+          "type": "string",
+          "maxLength": 180
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "approved",
+            "rejected"
+          ]
+        },
+        "claimed": {
+          "type": "boolean"
+        },
+        "claimedAtMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "reviewedByUid": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "reviewNote": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 180
+        },
+        "createdAtMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "requestId",
+        "ownerId",
+        "ownerEmail",
+        "playerName",
+        "gameUid",
+        "characterId",
+        "packageId",
+        "packageName",
+        "amountThb",
+        "baseDiamonds",
+        "bonusDiamonds",
+        "totalDiamonds",
+        "vipExpGranted",
+        "slipDataUrl",
+        "slipNote",
+        "status",
+        "claimed",
+        "claimedAtMs",
+        "reviewedByUid",
+        "reviewNote",
+        "createdAtMs",
+        "createdAt",
+        "updatedAt"
       ]
     }
   },
@@ -2432,6 +2656,18 @@
         "$ref": "#/entities/PlayerReport"
       },
       "description": "Player abuse and exploit reports submitted for GM moderation."
+    },
+    "/shopSettings/{settingId}": {
+      "schema": {
+        "$ref": "#/entities/PromptPayShopSettings"
+      },
+      "description": "Merchant PromptPay QR and account settings editable only by GM."
+    },
+    "/topupSlipRequests/{requestId}": {
+      "schema": {
+        "$ref": "#/entities/TopupSlipRequest"
+      },
+      "description": "Manual PromptPay slip verification requests reviewed by GM and claimed by player."
     }
   }
 }

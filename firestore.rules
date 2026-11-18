@@ -507,7 +507,7 @@ service cloud.firestore {
         data.packageName is string &&
         data.packageName.size() >= 1 &&
         data.packageName.size() <= 120 &&
-        data.provider in ['stripe_promptpay', 'stripe_checkout', 'promptpay_slip'] &&
+        data.provider in ['stripe_promptpay', 'stripe_checkout', 'promptpay_slip', 'promptpay_manual_gm'] &&
         data.gatewayRef is string &&
         data.gatewayRef.size() >= 4 &&
         data.gatewayRef.size() <= 128 &&
@@ -532,13 +532,172 @@ service cloud.firestore {
         data.txId.size() >= 4 &&
         data.txId.size() <= 64 &&
         data.serverVerified is bool &&
-        data.serverVerified == true &&
-        data.serverSignature is string &&
-        data.serverSignature.size() >= 16 &&
-        data.serverSignature.size() <= 64 &&
+        (data.serverSignature == null || (data.serverSignature is string && data.serverSignature.size() <= 64)) &&
         data.createdAtMs is int &&
         data.createdAtMs >= 0 &&
-        data.createdAt is timestamp;
+        data.createdAt is timestamp &&
+        (
+          (
+            data.provider in ['stripe_promptpay', 'stripe_checkout', 'promptpay_slip'] &&
+            data.serverVerified == true &&
+            data.serverSignature is string &&
+            data.serverSignature.size() >= 16
+          ) ||
+          (
+            data.provider == 'promptpay_manual_gm' &&
+            isValidId(data.gatewayRef) &&
+            exists(/databases/$(database)/documents/topupSlipRequests/$(data.gatewayRef)) &&
+            get(/databases/$(database)/documents/topupSlipRequests/$(data.gatewayRef)).data.status == 'approved' &&
+            get(/databases/$(database)/documents/topupSlipRequests/$(data.gatewayRef)).data.ownerId == request.auth.uid &&
+            get(/databases/$(database)/documents/topupSlipRequests/$(data.gatewayRef)).data.packageId == data.packageId &&
+            get(/databases/$(database)/documents/topupSlipRequests/$(data.gatewayRef)).data.totalDiamonds == data.totalDiamonds
+          )
+        );
+    }
+
+    function isValidPromptPayShopSettings(data, settingId) {
+      return data.keys().hasAll([
+          'settingId',
+          'promptPayId',
+          'accountName',
+          'customQrDataUrl',
+          'enabled',
+          'updatedByUid',
+          'createdAtMs',
+          'updatedAtMs',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'settingId',
+          'promptPayId',
+          'accountName',
+          'customQrDataUrl',
+          'enabled',
+          'updatedByUid',
+          'createdAtMs',
+          'updatedAtMs',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.settingId == settingId &&
+        data.settingId == 'promptpay' &&
+        data.promptPayId is string &&
+        data.promptPayId.size() <= 32 &&
+        data.accountName is string &&
+        data.accountName.size() >= 1 &&
+        data.accountName.size() <= 80 &&
+        (data.customQrDataUrl == null || (data.customQrDataUrl is string && data.customQrDataUrl.size() >= 20 && data.customQrDataUrl.size() <= 350000)) &&
+        data.enabled is bool &&
+        isValidId(data.updatedByUid) &&
+        data.createdAtMs is int &&
+        data.createdAtMs >= 0 &&
+        data.updatedAtMs is int &&
+        data.updatedAtMs >= 0 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidTopupSlipRequest(data, requestId) {
+      return data.keys().hasAll([
+          'requestId',
+          'ownerId',
+          'ownerEmail',
+          'playerName',
+          'gameUid',
+          'characterId',
+          'packageId',
+          'packageName',
+          'amountThb',
+          'baseDiamonds',
+          'bonusDiamonds',
+          'totalDiamonds',
+          'vipExpGranted',
+          'slipDataUrl',
+          'slipNote',
+          'status',
+          'claimed',
+          'claimedAtMs',
+          'reviewedByUid',
+          'reviewNote',
+          'createdAtMs',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'requestId',
+          'ownerId',
+          'ownerEmail',
+          'playerName',
+          'gameUid',
+          'characterId',
+          'packageId',
+          'packageName',
+          'amountThb',
+          'baseDiamonds',
+          'bonusDiamonds',
+          'totalDiamonds',
+          'vipExpGranted',
+          'slipDataUrl',
+          'slipNote',
+          'status',
+          'claimed',
+          'claimedAtMs',
+          'reviewedByUid',
+          'reviewNote',
+          'createdAtMs',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.requestId) &&
+        data.requestId == requestId &&
+        data.requestId.size() <= 64 &&
+        isValidId(data.ownerId) &&
+        data.ownerEmail is string &&
+        data.ownerEmail.size() >= 3 &&
+        data.ownerEmail.size() <= 320 &&
+        data.playerName is string &&
+        data.playerName.size() >= 1 &&
+        data.playerName.size() <= 40 &&
+        isValidGameUid(data.gameUid) &&
+        isValidId(data.characterId) &&
+        data.characterId.size() <= 64 &&
+        isValidId(data.packageId) &&
+        data.packageId.size() >= 2 &&
+        data.packageId.size() <= 64 &&
+        data.packageName is string &&
+        data.packageName.size() >= 1 &&
+        data.packageName.size() <= 120 &&
+        data.amountThb is int &&
+        data.amountThb >= 1 &&
+        data.amountThb <= 100000 &&
+        data.baseDiamonds is int &&
+        data.baseDiamonds >= 1 &&
+        data.baseDiamonds <= 1000000 &&
+        data.bonusDiamonds is int &&
+        data.bonusDiamonds >= 0 &&
+        data.bonusDiamonds <= 1000000 &&
+        data.totalDiamonds is int &&
+        data.totalDiamonds >= 1 &&
+        data.totalDiamonds <= 2000000 &&
+        data.totalDiamonds == data.baseDiamonds + data.bonusDiamonds &&
+        data.vipExpGranted is int &&
+        data.vipExpGranted >= 0 &&
+        data.vipExpGranted <= 100000 &&
+        data.slipDataUrl is string &&
+        data.slipDataUrl.size() >= 20 &&
+        data.slipDataUrl.size() <= 350000 &&
+        data.slipNote is string &&
+        data.slipNote.size() <= 180 &&
+        data.status in ['pending', 'approved', 'rejected'] &&
+        data.claimed is bool &&
+        (data.claimedAtMs == null || (data.claimedAtMs is int && data.claimedAtMs >= 0)) &&
+        (data.reviewedByUid == null || isValidId(data.reviewedByUid)) &&
+        (data.reviewNote == null || (data.reviewNote is string && data.reviewNote.size() <= 180)) &&
+        data.createdAtMs is int &&
+        data.createdAtMs >= 0 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
     }
 
     function isValidDailyMissionBoard(data, dateKey) {
@@ -2781,6 +2940,118 @@ service cloud.firestore {
             (existing().challengerUid == request.auth.uid || existing().opponentUid == request.auth.uid) &&
             incoming().status == 'cancelled' &&
             incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    match /shopSettings/{settingId} {
+      allow get: if isSignedIn() &&
+        isEmailVerified() &&
+        settingId == 'promptpay';
+
+      allow list: if false;
+
+      allow create: if isGmAccount() &&
+        settingId == 'promptpay' &&
+        isValidPromptPayShopSettings(incoming(), settingId) &&
+        incoming().updatedByUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isGmAccount() &&
+        settingId == 'promptpay' &&
+        isValidPromptPayShopSettings(incoming(), settingId) &&
+        incoming().updatedByUid == request.auth.uid &&
+        incoming().createdAtMs == existing().createdAtMs &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'promptPayId',
+          'accountName',
+          'customQrDataUrl',
+          'enabled',
+          'updatedByUid',
+          'updatedAtMs',
+          'updatedAt'
+        ]);
+
+      allow delete: if false;
+    }
+
+    match /topupSlipRequests/{requestId} {
+      allow get: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(requestId) &&
+        (
+          isGmAccount() ||
+          (resource != null && existing().ownerId == request.auth.uid)
+        );
+
+      allow list: if isSignedIn() &&
+        isEmailVerified() &&
+        (existing().ownerId == request.auth.uid || isGmAccount()) &&
+        request.query.limit != null &&
+        request.query.limit <= 50;
+
+      allow create: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(requestId) &&
+        isValidTopupSlipRequest(incoming(), requestId) &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().status == 'pending' &&
+        incoming().claimed == false &&
+        incoming().claimedAtMs == null &&
+        incoming().reviewedByUid == null &&
+        incoming().reviewNote == null &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isSignedIn() &&
+        isEmailVerified() &&
+        isValidId(requestId) &&
+        isValidTopupSlipRequest(incoming(), requestId) &&
+        incoming().requestId == existing().requestId &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().ownerEmail == existing().ownerEmail &&
+        incoming().characterId == existing().characterId &&
+        incoming().packageId == existing().packageId &&
+        incoming().amountThb == existing().amountThb &&
+        incoming().baseDiamonds == existing().baseDiamonds &&
+        incoming().bonusDiamonds == existing().bonusDiamonds &&
+        incoming().totalDiamonds == existing().totalDiamonds &&
+        incoming().vipExpGranted == existing().vipExpGranted &&
+        incoming().slipDataUrl == existing().slipDataUrl &&
+        incoming().createdAtMs == existing().createdAtMs &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          (
+            isGmAccount() &&
+            existing().status == 'pending' &&
+            (incoming().status == 'approved' || incoming().status == 'rejected') &&
+            incoming().reviewedByUid == request.auth.uid &&
+            incoming().claimed == false &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'status',
+              'reviewedByUid',
+              'reviewNote',
+              'updatedAt'
+            ])
+          ) ||
+          (
+            existing().ownerId == request.auth.uid &&
+            existing().status == 'approved' &&
+            existing().claimed == false &&
+            incoming().claimed == true &&
+            incoming().status == 'approved' &&
+            incoming().claimedAtMs is int &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'claimed',
+              'claimedAtMs',
+              'updatedAt'
+            ])
           )
         );
 

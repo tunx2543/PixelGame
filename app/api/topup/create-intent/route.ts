@@ -8,7 +8,6 @@ import { makeServerTxId, resolveActorFromRequest } from '@/lib/server/premium-se
 import {
   createStripePromptPayIntent,
   getPromptPayId,
-  getSlipOkConfig,
   getStripeSecretKey,
 } from '@/lib/server/topup-gateway'
 
@@ -46,10 +45,9 @@ export async function POST(req: Request) {
 
     if (provider === 'promptpay_slip') {
       const ppId = getPromptPayId()
-      const slipOk = getSlipOkConfig()
-      if (!ppId || !slipOk) {
+      if (!ppId) {
         return NextResponse.json(
-          { ok: false, message: 'ระบบ PromptPay + ตรวจสลิปยังไม่ได้ตั้งค่าใน Environment ของเซิร์ฟเวอร์' },
+          { ok: false, message: 'ยังไม่ได้ตั้งค่า PROMPTPAY_ID ใน Environment ของเซิร์ฟเวอร์' },
           { status: 503 },
         )
       }

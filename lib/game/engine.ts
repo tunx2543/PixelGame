@@ -168,11 +168,19 @@ import {
   generateUniqueTxId,
   sanitizePremiumState,
 } from './premium/wallet'
-import type {
-  TopupOrderRecord,
-  TopupPackage,
-  TopupProvider,
+import {
+  calculateTopupReward,
+  compressImageFileToDataUrl,
+  getTopupPackage,
+  type TopupOrderRecord,
+  type TopupPackage,
+  type TopupProvider,
+  type TopupSlipRequestRecord,
 } from './premium/topup'
+import {
+  markTopupSlipRequestClaimed,
+  submitManualTopupSlipRequest,
+} from '@/lib/firebase/topup-requests'
 import {
   isGatewayRefRecorded,
   recordDiamondTransaction,
@@ -4687,8 +4695,8 @@ export async function applyVerifiedTopupAction(
     txId: order.txId,
     actorUid: fbUser?.uid ?? 'guest',
     isGm: false,
-    serverVerified: order.serverVerified,
-    serverSignature: order.serverSignature,
+    serverVerified: Boolean(order.serverVerified),
+    serverSignature: order.serverSignature ? order.serverSignature : undefined,
     timestampMs: order.createdAtMs,
   })
   if (!txRes.ok) {
@@ -4715,7 +4723,7 @@ export async function applyVerifiedTopupAction(
     action: 'DIAMOND_EARN',
     txId: order.txId,
     details: `เติมเงินจริง [${order.provider}] ${order.packageName} ฿${order.amountThb} -> +${order.totalDiamonds.toLocaleString()} D (Ref: ${order.gatewayRef})`,
-    verifiedByServer: true,
+    verifiedByServer: Boolean(order.serverVerified),
   })
 
   if (fbUser && fbUser.emailVerified) {
@@ -4881,6 +4889,115 @@ export async function verifySlipTopupAction(
       ok: credited.ok,
       message: credited.message,
       order: json.order,
+    }
+  } finally {
+    inFlightPremiumLocks.delete(lockKey)
+  }
+}
+
+function formatReadableTopupError(err: unknown, fallback: string): string {
+  const raw = err instanceof Error ? err.message : String(err || '')
+  if (raw.includes('permission') || raw.includes('PERMISSION_DENIED') || raw.includes('insufficient permissions')) {
+    return 'สิทธิ์ Firestore ยังไม่อนุญาต (กรุณา Deploy ไฟล์ firestore.rules ล่าสุดขึ้น Firebase Console ก่อนส่งสลิป)'
+  }
+  return raw || fallback
+}
+
+export async function submitManualTopupSlipAction(
+  packageId: string,
+  file: File,
+  slipNote?: string,
+): Promise<{ ok: boolean; message: string; request?: TopupSlipRequestRecord }> {
+  const p = player()
+  const prem = ensurePremiumState(p)
+  const fbUser = firebaseAuth.currentUser
+  if (!fbUser || !fbUser.emailVerified || !fbUser.email) {
+    return { ok: false, message: 'กรุณาเข้าสู่ระบบด้วย Google ก่อนส่งสลิปเติมเงิน' }
+  }
+  const pkg = getTopupPackage(packageId)
+  if (!pkg) {
+    return { ok: false, message: 'ไม่พบแพ็กเกจเติมเงินที่เลือก' }
+  }
+  const lockKey = `manual_slip:${packageId}`
+  if (inFlightPremiumLocks.has(lockKey)) {
+    return { ok: false, message: 'กำลังอัปโหลดสลิปอยู่ กรุณารอสักครู่' }
+  }
+  inFlightPremiumLocks.add(lockKey)
+  try {
+    const isFirst = !(prem.firstTopupPackages ?? []).includes(pkg.packageId)
+    const reward = calculateTopupReward(pkg, isFirst)
+    const slipDataUrl = await compressImageFileToDataUrl(file, 720, 280000)
+    const reqId = generateUniqueTxId('SLIP')
+    const request = await submitManualTopupSlipRequest({
+      requestId: reqId,
+      playerName: p.name,
+      gameUid: p.gameUid,
+      characterId: prem.wallet.characterId || getActiveCharacterSlot(),
+      packageId: pkg.packageId,
+      packageName: pkg.name,
+      amountThb: pkg.priceThb,
+      baseDiamonds: reward.baseDiamonds,
+      bonusDiamonds: reward.bonusDiamonds,
+      vipExpGranted: reward.vipExp,
+      slipDataUrl,
+      slipNote,
+    })
+    say('system', `ส่งสลิปเติมเงิน ${pkg.name} (฿${pkg.priceThb}) แล้ว — รอ GM ตรวจสอบ`)
+    return {
+      ok: true,
+      request,
+      message: `ส่งสลิปสำเร็จ (${reqId})! รอ GM อนุมัติแล้วกดปุ่มรับเพชรได้เลย`,
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      message: formatReadableTopupError(err, 'ส่งสลิปไม่สำเร็จ กรุณาลองใหม่'),
+    }
+  } finally {
+    inFlightPremiumLocks.delete(lockKey)
+  }
+}
+
+export async function claimApprovedManualTopupAction(
+  req: TopupSlipRequestRecord,
+): Promise<{ ok: boolean; message: string; order?: TopupOrderRecord }> {
+  const lockKey = `claim_slip:${req.requestId}`
+  if (inFlightPremiumLocks.has(lockKey)) {
+    return { ok: false, message: 'กำลังรับเพชรอยู่ กรุณารอสักครู่' }
+  }
+  if (req.status !== 'approved') {
+    return { ok: false, message: 'คำขอนี้ยังไม่ได้รับการอนุมัติจาก GM' }
+  }
+  if (req.claimed) {
+    return { ok: false, message: 'รับเพชรจากสลิปนี้ไปแล้ว' }
+  }
+  inFlightPremiumLocks.add(lockKey)
+  try {
+    await markTopupSlipRequestClaimed(req.requestId)
+    const order: TopupOrderRecord = {
+      orderId: generateUniqueTxId('ORD'),
+      characterId: req.characterId || getActiveCharacterSlot(),
+      packageId: req.packageId,
+      packageName: req.packageName,
+      provider: 'promptpay_manual_gm',
+      gatewayRef: req.requestId,
+      amountThb: req.amountThb,
+      baseDiamonds: req.baseDiamonds,
+      bonusDiamonds: req.bonusDiamonds,
+      totalDiamonds: req.totalDiamonds,
+      vipExpGranted: req.vipExpGranted,
+      status: 'credited',
+      txId: generateUniqueTxId('TOPTX'),
+      serverVerified: false,
+      serverSignature: '',
+      createdAtMs: Date.now(),
+    }
+    const res = await applyVerifiedTopupAction(order)
+    return res
+  } catch (err) {
+    return {
+      ok: false,
+      message: formatReadableTopupError(err, 'ไม่สามารถรับเพชรจากคำขอที่อนุมัติได้'),
     }
   } finally {
     inFlightPremiumLocks.delete(lockKey)

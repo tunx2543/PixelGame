@@ -1,6 +1,10 @@
 import QRCode from 'qrcode'
 
-export type TopupProvider = 'stripe_promptpay' | 'stripe_checkout' | 'promptpay_slip'
+export type TopupProvider =
+  | 'stripe_promptpay'
+  | 'stripe_checkout'
+  | 'promptpay_slip'
+  | 'promptpay_manual_gm'
 
 export interface TopupPackage {
   packageId: string
@@ -195,4 +199,86 @@ export async function generatePromptPayQrDataUrl(rawTarget: string, amountThb: n
     errorCorrectionLevel: 'M',
     color: { dark: '#0f172a', light: '#ffffff' },
   })
+}
+
+export interface PromptPayShopSettings {
+  settingId: 'promptpay'
+  promptPayId: string
+  accountName: string
+  customQrDataUrl: string | null
+  enabled: boolean
+  updatedByUid: string
+  createdAtMs: number
+  updatedAtMs: number
+}
+
+export interface TopupSlipRequestRecord {
+  requestId: string
+  ownerId: string
+  ownerEmail: string
+  playerName: string
+  gameUid: string
+  characterId: string
+  packageId: string
+  packageName: string
+  amountThb: number
+  baseDiamonds: number
+  bonusDiamonds: number
+  totalDiamonds: number
+  vipExpGranted: number
+  slipDataUrl: string
+  slipNote: string
+  status: 'pending' | 'approved' | 'rejected'
+  claimed: boolean
+  claimedAtMs: number | null
+  reviewedByUid: string | null
+  reviewNote: string | null
+  createdAtMs: number
+}
+
+/**
+ * Compresses an uploaded QR or transfer slip image into a JPEG Data URL <= ~220KB
+ * so it can be stored safely in Firestore without exceeding document size bounds.
+ */
+export async function compressImageFileToDataUrl(
+  file: File,
+  maxDimension = 720,
+  maxChars = 280000,
+): Promise<string> {
+  if (typeof window === 'undefined') {
+    throw new Error('Image compression requires a browser environment')
+  }
+  const objectUrl = URL.createObjectURL(file)
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image()
+      el.onload = () => resolve(el)
+      el.onerror = () => reject(new Error('ไม่สามารถอ่านไฟล์รูปภาพได้'))
+      el.src = objectUrl
+    })
+    const scale = Math.min(1, maxDimension / Math.max(img.width || 1, img.height || 1))
+    const width = Math.max(1, Math.round((img.width || 1) * scale))
+    const height = Math.max(1, Math.round((img.height || 1) * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('ไม่สามารถประมวลผลรูปภาพได้')
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, width, height)
+    ctx.drawImage(img, 0, 0, width, height)
+
+    let quality = 0.82
+    let dataUrl = canvas.toDataURL('image/jpeg', quality)
+    while (dataUrl.length > maxChars && quality > 0.35) {
+      quality -= 0.12
+      dataUrl = canvas.toDataURL('image/jpeg', quality)
+    }
+    if (dataUrl.length > maxChars) {
+      throw new Error('ไฟล์รูปภาพใหญ่เกินไป กรุณาใช้รูปที่ขนาดเล็กลง')
+    }
+    return dataUrl
+  } finally {
+    URL.revokeObjectURL(objectUrl)
+  }
 }
