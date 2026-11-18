@@ -465,6 +465,112 @@
           "type": "string",
           "format": "date-time",
           "description": "Firestore server timestamp (request.time) for staleness detection."
+        },
+        "rebirthCount": {
+          "type": "integer",
+          "description": "Rebirth ascension aura tier (0..6).",
+          "minimum": 0,
+          "maximum": 6
+        },
+        "vipLevel": {
+          "type": "integer",
+          "description": "Active VIP tier badge level (0..5).",
+          "minimum": 0,
+          "maximum": 5
+        },
+        "activeTitle": {
+          "type": "string",
+          "description": "Equipped title identifier or empty string.",
+          "maxLength": 48,
+          "pattern": "^[a-zA-Z0-9_\\-]*$"
+        },
+        "guildTag": {
+          "type": "string",
+          "description": "Active guild short tag or empty string.",
+          "maxLength": 12
+        },
+        "weaponType": {
+          "type": "string",
+          "description": "Equipped weapon archetype.",
+          "enum": [
+            "stick",
+            "sword",
+            "staff",
+            "bow",
+            "dagger"
+          ]
+        },
+        "weaponColor": {
+          "type": "string",
+          "description": "Weapon or weapon skin primary hex color.",
+          "maxLength": 16,
+          "pattern": "^(#[0-9a-fA-F]{3,8})?$"
+        },
+        "petId": {
+          "type": "string",
+          "description": "Active combat pet or Phao companion identifier.",
+          "maxLength": 48,
+          "pattern": "^[a-zA-Z0-9_\\-]*$"
+        },
+        "mountId": {
+          "type": "string",
+          "description": "Active mount identifier while mounted.",
+          "maxLength": 48,
+          "pattern": "^[a-zA-Z0-9_\\-]*$"
+        },
+        "mountSkinId": {
+          "type": "string",
+          "description": "Equipped mount skin fashion identifier.",
+          "maxLength": 48,
+          "pattern": "^[a-zA-Z0-9_\\-]*$"
+        },
+        "fashionCostume": {
+          "type": "string",
+          "description": "Equipped fashion costume identifier.",
+          "maxLength": 48,
+          "pattern": "^[a-zA-Z0-9_\\-]*$"
+        },
+        "fashionHair": {
+          "type": "string",
+          "description": "Equipped fashion hair identifier.",
+          "maxLength": 48,
+          "pattern": "^[a-zA-Z0-9_\\-]*$"
+        },
+        "fashionAura": {
+          "type": "string",
+          "description": "Equipped fashion aura identifier.",
+          "maxLength": 48,
+          "pattern": "^[a-zA-Z0-9_\\-]*$"
+        },
+        "fashionWings": {
+          "type": "string",
+          "description": "Equipped fashion wings identifier.",
+          "maxLength": 48,
+          "pattern": "^[a-zA-Z0-9_\\-]*$"
+        },
+        "cosmeticWing": {
+          "type": "string",
+          "description": "Equipped wardrobe wing cosmetic identifier.",
+          "maxLength": 48,
+          "pattern": "^[a-zA-Z0-9_\\-]*$"
+        },
+        "weaponSkinId": {
+          "type": "string",
+          "description": "Equipped wardrobe weapon skin identifier.",
+          "maxLength": 48,
+          "pattern": "^[a-zA-Z0-9_\\-]*$"
+        },
+        "gemFashionId": {
+          "type": "string",
+          "description": "Equipped gem shop fashion identifier.",
+          "maxLength": 48,
+          "pattern": "^[a-zA-Z0-9_\\-]*$"
+        },
+        "frameId": {
+          "type": "string",
+          "description": "Equipped overhead name frame identifier.",
+          "maxLength": 48,
+          "pattern": "^[a-zA-Z0-9_\\-]*$"
         }
       },
       "required": [

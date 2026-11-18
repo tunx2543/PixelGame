@@ -136,7 +136,7 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     canvasSize: { ...HUMAN_MODEL_CANVAS_SIZE },
     weapon: 'stick',
     hatColor: '#7f5338',
-    scarfColor: '#784421',
+    scarfColor: '#dc2626',
     backpack: false,
     auraColor: '#60a5fa',
     wingStyle: 'none',

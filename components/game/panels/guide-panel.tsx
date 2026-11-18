@@ -4,7 +4,9 @@ import { useState } from 'react'
 import { CheckCircle2, Compass, Flame, ShieldAlert, Sun } from 'lucide-react'
 import {
   claimBeginnerGuideStepAction,
+  hasVipRemoteAccess,
   isBeginnerGuideStepReady,
+  isNearTownNpcRole,
   openPanel,
   startTownInvasionAction,
 } from '@/lib/game/engine'
@@ -117,8 +119,23 @@ export function GuidePanel() {
                     รับรางวัล
                   </PxButton>
                 ) : step.targetPanel ? (
-                  <PxButton variant="secondary" onClick={() => openPanel(step.targetPanel!)}>
-                    ไปยังเมนู
+                  <PxButton
+                    variant="secondary"
+                    onClick={() => {
+                      if (
+                        step.targetPanel === 'enhance' &&
+                        !hasVipRemoteAccess(p) &&
+                        !isNearTownNpcRole('enhance')
+                      ) {
+                        setNotice('กรุณาเดินไปคุยกับ ช่างเหล็กบุญมา ในเมือง เพื่อตีบวก (หรือเปิด VIP เพื่อตีบวกระยะไกล)')
+                        return
+                      }
+                      openPanel(step.targetPanel!)
+                    }}
+                  >
+                    {step.targetPanel === 'enhance' && !hasVipRemoteAccess(p) && !isNearTownNpcRole('enhance')
+                      ? 'คุยช่างเหล็กในเมือง'
+                      : 'ไปยังเมนู'}
                   </PxButton>
                 ) : (
                   <span className="text-[11px] text-muted-foreground">กำลังดำเนินการ...</span>

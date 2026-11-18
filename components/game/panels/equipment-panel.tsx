@@ -8,6 +8,8 @@ import {
   currentJob,
   equip,
   getStats,
+  hasVipRemoteAccess,
+  isNearTownNpcRole,
   itemLabel,
   itemPower,
   openPanel,
@@ -56,6 +58,9 @@ export function EquipmentPanel() {
   const setBonus = computeEquipmentSetBonuses(p.equipment)
   const rpgExt = sanitizeRpgExt(p.rpgExt)
   const activeTitleDef = rpgExt.activeTitle ? TITLE_DEFS.find((t) => t.id === rpgExt.activeTitle) : null
+  const vipRemoteEnhance = hasVipRemoteAccess(p)
+  const nearBlacksmith = isNearTownNpcRole('enhance')
+  const canOpenEnhance = vipRemoteEnhance || nearBlacksmith
 
   const bagCandidates = p.inventory.filter((it) => {
     const def = ITEMS[it.itemId]
@@ -340,8 +345,21 @@ export function EquipmentPanel() {
                 <Shield className="size-3.5 text-accent" aria-hidden />
                 เคล็ดลับ: เปิดหน้าต่างกระเป๋าคู่กันแล้วลากอาวุธ/เกราะมาวางที่ช่องได้ทันที
               </span>
-              <PxButton variant="secondary" onClick={() => openPanel('enhance')}>
-                ไปตีบวก / อัปเกรด
+              <PxButton
+                variant={canOpenEnhance ? 'secondary' : 'secondary'}
+                disabled={!canOpenEnhance}
+                title={
+                  canOpenEnhance
+                    ? 'เปิดหน้าต่างตีบวกอุปกรณ์'
+                    : 'คุยกับ ช่างเหล็กบุญมา ในเมือง หรือเปิดใช้งาน VIP เพื่อตีบวกระยะไกล'
+                }
+                onClick={() => openPanel('enhance')}
+              >
+                {vipRemoteEnhance && !nearBlacksmith
+                  ? 'ตีบวกระยะไกล (VIP)'
+                  : canOpenEnhance
+                    ? 'ไปตีบวก / อัปเกรด'
+                    : 'ตีบวกระยะไกล (เฉพาะ VIP)'}
               </PxButton>
             </div>
           </div>

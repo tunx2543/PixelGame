@@ -7,6 +7,8 @@ import {
   countItem,
   enhance,
   findEquipment,
+  hasVipRemoteAccess,
+  isNearTownNpcRole,
   itemLabel,
   itemPower,
   reforgeEquipmentAction,
@@ -53,9 +55,17 @@ export function EnhancePanel() {
   const rarity = item && def ? resolveEffectiveRarity(item, def) : 'common'
   const rarityMeta = EQUIPMENT_RARITY_META[rarity]
   const rfCost = item && def ? reforgeCost(def.tier ?? 1, rarity) : null
+  const isRemoteVip = hasVipRemoteAccess(p) && !isNearTownNpcRole('enhance')
 
   return (
-    <PanelFrame title="โรงตีเหล็กบุญมา & รีสุ่มออปชัน" subtitle="ตีบวกเพิ่มพลัง (สูงสุด +15) หรือ Reforge สุ่มระดับและออปชันเสริมใหม่">
+    <PanelFrame
+      title={isRemoteVip ? 'โรงตีเหล็กบุญมา (VIP ระยะไกล)' : 'โรงตีเหล็กบุญมา & รีสุ่มออปชัน'}
+      subtitle={
+        isRemoteVip
+          ? 'สิทธิ์ VIP ระยะไกล — ตีบวกอุปกรณ์ (+15) และ Reforge ออปชันได้จากทุกแผนที่'
+          : 'ตีบวกเพิ่มพลัง (สูงสุด +15) หรือ Reforge สุ่มระดับและออปชันเสริมใหม่'
+      }
+    >
       <div className="grid gap-4 md:grid-cols-[1fr_1.2fr]">
         <div>
           <p className="mb-2 text-xs text-muted-foreground">เลือกอุปกรณ์ ({gear.length})</p>

@@ -23,6 +23,30 @@ import {
   parseWorldPresenceToRemotePlayer,
 } from './presence-helpers'
 
+let extendedPresenceRejectedAt = 0
+
+function extractCorePresencePayload(payload: ReturnType<typeof buildWorldPresencePayload>) {
+  if (!payload) return null
+  return {
+    userId: payload.userId,
+    gameUid: payload.gameUid,
+    uid: payload.uid,
+    displayName: payload.displayName,
+    jobId: payload.jobId,
+    mapId: payload.mapId,
+    x: payload.x,
+    y: payload.y,
+    level: payload.level,
+    gm: payload.gm,
+    facing: payload.facing,
+    moving: payload.moving,
+    status: payload.status,
+    attackAnim: payload.attackAnim,
+    invisible: payload.invisible,
+    heartbeatMs: payload.heartbeatMs,
+  }
+}
+
 export async function upsertWorldPresence(input: BuildPresenceInput): Promise<boolean> {
   const currentUser = auth.currentUser
   if (!currentUser || currentUser.uid !== input.userId || !currentUser.emailVerified) {
@@ -35,13 +59,32 @@ export async function upsertWorldPresence(input: BuildPresenceInput): Promise<bo
   }
 
   const path = `worldPresence/${currentUser.uid}`
+  const docRef = doc(db, 'worldPresence', currentUser.uid)
+  const useCoreOnly = extendedPresenceRejectedAt > 0 && Date.now() - extendedPresenceRejectedAt < 60_000
+
   try {
-    await setDoc(doc(db, 'worldPresence', currentUser.uid), {
-      ...payload,
+    await setDoc(docRef, {
+      ...(useCoreOnly ? extractCorePresencePayload(payload) : payload),
       updatedAt: serverTimestamp(),
     })
     return true
   } catch (error) {
+    const raw = error instanceof Error ? error.message : String(error ?? '')
+    if (
+      !useCoreOnly &&
+      (raw.includes('permission-denied') || raw.includes('Missing or insufficient permissions'))
+    ) {
+      try {
+        await setDoc(docRef, {
+          ...extractCorePresencePayload(payload),
+          updatedAt: serverTimestamp(),
+        })
+        extendedPresenceRejectedAt = Date.now()
+        return true
+      } catch (fallbackError) {
+        handleFirestoreError(fallbackError, OperationType.WRITE, path)
+      }
+    }
     handleFirestoreError(error, OperationType.WRITE, path)
   }
 }

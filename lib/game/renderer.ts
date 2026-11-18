@@ -23,18 +23,32 @@ import {
   petSprite,
   type SpriteAction,
 } from './sprites'
-import { getActivePetBonuses } from './systems'
-import { getActiveMountBonuses } from './mounts'
+import { getActivePetBonuses, getCombatPetDef } from './systems'
+import { getActiveMountBonuses, getMountDef } from './mounts'
 import { TITLE_DEFS } from './rpg-systems'
 import { GATHERING_NODES, getCosmeticDef, getWorldTimePhase, sanitizeExtV2 } from './extended-systems'
 import { drawOverworldSkillEffect, drawRebirthAura } from './vfx-canvas'
 import { getNpcSheetFrame, preloadAllSpriteSheets } from './sprite-sheets'
 import { getFashionItemDef } from './premium/fashion-pet'
-import { getEffectiveVipBonuses } from './premium/vip'
+import { getEffectiveVipBonuses, getVipTierDef } from './premium/vip'
 import { sanitizePremiumState } from './premium/wallet'
 
 const cameraState = createCameraState('town')
 let prevRenderTime = 0
+let lastRenderCam = { mapId: 'town', x: 0, y: 0 }
+
+export function screenToWorld(cssX: number, cssY: number, cssW: number, cssH: number): { x: number; y: number } {
+  const safeW = Math.max(1, cssW)
+  const safeH = Math.max(1, cssH)
+  const zoom = computeCameraZoom(safeW, safeH)
+  const mapId = currentMap().id
+  const camX = lastRenderCam.mapId === mapId ? lastRenderCam.x : cameraState.x
+  const camY = lastRenderCam.mapId === mapId ? lastRenderCam.y : cameraState.y
+  return {
+    x: camX + cssX / zoom,
+    y: camY + cssY / zoom,
+  }
+}
 
 const THEME_BG: Record<string, string> = {
   town: '#2d5a27',
@@ -192,6 +206,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   const cam = stepSmoothCamera(cameraState, p.x, p.y, viewW, viewH, mapW, mapH, map.id, dt, game.facing)
   const camX = cam.x
   const camY = cam.y
+  lastRenderCam = { mapId: map.id, x: camX, y: camY }
 
   ctx.setTransform(1, 0, 0, 1, 0, 0)
   ctx.fillStyle = THEME_BG[map.theme]
@@ -549,14 +564,36 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       : other.moving
         ? Math.floor(t * 10) % remoteWalkMod
         : (Math.sin(t * 1.3 + remoteX) > 0.96 ? -1 : Math.floor(t * 2.4) % 4)
-    const remoteWeapon = remoteJob.weaponTypes[0] ?? 'stick'
-    const styledColors = jobHumanColors(remoteJob.id, remoteJob.colors, false)
+
+    const remoteRebirth = Math.max(0, Math.min(6, Math.floor(other.rebirthCount ?? 0)))
+    const gemFashion = other.gemFashionId ? GEM_SHOP_ITEMS.find((item) => item.id === other.gemFashionId) : undefined
+    const costumeFashion = getFashionItemDef(other.fashionCostume)
+    const hairFashion = getFashionItemDef(other.fashionHair)
+    const auraFashion = getFashionItemDef(other.fashionAura)
+    const wingsFashion = getFashionItemDef(other.fashionWings)
+    const mountSkinFashion = getFashionItemDef(other.mountSkinId)
+    const equippedWing = getCosmeticDef(other.cosmeticWing)
+    const equippedWeaponSkin = getCosmeticDef(other.weaponSkinId)
+    const activeMountDef = other.mountId ? getMountDef(other.mountId) : null
+    const activePetDef = other.petId ? getCombatPetDef(other.petId) : null
+
+    const remoteWeapon = other.weaponType ?? remoteJob.weaponTypes[0] ?? 'stick'
+    const remoteWeaponColor = equippedWeaponSkin?.primaryColor ?? (other.weaponColor || remoteJob.colors.accent)
+    const baseStyledColors = jobHumanColors(remoteJob.id, remoteJob.colors, false)
+    const styledColors = {
+      ...baseStyledColors,
+      ...(costumeFashion?.paletteOverride?.body ? { body: costumeFashion.paletteOverride.body } : {}),
+      ...(costumeFashion?.paletteOverride?.legs ? { legs: costumeFashion.paletteOverride.legs } : {}),
+      ...(costumeFashion?.paletteOverride?.accent ? { accent: costumeFashion.paletteOverride.accent } : {}),
+      ...(costumeFashion?.paletteOverride?.hat ? { hat: costumeFashion.paletteOverride.hat } : {}),
+      ...(hairFashion?.paletteOverride?.hair ? { hair: hairFashion.paletteOverride.hair } : {}),
+    }
     const remoteImg = humanSprite(
       styledColors,
       other.facing,
       remoteFrame,
       remoteWeapon,
-      remoteJob.colors.accent,
+      remoteWeaponColor,
       remoteAttacking,
       remoteAction,
       remoteAtkFrame,
@@ -566,28 +603,218 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     const remoteW = remoteImg.width * remoteScale
     const remoteH = remoteImg.height * remoteScale
     const remoteFootOffset = isRemoteGmEpic ? 10 : 2
+
+    const isMounted = Boolean(activeMountDef)
+    const mountHover =
+      isMounted && activeMountDef?.flying ? Math.round(Math.sin(t * 4.2) * 1.5 - 2) : 0
+    const riderSeatY = isMounted && activeMountDef ? activeMountDef.seatOffsetY + mountHover : 0
+
     ents.push({
       y: remoteY,
       draw: () => {
         const lungeDist = remoteAttacking ? Math.sin(atkProgress * Math.PI) * 3 : 0
         const ox = other.facing === 'left' ? -lungeDist : other.facing === 'right' ? lungeDist : 0
         const oy = other.facing === 'up' ? -lungeDist : other.facing === 'down' ? lungeDist : 0
-        shadow(ctx, remoteX, remoteY, 6.5)
+        shadow(ctx, remoteX, remoteY, isMounted ? 9 : 6.5)
+
+        if (other.moving) {
+          ctx.save()
+          ctx.fillStyle = isMounted && activeMountDef?.auraColor ? activeMountDef.auraColor : 'rgba(255,255,255,0.28)'
+          const dustPhase = (t * 4) % 1
+          ctx.globalAlpha = (1 - dustPhase) * (isMounted ? 0.6 : 0.45)
+          const dx = other.facing === 'left' ? 5 : other.facing === 'right' ? -5 : 3
+          ctx.fillRect(Math.round(remoteX + dx - dustPhase * dx), Math.round(remoteY - 1 - dustPhase * 2), isMounted ? 3 : 2, 1.5)
+          ctx.restore()
+        }
+
+        if (isMounted && (activeMountDef?.auraColor || mountSkinFashion)) {
+          ctx.save()
+          ctx.strokeStyle = mountSkinFashion?.primaryColor ?? activeMountDef?.auraColor ?? '#38bdf8'
+          ctx.lineWidth = mountSkinFashion ? 1.8 : 1.2
+          ctx.globalAlpha = 0.45 + Math.sin(t * 4) * 0.14
+          ctx.beginPath()
+          ctx.ellipse(remoteX, remoteY - 1, mountSkinFashion ? 15 : 13, 5.5, 0, 0, Math.PI * 2)
+          ctx.stroke()
+          ctx.restore()
+        }
+
         if (other.gm) {
           ctx.fillStyle = `rgba(255, 214, 10, ${0.18 + Math.sin(t * 5) * 0.08})`
           ctx.beginPath()
           ctx.ellipse(remoteX, remoteY, 10, 4, 0, 0, Math.PI * 2)
           ctx.fill()
         }
+
+        if (remoteRebirth > 0) {
+          drawRebirthAura(ctx, {
+            x: remoteX,
+            y: remoteY,
+            timeSec: t,
+            rebirthCount: remoteRebirth,
+            radiusX: 12,
+            spriteHeight: remoteH,
+            layer: 'back',
+          })
+        }
+
+        if (isMounted && activeMountDef) {
+          const mAction: SpriteAction = other.moving ? 'walk' : remoteAttacking ? 'attack' : 'idle'
+          const mFrame =
+            mAction === 'walk'
+              ? Math.floor(t * 10) % 6
+              : mAction === 'attack'
+                ? remoteAtkFrame
+                : Math.floor(t * 2.5) % 4
+          const mImg = mountSprite(activeMountDef.id, other.facing, mAction, mFrame, remoteAtkFrame)
+          const mHd = mImg.dataset?.hdScale ? Number(mImg.dataset.hdScale) : 1
+          const mDrawW = (mImg.width * 0.78) / mHd
+          const mDrawH = (mImg.height * 0.78) / mHd
+          ctx.drawImage(
+            mImg,
+            remoteX + ox * 0.4 - mDrawW / 2,
+            remoteY + oy * 0.4 + mountHover - mDrawH + 3,
+            mDrawW,
+            mDrawH,
+          )
+        }
+
+        const activeWingColors = equippedWing
+          ? { primary: equippedWing.primaryColor, secondary: equippedWing.secondaryColor }
+          : wingsFashion && !wingsFashion.linkedGemItemId
+            ? { primary: wingsFashion.primaryColor, secondary: wingsFashion.secondaryColor }
+            : null
+        if (activeWingColors) {
+          ctx.save()
+          ctx.globalAlpha = 0.9
+          const flap = Math.sin(t * 6) * 2.5
+          ctx.fillStyle = activeWingColors.primary
+          ctx.strokeStyle = activeWingColors.secondary
+          ctx.lineWidth = 1
+          ctx.beginPath()
+          ctx.moveTo(remoteX - 2, remoteY + riderSeatY - 15)
+          ctx.lineTo(remoteX - 14, remoteY + riderSeatY - 23 - flap)
+          ctx.lineTo(remoteX - 10, remoteY + riderSeatY - 11 - flap * 0.4)
+          ctx.closePath()
+          ctx.fill()
+          ctx.stroke()
+          ctx.beginPath()
+          ctx.moveTo(remoteX + 2, remoteY + riderSeatY - 15)
+          ctx.lineTo(remoteX + 14, remoteY + riderSeatY - 23 - flap)
+          ctx.lineTo(remoteX + 10, remoteY + riderSeatY - 11 - flap * 0.4)
+          ctx.closePath()
+          ctx.fill()
+          ctx.stroke()
+          ctx.restore()
+        }
+
+        if (gemFashion?.id === 'nebula_dragon_wings' || wingsFashion?.id === 'nebula_dragon_wings') {
+          const wingGem =
+            gemFashion?.id === 'nebula_dragon_wings'
+              ? gemFashion
+              : GEM_SHOP_ITEMS.find((g) => g.id === 'nebula_dragon_wings')
+          if (wingGem) {
+            ctx.save()
+            ctx.globalAlpha = 0.86
+            const wingBob = Math.sin(t * 5) * 0.7
+            drawGemItemPixels(ctx, wingGem, remoteX - 8, remoteY + riderSeatY - remoteH + 5 + wingBob, 2)
+            ctx.restore()
+          }
+        }
+
         ctx.save()
-        ctx.translate(Math.round(remoteX + ox), Math.round(remoteY + oy))
+        ctx.translate(Math.round(remoteX + ox), Math.round(remoteY + oy + riderSeatY))
         ctx.drawImage(remoteImg, Math.round(-remoteW / 2), Math.round(-remoteH + remoteFootOffset), remoteW, remoteH)
         if (remoteAttacking && !isRemoteGmEpic && !remoteImg.dataset?.sheetId) {
-          drawWeaponAttackOverlay(ctx, other.facing, remoteWeapon, atkProgress, remoteJob.colors.accent)
+          drawWeaponAttackOverlay(ctx, other.facing, remoteWeapon, atkProgress, remoteWeaponColor)
         }
         ctx.restore()
+
+        if (remoteRebirth > 0) {
+          drawRebirthAura(ctx, {
+            x: remoteX,
+            y: remoteY + riderSeatY,
+            timeSec: t,
+            rebirthCount: remoteRebirth,
+            radiusX: 12,
+            spriteHeight: remoteH,
+            layer: 'front',
+          })
+        }
+
+        if (gemFashion?.id === 'aurora_cat_hood' || hairFashion?.id === 'aurora_cat_hood') {
+          const catGem =
+            gemFashion?.id === 'aurora_cat_hood'
+              ? gemFashion
+              : GEM_SHOP_ITEMS.find((g) => g.id === 'aurora_cat_hood')
+          if (catGem) {
+            drawGemItemPixels(ctx, catGem, remoteX - 5, remoteY + riderSeatY - remoteH - 1, 1.25)
+          }
+        }
+
+        if (gemFashion?.id === 'sunfire_aura' || (auraFashion && !auraFashion.linkedGemItemId)) {
+          const pCol = auraFashion?.primaryColor ?? gemFashion?.colors.primary ?? '#fbbf24'
+          const aCol = auraFashion?.accentColor ?? gemFashion?.colors.accent ?? '#fde047'
+          ctx.save()
+          ctx.globalAlpha = 0.72
+          ctx.strokeStyle = pCol
+          ctx.shadowColor = aCol
+          ctx.shadowBlur = 7
+          ctx.lineWidth = 1.5
+          ctx.beginPath()
+          ctx.ellipse(remoteX, remoteY - 7, 12 + Math.sin(t * 4) * 1.5, 8, t * 0.3, 0, Math.PI * 2)
+          ctx.stroke()
+          ctx.fillStyle = aCol
+          for (let spark = 0; spark < 4; spark++) {
+            const angle = t * 2 + spark * (Math.PI / 2)
+            ctx.fillRect(
+              Math.round(remoteX + Math.cos(angle) * 13),
+              Math.round(remoteY - 8 + Math.sin(angle) * 9),
+              2,
+              2,
+            )
+          }
+          ctx.restore()
+        }
       },
     })
+
+    if (activePetDef) {
+      const isPhao = activePetDef.category === 'phao' || activePetDef.id.startsWith('phao_')
+      const petOffsetX = other.facing === 'left' ? 14 : other.facing === 'right' ? -14 : -15
+      const petX = remoteX + petOffsetX + Math.sin(t * 2.5 + remoteX * 0.1) * 1.5
+      const petY = remoteY - (isPhao ? 5 : 3) + Math.sin(t * 4 + remoteY * 0.1) * (isPhao ? 2.4 : 1.6)
+      const petAction: SpriteAction = remoteAttacking ? 'attack' : other.moving ? 'walk' : 'idle'
+      const petFrame = remoteAttacking
+        ? remoteAtkFrame
+        : petAction === 'walk'
+          ? Math.floor(t * 9) % 6
+          : Math.floor(t * 2.6) % 4
+      const pImg = petSprite(activePetDef.id, other.facing, petAction, petFrame, remoteAtkFrame)
+      const pHd = pImg.dataset?.hdScale ? Number(pImg.dataset.hdScale) : 1
+      const pScale = (activePetDef.id === 'aurora_cloud_dragon' ? 0.85 : isPhao ? 0.74 : 0.7) / pHd
+      const pDrawW = pImg.width * pScale
+      const pDrawH = pImg.height * pScale
+
+      ents.push({
+        y: remoteY + 1,
+        draw: () => {
+          ctx.save()
+          shadow(ctx, petX, remoteY + 1, isPhao ? 5 : 4)
+          if (isPhao) {
+            ctx.save()
+            ctx.strokeStyle = activePetDef.colors.accent
+            ctx.globalAlpha = 0.45 + Math.sin(t * 5) * 0.15
+            ctx.lineWidth = 1
+            ctx.beginPath()
+            ctx.ellipse(petX, petY + 1, 7, 2.5, 0, 0, Math.PI * 2)
+            ctx.stroke()
+            ctx.restore()
+          }
+          ctx.drawImage(pImg, petX - pDrawW / 2, petY - pDrawH + 2, pDrawW, pDrawH)
+          ctx.restore()
+        },
+      })
+    }
   }
 
   const job = JOBS[normalizeJobId(p.jobId)]
@@ -1130,7 +1357,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     text(n.name, x, y, '#ffffff', 9.5)
     if (game.nearNpc?.id === n.id && !game.panel) {
       const [bx, by] = toS(npcWorldX, npcWorldY + 6)
-      text('กด E เพื่อคุย', bx, by + 8 * dpr, '#7ae582', 9)
+      text('กด E หรือคลิกเพื่อคุย', bx, by + 8 * dpr, '#7ae582', 9)
     }
   }
 
@@ -1166,9 +1393,40 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     const networkBlend = other.receivedAt ? Math.min(1, (Date.now() - other.receivedAt) / 100) : 1
     const remoteX = (other.previousX ?? other.x) + (other.x - (other.previousX ?? other.x)) * networkBlend
     const remoteY = (other.previousY ?? other.y) + (other.y - (other.previousY ?? other.y)) * networkBlend
-    const [x, y] = toS(remoteX, remoteY - 35)
-    if (other.gm) text('[GM]', x, y - 12 * dpr, '#ffd60a', 8)
-    text(`${other.displayName} [${String(other.uid).padStart(5, '0')}] Lv.${other.level}`, x, y, other.gm ? '#ffd60a' : '#8be9fd', 9)
+    const isRemoteMounted = Boolean(other.mountId && getMountDef(other.mountId))
+    const [x, y] = toS(remoteX, remoteY - (isRemoteMounted ? 44 : 38))
+    const remoteJob = JOBS[normalizeJobId(other.jobId)]
+    const activeTitleDef = other.activeTitle ? TITLE_DEFS.find((item) => item.id === other.activeTitle) : null
+    const vipTierDef = (other.vipLevel ?? 0) > 0 ? getVipTierDef(other.vipLevel ?? 0) : null
+    const equippedFrame = getCosmeticDef(other.frameId)
+    const guildTagPrefix = other.guildTag ? `[${other.guildTag}] ` : ''
+    const vipPrefix = vipTierDef ? `[${vipTierDef.badgeLabel}] ` : ''
+    const displayNameLine = `${vipPrefix}${guildTagPrefix}${other.displayName} [${other.gm ? '0000' : String(other.uid).padStart(5, '0')}] Lv.${other.level}`
+
+    if (equippedFrame) {
+      ctx.save()
+      ctx.strokeStyle = equippedFrame.primaryColor
+      ctx.fillStyle = equippedFrame.secondaryColor
+      ctx.globalAlpha = 0.72
+      const fw = Math.max(76, displayNameLine.length * 4.8) * dpr
+      const fh = 12 * dpr
+      ctx.fillRect(Math.round(x - fw / 2), Math.round(y - 5 * dpr - fh / 2), Math.round(fw), Math.round(fh))
+      ctx.lineWidth = 1.2 * dpr
+      ctx.strokeRect(Math.round(x - fw / 2), Math.round(y - 5 * dpr - fh / 2), Math.round(fw), Math.round(fh))
+      ctx.restore()
+    }
+    text(`✦ ${remoteJob.name} ✦`, x, y - 18 * dpr, other.gm ? '#ffd60a' : '#72efdd', 8)
+    text(
+      displayNameLine,
+      x,
+      y - 5 * dpr,
+      other.gm ? '#ffd60a' : equippedFrame?.primaryColor ?? vipTierDef?.badgeColor ?? '#8be9fd',
+      9.2,
+    )
+    if (activeTitleDef) {
+      text(`«${activeTitleDef.name}»`, x, y - 31 * dpr, activeTitleDef.color, 7.8)
+    }
+    if (other.gm) text('[GM]', x, y - (activeTitleDef ? 43 : 31) * dpr, '#ffd60a', 8)
   }
 
   {

@@ -8,6 +8,8 @@ import {
   getInventoryCapacityBreakdown,
   getStorageCapacity,
   getStorageCapacityBreakdown,
+  hasVipRemoteAccess,
+  isNearTownNpcRole,
   moveGold,
   openPanel,
   withdraw,
@@ -32,9 +34,17 @@ export function StoragePanel() {
   const invBreakdown = getInventoryCapacityBreakdown(p)
   const storBreakdown = getStorageCapacityBreakdown(p)
   const moveQty = qtyMode === 'all' ? Infinity : qtyMode
+  const isRemoteVip = hasVipRemoteAccess(p) && !isNearTownNpcRole('storage')
 
   return (
-    <PanelFrame title="คลังเก็บของพี่มณี" subtitle="คลิกไอเทมเพื่อย้ายระหว่างกระเป๋าและคลัง (รองรับขยายช่องถาวร + โบนัส VIP)">
+    <PanelFrame
+      title={isRemoteVip ? 'คลังเก็บของพี่มณี (VIP ระยะไกล)' : 'คลังเก็บของพี่มณี'}
+      subtitle={
+        isRemoteVip
+          ? 'สิทธิ์ VIP ระยะไกล — ฝาก-ถอนไอเทมและเงินเข้าคลังได้จากทุกแผนที่'
+          : 'คลิกไอเทมเพื่อย้ายระหว่างกระเป๋าและคลัง (รองรับขยายช่องถาวร + โบนัส VIP)'
+      }
+    >
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-2 border-border bg-muted/60 px-3 py-2 text-[11px]">
         <div className="space-y-0.5 text-muted-foreground tabular-nums">
           <p>

@@ -63,7 +63,7 @@ export const JOBS: Record<string, JobDef> = {
     from: null,
     reqLevel: 1,
     cost: 0,
-    description: 'นักผจญภัยมือใหม่ผู้เริ่มต้นการเดินทาง สวมเสื้อคลุมฮู้ดสีขาว สายสะพายหนัง และกระเป๋าคาดเอว สามารถเปลี่ยนเป็น 6 อาชีพหลักได้ที่หอปรมาจารย์อาร์ค',
+    description: 'นักผจญภัยมือใหม่ผู้เริ่มต้นการเดินทาง ผมน้ำตาลฟู ผ้าพันคอแดง เสื้อคลุมสีขาวสายสะพายหนัง กระเป๋าคาดเอว และไม้พลอง สามารถเปลี่ยนเป็น 6 อาชีพหลักได้ที่หอปรมาจารย์อาร์ค',
     hpMul: 1.0,
     mpMul: 1.0,
     atkMul: 1.0,
@@ -74,7 +74,7 @@ export const JOBS: Record<string, JobDef> = {
     range: 24,
     ranged: false,
     weaponTypes: ['stick', 'sword', 'dagger'],
-    colors: { hair: '#7f5338', body: '#f6f2ea', legs: '#3b3332', accent: '#8b522e', hat: '#7f5338' },
+    colors: { hair: '#7f5338', body: '#f6f2ea', legs: '#3b3332', accent: '#dc2626', hat: '#7f5338' },
     skills: [
       { id: 'power', name: 'ฟาดพลังมือใหม่', mp: 5, mult: 2.1, cooldown: 1.8, kind: 'single', color: '#38bdf8' },
       { id: 'first-aid', name: 'ปฐมพยาบาล', mp: 10, mult: 0.28, cooldown: 5, kind: 'heal', color: '#f472b6' },

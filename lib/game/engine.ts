@@ -435,6 +435,10 @@ export function ensurePremiumState(p: SaveData): PremiumState {
     unlockedCosmetics: p.extV2?.unlockedCosmetics,
     equippedWing: p.extV2?.equippedWing,
   })
+  if (p.premium && typeof p.premium === 'object') {
+    Object.assign(p.premium, sanitized)
+    return p.premium
+  }
   p.premium = sanitized
   return sanitized
 }
@@ -546,6 +550,23 @@ export interface RemotePlayer {
   attackAnim: number
   invisible: boolean
   lastSeen: number
+  rebirthCount?: number
+  vipLevel?: number
+  activeTitle?: string
+  guildTag?: string
+  weaponType?: 'stick' | 'sword' | 'staff' | 'bow' | 'dagger'
+  weaponColor?: string
+  petId?: string
+  mountId?: string
+  mountSkinId?: string
+  fashionCostume?: string
+  fashionHair?: string
+  fashionAura?: string
+  fashionWings?: string
+  cosmeticWing?: string
+  weaponSkinId?: string
+  gemFashionId?: string
+  frameId?: string
   previousX?: number
   previousY?: number
   receivedAt?: number
@@ -1508,6 +1529,8 @@ export function changeMap(mapId: string, tx: number, ty: number) {
   game.effects = []
   game.floats = []
   game.panel = null
+  game.blockingUi = false
+  windowBridge?.closeAll()
   game.remotePlayers = game.onlinePlayers.filter((other) => !other.invisible && other.mapId === mapId)
   if (mapId !== 'town') game.invasion = null
   populateMap()
@@ -2485,15 +2508,49 @@ function die() {
 
 const ROLE_PANEL: Record<NpcRole, PanelId> = { shop: 'shop', enhance: 'enhance', job: 'job', storage: 'storage', gacha: 'gacha', rebirth: 'rebirth' }
 
+export function hasVipRemoteAccess(target?: SaveData | null): boolean {
+  const activePlayer = target ?? game.p
+  if (!activePlayer) return false
+  return isVipActive(ensurePremiumState(activePlayer).vip)
+}
+
+export function isNearTownNpcRole(role: NpcRole, maxDist = 120): boolean {
+  if (!game.p) return false
+  if (game.nearNpc?.role === role) return true
+  const map = MAPS[game.p.mapId]
+  if (!map) return false
+  for (const npc of map.npcs) {
+    if (npc.role !== role) continue
+    const dist = Math.hypot(npc.x * TILE - game.p.x, npc.y * TILE + 8 - game.p.y)
+    if (dist <= maxDist) return true
+  }
+  return false
+}
+
+export function interactWithNpc(npc: NpcDef, maxDist = 110): boolean {
+  if (!game.p) return false
+  const npcWorldX = npc.x * TILE
+  const npcWorldY = npc.y * TILE + 8
+  const dist = Math.hypot(npcWorldX - game.p.x, npcWorldY - game.p.y)
+  if (dist > maxDist) {
+    addFloat(npcWorldX, npcWorldY - 26, 'เข้าใกล้ NPC อีกนิดเพื่อคุย', '#fde047', 9)
+    say('system', `เดินเข้าใกล้ ${npc.name} อีกนิดเพื่อคุย`)
+    notify()
+    return false
+  }
+  game.keys.clear()
+  game.attackHeld = false
+  faceToward(npcWorldX, npcWorldY)
+  say('npc', npc.greeting, npc.name)
+  openPanel(ROLE_PANEL[npc.role], { fromNpc: true })
+  return true
+}
+
 export function interact() {
   if (!game.p) return false
   const npc = game.nearNpc
   if (npc) {
-    game.keys.clear()
-    game.panel = ROLE_PANEL[npc.role]
-    say('npc', npc.greeting, npc.name)
-    notify()
-    return true
+    return interactWithNpc(npc, 120)
   }
   const node = findNearbyGatheringNode(game.p.mapId, game.p.x, game.p.y)
   if (node) {
@@ -2560,7 +2617,7 @@ export function rebirth() {
   addFloat(p.x, p.y - 42, `REBIRTH ${p.rebirthCount}`, rebirthAura.primaryColor, 15)
   say('system', `จุติครั้งที่ ${p.rebirthCount} (${rebirthAura.title}) สำเร็จ! กลับสู่ผู้ฝึกหัด (Novice) เลเวล 1 และคงค่าสเตตัสเดิมไว้`)
   saveGame()
-  game.panel = null
+  closePanel('rebirth')
   notify()
   return true
 }
@@ -2970,12 +3027,41 @@ export function registerWindowBridge(bridge: WindowBridge | null) {
   windowBridge = bridge
 }
 
-export function openPanel(id: PanelId) {
+const VIP_REMOTE_NPC_PANEL_MESSAGES: Partial<Record<PanelId, string>> = {
+  shop: 'ซื้อขายระยะไกลเป็นสิทธิ์เฉพาะสมาชิก VIP (หรือคุยกับ ลุงสมปอง ในเมือง)',
+  enhance: 'ตีบวกระยะไกลเป็นสิทธิ์เฉพาะสมาชิก VIP (หรือคุยกับ ช่างเหล็กบุญมา ในเมือง)',
+  storage: 'คลังเก็บของระยะไกลเป็นสิทธิ์เฉพาะสมาชิก VIP (หรือคุยกับ พี่มณี ในเมือง)',
+}
+
+const TOWN_ONLY_NPC_PANEL_MESSAGES: Partial<Record<PanelId, string>> = {
+  job: 'กรุณาเดินไปคุยกับ ปรมาจารย์อาร์ค ในเมืองเพื่อเปลี่ยนอาชีพ',
+  gacha: 'กรุณาเดินไปคุยกับ มาดามแคปซูล ในเมืองเพื่อสุ่มกาชา',
+  rebirth: 'กรุณาเดินไปคุยกับ เทวทูตแห่งการจุติ ในเมืองเพื่อจุติ',
+}
+
+export function openPanel(id: PanelId, options?: { fromNpc?: boolean }) {
   if ((id === 'gm-summon' || id === 'dev-tools') && (!game.p?.gm || !isCurrentAccountGm())) {
     say('error', 'สงวนสิทธิ์เฉพาะบัญชี GM/Dev (ffsmilepay53@gmail.com)')
     notify()
     return
   }
+
+  if (!options?.fromNpc) {
+    if (id === 'shop' || id === 'enhance' || id === 'storage') {
+      if (!isNearTownNpcRole(id) && !hasVipRemoteAccess()) {
+        say('error', VIP_REMOTE_NPC_PANEL_MESSAGES[id] ?? 'ต้องเปิดใช้งาน VIP หรือคุยกับ NPC ในเมือง')
+        notify()
+        return
+      }
+    } else if (id === 'job' || id === 'gacha' || id === 'rebirth') {
+      if (!isNearTownNpcRole(id)) {
+        say('error', TOWN_ONLY_NPC_PANEL_MESSAGES[id] ?? 'กรุณาไปคุยกับ NPC ในเมือง')
+        notify()
+        return
+      }
+    }
+  }
+
   game.panel = id
   if (windowBridge) {
     windowBridge.open(id)
@@ -4837,6 +4923,9 @@ export async function purchasePremiumProductAction(
       return { ok: false, message: txRes.message }
     }
 
+    // Re-read sanitized premium state after commitDiamondDelta so mutations never hit stale sub-objects
+    const activePrem = ensurePremiumState(p)
+
     // Deliver product payload atomically
     const now = Date.now()
     const grantQty = (product.qty ?? 1) * safeQty
@@ -4846,9 +4935,9 @@ export async function purchasePremiumProductAction(
       if (!p.ownedGemItems.includes(product.itemId)) p.ownedGemItems.push(product.itemId)
       p.equippedGemFashion = product.itemId
       const fId = product.payload?.fashionId
-      if (fId && !prem.fashion.unlockedIds.includes(fId)) prem.fashion.unlockedIds.push(fId)
+      if (fId && !activePrem.fashion.unlockedIds.includes(fId)) activePrem.fashion.unlockedIds.push(fId)
       const fDef = fId ? getFashionItemDef(fId) : null
-      if (fDef) prem.fashion.equipped[fDef.slot] = fDef.id
+      if (fDef) activePrem.fashion.equipped[fDef.slot] = fDef.id
     } else if (product.rewardKind === 'gem_companion') {
       if (!p.ownedGemItems.includes(product.itemId)) p.ownedGemItems.push(product.itemId)
       p.petState = sanitizePetState(p.petState, p.ownedGemItems, p.equippedGemCompanion)
@@ -4861,10 +4950,10 @@ export async function purchasePremiumProductAction(
       }
     } else if (product.rewardKind === 'fashion' && product.payload?.fashionId) {
       const fId = product.payload.fashionId
-      if (!prem.fashion.unlockedIds.includes(fId)) prem.fashion.unlockedIds.push(fId)
+      if (!activePrem.fashion.unlockedIds.includes(fId)) activePrem.fashion.unlockedIds.push(fId)
       const fDef = getFashionItemDef(fId)
       if (fDef) {
-        prem.fashion.equipped[fDef.slot] = fDef.id
+        activePrem.fashion.equipped[fDef.slot] = fDef.id
         if (fDef.linkedLegacyCosmeticId) {
           const extV2 = sanitizeExtV2(p.extV2)
           if (!extV2.unlockedCosmetics.includes(fDef.linkedLegacyCosmeticId)) {
@@ -4877,35 +4966,50 @@ export async function purchasePremiumProductAction(
     } else if (product.rewardKind === 'vip_pass' || product.rewardKind === 'vip_exp') {
       const days = (product.payload?.vipDays ?? 7) * safeQty
       const expGain = (product.payload?.vipExp ?? 150) * safeQty
-      const baseTime = prem.vip.expiresAtMs && prem.vip.expiresAtMs > now ? prem.vip.expiresAtMs : now
-      prem.vip.expiresAtMs = baseTime + days * 24 * 60 * 60 * 1000
-      prem.vip.vipExp += expGain
+      const baseTime =
+        activePrem.vip.expiresAtMs && activePrem.vip.expiresAtMs > now ? activePrem.vip.expiresAtMs : now
+      activePrem.vip.expiresAtMs = baseTime + days * 24 * 60 * 60 * 1000
+      activePrem.vip.vipExp += expGain
       const floor = product.payload?.vipTierFloor ?? 1
-      prem.vip.vipLevel = Math.max(floor, prem.vip.vipLevel, resolveVipLevelFromExp(prem.vip.vipExp)) as VipTierId
-      const bonus = getEffectiveVipBonuses(prem.vip, now)
+      activePrem.vip.vipLevel = Math.max(
+        floor,
+        activePrem.vip.vipLevel,
+        resolveVipLevelFromExp(activePrem.vip.vipExp),
+      ) as VipTierId
+      const bonus = getEffectiveVipBonuses(activePrem.vip, now)
       for (const fId of bonus.exclusiveFashionIds) {
-        if (!prem.fashion.unlockedIds.includes(fId)) prem.fashion.unlockedIds.push(fId)
+        if (!activePrem.fashion.unlockedIds.includes(fId)) activePrem.fashion.unlockedIds.push(fId)
       }
     } else if (product.rewardKind === 'bag_expansion') {
       const addBag = (product.payload?.bagSlots ?? 10) * safeQty
-      prem.storage.extraInventorySlots = Math.min(EXTRA_INVENTORY_SCROLL_CAP, prem.storage.extraInventorySlots + addBag)
+      activePrem.storage.extraInventorySlots = Math.min(
+        EXTRA_INVENTORY_SCROLL_CAP,
+        activePrem.storage.extraInventorySlots + addBag,
+      )
     } else if (product.rewardKind === 'storage_expansion') {
       const addStor = (product.payload?.storageSlots ?? 15) * safeQty
-      prem.storage.extraStorageSlots = Math.min(EXTRA_STORAGE_SCROLL_CAP, prem.storage.extraStorageSlots + addStor)
+      activePrem.storage.extraStorageSlots = Math.min(
+        EXTRA_STORAGE_SCROLL_CAP,
+        activePrem.storage.extraStorageSlots + addStor,
+      )
     } else if (product.rewardKind === 'bundle') {
       const pl = product.payload
       if (pl?.bundleVipDays) {
-        const baseTime = prem.vip.expiresAtMs && prem.vip.expiresAtMs > now ? prem.vip.expiresAtMs : now
-        prem.vip.expiresAtMs = baseTime + pl.bundleVipDays * safeQty * 24 * 60 * 60 * 1000
-        prem.vip.vipLevel = Math.max(pl.vipTierFloor ?? 1, prem.vip.vipLevel) as VipTierId
+        const baseTime =
+          activePrem.vip.expiresAtMs && activePrem.vip.expiresAtMs > now ? activePrem.vip.expiresAtMs : now
+        activePrem.vip.expiresAtMs = baseTime + pl.bundleVipDays * safeQty * 24 * 60 * 60 * 1000
+        activePrem.vip.vipLevel = Math.max(pl.vipTierFloor ?? 1, activePrem.vip.vipLevel) as VipTierId
       }
       if (pl?.storageSlots) {
-        prem.storage.extraStorageSlots = Math.min(EXTRA_STORAGE_SCROLL_CAP, prem.storage.extraStorageSlots + pl.storageSlots * safeQty)
+        activePrem.storage.extraStorageSlots = Math.min(
+          EXTRA_STORAGE_SCROLL_CAP,
+          activePrem.storage.extraStorageSlots + pl.storageSlots * safeQty,
+        )
       }
-      if (pl?.bundleFashionId && !prem.fashion.unlockedIds.includes(pl.bundleFashionId)) {
-        prem.fashion.unlockedIds.push(pl.bundleFashionId)
+      if (pl?.bundleFashionId && !activePrem.fashion.unlockedIds.includes(pl.bundleFashionId)) {
+        activePrem.fashion.unlockedIds.push(pl.bundleFashionId)
         const fDef = getFashionItemDef(pl.bundleFashionId)
-        if (fDef) prem.fashion.equipped[fDef.slot] = fDef.id
+        if (fDef) activePrem.fashion.equipped[fDef.slot] = fDef.id
       }
       if (pl?.bundleItems) {
         for (const bi of pl.bundleItems) {
@@ -4916,9 +5020,12 @@ export async function purchasePremiumProductAction(
 
     // Grant VIP EXP bonus from purchase (except vip_pass/vip_exp which already counted payload.vipExp)
     if (product.vipExpGrant && product.rewardKind !== 'vip_pass' && product.rewardKind !== 'vip_exp') {
-      prem.vip.vipExp += product.vipExpGrant * safeQty
-      if (isVipActive(prem.vip, now)) {
-        prem.vip.vipLevel = Math.max(prem.vip.vipLevel, resolveVipLevelFromExp(prem.vip.vipExp)) as VipTierId
+      activePrem.vip.vipExp += product.vipExpGrant * safeQty
+      if (isVipActive(activePrem.vip, now)) {
+        activePrem.vip.vipLevel = Math.max(
+          activePrem.vip.vipLevel,
+          resolveVipLevelFromExp(activePrem.vip.vipExp),
+        ) as VipTierId
       }
     }
 
@@ -4926,7 +5033,7 @@ export async function purchasePremiumProductAction(
       receiptId: apiRes.data.receiptId,
       txId: txRes.tx.txId,
       requestId: txRes.tx.requestId,
-      characterId: prem.wallet.characterId,
+      characterId: activePrem.wallet.characterId,
       productId: product.productId,
       itemId: product.itemId,
       productName: product.name,
@@ -4938,7 +5045,7 @@ export async function purchasePremiumProductAction(
       status: 'completed',
       serverVerified: true,
     }
-    appendPurchaseReceipt(prem, receipt)
+    appendPurchaseReceipt(activePrem, receipt)
     logPremiumAudit(p, {
       action: 'PREMIUM_PURCHASE',
       txId: txRes.tx.txId,
@@ -5227,24 +5334,31 @@ export async function applyVerifiedTopupAction(
     return { ok: false, duplicate: txRes.duplicate, message: txRes.message }
   }
 
-  if (!prem.firstTopupPackages) prem.firstTopupPackages = []
-  if (!prem.firstTopupPackages.includes(order.packageId)) {
-    prem.firstTopupPackages.push(order.packageId)
+  const activePrem = ensurePremiumState(p)
+  if (!activePrem.firstTopupPackages) activePrem.firstTopupPackages = []
+  if (!activePrem.firstTopupPackages.includes(order.packageId)) {
+    activePrem.firstTopupPackages.push(order.packageId)
   }
 
-  prem.totalTopupThb = Math.max(0, Math.floor((prem.totalTopupThb ?? 0) + Math.max(0, order.amountThb || 0)))
-  prem.lastDailyTopupDate = todayIsoDate()
+  activePrem.totalTopupThb = Math.max(
+    0,
+    Math.floor((activePrem.totalTopupThb ?? 0) + Math.max(0, order.amountThb || 0)),
+  )
+  activePrem.lastDailyTopupDate = todayIsoDate()
 
   if (order.vipExpGranted > 0) {
-    prem.vip.vipExp += order.vipExpGranted
-    if (isVipActive(prem.vip)) {
-      prem.vip.vipLevel = Math.max(prem.vip.vipLevel, resolveVipLevelFromExp(prem.vip.vipExp)) as VipTierId
+    activePrem.vip.vipExp += order.vipExpGranted
+    if (isVipActive(activePrem.vip)) {
+      activePrem.vip.vipLevel = Math.max(
+        activePrem.vip.vipLevel,
+        resolveVipLevelFromExp(activePrem.vip.vipExp),
+      ) as VipTierId
     }
   }
 
-  if (!prem.topupOrders) prem.topupOrders = []
-  prem.topupOrders.unshift(order)
-  if (prem.topupOrders.length > 40) prem.topupOrders.length = 40
+  if (!activePrem.topupOrders) activePrem.topupOrders = []
+  activePrem.topupOrders.unshift(order)
+  if (activePrem.topupOrders.length > 40) activePrem.topupOrders.length = 40
 
   logPremiumAudit(p, {
     action: 'DIAMOND_EARN',
@@ -5642,9 +5756,13 @@ export async function redeemGiftCodeAction(rawCode: string): Promise<{ ok: boole
       rewardParts.push(`${claimed.diamonds.toLocaleString()} D`)
     }
     if (claimed.vipExp > 0) {
-      prem.vip.vipExp += claimed.vipExp
-      if (isVipActive(prem.vip)) {
-        prem.vip.vipLevel = Math.max(prem.vip.vipLevel, resolveVipLevelFromExp(prem.vip.vipExp)) as VipTierId
+      const activePrem = ensurePremiumState(p)
+      activePrem.vip.vipExp += claimed.vipExp
+      if (isVipActive(activePrem.vip)) {
+        activePrem.vip.vipLevel = Math.max(
+          activePrem.vip.vipLevel,
+          resolveVipLevelFromExp(activePrem.vip.vipExp),
+        ) as VipTierId
       }
       rewardParts.push(`${claimed.vipExp} VIP EXP`)
     }
@@ -6914,10 +7032,12 @@ export function update(dt: number) {
   }
 
   game.nearNpc = null
+  let bestNpcDist = 38
   for (const n of map.npcs) {
-    if (Math.hypot(n.x * TILE - p.x, n.y * TILE + 8 - p.y) < 30) {
+    const dist = Math.hypot(n.x * TILE - p.x, n.y * TILE + 8 - p.y)
+    if (dist < bestNpcDist) {
+      bestNpcDist = dist
       game.nearNpc = n
-      break
     }
   }
   if ((game.nearNpc?.id ?? null) !== prevNearNpcId) {

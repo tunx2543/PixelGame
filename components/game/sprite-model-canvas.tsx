@@ -212,7 +212,8 @@ export function SpriteModelCanvas({
         mode === 'monster' && (effectiveAction === 'walk' || effectiveAction === 'idle') && !reducedMotion
           ? Math.round(elapsed * 24)
           : 0
-      const sig = `${effectiveAction}|${frame}|${hoverY}|${lungeOffset}|${slashBucket}|${auraBucket}|${rebirthCount}|${gmReady ? '1' : '0'}|${mMotionBucket}`
+      const sheetId = spriteImg.dataset?.sheetId ?? ''
+      const sig = `${effectiveAction}|${frame}|${hoverY}|${lungeOffset}|${slashBucket}|${auraBucket}|${rebirthCount}|${gmReady ? '1' : '0'}|${sheetId}|${mMotionBucket}`
 
       if (sig !== lastSig) {
         lastSig = sig

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { ITEMS, SHOP_STOCK } from '@/lib/game/data'
-import { buyItem, itemLabel, sellItem, sellPrice } from '@/lib/game/engine'
+import { buyItem, hasVipRemoteAccess, isNearTownNpcRole, itemLabel, sellItem, sellPrice } from '@/lib/game/engine'
 import { useGame } from '@/lib/game/use-game'
 import { cn } from '@/lib/utils'
 import { formatNum } from '../format'
@@ -16,9 +16,17 @@ export function ShopPanel() {
   const [tab, setTab] = useState<'buy' | 'sell'>('buy')
   if (!g.p) return null
   const p = g.p
+  const isRemoteVip = hasVipRemoteAccess(p) && !isNearTownNpcRole('shop')
 
   return (
-    <PanelFrame title="ร้านค้าลุงสมปอง" subtitle="ซื้อยา อุปกรณ์ และหินตีบวก หรือขายของที่หามาได้">
+    <PanelFrame
+      title={isRemoteVip ? 'ร้านค้าลุงสมปอง (VIP ระยะไกล)' : 'ร้านค้าลุงสมปอง'}
+      subtitle={
+        isRemoteVip
+          ? 'สิทธิ์ VIP ระยะไกล — ซื้อยา อุปกรณ์ หินตีบวก และขายไอเทมได้จากทุกแผนที่'
+          : 'ซื้อยา อุปกรณ์ และหินตีบวก หรือขายของที่หามาได้'
+      }
+    >
       <div className="mb-3 flex gap-1.5" role="tablist">
         {(['buy', 'sell'] as const).map((t) => (
           <button

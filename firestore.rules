@@ -884,7 +884,24 @@ service cloud.firestore {
           'attackAnim',
           'invisible',
           'heartbeatMs',
-          'updatedAt'
+          'updatedAt',
+          'rebirthCount',
+          'vipLevel',
+          'activeTitle',
+          'guildTag',
+          'weaponType',
+          'weaponColor',
+          'petId',
+          'mountId',
+          'mountSkinId',
+          'fashionCostume',
+          'fashionHair',
+          'fashionAura',
+          'fashionWings',
+          'cosmeticWing',
+          'weaponSkinId',
+          'gemFashionId',
+          'frameId'
         ]) &&
         isValidId(data.userId) &&
         data.userId == userId &&
@@ -929,7 +946,24 @@ service cloud.firestore {
         data.invisible == false &&
         data.heartbeatMs is int &&
         data.heartbeatMs >= 0 &&
-        data.updatedAt is timestamp;
+        data.updatedAt is timestamp &&
+        (!('rebirthCount' in data) || (data.rebirthCount is int && data.rebirthCount >= 0 && data.rebirthCount <= 6)) &&
+        (!('vipLevel' in data) || (data.vipLevel is int && data.vipLevel >= 0 && data.vipLevel <= 5)) &&
+        (!('activeTitle' in data) || (data.activeTitle is string && data.activeTitle.size() <= 48 && data.activeTitle.matches('^[a-zA-Z0-9_\\-]*$'))) &&
+        (!('guildTag' in data) || (data.guildTag is string && data.guildTag.size() <= 12)) &&
+        (!('weaponType' in data) || (data.weaponType is string && data.weaponType in ['stick', 'sword', 'staff', 'bow', 'dagger'])) &&
+        (!('weaponColor' in data) || (data.weaponColor is string && data.weaponColor.size() <= 16 && data.weaponColor.matches('^(#[0-9a-fA-F]{3,8})?$'))) &&
+        (!('petId' in data) || (data.petId is string && data.petId.size() <= 48 && data.petId.matches('^[a-zA-Z0-9_\\-]*$'))) &&
+        (!('mountId' in data) || (data.mountId is string && data.mountId.size() <= 48 && data.mountId.matches('^[a-zA-Z0-9_\\-]*$'))) &&
+        (!('mountSkinId' in data) || (data.mountSkinId is string && data.mountSkinId.size() <= 48 && data.mountSkinId.matches('^[a-zA-Z0-9_\\-]*$'))) &&
+        (!('fashionCostume' in data) || (data.fashionCostume is string && data.fashionCostume.size() <= 48 && data.fashionCostume.matches('^[a-zA-Z0-9_\\-]*$'))) &&
+        (!('fashionHair' in data) || (data.fashionHair is string && data.fashionHair.size() <= 48 && data.fashionHair.matches('^[a-zA-Z0-9_\\-]*$'))) &&
+        (!('fashionAura' in data) || (data.fashionAura is string && data.fashionAura.size() <= 48 && data.fashionAura.matches('^[a-zA-Z0-9_\\-]*$'))) &&
+        (!('fashionWings' in data) || (data.fashionWings is string && data.fashionWings.size() <= 48 && data.fashionWings.matches('^[a-zA-Z0-9_\\-]*$'))) &&
+        (!('cosmeticWing' in data) || (data.cosmeticWing is string && data.cosmeticWing.size() <= 48 && data.cosmeticWing.matches('^[a-zA-Z0-9_\\-]*$'))) &&
+        (!('weaponSkinId' in data) || (data.weaponSkinId is string && data.weaponSkinId.size() <= 48 && data.weaponSkinId.matches('^[a-zA-Z0-9_\\-]*$'))) &&
+        (!('gemFashionId' in data) || (data.gemFashionId is string && data.gemFashionId.size() <= 48 && data.gemFashionId.matches('^[a-zA-Z0-9_\\-]*$'))) &&
+        (!('frameId' in data) || (data.frameId is string && data.frameId.size() <= 48 && data.frameId.matches('^[a-zA-Z0-9_\\-]*$')));
     }
 
     function isValidPartyMemberInfo(member, memberUid) {
@@ -2166,7 +2200,24 @@ service cloud.firestore {
           'attackAnim',
           'invisible',
           'heartbeatMs',
-          'updatedAt'
+          'updatedAt',
+          'rebirthCount',
+          'vipLevel',
+          'activeTitle',
+          'guildTag',
+          'weaponType',
+          'weaponColor',
+          'petId',
+          'mountId',
+          'mountSkinId',
+          'fashionCostume',
+          'fashionHair',
+          'fashionAura',
+          'fashionWings',
+          'cosmeticWing',
+          'weaponSkinId',
+          'gemFashionId',
+          'frameId'
         ]);
 
       allow delete: if isSignedIn() &&

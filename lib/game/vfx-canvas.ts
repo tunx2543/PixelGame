@@ -133,40 +133,6 @@ function drawCrystalSpire(
   ctx.restore()
 }
 
-function drawSwirlRibbonHalf(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  rx: number,
-  ry: number,
-  tilt: number,
-  primaryColor: string,
-  coreColor: string,
-  lineW: number,
-  half: 'back' | 'front',
-  alpha: number,
-) {
-  const start = half === 'back' ? Math.PI * 1.04 : -0.04
-  const end = half === 'back' ? Math.PI * 1.96 : Math.PI * 1.04
-
-  ctx.save()
-  ctx.globalAlpha = alpha * (half === 'back' ? 0.58 : 0.9)
-  ctx.strokeStyle = primaryColor
-  ctx.lineWidth = lineW
-  ctx.lineCap = 'round'
-  ctx.beginPath()
-  ctx.ellipse(cx, cy, rx, ry, tilt, start, end)
-  ctx.stroke()
-
-  ctx.globalAlpha = alpha * (half === 'back' ? 0.42 : 0.85)
-  ctx.strokeStyle = coreColor
-  ctx.lineWidth = Math.max(0.8, lineW * 0.42)
-  ctx.beginPath()
-  ctx.ellipse(cx, cy, rx, ry, tilt, start, end)
-  ctx.stroke()
-  ctx.restore()
-}
-
 function drawDetailedWings(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -517,103 +483,55 @@ export function drawRebirthAura(
       for (let i = 0; i < spec.spireCount; i++) {
         const ang = (i * Math.PI * 2) / spec.spireCount + (tier === 5 ? 0.35 : 0.25)
         if (Math.sin(ang) >= 0) continue
-        const sx = opts.x + Math.cos(ang) * cRx * 1.02
-        const sy = groundY + Math.sin(ang) * cRy * 1.02
+        const sx = opts.x + Math.cos(ang) * cRx * 1.04
+        const sy = groundY + Math.sin(ang) * cRy * 1.04
         const spireH = h * (0.28 + (i % 2) * 0.14)
         const spireW = Math.max(3, rx * 0.26)
         const tilt = Math.cos(ang) * 0.16
         if (tier === 5) {
           drawCrystalSpire(ctx, sx, sy, spireW, spireH, '#3b0764', '#9333ea', '#f5d0fe', tilt, 0.85 * aScale)
         } else {
-          drawCrystalSpire(ctx, sx, sy, spireW * 0.85, spireH * 1.15, '#b45309', '#fbbf24', '#ffffff', tilt * 0.4, 0.85 * aScale)
+          drawCrystalSpire(ctx, sx, sy, spireW * 0.85, spireH * 1.12, '#b45309', '#fbbf24', '#ffffff', tilt * 0.4, 0.85 * aScale)
         }
       }
-    }
-
-    // Back halves of swirling diagonal orbital energy ribbons
-    for (let r = 0; r < spec.ribbonCount; r++) {
-      const sign = r % 2 === 0 ? 1 : -1
-      const tilt = sign * (0.26 + r * 0.14) + Math.sin(t * 1.5 + r) * 0.08
-      const rRx = cRx * (0.86 + (r % 2) * 0.18)
-      const rRy = Math.max(3.5, rRx * (0.28 + (r % 3) * 0.06))
-      const rCy = opts.y - h * (0.32 + (r / Math.max(1, spec.ribbonCount)) * 0.42)
-      const lineW = Math.max(1.2, rx * (0.09 + tier * 0.008))
-      drawSwirlRibbonHalf(
-        ctx,
-        opts.x,
-        rCy,
-        rRx,
-        rRy,
-        tilt,
-        r === spec.ribbonCount - 1 && tier === 4 ? '#fde68a' : spec.primaryColor,
-        spec.coreAccentColor,
-        lineW,
-        'back',
-        aScale,
-      )
     }
   }
 
-  // ---------------- FRONT LAYER (halo crown, front ribbons, front spires, floating crystals, star sparkles) ----------------
+  // ---------------- FRONT LAYER (halo crown above head, outer side crystals & perimeter star sparkles) ----------------
   if (layer === 'all' || layer === 'front') {
-    // Crown / Celestial Sun-Cross Halo (Tier 5 & Tier 6)
+    // Crown / Celestial Sun-Cross Halo strictly above the head (Tier 5 & Tier 6)
     if (spec.hasHaloCrown && spec.wingVariant !== 'none') {
-      drawCrownHalo(ctx, opts.x, opts.y - h * 1.02, rx, h, t, spec.wingVariant, aScale)
+      drawCrownHalo(ctx, opts.x, opts.y - h * 1.07, rx, h, t, spec.wingVariant, aScale)
     }
 
-    // Front halves of swirling orbital energy ribbons
-    ctx.shadowColor = spec.glowColor
-    ctx.shadowBlur = Math.max(4, rx * 0.5)
-    for (let r = 0; r < spec.ribbonCount; r++) {
-      const sign = r % 2 === 0 ? 1 : -1
-      const tilt = sign * (0.26 + r * 0.14) + Math.sin(t * 1.5 + r) * 0.08
-      const rRx = cRx * (0.86 + (r % 2) * 0.18)
-      const rRy = Math.max(3.5, rRx * (0.28 + (r % 3) * 0.06))
-      const rCy = opts.y - h * (0.32 + (r / Math.max(1, spec.ribbonCount)) * 0.42)
-      const lineW = Math.max(1.2, rx * (0.09 + tier * 0.008))
-      drawSwirlRibbonHalf(
-        ctx,
-        opts.x,
-        rCy,
-        rRx,
-        rRy,
-        tilt,
-        r === spec.ribbonCount - 1 && tier === 4 ? '#fde68a' : spec.primaryColor,
-        spec.coreAccentColor,
-        lineW,
-        'front',
-        aScale,
-      )
-    }
-
-    // Front crystal spires / light blades on bottom edge of circle (Tier 5 & Tier 6)
+    // Compact flank crystal spires only on outer left/right edges so character torso & face stay clear
     if (spec.spireCount > 0) {
       for (let i = 0; i < spec.spireCount; i++) {
         const ang = (i * Math.PI * 2) / spec.spireCount + (tier === 5 ? 0.35 : 0.25)
-        if (Math.sin(ang) < 0) continue
-        const sx = opts.x + Math.cos(ang) * cRx * 1.02
-        const sy = groundY + Math.sin(ang) * cRy * 1.02
-        const spireH = h * (0.25 + (i % 2) * 0.13)
-        const spireW = Math.max(3, rx * 0.26)
-        const tilt = Math.cos(ang) * 0.16
+        if (Math.sin(ang) < 0 || Math.abs(Math.cos(ang)) < 0.5) continue
+        const sx = opts.x + Math.cos(ang) * cRx * 1.08
+        const sy = groundY + Math.sin(ang) * cRy * 1.04
+        const spireH = h * (0.14 + (i % 2) * 0.06)
+        const spireW = Math.max(2.6, rx * 0.22)
+        const tilt = Math.cos(ang) * 0.18
         if (tier === 5) {
-          drawCrystalSpire(ctx, sx, sy, spireW, spireH, '#3b0764', '#9333ea', '#f5d0fe', tilt, 0.94 * aScale)
+          drawCrystalSpire(ctx, sx, sy, spireW, spireH, '#3b0764', '#9333ea', '#f5d0fe', tilt, 0.86 * aScale)
         } else {
-          drawCrystalSpire(ctx, sx, sy, spireW * 0.85, spireH * 1.1, '#b45309', '#fbbf24', '#ffffff', tilt * 0.4, 0.94 * aScale)
+          drawCrystalSpire(ctx, sx, sy, spireW * 0.85, spireH * 1.05, '#b45309', '#fbbf24', '#ffffff', tilt * 0.4, 0.86 * aScale)
         }
       }
     }
 
-    // Floating faceted crystals (Tier 2: 2, Tier 3: 4, Tier 4: 6, Tier 5: 4, Tier 6: 6)
+    // Floating faceted crystals cleanly outside character silhouette (Tier 2: 2, Tier 3: 4, Tier 4: 6, Tier 5: 4, Tier 6: 6)
     if (spec.orbitShardCount > 0) {
       const cSize = Math.max(2.8, rx * (0.22 + (tier >= 4 ? 0.04 : 0)))
       for (let i = 0; i < spec.orbitShardCount; i++) {
         const side = i % 2 === 0 ? -1 : 1
         const slot = Math.floor(i / 2)
         const totalSlots = Math.ceil(spec.orbitShardCount / 2)
-        const heightFrac = totalSlots === 1 ? 0.56 : 0.34 + (slot / Math.max(1, totalSlots - 1)) * 0.44
-        const arcOffset = totalSlots === 1 ? 1.08 : 1.02 + Math.sin((slot / Math.max(1, totalSlots - 1)) * Math.PI) * 0.2
-        const cx = opts.x + side * cRx * arcOffset + Math.cos(t * 1.9 + i) * rx * 0.06
+        const heightFrac = totalSlots === 1 ? 0.56 : 0.32 + (slot / Math.max(1, totalSlots - 1)) * 0.46
+        const arcOffset = totalSlots === 1 ? 1.18 : 1.12 + Math.sin((slot / Math.max(1, totalSlots - 1)) * Math.PI) * 0.22
+        const cx = opts.x + side * cRx * arcOffset + Math.cos(t * 1.9 + i) * rx * 0.05
         const cy = opts.y - h * heightFrac + Math.sin(t * 2.8 + i * 1.4) * (h * 0.04)
         const outerCol = tier === 6 ? '#fbbf24' : tier === 5 ? '#9333ea' : '#2563eb'
         const innerCol = tier === 6 ? '#ffffff' : tier === 5 ? '#f5d0fe' : '#bae6fd'
@@ -621,13 +539,15 @@ export function drawRebirthAura(
       }
     }
 
-    // Twinkling 4-point star sparkles rising around character
+    // Twinkling 4-point star sparkles framing the outer perimeter without covering face/body
     const sparkCount = 4 + tier * 2
-    const sparkSize = Math.max(1.5, rx * 0.13)
+    const sparkSize = Math.max(1.5, rx * 0.12)
     for (let i = 0; i < sparkCount; i++) {
       const phase = (t * (0.7 + (i % 3) * 0.18) + i / sparkCount) % 1
-      const spreadX = Math.sin(i * 2.17 + t * 0.9) * cRx * 0.92
-      const py = groundY - phase * h * 1.15
+      const side = i % 2 === 0 ? -1 : 1
+      const outerFrac = 0.72 + ((i * 37) % 10) / 22
+      const spreadX = side * cRx * outerFrac + Math.sin(i * 2.17 + t * 0.9) * rx * 0.14
+      const py = groundY - phase * h * 1.12
       const fade = Math.sin(phase * Math.PI)
       const col = i % 3 === 0 ? '#ffffff' : spec.secondaryColor
       drawStarSparkle(ctx, opts.x + spreadX, py, sparkSize * (0.75 + (i % 2) * 0.35), col, fade * 0.88 * aScale)

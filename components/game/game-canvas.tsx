@@ -5,8 +5,10 @@ import {
   action,
   castSkill,
   closePanel,
+  currentMap,
   drinkPotion,
   game,
+  interactWithNpc,
   notify,
   openPanel,
   saveGame,
@@ -18,13 +20,60 @@ import {
   update,
   useQuickSlot,
 } from '@/lib/game/engine'
-import { render } from '@/lib/game/renderer'
+import { TILE } from '@/lib/game/maps'
+import { render, screenToWorld } from '@/lib/game/renderer'
 import { getUiPreferences } from '@/lib/game/ui-layout'
 
 const MOVE_KEYS = new Set(['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd'])
 
 export function GameCanvas() {
   const ref = useRef<HTMLCanvasElement>(null)
+
+  const hitTestWorldTargets = (clientX: number, clientY: number) => {
+    const canvas = ref.current
+    const p = game.p
+    if (!canvas || !p) return null
+    const rect = canvas.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return null
+    const world = screenToWorld(clientX - rect.left, clientY - rect.top, rect.width, rect.height)
+    const map = currentMap()
+
+    let bestNpc: (typeof map.npcs)[number] | null = null
+    let bestNpcScore = Number.POSITIVE_INFINITY
+    for (const n of map.npcs) {
+      const fx = n.x * TILE
+      const fy = n.y * TILE + 8
+      const withinBodyOrLabel =
+        world.x >= fx - 20 &&
+        world.x <= fx + 20 &&
+        world.y >= fy - 56 &&
+        world.y <= fy + 12
+      if (!withinBodyOrLabel) continue
+      const score = Math.hypot(world.x - fx, world.y - (fy - 16))
+      if (score < bestNpcScore) {
+        bestNpcScore = score
+        bestNpc = n
+      }
+    }
+    if (bestNpc) {
+      return { kind: 'npc' as const, npc: bestNpc }
+    }
+
+    const clickedRemote = game.remotePlayers
+      .filter((other) => !other.invisible && other.mapId === p.mapId)
+      .filter((other) => {
+        const rx = other.x
+        const ry = other.y
+        return world.x >= rx - 20 && world.x <= rx + 20 && world.y >= ry - 52 && world.y <= ry + 12
+      })
+      .sort((a, b) => Math.hypot(a.x - world.x, a.y - world.y) - Math.hypot(b.x - world.x, b.y - world.y))[0]
+
+    if (clickedRemote && Math.hypot(clickedRemote.x - p.x, clickedRemote.y - p.y) < 110) {
+      return { kind: 'remote' as const, remote: clickedRemote }
+    }
+
+    return null
+  }
 
   useEffect(() => {
     const canvas = ref.current
@@ -202,9 +251,28 @@ export function GameCanvas() {
   return (
     <canvas
       ref={ref}
-      onClick={() => {
+      onPointerMove={(e) => {
+        const canvas = ref.current
+        if (!canvas) return
+        const hit = hitTestWorldTargets(e.clientX, e.clientY)
+        canvas.style.cursor = hit ? 'pointer' : 'default'
+      }}
+      onPointerLeave={() => {
+        if (ref.current) ref.current.style.cursor = 'default'
+      }}
+      onClick={(e) => {
+        const hit = hitTestWorldTargets(e.clientX, e.clientY)
+        if (hit?.kind === 'npc') {
+          interactWithNpc(hit.npc, 120)
+          return
+        }
+        if (hit?.kind === 'remote') {
+          game.socialTargetId = hit.remote.userId
+          notify()
+          return
+        }
         const target = game.remotePlayers
-          .filter((other) => other.mapId === game.p?.mapId)
+          .filter((other) => !other.invisible && other.mapId === game.p?.mapId)
           .sort((a, b) => Math.hypot(a.x - (game.p?.x ?? 0), a.y - (game.p?.y ?? 0)) - Math.hypot(b.x - (game.p?.x ?? 0), b.y - (game.p?.y ?? 0)))[0]
         if (target && game.p && Math.hypot(target.x - game.p.x, target.y - game.p.y) < 64) {
           game.socialTargetId = target.userId
@@ -212,7 +280,7 @@ export function GameCanvas() {
         }
       }}
       className="absolute inset-0 h-full w-full touch-none"
-      aria-label="หน้าจอเกม ใช้ WASD หรือปุ่มลูกศรเพื่อเดิน คลิกตัวละครใกล้เคียงเพื่อเปิดเมนูโซเชียล"
+      aria-label="หน้าจอเกม ใช้ WASD หรือปุ่มลูกศรเพื่อเดิน คลิก NPC หรือตัวละครใกล้เคียงเพื่อใช้งาน"
     />
   )
 }

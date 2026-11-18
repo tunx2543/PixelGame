@@ -17,6 +17,7 @@ import {
   FlaskConical,
   Gem,
   Gift,
+  Hammer,
   History,
   Lock,
   LogIn,
@@ -60,6 +61,7 @@ import {
   fetchTopupGatewayConfig,
   getInventoryCapacityBreakdown,
   getStorageCapacityBreakdown,
+  isNearTownNpcRole,
   openPanel,
   purchasePremiumProductAction,
   redeemGiftCodeAction,
@@ -676,7 +678,10 @@ export function PremiumShopPanel() {
     setInFlight(true)
     try {
       const res = await claimTopupMilestoneAction(milestoneId)
-      if (res.ok) playQuestClaimSfx(true)
+      if (res.ok) {
+        playQuestClaimSfx(true)
+        setNowMs(Date.now())
+      }
       setNotice({ ok: res.ok, text: res.message })
     } finally {
       setInFlight(false)
@@ -688,7 +693,10 @@ export function PremiumShopPanel() {
     setInFlight(true)
     try {
       const res = await claimDailyTopupBonusAction()
-      if (res.ok) playQuestClaimSfx(true)
+      if (res.ok) {
+        playQuestClaimSfx(true)
+        setNowMs(Date.now())
+      }
       setNotice({ ok: res.ok, text: res.message })
     } finally {
       setInFlight(false)
@@ -704,6 +712,7 @@ export function PremiumShopPanel() {
       if (res.ok) {
         playQuestClaimSfx(true)
         setRedeemCodeInput('')
+        setNowMs(Date.now())
       }
       setNotice({ ok: res.ok, text: res.message })
     } finally {
@@ -719,6 +728,7 @@ export function PremiumShopPanel() {
       if (res.ok) {
         playQuestClaimSfx(true)
         setConfirmProduct(null)
+        setNowMs(Date.now())
       }
       setNotice({ ok: res.ok, text: res.message })
     } finally {
@@ -731,7 +741,10 @@ export function PremiumShopPanel() {
     setInFlight(true)
     try {
       const res = await claimVipTierRewardAction(level)
-      if (res.ok) playQuestClaimSfx(true)
+      if (res.ok) {
+        playQuestClaimSfx(true)
+        setNowMs(Date.now())
+      }
       setNotice({ ok: res.ok, text: res.message })
     } finally {
       setInFlight(false)
@@ -743,7 +756,10 @@ export function PremiumShopPanel() {
     setInFlight(true)
     try {
       const res = await claimVipDailyRewardAction()
-      if (res.ok) playQuestClaimSfx(true)
+      if (res.ok) {
+        playQuestClaimSfx(true)
+        setNowMs(Date.now())
+      }
       setNotice({ ok: res.ok, text: res.message })
     } finally {
       setInFlight(false)
@@ -953,6 +969,55 @@ export function PremiumShopPanel() {
                   </p>
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* VIP Remote Services Quick Access */}
+          <div className="flex flex-wrap items-center justify-between gap-2 border-2 border-amber-400/45 bg-amber-950/20 p-2.5">
+            <div className="min-w-0">
+              <p className="flex items-center gap-1.5 text-xs font-bold text-amber-200">
+                <Crown className="size-3.5 text-amber-300" aria-hidden />
+                บริการ VIP ระยะไกล (ใช้งานได้ทุกแผนที่)
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                {vipActive
+                  ? 'เปิดร้านค้าระยะไกล, ตีบวกอุปกรณ์ และฝาก-ถอนคลังเก็บของได้ทันที'
+                  : 'เปิดใช้งานสมาชิก VIP เพื่อซื้อของ ตีบวก และฝาก-ถอนคลังจากระยะไกล'}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <PxButton
+                variant={vipActive ? 'accent' : 'secondary'}
+                disabled={!vipActive}
+                onClick={() => openPanel('shop')}
+                className="px-2.5 py-1 text-[10px]"
+              >
+                <Store className="mr-1 inline size-3" aria-hidden />
+                ร้านค้าระยะไกล
+              </PxButton>
+              <PxButton
+                variant={vipActive ? 'accent' : 'secondary'}
+                disabled={!vipActive}
+                onClick={() => openPanel('enhance')}
+                className="px-2.5 py-1 text-[10px]"
+              >
+                <Hammer className="mr-1 inline size-3" aria-hidden />
+                ตีบวกระยะไกล
+              </PxButton>
+              <PxButton
+                variant={vipActive ? 'accent' : 'secondary'}
+                disabled={!vipActive}
+                onClick={() => openPanel('storage')}
+                className="px-2.5 py-1 text-[10px]"
+              >
+                <Warehouse className="mr-1 inline size-3" aria-hidden />
+                คลังระยะไกล
+              </PxButton>
+              {!vipActive && (
+                <PxButton variant="primary" onClick={() => setActiveTab('vip')} className="px-2.5 py-1 text-[10px]">
+                  เปิด VIP
+                </PxButton>
+              )}
             </div>
           </div>
 
@@ -1837,6 +1902,94 @@ export function PremiumShopPanel() {
               >
                 ซื้อบัตร VIP 7 วัน (150 D)
               </PxButton>
+              <PxButton
+                variant="secondary"
+                disabled={inFlight}
+                onClick={() => {
+                  const p30 = getPremiumProduct('prod_vip_card_30d')
+                  if (p30) openBuyModal(p30)
+                }}
+              >
+                ซื้อ VIP 30 วัน (480 D)
+              </PxButton>
+            </div>
+          </div>
+
+          {/* VIP Remote Privileges (Shop / Enhance / Storage) */}
+          <div className="space-y-2.5 border-2 border-cyan-400/45 bg-cyan-950/20 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h4 className="flex items-center gap-1.5 text-xs font-bold text-cyan-200">
+                  <Crown className="size-4 text-amber-300" aria-hidden />
+                  สิทธิพิเศษบริการระยะไกลสำหรับสมาชิก VIP
+                </h4>
+                <p className="text-[11px] text-muted-foreground">
+                  {vipActive
+                    ? 'บัญชีของคุณมีสถานะ VIP สามารถใช้งานระบบ NPC เมืองทั้ง 3 ระบบจากระยะไกลได้ทุกแผนที่'
+                    : 'สำหรับผู้ที่ยังไม่มี VIP กรุณาซื้อบัตร VIP หรือเดินไปคุยกับ NPC ในเมือง'}
+                </p>
+              </div>
+              {!vipActive && (
+                <span className="inline-flex items-center gap-1 border border-amber-400/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-200">
+                  <Lock className="size-3" aria-hidden /> ต้องเปิดใช้งาน VIP
+                </span>
+              )}
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-3">
+              <div className="flex flex-col justify-between gap-2 border border-border bg-background/70 p-2.5">
+                <div>
+                  <p className="flex items-center gap-1.5 text-xs font-bold text-amber-200">
+                    <Store className="size-4 text-amber-300" aria-hidden />
+                    ซื้อขายร้านค้าระยะไกล
+                  </p>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">ซื้อยา หินตีบวก และขายของได้ทันทีไม่ต้องกลับเมือง</p>
+                </div>
+                <PxButton
+                  variant={vipActive ? 'accent' : 'secondary'}
+                  disabled={!vipActive}
+                  onClick={() => openPanel('shop')}
+                  className="w-full py-1 text-[11px]"
+                >
+                  {vipActive ? 'เปิดร้านค้าระยะไกล' : 'เฉพาะสมาชิก VIP'}
+                </PxButton>
+              </div>
+
+              <div className="flex flex-col justify-between gap-2 border border-border bg-background/70 p-2.5">
+                <div>
+                  <p className="flex items-center gap-1.5 text-xs font-bold text-cyan-200">
+                    <Hammer className="size-4 text-cyan-300" aria-hidden />
+                    ตีบวกอุปกรณ์ระยะไกล
+                  </p>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">ตีบวก +1 ถึง +15 และรีสุ่มออปชันจากทุกแผนที่</p>
+                </div>
+                <PxButton
+                  variant={vipActive ? 'accent' : 'secondary'}
+                  disabled={!vipActive}
+                  onClick={() => openPanel('enhance')}
+                  className="w-full py-1 text-[11px]"
+                >
+                  {vipActive ? 'เปิดตีบวกระยะไกล' : 'เฉพาะสมาชิก VIP'}
+                </PxButton>
+              </div>
+
+              <div className="flex flex-col justify-between gap-2 border border-border bg-background/70 p-2.5">
+                <div>
+                  <p className="flex items-center gap-1.5 text-xs font-bold text-emerald-200">
+                    <Warehouse className="size-4 text-emerald-300" aria-hidden />
+                    ฝาก-ถอนคลังระยะไกล
+                  </p>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">ฝากไอเทมและเงินเข้าคลังพี่มณีได้ทันทีทุกที่</p>
+                </div>
+                <PxButton
+                  variant={vipActive ? 'accent' : 'secondary'}
+                  disabled={!vipActive}
+                  onClick={() => openPanel('storage')}
+                  className="w-full py-1 text-[11px]"
+                >
+                  {vipActive ? 'เปิดคลังระยะไกล' : 'เฉพาะสมาชิก VIP'}
+                </PxButton>
+              </div>
             </div>
           </div>
 
@@ -2261,10 +2414,23 @@ export function PremiumShopPanel() {
             </div>
           </div>
 
-          <div className="flex justify-end">
-            <PxButton variant="secondary" onClick={() => openPanel('storage')}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[11px] text-muted-foreground">
+              {vipActive
+                ? 'สถานะ VIP: เปิดใช้งานคลังเก็บของระยะไกลได้ทุกแผนที่'
+                : 'คลังเก็บของระยะไกลเป็นสิทธิ์ VIP (หรือคุยกับ พี่มณี ในเมือง)'}
+            </span>
+            <PxButton
+              variant={vipActive || isNearTownNpcRole('storage') ? 'accent' : 'secondary'}
+              disabled={!vipActive && !isNearTownNpcRole('storage')}
+              onClick={() => openPanel('storage')}
+            >
               <Warehouse className="mr-1 inline size-3.5" aria-hidden />
-              เปิดหน้าต่างคลังเก็บของ
+              {vipActive
+                ? 'เปิดคลังเก็บของ (VIP ระยะไกล)'
+                : isNearTownNpcRole('storage')
+                  ? 'เปิดหน้าต่างคลังเก็บของ'
+                  : 'เปิดคลังระยะไกล (เฉพาะ VIP)'}
             </PxButton>
           </div>
 

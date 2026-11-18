@@ -35,6 +35,12 @@ import {
 } from '@/lib/firebase/gm-events'
 import { createClient } from '@/lib/supabase/client'
 import { isGmAccountUser, PERMANENT_GM_GAME_UID, PERMANENT_GM_UID } from '@/lib/game/permissions'
+import { ITEMS, JOBS, normalizeJobId } from '@/lib/game/data'
+import { getCosmeticDef, sanitizeExtV2 } from '@/lib/game/extended-systems'
+import { getActiveMountBonuses } from '@/lib/game/mounts'
+import { getEffectiveVipBonuses } from '@/lib/game/premium/vip'
+import { sanitizePremiumState } from '@/lib/game/premium/wallet'
+import { getActivePetBonuses } from '@/lib/game/systems'
 import {
   applyGmKickDirective,
   applyGmMuteDirective,
@@ -49,7 +55,85 @@ import {
   say,
   setGameAccountIdentity,
   subscribe,
+  type SaveData,
 } from '@/lib/game/engine'
+
+function resolveLocalAppearance(player: SaveData) {
+  const job = JOBS[normalizeJobId(player.jobId)]
+  const weaponDef = player.equipment.weapon ? ITEMS[player.equipment.weapon.itemId] : null
+  const extV2 = sanitizeExtV2(player.extV2)
+  const prem = sanitizePremiumState(player.premium, {
+    characterId: 'slot_1',
+    diamonds: player.diamonds ?? 0,
+    ownedGemItems: player.ownedGemItems,
+    equippedGemFashion: player.equippedGemFashion,
+    unlockedCosmetics: extV2.unlockedCosmetics,
+    equippedWing: extV2.equippedWing,
+  })
+  const vipBonus = getEffectiveVipBonuses(prem.vip)
+  const activePet = getActivePetBonuses(player.petState, player.equippedGemCompanion, player.ownedGemItems)
+  const activeMount = getActiveMountBonuses(player.mountState, player.ownedGemItems)
+  const equippedWeaponSkin = getCosmeticDef(extV2.equippedWeaponSkin)
+
+  const rebirthCount = Math.max(0, Math.min(6, Math.floor(player.rebirthCount ?? 0)))
+  const vipLevel = vipBonus.active ? vipBonus.level : 0
+  const activeTitle = player.rpgExt?.activeTitle ?? ''
+  const guildTag = player.rpgExt?.guildTag ?? ''
+  const weaponType = weaponDef?.weaponType ?? job.weaponTypes[0] ?? 'stick'
+  const weaponColor = equippedWeaponSkin?.primaryColor ?? weaponDef?.color ?? job.colors.accent ?? ''
+  const petId = activePet?.petId ?? ''
+  const mountId = activeMount?.mounted ? activeMount.mountId : ''
+  const mountSkinId = prem.fashion.equipped.mountAppearance ?? ''
+  const fashionCostume = prem.fashion.equipped.costume ?? ''
+  const fashionHair = prem.fashion.equipped.hair ?? ''
+  const fashionAura = prem.fashion.equipped.aura ?? ''
+  const fashionWings = prem.fashion.equipped.wings ?? ''
+  const cosmeticWing = extV2.equippedWing ?? ''
+  const weaponSkinId = extV2.equippedWeaponSkin ?? ''
+  const gemFashionId = player.equippedGemFashion ?? ''
+  const frameId = extV2.equippedFrame ?? ''
+
+  const appearanceKey = [
+    rebirthCount,
+    vipLevel,
+    activeTitle,
+    guildTag,
+    weaponType,
+    weaponColor,
+    petId,
+    mountId,
+    mountSkinId,
+    fashionCostume,
+    fashionHair,
+    fashionAura,
+    fashionWings,
+    cosmeticWing,
+    weaponSkinId,
+    gemFashionId,
+    frameId,
+  ].join('|')
+
+  return {
+    rebirthCount,
+    vipLevel,
+    activeTitle,
+    guildTag,
+    weaponType,
+    weaponColor,
+    petId,
+    mountId,
+    mountSkinId,
+    fashionCostume,
+    fashionHair,
+    fashionAura,
+    fashionWings,
+    cosmeticWing,
+    weaponSkinId,
+    gemFashionId,
+    frameId,
+    appearanceKey,
+  }
+}
 
 let lastPrivateMessageId = 0
 
@@ -102,6 +186,7 @@ export function PresenceSync() {
       name: '',
       attacking: false,
       invisible: false,
+      appearanceKey: '',
     }
 
     const fbRemotePlayers = new Map<string, RemotePlayerSnapshot>()
@@ -426,6 +511,7 @@ export function PresenceSync() {
         ? Math.hypot(player.x - lastSentState.x, player.y - lastSentState.y)
         : Number.POSITIVE_INFINITY
 
+      const appearance = resolveLocalAppearance(player)
       const criticalChange =
         lastSentState.mapId !== player.mapId ||
         lastSentState.facing !== game.facing ||
@@ -435,6 +521,7 @@ export function PresenceSync() {
         lastSentState.level !== player.level ||
         lastSentState.name !== player.name ||
         lastSentState.invisible !== Boolean(player.invisible) ||
+        lastSentState.appearanceKey !== appearance.appearanceKey ||
         (!lastSentState.attacking && attacking)
 
       const movedEnough = dist >= 2
@@ -462,6 +549,7 @@ export function PresenceSync() {
         name: player.name,
         attacking,
         invisible: Boolean(player.invisible),
+        appearanceKey: appearance.appearanceKey,
       }
 
       try {
@@ -482,6 +570,23 @@ export function PresenceSync() {
           inCombat,
           invisible: Boolean(player.invisible),
           nowMs: now,
+          rebirthCount: appearance.rebirthCount,
+          vipLevel: appearance.vipLevel,
+          activeTitle: appearance.activeTitle,
+          guildTag: appearance.guildTag,
+          weaponType: appearance.weaponType,
+          weaponColor: appearance.weaponColor,
+          petId: appearance.petId,
+          mountId: appearance.mountId,
+          mountSkinId: appearance.mountSkinId,
+          fashionCostume: appearance.fashionCostume,
+          fashionHair: appearance.fashionHair,
+          fashionAura: appearance.fashionAura,
+          fashionWings: appearance.fashionWings,
+          cosmeticWing: appearance.cosmeticWing,
+          weaponSkinId: appearance.weaponSkinId,
+          gemFashionId: appearance.gemFashionId,
+          frameId: appearance.frameId,
         })
         if (ok) {
           hasPublishedFbPresence = true
@@ -740,6 +845,7 @@ export function PresenceSync() {
     const currentSnapshot = (userId: string, uid: number) => {
       const player = game.p
       if (!player) return null
+      const appearance = resolveLocalAppearance(player)
       return {
         userId,
         displayName: player.name,
@@ -756,6 +862,23 @@ export function PresenceSync() {
         attackAnim: game.attackAnim,
         invisible: Boolean(player.invisible),
         lastSeen: Date.now(),
+        rebirthCount: appearance.rebirthCount,
+        vipLevel: appearance.vipLevel,
+        activeTitle: appearance.activeTitle,
+        guildTag: appearance.guildTag,
+        weaponType: appearance.weaponType,
+        weaponColor: appearance.weaponColor,
+        petId: appearance.petId,
+        mountId: appearance.mountId,
+        mountSkinId: appearance.mountSkinId,
+        fashionCostume: appearance.fashionCostume,
+        fashionHair: appearance.fashionHair,
+        fashionAura: appearance.fashionAura,
+        fashionWings: appearance.fashionWings,
+        cosmeticWing: appearance.cosmeticWing,
+        weaponSkinId: appearance.weaponSkinId,
+        gemFashionId: appearance.gemFashionId,
+        frameId: appearance.frameId,
       }
     }
 

@@ -1,6 +1,7 @@
 import type { Dir, SpriteAction } from './sprites'
 
 export type HeroSheetId =
+  | 'novice'
   | 'swordsman'
   | 'mage'
   | 'archer'
@@ -112,6 +113,7 @@ function makeHeroSheetSpec(id: HeroSheetId): SpriteSheetSpec {
 }
 
 export const HERO_SPRITE_SHEETS: Record<HeroSheetId, SpriteSheetSpec> = {
+  novice: makeHeroSheetSpec('novice'),
   swordsman: makeHeroSheetSpec('swordsman'),
   mage: makeHeroSheetSpec('mage'),
   archer: makeHeroSheetSpec('archer'),
@@ -213,6 +215,7 @@ export const NPC_SPRITE_SHEETS: Record<NpcSheetId, SpriteSheetSpec> = {
 }
 
 export const JOB_TO_HERO_SHEET: Record<string, HeroSheetId> = {
+  novice: 'novice',
   swordsman: 'swordsman',
   mage: 'mage',
   archer: 'archer',

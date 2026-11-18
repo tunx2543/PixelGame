@@ -583,7 +583,7 @@ export function TitleScreen() {
                   <div className="min-w-0 flex-1 space-y-2">
                     <p className="text-[11px] leading-relaxed text-foreground/90">
                       เริ่มต้นการผจญภัยด้วยตัวละคร <span className="font-semibold text-amber-200">Novice</span>{' '}
-                      เสื้อคลุมฮู้ดสีขาว สายสะพายหนัง กระเป๋าคาดเอว และไม้พลอง พร้อมสกิล{' '}
+                      ผ้าพันคอแดง เสื้อคลุมขาวสายสะพายหนัง กระเป๋าคาดเอว และไม้พลอง พร้อมสกิล{' '}
                       <span className="text-sky-300">ฟาดพลังมือใหม่</span> &amp;{' '}
                       <span className="text-pink-300">ปฐมพยาบาล</span>
                     </p>

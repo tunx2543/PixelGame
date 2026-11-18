@@ -7,6 +7,7 @@ export const PRESENCE_QUERY_LIMIT = 60
 
 export type PresenceFacing = 'up' | 'down' | 'left' | 'right'
 export type PresenceStatus = 'town' | 'idle' | 'moving' | 'combat'
+export type PresenceWeaponType = 'stick' | 'sword' | 'staff' | 'bow' | 'dagger'
 
 export interface WorldPresencePayload {
   userId: string
@@ -25,6 +26,23 @@ export interface WorldPresencePayload {
   attackAnim: number
   invisible: false
   heartbeatMs: number
+  rebirthCount: number
+  vipLevel: number
+  activeTitle: string
+  guildTag: string
+  weaponType: PresenceWeaponType
+  weaponColor: string
+  petId: string
+  mountId: string
+  mountSkinId: string
+  fashionCostume: string
+  fashionHair: string
+  fashionAura: string
+  fashionWings: string
+  cosmeticWing: string
+  weaponSkinId: string
+  gemFashionId: string
+  frameId: string
 }
 
 export interface BuildPresenceInput {
@@ -44,6 +62,23 @@ export interface BuildPresenceInput {
   inCombat?: boolean
   invisible?: boolean
   nowMs?: number
+  rebirthCount?: number
+  vipLevel?: number
+  activeTitle?: string | null
+  guildTag?: string | null
+  weaponType?: string | null
+  weaponColor?: string | null
+  petId?: string | null
+  mountId?: string | null
+  mountSkinId?: string | null
+  fashionCostume?: string | null
+  fashionHair?: string | null
+  fashionAura?: string | null
+  fashionWings?: string | null
+  cosmeticWing?: string | null
+  weaponSkinId?: string | null
+  gemFashionId?: string | null
+  frameId?: string | null
 }
 
 export interface RemotePlayerSnapshot {
@@ -64,6 +99,23 @@ export interface RemotePlayerSnapshot {
   attackAnim: number
   invisible: boolean
   lastSeen: number
+  rebirthCount?: number
+  vipLevel?: number
+  activeTitle?: string
+  guildTag?: string
+  weaponType?: PresenceWeaponType
+  weaponColor?: string
+  petId?: string
+  mountId?: string
+  mountSkinId?: string
+  fashionCostume?: string
+  fashionHair?: string
+  fashionAura?: string
+  fashionWings?: string
+  cosmeticWing?: string
+  weaponSkinId?: string
+  gemFashionId?: string
+  frameId?: string
   previousX?: number
   previousY?: number
   receivedAt?: number
@@ -81,11 +133,28 @@ export interface RemotePlayerSnapshot {
 
 const VALID_FACING = new Set<PresenceFacing>(['up', 'down', 'left', 'right'])
 const VALID_STATUS = new Set<PresenceStatus>(['town', 'idle', 'moving', 'combat'])
+const VALID_WEAPON_TYPES = new Set<PresenceWeaponType>(['stick', 'sword', 'staff', 'bow', 'dagger'])
 
 export function sanitizeSafePresenceId(value: unknown, fallback: string, maxLen: number): string {
   const raw = typeof value === 'string' ? value : ''
   const cleaned = raw.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, maxLen)
   return cleaned.length > 0 ? cleaned : fallback
+}
+
+function sanitizeOptionalPresenceId(value: unknown, maxLen: number = 48): string {
+  if (typeof value !== 'string') return ''
+  return value.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, maxLen)
+}
+
+function sanitizeOptionalHexColor(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  const trimmed = value.trim().slice(0, 16)
+  return /^#[0-9a-fA-F]{3,8}$/.test(trimmed) ? trimmed : ''
+}
+
+function sanitizeOptionalGuildTag(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  return value.trim().replace(/[\[\]\r\n\t]/g, '').slice(0, 12)
 }
 
 function clampFinite(value: unknown, min: number, max: number, fallback: number, decimals: number): number {
@@ -170,6 +239,9 @@ export function buildWorldPresencePayload(input: BuildPresenceInput): WorldPrese
     : 'down'
   const attackAnim = clampFinite(input.attackAnim, 0, 5, 0, 3)
   const moving = Boolean(input.moving)
+  const weaponType: PresenceWeaponType = VALID_WEAPON_TYPES.has(input.weaponType as PresenceWeaponType)
+    ? (input.weaponType as PresenceWeaponType)
+    : 'stick'
 
   return {
     userId: input.userId,
@@ -188,6 +260,23 @@ export function buildWorldPresencePayload(input: BuildPresenceInput): WorldPrese
     attackAnim,
     invisible: false,
     heartbeatMs: Math.max(0, Math.floor(Number.isFinite(input.nowMs) ? Number(input.nowMs) : Date.now())),
+    rebirthCount: clampInt(input.rebirthCount, 0, 6, 0),
+    vipLevel: clampInt(input.vipLevel, 0, 5, 0),
+    activeTitle: sanitizeOptionalPresenceId(input.activeTitle),
+    guildTag: sanitizeOptionalGuildTag(input.guildTag),
+    weaponType,
+    weaponColor: sanitizeOptionalHexColor(input.weaponColor),
+    petId: sanitizeOptionalPresenceId(input.petId),
+    mountId: sanitizeOptionalPresenceId(input.mountId),
+    mountSkinId: sanitizeOptionalPresenceId(input.mountSkinId),
+    fashionCostume: sanitizeOptionalPresenceId(input.fashionCostume),
+    fashionHair: sanitizeOptionalPresenceId(input.fashionHair),
+    fashionAura: sanitizeOptionalPresenceId(input.fashionAura),
+    fashionWings: sanitizeOptionalPresenceId(input.fashionWings),
+    cosmeticWing: sanitizeOptionalPresenceId(input.cosmeticWing),
+    weaponSkinId: sanitizeOptionalPresenceId(input.weaponSkinId),
+    gemFashionId: sanitizeOptionalPresenceId(input.gemFashionId),
+    frameId: sanitizeOptionalPresenceId(input.frameId),
   }
 }
 
@@ -276,6 +365,10 @@ export function parseWorldPresenceToRemotePlayer(
     ? (docData.status as PresenceStatus)
     : resolvePresenceStatus({ mapId, moving, attackAnim })
 
+  const weaponType: PresenceWeaponType = VALID_WEAPON_TYPES.has(docData.weaponType as PresenceWeaponType)
+    ? (docData.weaponType as PresenceWeaponType)
+    : 'stick'
+
   const existing = options.existing
   const sameMapExisting = existing && existing.mapId === mapId ? existing : null
   const posChanged = !sameMapExisting || Math.hypot(x - sameMapExisting.x, y - sameMapExisting.y) >= 0.05
@@ -298,6 +391,23 @@ export function parseWorldPresenceToRemotePlayer(
     attackAnim,
     invisible: false,
     lastSeen: localLastSeen,
+    rebirthCount: clampInt(docData.rebirthCount, 0, 6, 0),
+    vipLevel: clampInt(docData.vipLevel, 0, 5, 0),
+    activeTitle: sanitizeOptionalPresenceId(docData.activeTitle),
+    guildTag: sanitizeOptionalGuildTag(docData.guildTag),
+    weaponType,
+    weaponColor: sanitizeOptionalHexColor(docData.weaponColor),
+    petId: sanitizeOptionalPresenceId(docData.petId),
+    mountId: sanitizeOptionalPresenceId(docData.mountId),
+    mountSkinId: sanitizeOptionalPresenceId(docData.mountSkinId),
+    fashionCostume: sanitizeOptionalPresenceId(docData.fashionCostume),
+    fashionHair: sanitizeOptionalPresenceId(docData.fashionHair),
+    fashionAura: sanitizeOptionalPresenceId(docData.fashionAura),
+    fashionWings: sanitizeOptionalPresenceId(docData.fashionWings),
+    cosmeticWing: sanitizeOptionalPresenceId(docData.cosmeticWing),
+    weaponSkinId: sanitizeOptionalPresenceId(docData.weaponSkinId),
+    gemFashionId: sanitizeOptionalPresenceId(docData.gemFashionId),
+    frameId: sanitizeOptionalPresenceId(docData.frameId),
     previousX: sameMapExisting ? (posChanged ? sameMapExisting.x : (sameMapExisting.previousX ?? sameMapExisting.x)) : x,
     previousY: sameMapExisting ? (posChanged ? sameMapExisting.y : (sameMapExisting.previousY ?? sameMapExisting.y)) : y,
     receivedAt: posChanged ? nowMs : (sameMapExisting?.receivedAt ?? nowMs),

@@ -59,12 +59,9 @@ const MORE_MENU_ITEMS: Array<{
   iconId: MenuIconId
   hint: string
 }> = [
-  { panel: 'shop', label: 'ร้านค้า', iconId: 'shop', hint: 'ซื้อขายไอเทม & ยา' },
   { panel: 'talents', label: 'สกิล & เซ็ต', iconId: 'skills', hint: '3 สาย / อัปสกิล' },
-  { panel: 'job', label: 'เปลี่ยนอาชีพ', iconId: 'job', hint: '21 อาชีพพิเศษ' },
-  { panel: 'gem-shop', label: 'ร้านเพชร', iconId: 'gem-shop', hint: 'VIP / เติมเงิน / แฟชั่น' },
+  { panel: 'gem-shop', label: 'ร้านเพชร & VIP', iconId: 'gem-shop', hint: 'VIP / เติมเงิน / แฟชั่น' },
   { panel: 'pass', label: 'Battle Pass', iconId: 'pass', hint: 'รางวัลซีซัน 20 ขั้น' },
-  { panel: 'enhance', label: 'ตีบวก', iconId: 'enhance', hint: 'เสริมพลังอาวุธ & เกราะ' },
   { panel: 'craft', label: 'คราฟต์', iconId: 'craft', hint: 'สร้าง / ย่อย / ฝังรูน' },
   { panel: 'pets', label: 'สัตว์เลี้ยง', iconId: 'pets', hint: 'ผอบ / คู่หู / พาหนะ' },
   { panel: 'wardrobe', label: 'แฟชั่น', iconId: 'wardrobe', hint: 'ปีก / สกินอาวุธ' },
@@ -75,7 +72,6 @@ const MORE_MENU_ITEMS: Array<{
   { panel: 'lifeskills', label: 'ทักษะชีวิต', iconId: 'lifeskills', hint: 'ตกปลา / ขุดแร่ / อาหาร' },
   { panel: 'mail', label: 'จดหมาย', iconId: 'mail', hint: 'รับรางวัล / ส่งของขวัญ' },
   { panel: 'codex', label: 'สมุดภาพ', iconId: 'codex', hint: 'รางวัลล่ามอนสเตอร์' },
-  { panel: 'gacha', label: 'กาชาปอง', iconId: 'gacha', hint: 'สุ่มอาวุธหายาก' },
   { panel: 'friends', label: 'เพื่อน', iconId: 'friends', hint: 'รายชื่อ & แชทเพื่อน' },
   { panel: 'party', label: 'ปาร์ตี้', iconId: 'party', hint: 'จัดตี้ล่าบอส' },
   { panel: 'models', label: 'คลังโมเดล', iconId: 'models', hint: 'พรีวิวโมเดล 2D' },
