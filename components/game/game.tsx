@@ -2,32 +2,33 @@
 
 import { useEffect, useState } from 'react'
 import { Eye, RotateCw } from 'lucide-react'
-import { useGame } from '@/lib/game/use-game'
+import { ITEMS } from '@/lib/game/data'
 import { game, toggleZenHud } from '@/lib/game/engine'
-import { AutoFarmWidget } from './auto-farm-widget'
+import { useUiLayout } from '@/lib/game/ui-layout'
+import { useGame } from '@/lib/game/use-game'
 import { CharacterBar } from './character-bar'
 import { ChatBox } from './chat-box'
-import { DailyMissionsWidget } from './daily-missions-widget'
+import { CheckinModal } from './checkin-modal'
 import { GameCanvas } from './game-canvas'
 import { GmToolsWidget } from './gm-tools-widget'
 import { Hud } from './hud'
+import { ItemIcon } from './item-icon'
+import { KillRewardToast } from './kill-reward-toast'
 import { MenuDock } from './menu-dock'
+import { OfflineAfkModal } from './offline-afk-modal'
 import { Panels } from './panels/panels'
-import { TitleScreen } from './title-screen'
-import { PresenceSync } from './presence-sync'
-import { TownServicesWidget } from './town-services-widget'
-import { WorldBanner } from './world-banner'
-import { TouchControls } from './touch-controls'
-import { PlayerActionMenu } from './player-action-menu'
 import { PartyPopover } from './party-popover'
+import { PlayerActionMenu } from './player-action-menu'
+import { PlayerInspectModal } from './player-inspect-modal'
+import { PresenceSync } from './presence-sync'
+import { QuestTrackerWidget } from './quest-tracker-widget'
+import { QuickItemBar } from './quick-item-bar'
+import { CharacterControlBar, SkillBar } from './skill-bar'
 import { SocialNotifications } from './social-notifications'
 import { SocialPopover } from './social-popover'
-import { ITEMS } from '@/lib/game/data'
-import { CheckinModal } from './checkin-modal'
-import { OfflineAfkModal } from './offline-afk-modal'
-import { KillRewardToast } from './kill-reward-toast'
-import { ItemIcon } from './item-icon'
-import { PlayerInspectModal } from './player-inspect-modal'
+import { TitleScreen } from './title-screen'
+import { TouchControls } from './touch-controls'
+import { WorldBanner } from './world-banner'
 
 function LootToast() {
   const loot = game.lootToast
@@ -50,6 +51,7 @@ function LootToast() {
 
 export function Game() {
   const g = useGame()
+  const uiLayout = useUiLayout()
   const [showCheckin, setShowCheckin] = useState(false)
   const [isTouchDevice, setIsTouchDevice] = useState(false)
   const [touchOverride, setTouchOverride] = useState<boolean | null>(null)
@@ -67,14 +69,23 @@ export function Game() {
       setIsTouchDevice(coarse)
       setNarrowPortrait(window.innerWidth < 640 && window.innerHeight > window.innerWidth)
     }
+    const handleToggleTouch = () => {
+      setTouchOverride((prev) => !(prev ?? isTouchDevice))
+    }
     checkViewport()
     window.addEventListener('resize', checkViewport)
-    return () => window.removeEventListener('resize', checkViewport)
-  }, [])
+    window.addEventListener('pixelquest:toggle-touch', handleToggleTouch)
+    return () => {
+      window.removeEventListener('resize', checkViewport)
+      window.removeEventListener('pixelquest:toggle-touch', handleToggleTouch)
+    }
+  }, [isTouchDevice])
 
   if (!g.p) return <TitleScreen />
 
   const showTouch = touchOverride ?? isTouchDevice
+  const isCompactHud = g.zenHud || uiLayout.preferences.compactHud
+  const isMobileViewport = uiLayout.viewport.width < 768
 
   return (
     <div className="relative h-full w-full select-none overflow-hidden">
@@ -83,20 +94,19 @@ export function Game() {
       <div className="game-ui pointer-events-none absolute inset-0">
         {showTouch && <TouchControls />}
 
-        {/* มุมบนซ้าย: โปรไฟล์ + พลังชีวิต + ภารกิจย่อ */}
-        <div className="pointer-events-none absolute left-2 top-12 z-20 flex w-[11rem] flex-col gap-1 sm:top-2 sm:w-[14.5rem]">
-          <CharacterBar compact={g.zenHud} />
-          <Hud compact={g.zenHud} />
+        {/* ZONE 1 & 3: มุมซ้ายบน (Profile, HP/MP/EXP, Gold/Diamond/CP) + ด้านซ้าย (Quest Tracker) */}
+        <div className="pointer-events-none absolute left-2 top-2 z-20 flex w-[11rem] flex-col gap-1 sm:w-[14.75rem]">
+          <CharacterBar compact={isCompactHud} />
+          <Hud compact={isCompactHud} />
           {!g.zenHud && (
             <>
-              <TownServicesWidget onOpenCheckin={() => setShowCheckin(true)} />
-              <DailyMissionsWidget />
+              <QuestTrackerWidget />
               <GmToolsWidget />
             </>
           )}
         </div>
 
-        {/* มุมบนขวา: แถบเมนู + มินิแมพ + สังคม */}
+        {/* ZONE 2 & 4: มุมบนขวา (Primary Menu Dock) + ด้านขวา (Minimap, Friends, Party, World Info) */}
         <div className="pointer-events-none absolute right-2 top-2 z-20 flex flex-col items-end gap-1">
           {g.zenHud ? (
             <button
@@ -112,15 +122,38 @@ export function Game() {
               <MenuDock
                 showTouch={showTouch}
                 onToggleTouch={() => setTouchOverride((prev) => !(prev ?? isTouchDevice))}
+                onOpenCheckin={() => setShowCheckin(true)}
               />
               <WorldBanner />
             </>
           )}
         </div>
 
-        {!g.zenHud && <AutoFarmWidget compactTouchMode={showTouch} />}
+        {/* ZONE 5: ด้านล่าง (Chat ซ้าย, Skill Bar + Quick Item Bar กลาง, Character Controls ขวา) */}
+        {!g.zenHud && (
+          <>
+            <ChatBox offsetTouch={showTouch} />
 
-        {!g.zenHud && <ChatBox offsetTouch={showTouch} />}
+            {/* Bottom Center: Separated Skill Bar & 10-Slot Quick Item Bar */}
+            <div
+              className={`pointer-events-none absolute left-1/2 z-20 flex -translate-x-1/2 flex-col items-center gap-1 ${
+                showTouch && uiLayout.viewport.width < 920 ? 'bottom-[9.75rem]' : 'bottom-2'
+              }`}
+            >
+              {!showTouch && <SkillBar compactTouchMode={isMobileViewport} />}
+              <QuickItemBar compact={isMobileViewport || showTouch} />
+            </div>
+
+            {/* Bottom Right: Character Controls (Auto-Farm, Mount, Gather, Combo) */}
+            <div
+              className={`pointer-events-none absolute right-2 z-20 ${
+                showTouch ? 'bottom-[13.5rem]' : 'bottom-2'
+              }`}
+            >
+              <CharacterControlBar compactTouchMode={showTouch || isMobileViewport} />
+            </div>
+          </>
+        )}
 
         <PlayerActionMenu />
         <PlayerInspectModal />

@@ -28,14 +28,20 @@ export function WorldBanner() {
   return (
     <>
       {announcement && (
-        <aside className="pointer-events-none absolute left-1/2 top-12 z-30 w-[min(90vw,30rem)] -translate-x-1/2 border border-yellow-300/50 bg-black/85 px-3 py-1.5 text-center shadow-xl">
+        <aside className="pointer-events-none fixed left-1/2 top-12 z-30 w-[min(90vw,30rem)] -translate-x-1/2 border border-yellow-300/50 bg-black/85 px-3 py-1.5 text-center shadow-xl">
           <div className="text-[9px] font-bold tracking-[0.18em] text-yellow-300">ประกาศจาก GM</div>
           <div className="mt-0.5 truncate text-xs font-semibold text-white">{announcement.body}</div>
         </aside>
       )}
-      <div className={`pointer-events-none flex flex-col items-end gap-1 ${game.onlinePanelOpen ? 'z-40' : 'z-20'}`}>
+      <div
+        data-testid="right-hud-panel"
+        className={`pointer-events-none flex w-[9.5rem] flex-col items-end gap-1 sm:w-[11.75rem] ${game.onlinePanelOpen ? 'z-40' : 'z-20'}`}
+      >
+        {/* 1. Mini Map & Location */}
         <MapMinimap />
-        <div className="flex max-w-[11.25rem] flex-wrap items-center justify-end gap-1 sm:max-w-none">
+
+        {/* 2. Friends Online & Party Status */}
+        <div className="flex w-full flex-col items-end gap-1">
           <button
             type="button"
             onClick={() => {
@@ -47,22 +53,26 @@ export function WorldBanner() {
               notify()
             }}
             aria-expanded={game.onlinePanelOpen}
-            aria-label="เปิดรายชื่อผู้เล่นออนไลน์และตำแหน่ง"
-            className="pointer-events-auto pixel-panel flex items-center gap-1.5 px-2 py-1 text-[10px] font-semibold text-foreground shadow-lg transition-colors hover:border-cyan-400/70"
+            aria-label="เปิดรายชื่อผู้เล่นและเพื่อนออนไลน์"
+            className="pointer-events-auto pixel-panel flex w-full items-center justify-between gap-1.5 px-2 py-1 text-[10px] font-semibold text-foreground shadow-lg transition-colors hover:border-cyan-400/70"
           >
-            <span
-              className={`size-2 ${totalOnline > 0 ? 'bg-emerald-400' : 'bg-muted-foreground/60'}`}
-              aria-hidden
-            />
-            <Users className="size-3 text-cyan-300" aria-hidden />
-            <span className="tabular-nums">ออนไลน์ {totalOnline}</span>
+            <span className="flex items-center gap-1.5 truncate">
+              <span
+                className={`size-2 shrink-0 rounded-full ${totalOnline > 0 ? 'bg-emerald-400' : 'bg-muted-foreground/60'}`}
+                aria-hidden
+              />
+              <Users className="size-3 shrink-0 text-cyan-300" aria-hidden />
+              <span className="truncate tabular-nums">ออนไลน์ {totalOnline}</span>
+            </span>
             {sameMapOnline > 0 && (
-              <span className="text-emerald-300 tabular-nums">· แมพนี้ {sameMapOnline}</span>
+              <span className="shrink-0 text-[9px] text-emerald-300 tabular-nums">แมพนี้ {sameMapOnline}</span>
             )}
           </button>
           <SocialBar />
         </div>
-        <div className="flex max-w-[11.25rem] flex-wrap items-center justify-end gap-1 text-[10px] sm:max-w-none">
+
+        {/* 3. World Information */}
+        <div className="flex w-full flex-wrap items-center justify-end gap-1 text-[9px] sm:text-[10px]">
           <button
             type="button"
             onClick={() => openPanel('guild')}
@@ -94,7 +104,7 @@ export function WorldBanner() {
           {foodBuff?.active && extV2?.activeFoodBuff && (
             <span className="pixel-panel flex items-center gap-1 border-amber-400/50 px-2 py-0.5 font-semibold text-amber-200 shadow tabular-nums">
               <Utensils className="size-3" aria-hidden />
-              <span>
+              <span className="truncate">
                 {extV2.activeFoodBuff.name} ({foodBuff.remainingSec}s)
               </span>
             </span>
@@ -105,4 +115,3 @@ export function WorldBanner() {
     </>
   )
 }
-

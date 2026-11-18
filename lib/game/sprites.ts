@@ -3874,6 +3874,9 @@ const ICONS: Record<string, string[]> = {
   bone: ['.cc.......', 'cccc......', '.cccc.....', '...ccc....', '....ccc...', '.....ccc..', '......cccc', '.......ccc', '........c.', '..........'],
   core: ['..........', '...oooo...', '..occcco..', '.occyyco..', '.occyycco.', '.occcccco.', '..occccod.', '...oooo...', '..........', '..........'],
   scroll: ['..........', '.nnnnnnnn.', '.cccccccc.', '.ckkkkkkc.', '.cccccccc.', '.ckkkkcc..', '.cccccccc.', '.nnnnnnnn.', '..........', '..........'],
+  ticket: ['..........', '.cccccccc.', 'ccyyccyycc', 'cccccccccc', 'ccwwkkwwcc', 'cccccccccc', 'ccyyccyycc', '.cccccccc.', '..........', '..........'],
+  bag: ['..........', '...gggg...', '..nccccn..', '.cccccccc.', '.cclcccdd.', '.cccccccc.', '.ccccccdd.', '.ddddddddd', '..ddddddd.', '..........'],
+  crystal: ['....ll....', '...lwwl...', '..lccccd..', '.lcwcccd..', '.lccccccd.', '..lccccd..', '...lccd...', '....dd....', '..........', '..........'],
 }
 
 export function itemIconUrl(icon: string, color: string) {

@@ -933,6 +933,82 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["reportId", "reporterUid", "targetUid", "targetGameUid", "targetName", "reason", "details", "createdAtMs", "createdAt"]
+    },
+    "DiamondTransaction": {
+      "title": "DiamondTransaction",
+      "description": "Immutable Diamond currency ledger entry for a player character.",
+      "type": "object",
+      "properties": {
+        "txId": { "type": "string", "minLength": 4, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "requestId": { "type": "string", "minLength": 4, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "characterId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "type": { "type": "string", "enum": ["earn", "spend", "sandbox_grant", "refund"] },
+        "source": { "type": "string", "minLength": 1, "maxLength": 48 },
+        "amount": { "type": "integer", "minimum": 0, "maximum": 1000000000 },
+        "balanceBefore": { "type": "integer", "minimum": 0, "maximum": 1000000000 },
+        "balanceAfter": { "type": "integer", "minimum": 0, "maximum": 1000000000 },
+        "productId": { "type": ["string", "null"], "maxLength": 64 },
+        "itemId": { "type": ["string", "null"], "maxLength": 64 },
+        "note": { "type": "string", "minLength": 1, "maxLength": 180 },
+        "actorUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "isGm": { "type": "boolean" },
+        "serverVerified": { "type": "boolean" },
+        "serverSignature": { "type": ["string", "null"], "maxLength": 64 },
+        "createdAtMs": { "type": "integer", "minimum": 0 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "txId",
+        "requestId",
+        "ownerId",
+        "characterId",
+        "type",
+        "source",
+        "amount",
+        "balanceBefore",
+        "balanceAfter",
+        "productId",
+        "itemId",
+        "note",
+        "actorUid",
+        "isGm",
+        "serverVerified",
+        "serverSignature",
+        "createdAtMs",
+        "createdAt"
+      ]
+    },
+    "PremiumAuditLog": {
+      "title": "PremiumAuditLog",
+      "description": "Immutable security and action audit log for premium operations.",
+      "type": "object",
+      "properties": {
+        "logId": { "type": "string", "minLength": 4, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "characterId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "action": { "type": "string", "minLength": 2, "maxLength": 40 },
+        "actorUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "actorRole": { "type": "string", "enum": ["gm", "player"] },
+        "txId": { "type": ["string", "null"], "maxLength": 64 },
+        "details": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "verifiedByServer": { "type": "boolean" },
+        "createdAtMs": { "type": "integer", "minimum": 0 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "logId",
+        "ownerId",
+        "characterId",
+        "action",
+        "actorUid",
+        "actorRole",
+        "txId",
+        "details",
+        "verifiedByServer",
+        "createdAtMs",
+        "createdAt"
+      ]
     }
   },
   "firestore": {
@@ -943,6 +1019,14 @@
     "/users/{userId}/characters/{characterId}": {
       "schema": { "$ref": "#/entities/CharacterSave" },
       "description": "Player character slots and cloud RPG saves owned by the parent user."
+    },
+    "/users/{userId}/characters/{characterId}/diamondTransactions/{txId}": {
+      "schema": { "$ref": "#/entities/DiamondTransaction" },
+      "description": "Immutable Diamond transaction ledger owned by the character owner."
+    },
+    "/users/{userId}/characters/{characterId}/auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/PremiumAuditLog" },
+      "description": "Immutable Premium audit log entries owned by the character owner."
     },
     "/users/{userId}/dailyMissions/{dateKey}": {
       "schema": { "$ref": "#/entities/DailyMissionBoard" },

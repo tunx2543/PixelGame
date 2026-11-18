@@ -1,6 +1,6 @@
 'use client'
 
-import { LogOut } from 'lucide-react'
+import { LogOut, Crown } from 'lucide-react'
 import { useGame } from '@/lib/game/use-game'
 import {
   currentJob,
@@ -9,6 +9,7 @@ import {
   quitToTitle,
 } from '@/lib/game/engine'
 import { PERMANENT_GM_GAME_UID } from '@/lib/game/permissions'
+import { getEffectiveVipBonuses } from '@/lib/game/premium/vip'
 import { SpriteModelCanvas } from './sprite-model-canvas'
 
 export function CharacterBar({ compact = false }: { compact?: boolean; layout?: 'desktop' | 'mobile' }) {
@@ -18,6 +19,7 @@ export function CharacterBar({ compact = false }: { compact?: boolean; layout?: 
   const job = currentJob()
   const isGmDev = Boolean(p.gm && isCurrentAccountGm())
   const displayGameUid = isGmDev ? PERMANENT_GM_GAME_UID : (p.gameUid ?? getActiveAccountGameUid())
+  const vipBonus = getEffectiveVipBonuses(p.premium?.vip)
 
   return (
     <div
@@ -43,6 +45,19 @@ export function CharacterBar({ compact = false }: { compact?: boolean; layout?: 
         <div className="min-w-0 leading-tight">
           <div className="flex items-center gap-1 truncate text-[11px] font-bold text-foreground">
             {isGmDev && <span className="text-gold">[GM]</span>}
+            {vipBonus.active && vipBonus.tierDef && (
+              <span
+                className="inline-flex shrink-0 items-center gap-0.5 rounded px-1 py-0 text-[8px] font-extrabold leading-tight"
+                style={{
+                  color: vipBonus.tierDef.badgeColor,
+                  backgroundColor: vipBonus.tierDef.badgeBg,
+                  border: `1px solid ${vipBonus.tierDef.badgeBorder}`,
+                }}
+              >
+                <Crown className="size-2.5" aria-hidden />
+                {vipBonus.tierDef.badgeLabel}
+              </span>
+            )}
             <span className="truncate">{p.name}</span>
           </div>
           <div className="flex items-center gap-1 truncate text-[9px] text-muted-foreground">

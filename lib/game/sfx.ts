@@ -15,6 +15,33 @@ function getCtx(): AudioContext | null {
   return sharedAudioCtx
 }
 
+const SFX_MUTED_KEY = 'pixel-quest-sfx-muted'
+let globalSfxMuted = false
+
+if (typeof window !== 'undefined') {
+  try {
+    globalSfxMuted = window.localStorage.getItem(SFX_MUTED_KEY) === '1'
+  } catch {
+    // Ignore storage errors cleanly.
+  }
+}
+
+export function isSfxMuted(): boolean {
+  return globalSfxMuted
+}
+
+export function setSfxMuted(muted: boolean): boolean {
+  globalSfxMuted = muted
+  if (typeof window !== 'undefined') {
+    try {
+      window.localStorage.setItem(SFX_MUTED_KEY, muted ? '1' : '0')
+    } catch {
+      // Ignore storage errors cleanly.
+    }
+  }
+  return globalSfxMuted
+}
+
 function playTone(
   freqStart: number,
   freqEnd: number,
@@ -23,6 +50,7 @@ function playTone(
   gainValue = 0.06,
   delay = 0,
 ) {
+  if (globalSfxMuted) return
   const ctx = getCtx()
   if (!ctx) return
   try {

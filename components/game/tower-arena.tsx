@@ -36,6 +36,7 @@ import {
   getStats,
   setActiveCharacterSlot,
   setGameAccountIdentity,
+  syncExternalDiamondDelta,
   type SaveData,
 } from '@/lib/game/engine'
 import { recordDailyMissionProgress } from '@/lib/game/daily-missions'
@@ -414,6 +415,7 @@ export function TowerArena() {
       const sanitizedPets = sanitizePetState(nextSave.petState, nextSave.ownedGemItems, nextSave.equippedGemCompanion)
       nextSave.petState = grantActivePetExp(sanitizedPets, Math.max(8, Math.round(expEarned * 0.3))).nextPetState
 
+      const beforeDiamonds = nextSave.diamonds ?? 0
       const applied = applyLevelAndRewards(
         nextSave,
         {
@@ -425,6 +427,11 @@ export function TowerArena() {
         () => getStats(nextSave),
         getInventoryCapacity(nextSave),
       )
+      const gainedDiamonds = (nextSave.diamonds ?? 0) - beforeDiamonds
+      if (gainedDiamonds > 0) {
+        nextSave.diamonds = beforeDiamonds
+        syncExternalDiamondDelta(nextSave, gainedDiamonds, 'tower_floor', `พิชิตหอคอยชั้น ${spec.floor}`)
+      }
 
       saveRef.current = nextSave
       setSave(nextSave)

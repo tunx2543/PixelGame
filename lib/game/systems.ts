@@ -1,5 +1,6 @@
 import { ITEMS, MAX_LEVEL, MONSTERS, expToNext, type MonsterDef } from './data'
 import type { EncounterBiome, EncounterEnemy } from './encounter'
+import { PET_STAT_CAPS, getPetSkillDef, type PetSkillDef } from './premium/fashion-pet'
 
 export interface PetProgress {
   level: number
@@ -350,6 +351,17 @@ export interface ActivePetBonuses {
   companionAtk: number
   attackInterval: number
   autoLootMagnet: boolean
+  skill: PetSkillDef
+  isCapped: boolean
+  rawUncapped: {
+    hpBonus: number
+    mpBonus: number
+    atkBonus: number
+    defBonus: number
+    companionAtk: number
+    expBonusPct: number
+    goldBonusPct: number
+  }
 }
 
 export function getActivePetBonuses(
@@ -367,6 +379,31 @@ export function getActivePetBonuses(
   const lv = progress.level
   const stars = Math.max(1, Math.min(MAX_PET_STARS, progress.stars ?? 1))
   const lvScale = (1 + (lv - 1) * 0.14) * getPetStarMultiplier(stars)
+  const rawHpBonus = Math.round(def.hpBonus * lvScale)
+  const rawMpBonus = Math.round(def.mpBonus * lvScale)
+  const rawAtkBonus = Math.round(def.atkBuff * lvScale)
+  const rawDefBonus = Math.round(def.defBuff * lvScale)
+  const rawExpPct = def.expBonusPct + (lv - 1) * 0.5 + (stars - 1) * 3
+  const rawGoldPct = def.goldBonusPct + (lv - 1) * 0.5 + (stars - 1) * 3
+  const rawCompanionAtk = Math.round((def.baseAtk + (lv - 1) * def.atkPerLevel) * getPetStarMultiplier(stars))
+
+  const hpBonus = Math.min(PET_STAT_CAPS.maxHpBonus, rawHpBonus)
+  const mpBonus = Math.min(PET_STAT_CAPS.maxMpBonus, rawMpBonus)
+  const atkBonus = Math.min(PET_STAT_CAPS.maxAtkBonus, rawAtkBonus)
+  const defBonus = Math.min(PET_STAT_CAPS.maxDefBonus, rawDefBonus)
+  const cappedExpPct = Math.min(PET_STAT_CAPS.maxExpBonusPct, rawExpPct)
+  const cappedGoldPct = Math.min(PET_STAT_CAPS.maxGoldBonusPct, rawGoldPct)
+  const companionAtk = Math.min(PET_STAT_CAPS.maxCompanionAtk, rawCompanionAtk)
+
+  const isCapped =
+    rawHpBonus > PET_STAT_CAPS.maxHpBonus ||
+    rawMpBonus > PET_STAT_CAPS.maxMpBonus ||
+    rawAtkBonus > PET_STAT_CAPS.maxAtkBonus ||
+    rawDefBonus > PET_STAT_CAPS.maxDefBonus ||
+    rawCompanionAtk > PET_STAT_CAPS.maxCompanionAtk ||
+    rawExpPct > PET_STAT_CAPS.maxExpBonusPct ||
+    rawGoldPct > PET_STAT_CAPS.maxGoldBonusPct
+
   return {
     petId: resolvedId,
     def,
@@ -374,15 +411,26 @@ export function getActivePetBonuses(
     stars,
     exp: progress.exp,
     nextExp: petExpToNext(lv),
-    hpBonus: Math.round(def.hpBonus * lvScale),
-    mpBonus: Math.round(def.mpBonus * lvScale),
-    atkBonus: Math.round(def.atkBuff * lvScale),
-    defBonus: Math.round(def.defBuff * lvScale),
-    expMul: 1 + def.expBonusPct / 100 + (lv - 1) * 0.005 + (stars - 1) * 0.03,
-    goldMul: 1 + def.goldBonusPct / 100 + (lv - 1) * 0.005 + (stars - 1) * 0.03,
-    companionAtk: Math.round((def.baseAtk + (lv - 1) * def.atkPerLevel) * getPetStarMultiplier(stars)),
+    hpBonus,
+    mpBonus,
+    atkBonus,
+    defBonus,
+    expMul: 1 + cappedExpPct / 100,
+    goldMul: 1 + cappedGoldPct / 100,
+    companionAtk,
     attackInterval: Math.max(1.0, def.attackInterval - (lv - 1) * 0.025 - (stars - 1) * 0.06),
     autoLootMagnet: stars >= 2,
+    skill: getPetSkillDef(resolvedId),
+    isCapped,
+    rawUncapped: {
+      hpBonus: rawHpBonus,
+      mpBonus: rawMpBonus,
+      atkBonus: rawAtkBonus,
+      defBonus: rawDefBonus,
+      companionAtk: rawCompanionAtk,
+      expBonusPct: Number(rawExpPct.toFixed(1)),
+      goldBonusPct: Number(rawGoldPct.toFixed(1)),
+    },
   }
 }
 

@@ -235,6 +235,152 @@ service cloud.firestore {
         data.updatedAt is timestamp;
     }
 
+    function isValidDiamondTransaction(data, txId, characterId) {
+      return data.keys().hasAll([
+          'txId',
+          'requestId',
+          'ownerId',
+          'characterId',
+          'type',
+          'source',
+          'amount',
+          'balanceBefore',
+          'balanceAfter',
+          'productId',
+          'itemId',
+          'note',
+          'actorUid',
+          'isGm',
+          'serverVerified',
+          'serverSignature',
+          'createdAtMs',
+          'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'txId',
+          'requestId',
+          'ownerId',
+          'characterId',
+          'type',
+          'source',
+          'amount',
+          'balanceBefore',
+          'balanceAfter',
+          'productId',
+          'itemId',
+          'note',
+          'actorUid',
+          'isGm',
+          'serverVerified',
+          'serverSignature',
+          'createdAtMs',
+          'createdAt'
+        ]) &&
+        isValidId(data.txId) &&
+        data.txId == txId &&
+        data.txId.size() <= 64 &&
+        isValidId(data.requestId) &&
+        data.requestId.size() <= 64 &&
+        isValidId(data.ownerId) &&
+        data.ownerId == request.auth.uid &&
+        isValidId(data.characterId) &&
+        data.characterId == characterId &&
+        data.characterId.size() <= 64 &&
+        data.type in ['earn', 'spend', 'sandbox_grant', 'refund'] &&
+        data.source is string &&
+        data.source.size() >= 1 &&
+        data.source.size() <= 48 &&
+        data.amount is int &&
+        data.amount >= 0 &&
+        data.amount <= 1000000000 &&
+        data.balanceBefore is int &&
+        data.balanceBefore >= 0 &&
+        data.balanceBefore <= 1000000000 &&
+        data.balanceAfter is int &&
+        data.balanceAfter >= 0 &&
+        data.balanceAfter <= 1000000000 &&
+        (data.productId == null || (data.productId is string && data.productId.size() <= 64)) &&
+        (data.itemId == null || (data.itemId is string && data.itemId.size() <= 64)) &&
+        data.note is string &&
+        data.note.size() >= 1 &&
+        data.note.size() <= 180 &&
+        isValidId(data.actorUid) &&
+        data.actorUid == request.auth.uid &&
+        data.isGm is bool &&
+        (
+          (!data.isGm && data.source != 'gm_grant') ||
+          isGmAccount()
+        ) &&
+        data.serverVerified is bool &&
+        (data.serverSignature == null || (data.serverSignature is string && data.serverSignature.size() <= 64)) &&
+        data.createdAtMs is int &&
+        data.createdAtMs >= 0 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidPremiumAuditLog(data, logId, characterId) {
+      return data.keys().hasAll([
+          'logId',
+          'ownerId',
+          'characterId',
+          'action',
+          'actorUid',
+          'actorRole',
+          'txId',
+          'details',
+          'verifiedByServer',
+          'createdAtMs',
+          'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'logId',
+          'ownerId',
+          'characterId',
+          'action',
+          'actorUid',
+          'actorRole',
+          'txId',
+          'details',
+          'verifiedByServer',
+          'createdAtMs',
+          'createdAt'
+        ]) &&
+        isValidId(data.logId) &&
+        data.logId == logId &&
+        data.logId.size() <= 64 &&
+        isValidId(data.ownerId) &&
+        data.ownerId == request.auth.uid &&
+        isValidId(data.characterId) &&
+        data.characterId == characterId &&
+        data.characterId.size() <= 64 &&
+        data.action in [
+          'SANDBOX_GRANT',
+          'DIAMOND_EARN',
+          'DIAMOND_SPEND',
+          'PREMIUM_PURCHASE',
+          'VIP_ACTIVATE',
+          'VIP_CLAIM_TIER',
+          'VIP_CLAIM_DAILY',
+          'PASS_UNLOCK',
+          'PASS_CLAIM',
+          'PASS_ARCHIVE_CLAIM',
+          'STORAGE_EXPAND',
+          'FASHION_EQUIP'
+        ] &&
+        isValidId(data.actorUid) &&
+        data.actorUid == request.auth.uid &&
+        data.actorRole in ['gm', 'player'] &&
+        (data.actorRole == 'player' || isGmAccount()) &&
+        (data.txId == null || (isValidId(data.txId) && data.txId.size() <= 64)) &&
+        data.details is string &&
+        data.details.size() >= 1 &&
+        data.details.size() <= 240 &&
+        data.verifiedByServer is bool &&
+        data.createdAtMs is int &&
+        data.createdAtMs >= 0 &&
+        data.createdAt is timestamp;
+    }
+
     function isValidMissionEntry(m) {
       return m is map &&
         m.keys().hasAll([
@@ -1751,6 +1897,70 @@ service cloud.firestore {
           userId == request.auth.uid &&
           isUserAccountOwner(userId) &&
           existing().ownerId == request.auth.uid;
+
+        match /diamondTransactions/{txId} {
+          allow get: if isSignedIn() &&
+            isEmailVerified() &&
+            isValidId(userId) &&
+            isValidId(characterId) &&
+            isValidId(txId) &&
+            userId == request.auth.uid &&
+            isUserAccountOwner(userId) &&
+            (resource == null || existing().ownerId == request.auth.uid);
+
+          allow list: if isSignedIn() &&
+            isEmailVerified() &&
+            isValidId(userId) &&
+            isValidId(characterId) &&
+            userId == request.auth.uid &&
+            existing().ownerId == request.auth.uid &&
+            request.query.limit != null &&
+            request.query.limit <= 100;
+
+          allow create: if isSignedIn() &&
+            isEmailVerified() &&
+            isValidId(userId) &&
+            isValidId(characterId) &&
+            isValidId(txId) &&
+            userId == request.auth.uid &&
+            isValidDiamondTransaction(incoming(), txId, characterId) &&
+            incoming().createdAt == request.time &&
+            isUserAccountOwner(userId);
+
+          allow update, delete: if false;
+        }
+
+        match /auditLogs/{logId} {
+          allow get: if isSignedIn() &&
+            isEmailVerified() &&
+            isValidId(userId) &&
+            isValidId(characterId) &&
+            isValidId(logId) &&
+            userId == request.auth.uid &&
+            isUserAccountOwner(userId) &&
+            (resource == null || existing().ownerId == request.auth.uid);
+
+          allow list: if isSignedIn() &&
+            isEmailVerified() &&
+            isValidId(userId) &&
+            isValidId(characterId) &&
+            userId == request.auth.uid &&
+            existing().ownerId == request.auth.uid &&
+            request.query.limit != null &&
+            request.query.limit <= 100;
+
+          allow create: if isSignedIn() &&
+            isEmailVerified() &&
+            isValidId(userId) &&
+            isValidId(characterId) &&
+            isValidId(logId) &&
+            userId == request.auth.uid &&
+            isValidPremiumAuditLog(incoming(), logId, characterId) &&
+            incoming().createdAt == request.time &&
+            isUserAccountOwner(userId);
+
+          allow update, delete: if false;
+        }
       }
 
       match /dailyMissions/{dateKey} {

@@ -33,6 +33,7 @@ import {
   petFeedCost,
   sanitizePetState,
 } from '@/lib/game/systems'
+import { PET_STAT_CAPS } from '@/lib/game/premium/fashion-pet'
 import { useGame } from '@/lib/game/use-game'
 import { formatNum } from '../format'
 import { SpriteModelCanvas } from '../sprite-model-canvas'
@@ -126,13 +127,21 @@ export function PetsPanel() {
                         กำลังใช้งาน: {activeBonus.def.name} (Lv.{activeBonus.level} · {'★'.repeat(activeBonus.stars)})
                       </p>
                       <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
-                        พลังช่วยยิง {formatNum(activeBonus.companionAtk)} · ยิงทุก {activeBonus.attackInterval.toFixed(1)} วินาที
+                        พลังช่วยยิง {formatNum(activeBonus.companionAtk)}/{formatNum(PET_STAT_CAPS.maxCompanionAtk)} · ยิงทุก{' '}
+                        {activeBonus.attackInterval.toFixed(1)} วินาที
                         {activeBonus.autoLootMagnet ? ' · ดูดไอเทมตกอัตโนมัติ (2★+)' : ''}
                       </p>
                       <p className="mt-0.5 text-xs text-accent tabular-nums">
-                        บัฟตัวละคร: +{formatNum(activeBonus.atkBonus)} ATK · +{formatNum(activeBonus.defBonus)} DEF · +{formatNum(activeBonus.hpBonus)} HP
+                        บัฟตัวละคร: +{formatNum(activeBonus.atkBonus)}/{PET_STAT_CAPS.maxAtkBonus} ATK · +
+                        {formatNum(activeBonus.defBonus)}/{PET_STAT_CAPS.maxDefBonus} DEF · +
+                        {formatNum(activeBonus.hpBonus)}/{PET_STAT_CAPS.maxHpBonus} HP
                         {activeBonus.def.expBonusPct > 0 ? ` · EXP +${Math.round((activeBonus.expMul - 1) * 100)}%` : ''}
                         {activeBonus.def.goldBonusPct > 0 ? ` · ทอง +${Math.round((activeBonus.goldMul - 1) * 100)}%` : ''}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-cyan-200">
+                        สกิล: <strong>{activeBonus.skill.name}</strong> ({activeBonus.skill.triggerLabel}) —{' '}
+                        {activeBonus.skill.description}
+                        {activeBonus.isCapped ? ' · [ติดเพดานสมดุลระบบ]' : ''}
                       </p>
                     </div>
                   </div>

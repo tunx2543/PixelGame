@@ -361,19 +361,85 @@ export interface BattlePassTierDef {
   premReward: { label: string; gold?: number; diamonds?: number; stones?: number; itemId?: string; cosmeticId?: string; qty?: number }
 }
 
+export interface ExpiredPassReward {
+  archiveId: string
+  seasonId: string
+  level: number
+  track: 'free' | 'prem'
+  label: string
+  gold?: number
+  diamonds?: number
+  stones?: number
+  itemId?: string
+  cosmeticId?: string
+  qty?: number
+  archivedAtMs: number
+}
+
 export interface BattlePassState {
   seasonId: string
+  seasonName?: string
+  seasonStartAtMs?: number
+  seasonEndAtMs?: number
   level: number
   exp: number
   premiumUnlocked: boolean
   claimedFree: number[]
   claimedPrem: number[]
+  expiredArchive?: ExpiredPassReward[]
 }
 
 export const BP_MAX_LEVEL = 20
 export const BP_EXP_PER_LEVEL = 120
 export const BP_PREMIUM_DIAMOND_COST = 120
 export const CURRENT_BP_SEASON_ID = 'season_aurora_2026'
+export const CURRENT_BP_SEASON_META = {
+  seasonId: CURRENT_BP_SEASON_ID,
+  seasonName: 'Aurora Expedition 2026',
+  seasonStartAtMs: Date.UTC(2026, 0, 1, 0, 0, 0),
+  seasonEndAtMs: Date.UTC(2026, 11, 31, 23, 59, 59),
+}
+
+export function archiveExpiredBattlePassRewards(prevBp: Partial<BattlePassState>, existingArchive: ExpiredPassReward[] = []): ExpiredPassReward[] {
+  const archive = [...existingArchive]
+  const prevSeasonId = typeof prevBp.seasonId === 'string' && prevBp.seasonId ? prevBp.seasonId : 'previous_season'
+  const reachedLevel = Math.max(1, Math.min(BP_MAX_LEVEL, Math.floor(Number(prevBp.level ?? 1) || 1)))
+  const claimedFree = Array.isArray(prevBp.claimedFree) ? prevBp.claimedFree : []
+  const claimedPrem = Array.isArray(prevBp.claimedPrem) ? prevBp.claimedPrem : []
+  const premUnlocked = Boolean(prevBp.premiumUnlocked)
+  const nowMs = Date.now()
+
+  for (const tier of BATTLE_PASS_TIERS) {
+    if (tier.level > reachedLevel) continue
+    if (!claimedFree.includes(tier.level)) {
+      const id = `${prevSeasonId}:free:${tier.level}`
+      if (!archive.some((a) => a.archiveId === id)) {
+        archive.push({
+          archiveId: id,
+          seasonId: prevSeasonId,
+          level: tier.level,
+          track: 'free',
+          ...tier.freeReward,
+          archivedAtMs: nowMs,
+        })
+      }
+    }
+    if (premUnlocked && !claimedPrem.includes(tier.level)) {
+      const id = `${prevSeasonId}:prem:${tier.level}`
+      if (!archive.some((a) => a.archiveId === id)) {
+        archive.push({
+          archiveId: id,
+          seasonId: prevSeasonId,
+          level: tier.level,
+          track: 'prem',
+          ...tier.premReward,
+          archivedAtMs: nowMs,
+        })
+      }
+    }
+  }
+  return archive.slice(-60)
+}
 
 export const BATTLE_PASS_TIERS: BattlePassTierDef[] = Array.from({ length: BP_MAX_LEVEL }, (_, idx) => {
   const lv = idx + 1
@@ -646,6 +712,21 @@ export function getWorldTimePhase(nowMs = Date.now()): {
 /* 6. EXTENDED PLAYER PERSISTENCE CONTAINER (SaveData.extV2)                  */
 /* ========================================================================== */
 
+export const QUICK_SLOT_COUNT = 10
+
+export const DEFAULT_QUICK_SLOTS: ReadonlyArray<string | null> = [
+  'red_potion',
+  'blue_potion',
+  'return_scroll',
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+]
+
 export interface PlayerExtensionV2 {
   lifeSkills: Record<LifeSkillType, LifeSkillProgress>
   activeFoodBuff: ActiveFoodBuff | null
@@ -661,6 +742,7 @@ export interface PlayerExtensionV2 {
   gatherCount: number
   invasionWavesCleared: number
   coopClears: number
+  quickSlots: Array<string | null>
 }
 
 export function createDefaultExtV2(): PlayerExtensionV2 {
@@ -675,11 +757,15 @@ export function createDefaultExtV2(): PlayerExtensionV2 {
     talentPointsBonus: 0,
     battlePass: {
       seasonId: CURRENT_BP_SEASON_ID,
+      seasonName: CURRENT_BP_SEASON_META.seasonName,
+      seasonStartAtMs: CURRENT_BP_SEASON_META.seasonStartAtMs,
+      seasonEndAtMs: CURRENT_BP_SEASON_META.seasonEndAtMs,
       level: 1,
       exp: 0,
       premiumUnlocked: false,
       claimedFree: [],
       claimedPrem: [],
+      expiredArchive: [],
     },
     unlockedCosmetics: [],
     equippedWing: null,
@@ -694,7 +780,22 @@ export function createDefaultExtV2(): PlayerExtensionV2 {
     gatherCount: 0,
     invasionWavesCleared: 0,
     coopClears: 0,
+    quickSlots: [...DEFAULT_QUICK_SLOTS],
   }
+}
+
+export function sanitizeQuickSlots(raw: unknown): Array<string | null> {
+  if (!Array.isArray(raw)) return [...DEFAULT_QUICK_SLOTS]
+  const out: Array<string | null> = []
+  for (let i = 0; i < QUICK_SLOT_COUNT; i++) {
+    const val = raw[i]
+    if (typeof val === 'string' && ITEMS[val]?.kind === 'consumable') {
+      out.push(val)
+    } else {
+      out.push(null)
+    }
+  }
+  return out
 }
 
 export function sanitizeExtV2(raw: unknown): PlayerExtensionV2 {
@@ -737,10 +838,18 @@ export function sanitizeExtV2(raw: unknown): PlayerExtensionV2 {
   }
 
   const rawBp = obj.battlePass
+  const prevArchive: ExpiredPassReward[] = Array.isArray(rawBp?.expiredArchive)
+    ? rawBp.expiredArchive
+        .filter((a): a is ExpiredPassReward => Boolean(a && typeof a.archiveId === 'string' && typeof a.level === 'number'))
+        .slice(-60)
+    : []
   const sameSeason = rawBp && rawBp.seasonId === CURRENT_BP_SEASON_ID
   const battlePass: BattlePassState = sameSeason
     ? {
         seasonId: CURRENT_BP_SEASON_ID,
+        seasonName: CURRENT_BP_SEASON_META.seasonName,
+        seasonStartAtMs: CURRENT_BP_SEASON_META.seasonStartAtMs,
+        seasonEndAtMs: CURRENT_BP_SEASON_META.seasonEndAtMs,
         level: Math.max(1, Math.min(BP_MAX_LEVEL, Math.floor(Number(rawBp.level ?? 1) || 1))),
         exp: Math.max(0, Math.floor(Number(rawBp.exp ?? 0) || 0)),
         premiumUnlocked: Boolean(rawBp.premiumUnlocked),
@@ -750,8 +859,12 @@ export function sanitizeExtV2(raw: unknown): PlayerExtensionV2 {
         claimedPrem: Array.isArray(rawBp.claimedPrem)
           ? [...new Set(rawBp.claimedPrem.filter((n): n is number => typeof n === 'number' && n >= 1 && n <= BP_MAX_LEVEL))]
           : [],
+        expiredArchive: prevArchive,
       }
-    : def.battlePass
+    : {
+        ...def.battlePass,
+        expiredArchive: rawBp ? archiveExpiredBattlePassRewards(rawBp, prevArchive) : prevArchive,
+      }
 
   const validCosmeticIds = new Set(COSMETIC_DEFS.map((c) => c.id))
   const unlockedCosmetics = Array.isArray(obj.unlockedCosmetics)
@@ -797,6 +910,7 @@ export function sanitizeExtV2(raw: unknown): PlayerExtensionV2 {
     gatherCount: Math.max(0, Math.floor(Number(obj.gatherCount ?? 0) || 0)),
     invasionWavesCleared: Math.max(0, Math.floor(Number(obj.invasionWavesCleared ?? 0) || 0)),
     coopClears: Math.max(0, Math.floor(Number(obj.coopClears ?? 0) || 0)),
+    quickSlots: sanitizeQuickSlots(obj.quickSlots),
   }
 }
 

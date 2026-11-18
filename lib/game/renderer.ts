@@ -29,6 +29,9 @@ import { TITLE_DEFS } from './rpg-systems'
 import { GATHERING_NODES, getCosmeticDef, getWorldTimePhase, sanitizeExtV2 } from './extended-systems'
 import { drawOverworldSkillEffect, drawRebirthAura } from './vfx-canvas'
 import { getNpcSheetFrame, preloadAllSpriteSheets } from './sprite-sheets'
+import { getFashionItemDef } from './premium/fashion-pet'
+import { getEffectiveVipBonuses } from './premium/vip'
+import { sanitizePremiumState } from './premium/wallet'
 
 const cameraState = createCameraState('town')
 let prevRenderTime = 0
@@ -593,6 +596,20 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   const activePet = getActivePetBonuses(p.petState, p.equippedGemCompanion, p.ownedGemItems)
   const activeMount = getActiveMountBonuses(p.mountState, p.ownedGemItems)
   const extV2 = sanitizeExtV2(p.extV2)
+  const prem = sanitizePremiumState(p.premium, {
+    characterId: 'slot_1',
+    diamonds: p.diamonds ?? 0,
+    ownedGemItems: p.ownedGemItems,
+    equippedGemFashion: p.equippedGemFashion,
+    unlockedCosmetics: extV2.unlockedCosmetics,
+    equippedWing: extV2.equippedWing,
+  })
+  const vipBonus = getEffectiveVipBonuses(prem.vip)
+  const costumeFashion = getFashionItemDef(prem.fashion.equipped.costume)
+  const hairFashion = getFashionItemDef(prem.fashion.equipped.hair)
+  const auraFashion = getFashionItemDef(prem.fashion.equipped.aura)
+  const wingsFashion = getFashionItemDef(prem.fashion.equipped.wings)
+  const mountSkinFashion = getFashionItemDef(prem.fashion.equipped.mountAppearance)
   const equippedWing = getCosmeticDef(extV2.equippedWing)
   const equippedWeaponSkin = getCosmeticDef(extV2.equippedWeaponSkin)
   const equippedFrame = getCosmeticDef(extV2.equippedFrame)
@@ -617,7 +634,15 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
             ? Math.floor(game.walkT * 10) % walkMod
             : (Math.sin(t * 1.4) > 0.96 ? -1 : Math.floor(t * 2.4) % 4)
       const weaponType = weapon?.weaponType ?? job.weaponTypes[0] ?? 'stick'
-      const styledColors = jobHumanColors(job.id, job.colors, false)
+      const baseStyledColors = jobHumanColors(job.id, job.colors, false)
+      const styledColors = {
+        ...baseStyledColors,
+        ...(costumeFashion?.paletteOverride?.body ? { body: costumeFashion.paletteOverride.body } : {}),
+        ...(costumeFashion?.paletteOverride?.legs ? { legs: costumeFashion.paletteOverride.legs } : {}),
+        ...(costumeFashion?.paletteOverride?.accent ? { accent: costumeFashion.paletteOverride.accent } : {}),
+        ...(costumeFashion?.paletteOverride?.hat ? { hat: costumeFashion.paletteOverride.hat } : {}),
+        ...(hairFashion?.paletteOverride?.hair ? { hair: hairFashion.paletteOverride.hair } : {}),
+      }
       const weaponDrawColor = castingSkill
         ? game.skillVfxColor
         : (equippedWeaponSkin?.primaryColor ?? weapon?.color ?? job.colors.accent)
@@ -673,13 +698,13 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         ctx.restore()
       }
       ctx.globalAlpha = p.invisible ? 0.18 : 1
-      if (isMounted && activeMount?.def.auraColor) {
+      if (isMounted && (activeMount?.def.auraColor || mountSkinFashion)) {
         ctx.save()
-        ctx.strokeStyle = activeMount.def.auraColor
-        ctx.lineWidth = 1.2
-        ctx.globalAlpha = (p.invisible ? 0.12 : 0.38) + Math.sin(t * 4) * 0.12
+        ctx.strokeStyle = mountSkinFashion?.primaryColor ?? activeMount?.def.auraColor ?? '#38bdf8'
+        ctx.lineWidth = mountSkinFashion ? 1.8 : 1.2
+        ctx.globalAlpha = (p.invisible ? 0.12 : 0.45) + Math.sin(t * 4) * 0.14
         ctx.beginPath()
-        ctx.ellipse(p.x, p.y - 1, 13, 5, 0, 0, Math.PI * 2)
+        ctx.ellipse(p.x, p.y - 1, mountSkinFashion ? 15 : 13, 5.5, 0, 0, Math.PI * 2)
         ctx.stroke()
         ctx.restore()
       }
@@ -721,12 +746,17 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           mDrawH,
         )
       }
-      if (equippedWing) {
+      const activeWingColors = equippedWing
+        ? { primary: equippedWing.primaryColor, secondary: equippedWing.secondaryColor }
+        : wingsFashion && !wingsFashion.linkedGemItemId
+          ? { primary: wingsFashion.primaryColor, secondary: wingsFashion.secondaryColor }
+          : null
+      if (activeWingColors) {
         ctx.save()
         ctx.globalAlpha = p.invisible ? 0.15 : 0.9
         const flap = Math.sin(t * 6) * 2.5
-        ctx.fillStyle = equippedWing.primaryColor
-        ctx.strokeStyle = equippedWing.secondaryColor
+        ctx.fillStyle = activeWingColors.primary
+        ctx.strokeStyle = activeWingColors.secondary
         ctx.lineWidth = 1
         ctx.beginPath()
         ctx.moveTo(p.x - 2, p.y + riderSeatY - 15)
@@ -744,12 +774,15 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         ctx.stroke()
         ctx.restore()
       }
-      if (gemFashion?.id === 'nebula_dragon_wings') {
-        ctx.save()
-        ctx.globalAlpha = p.invisible ? 0.14 : 0.86
-        const wingBob = Math.sin(t * 5) * 0.7
-        drawGemItemPixels(ctx, gemFashion, p.x - 8, p.y + riderSeatY - drawH + 5 + wingBob, 2)
-        ctx.restore()
+      if (gemFashion?.id === 'nebula_dragon_wings' || wingsFashion?.id === 'nebula_dragon_wings') {
+        const wingGem = gemFashion?.id === 'nebula_dragon_wings' ? gemFashion : GEM_SHOP_ITEMS.find((g) => g.id === 'nebula_dragon_wings')
+        if (wingGem) {
+          ctx.save()
+          ctx.globalAlpha = p.invisible ? 0.14 : 0.86
+          const wingBob = Math.sin(t * 5) * 0.7
+          drawGemItemPixels(ctx, wingGem, p.x - 8, p.y + riderSeatY - drawH + 5 + wingBob, 2)
+          ctx.restore()
+        }
       }
       ctx.save()
       ctx.translate(Math.round(p.x + ox), Math.round(p.y + oy + riderSeatY))
@@ -776,20 +809,25 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           layer: 'front',
         })
       }
-      if (gemFashion?.id === 'aurora_cat_hood') {
-        drawGemItemPixels(ctx, gemFashion, p.x - 5, p.y + riderSeatY - drawH - 1, 1.25)
+      if (gemFashion?.id === 'aurora_cat_hood' || hairFashion?.id === 'aurora_cat_hood') {
+        const catGem = gemFashion?.id === 'aurora_cat_hood' ? gemFashion : GEM_SHOP_ITEMS.find((g) => g.id === 'aurora_cat_hood')
+        if (catGem) {
+          drawGemItemPixels(ctx, catGem, p.x - 5, p.y + riderSeatY - drawH - 1, 1.25)
+        }
       }
-      if (gemFashion?.id === 'sunfire_aura') {
+      if (gemFashion?.id === 'sunfire_aura' || (auraFashion && !auraFashion.linkedGemItemId)) {
+        const pCol = auraFashion?.primaryColor ?? gemFashion?.colors.primary ?? '#fbbf24'
+        const aCol = auraFashion?.accentColor ?? gemFashion?.colors.accent ?? '#fde047'
         ctx.save()
         ctx.globalAlpha = p.invisible ? 0.12 : 0.72
-        ctx.strokeStyle = gemFashion.colors.primary
-        ctx.shadowColor = gemFashion.colors.accent
+        ctx.strokeStyle = pCol
+        ctx.shadowColor = aCol
         ctx.shadowBlur = 7
         ctx.lineWidth = 1.5
         ctx.beginPath()
         ctx.ellipse(p.x, p.y - 7, 12 + Math.sin(t * 4) * 1.5, 8, t * 0.3, 0, Math.PI * 2)
         ctx.stroke()
-        ctx.fillStyle = gemFashion.colors.accent
+        ctx.fillStyle = aCol
         for (let spark = 0; spark < 4; spark++) {
           const angle = t * 2 + spark * (Math.PI / 2)
           ctx.fillRect(Math.round(p.x + Math.cos(angle) * 13), Math.round(p.y - 8 + Math.sin(angle) * 9), 2, 2)
@@ -1155,7 +1193,8 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     }
     const activeTitleDef = p.rpgExt?.activeTitle ? TITLE_DEFS.find((item) => item.id === p.rpgExt?.activeTitle) : null
     const guildTagPrefix = p.rpgExt?.guildTag ? `[${p.rpgExt.guildTag}] ` : ''
-    const displayNameLine = `${guildTagPrefix}${p.name} [${p.uid === undefined ? 'Guest' : String(p.uid).padStart(5, '0')}]`
+    const vipPrefix = vipBonus.active && vipBonus.tierDef ? `[${vipBonus.tierDef.badgeLabel}] ` : ''
+    const displayNameLine = `${vipPrefix}${guildTagPrefix}${p.name} [${p.uid === undefined ? 'Guest' : String(p.uid).padStart(5, '0')}]`
     if (equippedFrame) {
       ctx.save()
       ctx.strokeStyle = equippedFrame.primaryColor
@@ -1169,7 +1208,13 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       ctx.restore()
     }
     text(`✦ ${job.name} ✦`, x, y - 18 * dpr, p.gm ? '#ffd60a' : '#72efdd', 8)
-    text(displayNameLine, x, y - 5 * dpr, p.gm ? '#ffd60a' : equippedFrame?.primaryColor ?? '#ffffff', 9.5)
+    text(
+      displayNameLine,
+      x,
+      y - 5 * dpr,
+      p.gm ? '#ffd60a' : equippedFrame?.primaryColor ?? (vipBonus.active && vipBonus.tierDef ? vipBonus.tierDef.badgeColor : '#ffffff'),
+      9.5,
+    )
     if (activeTitleDef) {
       text(`«${activeTitleDef.name}»`, x, y - 31 * dpr, activeTitleDef.color, 7.8)
     }

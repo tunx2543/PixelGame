@@ -3,21 +3,23 @@
 import { useEffect, useRef } from 'react'
 import {
   action,
+  castSkill,
   closePanel,
+  drinkPotion,
   game,
   notify,
   openPanel,
   saveGame,
-  toggleZenHud,
   toggleMountRiding,
+  toggleZenHud,
   triggerDodgeDash,
   triggerOpenWorldGuard,
   triggerUltimateSkill,
   update,
-  drinkPotion,
-  castSkill,
+  useQuickSlot,
 } from '@/lib/game/engine'
 import { render } from '@/lib/game/renderer'
+import { getUiPreferences } from '@/lib/game/ui-layout'
 
 const MOVE_KEYS = new Set(['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd'])
 
@@ -66,7 +68,16 @@ export function GameCanvas() {
             break
           }
         }
-        if (hasActiveSkillCd || game.guardCd > 0 || game.dashCd > 0 || game.comboCount > 0) notify()
+        let hasActiveItemCd = false
+        for (const k in game.itemCd) {
+          if (game.itemCd[k] > 0) {
+            hasActiveItemCd = true
+            break
+          }
+        }
+        if (hasActiveSkillCd || hasActiveItemCd || game.guardCd > 0 || game.dashCd > 0 || game.comboCount > 0) {
+          notify()
+        }
       }
       raf = requestAnimationFrame(loop)
     }
@@ -74,25 +85,58 @@ export function GameCanvas() {
 
     const isTyping = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null
-      return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')
+      return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')
     }
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (isTyping(e)) return
       const k = e.key.toLowerCase()
+      const prefs = getUiPreferences()
+
       if (k === 'enter') {
         e.preventDefault()
         window.dispatchEvent(new CustomEvent('pixelquest:open-chat'))
         window.setTimeout(() => document.getElementById('chat-input')?.focus(), 20)
         return
       }
-      if (k === 'escape') return closePanel()
+      if (k === 'escape') {
+        closePanel()
+        return
+      }
       if (MOVE_KEYS.has(k)) {
         game.keys.add(k)
         e.preventDefault()
         return
       }
       if (e.repeat) return
+
+      // Skill bar F1-F4
+      if (e.key === 'F1' || e.key === 'F2' || e.key === 'F3' || e.key === 'F4') {
+        e.preventDefault()
+        castSkill(Number(e.key.slice(1)) - 1)
+        return
+      }
+
+      // Quick Item Bar 1-0 (always active in 'f-keys' preset, or Shift+Digit in 'legacy-1-3')
+      if (/^Digit[0-9]$/.test(e.code)) {
+        const digit = Number(e.code.slice(5))
+        const slotIdx = digit === 0 ? 9 : digit - 1
+        if (prefs.hotkeyPreset === 'f-keys') {
+          e.preventDefault()
+          useQuickSlot(slotIdx)
+          return
+        }
+        if (e.shiftKey) {
+          e.preventDefault()
+          useQuickSlot(slotIdx)
+          return
+        }
+        if (digit >= 1 && digit <= 3) {
+          castSkill(digit - 1)
+          return
+        }
+      }
+
       if (k === ' ' || k === 'j' || k === 'e') {
         e.preventDefault()
         action()
@@ -111,11 +155,19 @@ export function GameCanvas() {
       } else if (k === 'm') {
         e.preventDefault()
         toggleMountRiding()
-      } else if (k === '1' || k === '2' || k === '3') castSkill(Number(k) - 1)
-      else if (k === 'q') drinkPotion('hp')
-      else if (k === 'r') drinkPotion('mp')
-      else if (k === 'i' || k === 'c') openPanel('character')
+      } else if (k === 'q' && prefs.legacyQuickPotions) {
+        drinkPotion('hp')
+      } else if (k === 'r' && prefs.legacyQuickPotions) {
+        drinkPotion('mp')
+      } else if (k === 'i') {
+        openPanel('inventory')
+      } else if (k === 'c') {
+        openPanel('character')
+      } else if (k === 'k') {
+        openPanel('quests')
+      }
     }
+
     const onKeyUp = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase()
       game.keys.delete(k)

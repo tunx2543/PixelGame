@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { Award, Check, Crown, Gem, Lock } from 'lucide-react'
+import { Archive, Award, Check, Clock, Crown, Gem, Lock } from 'lucide-react'
 import {
   claimBattlePassTierAction,
+  claimExpiredPassArchiveAction,
   unlockBattlePassPremiumAction,
 } from '@/lib/game/engine'
 import {
@@ -11,11 +12,20 @@ import {
   BP_EXP_PER_LEVEL,
   BP_MAX_LEVEL,
   BP_PREMIUM_DIAMOND_COST,
+  CURRENT_BP_SEASON_META,
   sanitizeExtV2,
 } from '@/lib/game/extended-systems'
 import { playQuestClaimSfx } from '@/lib/game/sfx'
 import { useGame } from '@/lib/game/use-game'
 import { PanelFrame, PxButton } from './panels'
+
+function formatSeasonCountdown(endAtMs: number): string {
+  const diff = Math.max(0, endAtMs - Date.now())
+  if (diff <= 0) return 'สิ้นสุดซีซันแล้ว'
+  const days = Math.floor(diff / (24 * 60 * 60 * 1000))
+  const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000))
+  return `เหลือเวลา ${days} วัน ${hours} ชม.`
+}
 
 export function PassPanel() {
   const { p } = useGame()
@@ -24,6 +34,7 @@ export function PassPanel() {
 
   const extV2 = sanitizeExtV2(p.extV2)
   const bp = extV2.battlePass
+  const expiredArchive = bp.expiredArchive ?? []
   const pct = bp.level >= BP_MAX_LEVEL ? 100 : Math.min(100, Math.round((bp.exp / BP_EXP_PER_LEVEL) * 100))
 
   const handleClaimAll = () => {
@@ -47,14 +58,18 @@ export function PassPanel() {
 
   return (
     <PanelFrame
-      title="Aurora Season Pass (Lv.1–20)"
+      title={`${CURRENT_BP_SEASON_META.seasonName} (Lv.1–20)`}
       subtitle="ล่ามอนสเตอร์ เก็บเกี่ยววัตถุดิบ และลงดันเจี้ยนเพื่อสะสม EXP ปลดล็อกปีกและเพชรฟรี"
     >
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border border-primary/50 bg-primary/10 p-3">
         <div className="min-w-0 flex-1 space-y-1.5">
-          <div className="flex items-center justify-between text-xs font-bold">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold">
             <span className="flex items-center gap-1.5 text-primary">
               <Award className="size-4" aria-hidden /> ระดับซีซัน: Lv.{bp.level} / {BP_MAX_LEVEL}
+            </span>
+            <span className="inline-flex items-center gap-1 text-[11px] text-cyan-200">
+              <Clock className="size-3.5" aria-hidden />
+              {formatSeasonCountdown(bp.seasonEndAtMs ?? CURRENT_BP_SEASON_META.seasonEndAtMs)}
             </span>
             <span className="tabular-nums text-muted-foreground">
               {bp.level >= BP_MAX_LEVEL ? 'MAX LEVEL' : `${bp.exp} / ${BP_EXP_PER_LEVEL} EXP`}
@@ -89,6 +104,32 @@ export function PassPanel() {
           )}
         </div>
       </div>
+
+      {expiredArchive.length > 0 && (
+        <div className="mb-3 space-y-2 border-2 border-amber-400/50 bg-amber-500/10 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="flex items-center gap-1.5 text-xs font-bold text-amber-200">
+                <Archive className="size-4" aria-hidden />
+                รางวัลซีซันเก่าที่ปลดล็อกไว้ ({expiredArchive.length} รายการ)
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                ระบบเก็บรักษารางวัลที่ยังไม่ได้รับจากซีซันก่อนหน้าให้คุณกดรับย้อนหลังได้
+              </p>
+            </div>
+            <PxButton
+              variant="accent"
+              onClick={() => {
+                const res = claimExpiredPassArchiveAction()
+                if (res.ok) playQuestClaimSfx(true)
+                setNotice(res.message)
+              }}
+            >
+              รับย้อนหลังทั้งหมด ({expiredArchive.length})
+            </PxButton>
+          </div>
+        </div>
+      )}
 
       {notice && (
         <div className="mb-3 border border-emerald-400/60 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-300" role="status">

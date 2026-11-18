@@ -105,6 +105,7 @@ import {
   LIFE_SKILL_META,
   MAX_LOADOUTS,
   MAX_SKILL_UPGRADE,
+  QUICK_SLOT_COUNT,
   TALENT_NODES,
   calculateOfflineAfkRewards,
   computeTalentBonuses,
@@ -119,6 +120,7 @@ import {
   lifeSkillExpToNext,
   rollGatheringDrops,
   sanitizeExtV2,
+  sanitizeQuickSlots,
   skillUpgradeCost,
   type CosmeticSlot,
   type OfflineAfkSummary,
@@ -139,6 +141,37 @@ import {
   type EquipmentRarity,
   type ItemAffix,
 } from './mmo-systems'
+import type {
+  AuditLogEntry,
+  DiamondTxType,
+  FashionSlot,
+  PremiumState,
+  PurchaseReceipt,
+  VipTierId,
+} from './premium/types'
+import {
+  VIP_TIERS,
+  getEffectiveVipBonuses,
+  getVipTierDef,
+  isVipActive,
+  resolveVipLevelFromExp,
+} from './premium/vip'
+import { getFashionItemDef } from './premium/fashion-pet'
+import { getPremiumProduct, getPremiumProductByItemOrId } from './premium/catalog'
+import {
+  EXTRA_INVENTORY_SCROLL_CAP,
+  EXTRA_STORAGE_SCROLL_CAP,
+  appendAuditLog,
+  appendPurchaseReceipt,
+  applyDiamondTransaction,
+  createDefaultPremiumState,
+  generateUniqueTxId,
+  sanitizePremiumState,
+} from './premium/wallet'
+import {
+  recordDiamondTransaction,
+  recordPremiumAuditLog,
+} from '@/lib/firebase/premium-ledger'
 
 if (typeof window !== 'undefined') {
   onDailyMissionCompleted((mission) => {
@@ -344,8 +377,114 @@ export interface SaveData {
   towerState?: TowerState
   rpgExt?: RpgExtensionState
   extV2?: PlayerExtensionV2
+  premium?: PremiumState
   blockedUids?: string[]
   appliedTradeIds?: string[]
+}
+
+const inFlightPremiumLocks = new Set<string>()
+
+export function ensurePremiumState(p: SaveData): PremiumState {
+  const charId = getActiveCharacterSlot()
+  const sanitized = sanitizePremiumState(p.premium, {
+    characterId: charId,
+    diamonds: p.diamonds ?? 0,
+    ownedGemItems: p.ownedGemItems,
+    equippedGemFashion: p.equippedGemFashion,
+    unlockedCosmetics: p.extV2?.unlockedCosmetics,
+    equippedWing: p.extV2?.equippedWing,
+  })
+  p.premium = sanitized
+  return sanitized
+}
+
+function persistLedgerAsync(tx?: import('./premium/types').DiamondTransaction, audit?: AuditLogEntry) {
+  if (typeof window === 'undefined') return
+  const fbUser = firebaseAuth.currentUser
+  if (!fbUser || !fbUser.emailVerified) return
+  const slotId = getActiveCharacterSlot()
+  if (tx) {
+    void recordDiamondTransaction(fbUser.uid, slotId, tx).catch(() => {})
+  }
+  if (audit) {
+    void recordPremiumAuditLog(fbUser.uid, slotId, audit).catch(() => {})
+  }
+}
+
+export function commitDiamondDelta(
+  p: SaveData,
+  delta: number,
+  meta: {
+    source: string
+    note: string
+    type?: DiamondTxType
+    requestId?: string
+    txId?: string
+    productId?: string
+    itemId?: string
+    serverVerified?: boolean
+    serverSignature?: string
+    actorUid?: string
+    isGm?: boolean
+    timestampMs?: number
+  },
+): { ok: boolean; duplicate?: boolean; message: string; nextBalance: number; tx?: import('./premium/types').DiamondTransaction } {
+  const prem = ensurePremiumState(p)
+  const safeDelta = Math.trunc(Number(delta) || 0)
+  if (safeDelta === 0) {
+    return { ok: true, message: 'ไม่มีการเปลี่ยนแปลงเพชร', nextBalance: p.diamonds ?? 0 }
+  }
+  const txType: DiamondTxType = meta.type ?? (safeDelta > 0 ? 'earn' : 'spend')
+  const amount = Math.abs(safeDelta)
+  const fbUser = firebaseAuth.currentUser
+  const res = applyDiamondTransaction(prem, p.diamonds ?? 0, {
+    type: txType,
+    amount,
+    source: meta.source,
+    note: meta.note,
+    actorUid: meta.actorUid ?? fbUser?.uid ?? 'guest',
+    isGm: meta.isGm ?? Boolean(p.gm && isCurrentAccountGm()),
+    requestId: meta.requestId,
+    txId: meta.txId,
+    productId: meta.productId,
+    itemId: meta.itemId,
+    serverVerified: meta.serverVerified,
+    serverSignature: meta.serverSignature,
+    timestampMs: meta.timestampMs,
+  })
+  if (!res.ok) return res
+  p.diamonds = res.nextBalance
+  if (res.tx) {
+    persistLedgerAsync(res.tx, undefined)
+  }
+  return res
+}
+
+function logPremiumAudit(
+  p: SaveData,
+  entry: Omit<AuditLogEntry, 'logId' | 'createdAtMs' | 'characterId' | 'actorUid' | 'actorRole'> & {
+    actorUid?: string
+    actorRole?: 'gm' | 'player'
+  },
+) {
+  const prem = ensurePremiumState(p)
+  const fbUser = firebaseAuth.currentUser
+  const actorRole: 'gm' | 'player' = entry.actorRole ?? (p.gm && isCurrentAccountGm() ? 'gm' : 'player')
+  const log = appendAuditLog(prem, {
+    action: entry.action,
+    characterId: prem.wallet.characterId || getActiveCharacterSlot(),
+    actorUid: entry.actorUid ?? fbUser?.uid ?? 'guest',
+    actorRole,
+    txId: entry.txId,
+    details: entry.details,
+    verifiedByServer: entry.verifiedByServer,
+  })
+  persistLedgerAsync(undefined, log)
+  return log
+}
+
+export function syncExternalDiamondDelta(p: SaveData, delta: number, source: string, note: string) {
+  return commitDiamondDelta(p, delta, { source, note, type: delta >= 0 ? 'earn' : 'spend' })
 }
 
 export interface RemotePlayer {
@@ -446,7 +585,38 @@ interface Projectile {
   skillId?: string
 }
 
-export type PanelId = 'shop' | 'gem-shop' | 'enhance' | 'job' | 'storage' | 'character' | 'gacha' | 'rebirth' | 'friends' | 'trade' | 'inventory' | 'gm-summon' | 'dev-tools' | 'pets' | 'quests' | 'models' | 'craft' | 'codex' | 'guild' | 'arena' | 'dungeon' | 'market' | 'mail' | 'pass' | 'lifeskills' | 'talents' | 'wardrobe' | 'guide'
+export type PanelId =
+  | 'shop'
+  | 'gem-shop'
+  | 'enhance'
+  | 'job'
+  | 'storage'
+  | 'character'
+  | 'equipment'
+  | 'settings'
+  | 'party'
+  | 'gacha'
+  | 'rebirth'
+  | 'friends'
+  | 'trade'
+  | 'inventory'
+  | 'gm-summon'
+  | 'dev-tools'
+  | 'pets'
+  | 'quests'
+  | 'models'
+  | 'craft'
+  | 'codex'
+  | 'guild'
+  | 'arena'
+  | 'dungeon'
+  | 'market'
+  | 'mail'
+  | 'pass'
+  | 'lifeskills'
+  | 'talents'
+  | 'wardrobe'
+  | 'guide'
 export type ChatType = 'system' | 'player' | 'gm' | 'loot' | 'error' | 'npc'
 export interface ChatMsg {
   id: number
@@ -507,6 +677,8 @@ export const game = {
   petAttackCd: 0,
   petAttackAnim: 0,
   skillCd: {} as Record<string, number>,
+  itemCd: {} as Record<string, number>,
+  blockingUi: false,
   bubble: null as null | { text: string; until: number },
   announcement: null as null | { body: string; authorId: string; until: number },
   lootToast: null as null | { itemId: string; until: number },
@@ -728,9 +900,42 @@ function stackable(def: ItemDef) {
   return def.kind === 'consumable' || def.kind === 'material'
 }
 
+export function getInventoryCapacityBreakdown(p: SaveData) {
+  const prem = ensurePremiumState(p)
+  const vipBonus = getEffectiveVipBonuses(prem.vip)
+  const base = INV_SIZE
+  const scrollBonus = Math.max(0, Math.min(60, Math.floor(p.inventoryCapacityBonus ?? 0)))
+  const premiumExtra = Math.max(0, Math.min(EXTRA_INVENTORY_SCROLL_CAP, prem.storage.extraInventorySlots))
+  const vipExtra = vipBonus.extraInventorySlots
+  return {
+    base,
+    scrollBonus,
+    premiumExtra,
+    vipExtra,
+    total: base + scrollBonus + premiumExtra + vipExtra,
+  }
+}
+
 export function getInventoryCapacity(p: SaveData) {
-  const bonus = Math.max(0, Math.min(60, Math.floor((p.inventoryCapacityBonus ?? 0) / 20) * 20))
-  return INV_SIZE + bonus
+  return getInventoryCapacityBreakdown(p).total
+}
+
+export function getStorageCapacityBreakdown(p: SaveData) {
+  const prem = ensurePremiumState(p)
+  const vipBonus = getEffectiveVipBonuses(prem.vip)
+  const base = STORAGE_SIZE
+  const premiumExtra = Math.max(0, Math.min(EXTRA_STORAGE_SCROLL_CAP, prem.storage.extraStorageSlots))
+  const vipExtra = vipBonus.extraStorageSlots
+  return {
+    base,
+    premiumExtra,
+    vipExtra,
+    total: base + premiumExtra + vipExtra,
+  }
+}
+
+export function getStorageCapacity(p: SaveData) {
+  return getStorageCapacityBreakdown(p).total
 }
 
 export function addItem(
@@ -871,35 +1076,154 @@ export function itemLabel(it: InvItem) {
   return `${def?.name ?? it.itemId}${it.plus > 0 ? ` +${it.plus}` : ''}`
 }
 
-export function consumeItem(id: string) {
+export function getItemCooldownDuration(itemId: string): number {
+  const def = ITEMS[itemId]
+  if (!def || def.kind !== 'consumable') return 0
+  if (itemId === 'return_scroll' || itemId === 'town_warp_tome') return 4
+  if (getFoodBuffForItem(itemId)) return 3
+  if (itemId === 'starlight_loot_magnet') return 3
+  if (def.heal || def.mana) return 1.5
+  return 1
+}
+
+export function itemCooldownRemaining(itemId: string): number {
+  return Math.max(0, game.itemCd[itemId] ?? 0)
+}
+
+export function consumeItem(id: string): boolean {
   const p = player()
   const it = p.inventory.find((i) => i.uid === id)
-  if (!it) return
+  if (!it) return false
   const def = ITEMS[it.itemId]
-  if (!def) return
-  if (def.kind === 'weapon' || def.kind === 'armor') return equip(id)
-  if (def.kind !== 'consumable') return
+  if (!def) return false
+  if (def.kind === 'weapon' || def.kind === 'armor') {
+    equip(id)
+    return true
+  }
+  if (def.kind !== 'consumable') return false
+
+  const cdLeft = itemCooldownRemaining(def.id)
+  if (cdLeft > 0) {
+    warn(`${def.name} ติดคูลดาวน์ (${cdLeft.toFixed(1)}s)`)
+    return false
+  }
+  const cdDur = getItemCooldownDuration(def.id)
 
   if (def.id === 'starlight_loot_magnet') {
     p.lootMagnetUntil = Math.max(Date.now(), p.lootMagnetUntil ?? 0) + 5 * 60 * 1000
     removeUid(p.inventory, id, 1)
+    if (cdDur > 0) game.itemCd[def.id] = cdDur
     say('system', 'แม่เหล็กแสงดาวทำงาน 5 นาที — เก็บดรอปของคุณในระยะ 120 px')
     saveGame()
     notify()
-    return
+    return true
   }
 
   if (def.id === 'astral_bag_expansion') {
     if (p.inventoryCapacityBonus >= 60) {
-      say('error', 'กระเป๋าเพิ่มช่องถึงขีดจำกัด +60 แล้ว')
-      return notify()
+      say('error', 'กระเป๋าดวงดาวเพิ่มช่องถึงขีดจำกัด +60 แล้ว')
+      notify()
+      return false
     }
     removeUid(p.inventory, id, 1)
     p.inventoryCapacityBonus = Math.min(60, p.inventoryCapacityBonus + 20)
+    if (cdDur > 0) game.itemCd[def.id] = cdDur
     say('system', `กระเป๋าเพิ่มเป็น ${getInventoryCapacity(p)} ช่องถาวร`)
     saveGame()
     notify()
-    return
+    return true
+  }
+
+  if (def.id === 'bag_scroll_10') {
+    const prem = ensurePremiumState(p)
+    if (prem.storage.extraInventorySlots >= EXTRA_INVENTORY_SCROLL_CAP) {
+      say('error', `ขยายช่องกระเป๋าพรีเมียมครบขีดจำกัด +${EXTRA_INVENTORY_SCROLL_CAP} ช่องแล้ว`)
+      notify()
+      return false
+    }
+    removeUid(p.inventory, id, 1)
+    prem.storage.extraInventorySlots = Math.min(EXTRA_INVENTORY_SCROLL_CAP, prem.storage.extraInventorySlots + 10)
+    logPremiumAudit(p, { action: 'STORAGE_EXPAND', details: `ใช้คัมภีร์ขยายกระเป๋า +10 ช่อง (รวม ${getInventoryCapacity(p)} ช่อง)`, verifiedByServer: false })
+    say('system', `ขยายกระเป๋าสำเร็จ! ความจุรวม ${getInventoryCapacity(p)} ช่อง`)
+    saveGame()
+    notify()
+    return true
+  }
+
+  if (def.id === 'storage_scroll_15' || def.id === 'storage_scroll_30') {
+    const prem = ensurePremiumState(p)
+    const addSlots = def.id === 'storage_scroll_30' ? 30 : 15
+    if (prem.storage.extraStorageSlots >= EXTRA_STORAGE_SCROLL_CAP) {
+      say('error', `ขยายคลังเก็บของครบขีดจำกัด +${EXTRA_STORAGE_SCROLL_CAP} ช่องแล้ว`)
+      notify()
+      return false
+    }
+    removeUid(p.inventory, id, 1)
+    prem.storage.extraStorageSlots = Math.min(EXTRA_STORAGE_SCROLL_CAP, prem.storage.extraStorageSlots + addSlots)
+    logPremiumAudit(p, { action: 'STORAGE_EXPAND', details: `ใช้ ${def.name} (ความจุคลังรวม ${getStorageCapacity(p)} ช่อง)`, verifiedByServer: false })
+    say('system', `ขยายคลังเก็บของเป็น ${getStorageCapacity(p)} ช่องถาวร`)
+    saveGame()
+    notify()
+    return true
+  }
+
+  if (def.id === 'vip_card_7d' || def.id === 'vip_card_30d' || def.id === 'vip_exp_crystal') {
+    const prem = ensurePremiumState(p)
+    const now = Date.now()
+    const days = def.id === 'vip_card_30d' ? 30 : 7
+    const expGain = def.id === 'vip_exp_crystal' ? 600 : def.id === 'vip_card_30d' ? 450 : 150
+    const tierFloor: VipTierId = def.id === 'vip_card_30d' ? 2 : 1
+    removeUid(p.inventory, id, 1)
+    const baseTime = prem.vip.expiresAtMs && prem.vip.expiresAtMs > now ? prem.vip.expiresAtMs : now
+    prem.vip.expiresAtMs = baseTime + days * 24 * 60 * 60 * 1000
+    prem.vip.vipExp += expGain
+    prem.vip.vipLevel = Math.max(tierFloor, prem.vip.vipLevel, resolveVipLevelFromExp(prem.vip.vipExp)) as VipTierId
+    const bonus = getEffectiveVipBonuses(prem.vip, now)
+    for (const fId of bonus.exclusiveFashionIds) {
+      if (!prem.fashion.unlockedIds.includes(fId)) prem.fashion.unlockedIds.push(fId)
+    }
+    logPremiumAudit(p, { action: 'VIP_ACTIVATE', details: `ใช้ ${def.name} -> VIP ${prem.vip.vipLevel} (${prem.vip.vipExp} EXP)`, verifiedByServer: false })
+    say('loot', `★ เปิดใช้งาน VIP ระดับ ${prem.vip.vipLevel} (+${expGain} VIP EXP)!`)
+    saveGame()
+    notify()
+    return true
+  }
+
+  if (def.id === 'pet_exp_elixir') {
+    p.petState = sanitizePetState(p.petState, p.ownedGemItems, p.equippedGemCompanion)
+    if (!p.petState.activePetId) {
+      say('error', 'กรุณาสวมใส่สัตว์เลี้ยงก่อนใช้น้ำทิพย์ฝึกสัตว์เลี้ยง')
+      notify()
+      return false
+    }
+    removeUid(p.inventory, id, 1)
+    const res = grantActivePetExp(p.petState, 250)
+    p.petState = res.nextPetState
+    say('loot', `คู่หูได้รับ +250 EXP${res.leveledUp ? ` และอัปเป็น Lv.${res.newLevel}!` : ''}`)
+    saveGame()
+    notify()
+    return true
+  }
+
+  if (def.id === 'double_exp_scroll') {
+    const extV2 = sanitizeExtV2(p.extV2)
+    extV2.activeFoodBuff = {
+      itemId: def.id,
+      name: 'คัมภีร์คูณ EXP +35%',
+      expiresAtMs: Date.now() + 10 * 60 * 1000,
+      atkPct: 15,
+      defPct: 15,
+      critBonus: 0.05,
+      expMul: 1.35,
+    }
+    p.extV2 = extV2
+    removeUid(p.inventory, id, 1)
+    if (cdDur > 0) game.itemCd[def.id] = cdDur
+    addFloat(p.x, p.y - 28, 'EXP +35%!', '#facc15', 10)
+    say('loot', 'เปิดใช้งานคัมภีร์คูณค่าประสบการณ์ +35% · ATK/DEF +15% นาน 10 นาที')
+    saveGame()
+    notify()
+    return true
   }
 
   const foodDef = getFoodBuffForItem(def.id)
@@ -916,11 +1240,12 @@ export function consumeItem(id: string) {
     }
     p.extV2 = extV2
     removeUid(p.inventory, id, 1)
+    if (cdDur > 0) game.itemCd[def.id] = cdDur
     addFloat(p.x, p.y - 28, `${foodDef.name}!`, '#fbbf24', 10)
     say('system', `รับประทาน ${foodDef.name} (ATK +${foodDef.atkPct}% · DEF +${foodDef.defPct}% นาน ${Math.round(foodDef.durationSec / 60)} นาที)`)
     saveGame()
     notify()
-    return
+    return true
   }
 
   const s = getStats()
@@ -933,12 +1258,75 @@ export function consumeItem(id: string) {
     addFloat(p.x, p.y - 22, `+${def.mana}`, '#4cc9f0')
   }
   removeUid(p.inventory, id, 1)
+  if (cdDur > 0) game.itemCd[def.id] = cdDur
   if (def.id === 'return_scroll' || def.id === 'town_warp_tome') {
     const town = MAPS.town
     changeMap('town', town.spawn.x, town.spawn.y)
   }
   saveGame()
   notify()
+  return true
+}
+
+export function getQuickSlots(): Array<string | null> {
+  if (!game.p) return Array<string | null>(QUICK_SLOT_COUNT).fill(null)
+  const extV2 = sanitizeExtV2(game.p.extV2)
+  return extV2.quickSlots
+}
+
+export function setQuickSlot(slotIndex: number, itemId: string | null): { ok: boolean; message?: string } {
+  if (!game.p) return { ok: false }
+  if (slotIndex < 0 || slotIndex >= QUICK_SLOT_COUNT) return { ok: false, message: 'ช่องลัดไม่ถูกต้อง' }
+  if (itemId !== null && ITEMS[itemId]?.kind !== 'consumable') {
+    warn('ใส่ได้เฉพาะไอเทมใช้งานได้ (ยา, อาหาร, คัมภีร์) เท่านั้น')
+    return { ok: false, message: 'ใส่ได้เฉพาะไอเทมใช้งานได้เท่านั้น' }
+  }
+  const extV2 = sanitizeExtV2(game.p.extV2)
+  const nextSlots = [...extV2.quickSlots]
+  nextSlots[slotIndex] = itemId
+  extV2.quickSlots = sanitizeQuickSlots(nextSlots)
+  game.p.extV2 = extV2
+  saveGame()
+  notify()
+  return { ok: true }
+}
+
+export function swapQuickSlots(fromIndex: number, toIndex: number): boolean {
+  if (!game.p) return false
+  if (
+    fromIndex < 0 ||
+    fromIndex >= QUICK_SLOT_COUNT ||
+    toIndex < 0 ||
+    toIndex >= QUICK_SLOT_COUNT ||
+    fromIndex === toIndex
+  ) {
+    return false
+  }
+  const extV2 = sanitizeExtV2(game.p.extV2)
+  const nextSlots = [...extV2.quickSlots]
+  const tmp = nextSlots[fromIndex] ?? null
+  nextSlots[fromIndex] = nextSlots[toIndex] ?? null
+  nextSlots[toIndex] = tmp
+  extV2.quickSlots = sanitizeQuickSlots(nextSlots)
+  game.p.extV2 = extV2
+  saveGame()
+  notify()
+  return true
+}
+
+export function useQuickSlot(slotIndex: number): boolean {
+  if (!game.p) return false
+  const slots = getQuickSlots()
+  const itemId = slots[slotIndex]
+  if (!itemId) return false
+  const def = ITEMS[itemId]
+  if (!def || def.kind !== 'consumable') return false
+  const target = game.p.inventory.find((it) => it.itemId === itemId && it.qty > 0)
+  if (!target) {
+    warn(`${def.name} หมดแล้ว`)
+    return false
+  }
+  return consumeItem(target.uid)
 }
 
 export function drinkPotion(kind: 'hp' | 'mp') {
@@ -1264,6 +1652,7 @@ function killMonster(m: Monster) {
       talentBonus.goldMul *
       (1 + (getStats(p).affixGoldPct ?? 0) / 100),
   )
+  const vipBonus = getEffectiveVipBonuses(ensurePremiumState(p).vip)
   const expGain = Math.round(
     def.exp *
       (petBonus?.expMul ?? 1) *
@@ -1271,12 +1660,16 @@ function killMonster(m: Monster) {
       guildExpMul *
       talentBonus.expMul *
       foodBuff.expMul *
+      vipBonus.expMul *
       timeExpMul *
       (1 + (getStats(p).affixExpPct ?? 0) / 100),
   )
   p.gold += gold
   if (m.isWorldBoss) {
-    p.diamonds = (p.diamonds ?? 0) + 15
+    commitDiamondDelta(p, 15, {
+      source: 'world_boss_kill',
+      note: `โบนัสปราบบอสโลก ${m.worldBossName ?? def.name}`,
+    })
     say('loot', `★ พิชิตบอสโลก ${m.worldBossName ?? def.name} บนแมพ! รับโบนัส +15 เพชร!`)
   }
   recordDailyMissionProgress({
@@ -1891,8 +2284,19 @@ export function devAddDiamonds(amount: number) {
   const p = player()
   if (!p.gm || !isCurrentAccountGm()) return
   const delta = Math.floor(amount)
-  if (!Number.isFinite(delta)) return
-  p.diamonds = Math.max(0, Math.min(1_000_000_000, (p.diamonds ?? 0) + delta))
+  if (!Number.isFinite(delta) || delta === 0) return
+  commitDiamondDelta(p, delta, {
+    type: delta >= 0 ? 'sandbox_grant' : 'spend',
+    source: 'gm_dev_console',
+    note: `[DEV Console] ปรับเพชร ${delta >= 0 ? `+${delta}` : delta}`,
+    isGm: true,
+  })
+  logPremiumAudit(p, {
+    action: delta >= 0 ? 'SANDBOX_GRANT' : 'DIAMOND_SPEND',
+    details: `[DEV Console] ปรับเพชร ${delta >= 0 ? `+${delta}` : delta} (คงเหลือ ${p.diamonds.toLocaleString()} D)`,
+    verifiedByServer: false,
+    actorRole: 'gm',
+  })
   say('gm', `[DEV] ปรับเพชรเป็น ${p.diamonds.toLocaleString()} D`)
   saveGame()
   notify()
@@ -2026,6 +2430,18 @@ export function devBroadcastAnnouncement(rawBody: string) {
   notify()
 }
 
+interface WindowBridge {
+  open: (id: PanelId) => void
+  close: (id?: PanelId) => void
+  closeAll: () => void
+}
+
+let windowBridge: WindowBridge | null = null
+
+export function registerWindowBridge(bridge: WindowBridge | null) {
+  windowBridge = bridge
+}
+
 export function openPanel(id: PanelId) {
   if ((id === 'gm-summon' || id === 'dev-tools') && (!game.p?.gm || !isCurrentAccountGm())) {
     say('error', 'สงวนสิทธิ์เฉพาะบัญชี GM/Dev (ffsmilepay53@gmail.com)')
@@ -2033,12 +2449,19 @@ export function openPanel(id: PanelId) {
     return
   }
   game.panel = id
+  if (windowBridge) {
+    windowBridge.open(id)
+  }
   notify()
 }
 
-export function closePanel() {
-  if (!game.panel) return
-  if (game.panel === 'trade' && game.tradeId !== null) {
+export function closePanel(targetId?: PanelId | unknown) {
+  const closingId = typeof targetId === 'string' ? (targetId as PanelId) : game.panel
+  if (!closingId) {
+    if (windowBridge) windowBridge.closeAll()
+    return
+  }
+  if (closingId === 'trade' && game.tradeId !== null) {
     const tradeId = game.tradeId
     game.tradeId = null
     game.tradeTargetId = null
@@ -2048,7 +2471,11 @@ export function closePanel() {
       notify()
     })
   }
-  game.panel = null
+  if (windowBridge) {
+    windowBridge.close(closingId)
+  } else {
+    game.panel = null
+  }
   saveGame()
   notify()
 }
@@ -2113,7 +2540,41 @@ export function buyGemShopItem(itemId: string) {
     }
   }
 
-  p.diamonds -= shopItem.price
+  const txRes = commitDiamondDelta(p, -shopItem.price, {
+    type: 'spend',
+    source: 'gem_shop',
+    itemId: shopItem.id,
+    productId: getPremiumProductByItemOrId(shopItem.id)?.productId,
+    note: `ซื้อ ${shopItem.name}`,
+  })
+  if (txRes.tx) {
+    const prem = ensurePremiumState(p)
+    const prod = getPremiumProductByItemOrId(shopItem.id)
+    if (prod) {
+      appendPurchaseReceipt(prem, {
+        receiptId: generateUniqueTxId('RCPT'),
+        txId: txRes.tx.txId,
+        requestId: txRes.tx.requestId,
+        characterId: prem.wallet.characterId,
+        productId: prod.productId,
+        itemId: shopItem.id,
+        productName: shopItem.name,
+        category: prod.category,
+        qty: 1,
+        diamondPrice: shopItem.price,
+        totalPaid: shopItem.price,
+        purchasedAtMs: Date.now(),
+        status: 'completed',
+        serverVerified: false,
+      })
+    }
+    logPremiumAudit(p, {
+      action: 'PREMIUM_PURCHASE',
+      txId: txRes.tx.txId,
+      details: `ซื้อ ${shopItem.name} (-${shopItem.price.toLocaleString()} D)`,
+      verifiedByServer: false,
+    })
+  }
   say('loot', `ซื้อ ${shopItem.name} สำเร็จ (-${shopItem.price.toLocaleString()} เพชร)`)
   saveGame()
   notify()
@@ -2363,6 +2824,7 @@ export function claimQuestReward(questId: string): { ok: boolean; message: strin
     p.questState.claimedMilestoneIds.push(quest.id)
   }
 
+  const beforeDiamonds = p.diamonds ?? 0
   const res = applyLevelAndRewards(
     p,
     {
@@ -2374,6 +2836,14 @@ export function claimQuestReward(questId: string): { ok: boolean; message: strin
     () => getStats(p),
     getInventoryCapacity(p),
   )
+  const deltaDiamonds = (p.diamonds ?? 0) - beforeDiamonds
+  if (deltaDiamonds > 0) {
+    p.diamonds = beforeDiamonds
+    commitDiamondDelta(p, deltaDiamonds, {
+      source: 'quest_reward',
+      note: `รางวัลเควสต์ "${quest.title}"`,
+    })
+  }
 
   saveGame()
   notify()
@@ -2389,6 +2859,7 @@ export async function claimDailyMissionReward(missionId: string): Promise<{ ok: 
   if (!game.p) return { ok: false, message: 'ไม่พบข้อมูลตัวละคร' }
   const p = game.p
   return claimDailyMission(missionId, (mission) => {
+    const beforeDiamonds = p.diamonds ?? 0
     applyLevelAndRewards(
       p,
       {
@@ -2400,6 +2871,14 @@ export async function claimDailyMissionReward(missionId: string): Promise<{ ok: 
       () => getStats(p),
       getInventoryCapacity(p),
     )
+    const deltaDiamonds = (p.diamonds ?? 0) - beforeDiamonds
+    if (deltaDiamonds > 0) {
+      p.diamonds = beforeDiamonds
+      commitDiamondDelta(p, deltaDiamonds, {
+        source: 'daily_mission',
+        note: `รางวัลภารกิจรายวัน "${mission.title}"`,
+      })
+    }
     saveGame()
     notify()
     say('loot', `รับรางวัลภารกิจรายวัน "${mission.title}" สำเร็จ!`)
@@ -2466,32 +2945,70 @@ function applyJob(jobId: string) {
   addEffect({ type: 'levelup', x: p.x, y: p.y, r: 22, color: '#c77dff', max: 1.4 })
 }
 
-export function deposit(id: string) {
+export function deposit(id: string, requestedQty = Infinity): { ok: boolean; message?: string } {
   const p = player()
   const it = p.inventory.find((i) => i.uid === id)
-  if (!it) return
+  if (!it) return { ok: false, message: 'ไม่พบไอเทมในกระเป๋า' }
   const def = ITEMS[it.itemId]
-  if (!def) return
-  const existingStack = stackable(def) ? p.storage.find((s) => s.itemId === it.itemId) : undefined
-  if (!existingStack && p.storage.length >= STORAGE_SIZE) return say('error', 'คลังเต็ม'), notify()
-  p.inventory = p.inventory.filter((i) => i.uid !== id)
-  if (existingStack) existingStack.qty += it.qty
-  else p.storage.push(it)
+  if (!def) return { ok: false, message: 'ไม่พบข้อมูลไอเทม' }
+
+  const isStack = stackable(def)
+  const moveQty = isStack ? Math.max(1, Math.min(it.qty, Math.floor(requestedQty))) : it.qty
+  const existingStack = isStack ? p.storage.find((s) => s.itemId === it.itemId) : undefined
+  const storageCap = getStorageCapacity(p)
+
+  // Atomic check-before-mutate
+  if (!existingStack && p.storage.length >= storageCap) {
+    say('error', `คลังเต็ม (${p.storage.length}/${storageCap} ช่อง)`)
+    notify()
+    return { ok: false, message: `คลังเต็ม (${p.storage.length}/${storageCap} ช่อง)` }
+  }
+
+  if (isStack && moveQty < it.qty) {
+    it.qty -= moveQty
+    if (existingStack) existingStack.qty += moveQty
+    else p.storage.push({ ...it, uid: uid(), qty: moveQty })
+  } else {
+    p.inventory = p.inventory.filter((i) => i.uid !== id)
+    if (existingStack) existingStack.qty += it.qty
+    else p.storage.push(it)
+  }
+  saveGame()
   notify()
+  return { ok: true }
 }
 
-export function withdraw(id: string) {
+export function withdraw(id: string, requestedQty = Infinity): { ok: boolean; message?: string } {
   const p = player()
   const it = p.storage.find((i) => i.uid === id)
-  if (!it) return
+  if (!it) return { ok: false, message: 'ไม่พบไอเทมในคลัง' }
   const def = ITEMS[it.itemId]
-  if (!def) return
-  const existingStack = stackable(def) ? p.inventory.find((s) => s.itemId === it.itemId) : undefined
-  if (!existingStack && p.inventory.length >= getInventoryCapacity(p)) return say('error', 'กระเป๋าเต็ม'), notify()
-  p.storage = p.storage.filter((i) => i.uid !== id)
-  if (existingStack) existingStack.qty += it.qty
-  else p.inventory.push(it)
+  if (!def) return { ok: false, message: 'ไม่พบข้อมูลไอเทม' }
+
+  const isStack = stackable(def)
+  const moveQty = isStack ? Math.max(1, Math.min(it.qty, Math.floor(requestedQty))) : it.qty
+  const existingStack = isStack ? p.inventory.find((s) => s.itemId === it.itemId) : undefined
+  const invCap = getInventoryCapacity(p)
+
+  // Atomic check-before-mutate
+  if (!existingStack && p.inventory.length >= invCap) {
+    say('error', `กระเป๋าเต็ม (${p.inventory.length}/${invCap} ช่อง)`)
+    notify()
+    return { ok: false, message: `กระเป๋าเต็ม (${p.inventory.length}/${invCap} ช่อง)` }
+  }
+
+  if (isStack && moveQty < it.qty) {
+    it.qty -= moveQty
+    if (existingStack) existingStack.qty += moveQty
+    else p.inventory.push({ ...it, uid: uid(), qty: moveQty })
+  } else {
+    p.storage = p.storage.filter((i) => i.uid !== id)
+    if (existingStack) existingStack.qty += it.qty
+    else p.inventory.push(it)
+  }
+  saveGame()
   notify()
+  return { ok: true }
 }
 
 export function moveGold(amount: number, toStorage: boolean) {
@@ -2620,7 +3137,10 @@ export function claimBestiaryRewardAction(monsterId: string): { ok: boolean; mes
   })
   p.rpgExt = ext
   const diamondBonus = nextTier.tier * (def.boss ? 15 : 6)
-  p.diamonds = (p.diamonds ?? 0) + diamondBonus
+  commitDiamondDelta(p, diamondBonus, {
+    source: 'bestiary_milestone',
+    note: `ปลดล็อกสมุดภาพ ${def.name} Lv.${nextTier.tier}`,
+  })
   clampVitals()
   saveGame()
   notify()
@@ -2679,7 +3199,10 @@ export function completeDailyDungeonAction(
   ext.dailyDungeonRuns[dungeonId] = (ext.dailyDungeonRuns[dungeonId] ?? 0) + 1
   const rewards = calculateDailyDungeonRewards(def, p.level, clearBonusFactor)
   p.gold += rewards.gold
-  p.diamonds = (p.diamonds ?? 0) + rewards.diamonds
+  commitDiamondDelta(p, rewards.diamonds, {
+    source: 'daily_dungeon',
+    note: `พิชิตดันเจี้ยนรายวัน ${def.name}`,
+  })
   if (rewards.stones > 0) addItem('enhance_stone', rewards.stones)
   if (rewards.materialId) addItem(rewards.materialId, 2)
   if (rewards.runeId) {
@@ -2703,7 +3226,12 @@ export function recordPvpResultAction(ratingDelta: number, gold: number, diamond
   if (won) ext.arenaWins += 1
   else ext.arenaLosses += 1
   p.gold += Math.max(0, gold)
-  p.diamonds = (p.diamonds ?? 0) + Math.max(0, diamonds)
+  if (diamonds > 0) {
+    commitDiamondDelta(p, diamonds, {
+      source: 'pvp_arena',
+      note: won ? 'รางวัลชนะลานประลอง PvP' : 'รางวัลเข้าร่วมลานประลอง PvP',
+    })
+  }
   ext.titles = evaluateUnlockedTitleIds({
     kills: p.kills,
     rebirthCount: p.rebirthCount,
@@ -2822,7 +3350,10 @@ export function claimWorldBossMilestoneAction(milestoneId: string): { ok: boolea
   }
   ext.claimedWorldBossMilestones.push(milestoneId)
   p.gold += ms.gold
-  p.diamonds = (p.diamonds ?? 0) + ms.diamonds
+  commitDiamondDelta(p, ms.diamonds, {
+    source: 'world_boss_milestone',
+    note: `รางวัลความเสียหายเวิลด์บอส ${ms.id}`,
+  })
   if (ms.stones > 0) addItem('enhance_stone', ms.stones)
   if (ms.runeId) {
     ext.runeBag[ms.runeId] = (ext.runeBag[ms.runeId] ?? 0) + 1
@@ -2991,12 +3522,22 @@ export function unlockBattlePassPremiumAction(): { ok: boolean; message: string 
   const p = player()
   const extV2 = sanitizeExtV2(p.extV2)
   if (extV2.battlePass.premiumUnlocked) return { ok: false, message: 'เปิดใช้งาน Premium Pass แล้ว' }
-  if (p.diamonds < BP_PREMIUM_DIAMOND_COST) {
+  const txRes = commitDiamondDelta(p, -BP_PREMIUM_DIAMOND_COST, {
+    type: 'spend',
+    source: 'battle_pass_unlock',
+    note: `ปลดล็อก Aurora Premium Battle Pass (${extV2.battlePass.seasonId})`,
+  })
+  if (!txRes.ok) {
     return { ok: false, message: `เพชรไม่พอ (ต้องการ ${BP_PREMIUM_DIAMOND_COST} เพชร)` }
   }
-  p.diamonds -= BP_PREMIUM_DIAMOND_COST
   extV2.battlePass.premiumUnlocked = true
   p.extV2 = extV2
+  logPremiumAudit(p, {
+    action: 'PASS_UNLOCK',
+    txId: txRes.tx?.txId,
+    details: `ปลดล็อก Premium Battle Pass (-${BP_PREMIUM_DIAMOND_COST} D)`,
+    verifiedByServer: false,
+  })
   saveGame()
   notify()
   return { ok: true, message: 'ปลดล็อก Aurora Premium Battle Pass สำเร็จ!' }
@@ -3016,17 +3557,74 @@ export function claimBattlePassTierAction(level: number, track: 'free' | 'prem')
   const reward = track === 'free' ? tier.freeReward : tier.premReward
   list.push(level)
   if (reward.gold) p.gold += reward.gold
-  if (reward.diamonds) p.diamonds = (p.diamonds ?? 0) + reward.diamonds
+  if (reward.diamonds) {
+    commitDiamondDelta(p, reward.diamonds, {
+      source: 'battle_pass_claim',
+      note: `Battle Pass Lv.${level} (${track})`,
+    })
+  }
   if (reward.stones) addItem('enhance_stone', reward.stones)
   if (reward.itemId) addItem(reward.itemId, reward.qty ?? 1)
   if ('cosmeticId' in reward && reward.cosmeticId && !extV2.unlockedCosmetics.includes(reward.cosmeticId)) {
     extV2.unlockedCosmetics.push(reward.cosmeticId)
   }
   p.extV2 = extV2
+  logPremiumAudit(p, {
+    action: 'PASS_CLAIM',
+    details: `รับรางวัล Battle Pass Lv.${level} (${track}): ${reward.label}`,
+    verifiedByServer: false,
+  })
   saveGame()
   notify()
   say('loot', `รับรางวัล Battle Pass Lv.${level}: ${reward.label}`)
   return { ok: true, message: `รับ ${reward.label} สำเร็จ!` }
+}
+
+export function claimExpiredPassArchiveAction(archiveId?: string): { ok: boolean; message: string; count: number } {
+  const p = player()
+  const extV2 = sanitizeExtV2(p.extV2)
+  const archive = extV2.battlePass.expiredArchive ?? []
+  if (archive.length === 0) {
+    return { ok: false, message: 'ไม่มีรางวัล Battle Pass ที่หมดอายุค้างรับ', count: 0 }
+  }
+  const targets = archiveId ? archive.filter((a) => a.archiveId === archiveId) : [...archive]
+  if (targets.length === 0) {
+    return { ok: false, message: 'ไม่พบรายการรางวัลค้างรับที่เลือก', count: 0 }
+  }
+
+  let totalDiamonds = 0
+  let totalGold = 0
+  for (const item of targets) {
+    if (item.gold) totalGold += item.gold
+    if (item.diamonds) totalDiamonds += item.diamonds
+    if (item.stones) addItem('enhance_stone', item.stones)
+    if (item.itemId) addItem(item.itemId, item.qty ?? 1)
+    if (item.cosmeticId && !extV2.unlockedCosmetics.includes(item.cosmeticId)) {
+      extV2.unlockedCosmetics.push(item.cosmeticId)
+    }
+  }
+  p.gold += totalGold
+  if (totalDiamonds > 0) {
+    commitDiamondDelta(p, totalDiamonds, {
+      source: 'battle_pass_archive',
+      note: `รับรางวัล Battle Pass ซีซันเก่าที่ค้างรับ (${targets.length} รายการ)`,
+    })
+  }
+  const claimedIds = new Set(targets.map((t) => t.archiveId))
+  extV2.battlePass.expiredArchive = archive.filter((a) => !claimedIds.has(a.archiveId))
+  p.extV2 = extV2
+  logPremiumAudit(p, {
+    action: 'PASS_ARCHIVE_CLAIM',
+    details: `รับรางวัล Pass ซีซันเก่าค้างรับ ${targets.length} รายการ`,
+    verifiedByServer: false,
+  })
+  saveGame()
+  notify()
+  return {
+    ok: true,
+    count: targets.length,
+    message: `รับรางวัล Battle Pass ค้างรับ ${targets.length} รายการสำเร็จ!`,
+  }
 }
 
 export function grantBattlePassExpAction(amount: number) {
@@ -3048,12 +3646,24 @@ export function unlockCosmeticAction(cosmeticId: string): { ok: boolean; message
   if (def.goldCost && p.gold < def.goldCost) return { ok: false, message: `ทองไม่พอ (ต้องการ ${def.goldCost.toLocaleString()} G)` }
   if (def.diamondCost > 0 && p.diamonds < def.diamondCost) return { ok: false, message: `เพชรไม่พอ (ต้องการ ${def.diamondCost} เพชร)` }
   if (def.goldCost) p.gold -= def.goldCost
-  if (def.diamondCost > 0) p.diamonds -= def.diamondCost
+  if (def.diamondCost > 0) {
+    commitDiamondDelta(p, -def.diamondCost, {
+      type: 'spend',
+      source: 'cosmetic_shop',
+      itemId: def.id,
+      note: `ปลดล็อกแฟชั่น ${def.name}`,
+    })
+  }
   extV2.unlockedCosmetics.push(cosmeticId)
   if (def.slot === 'wing') extV2.equippedWing = cosmeticId
   else if (def.slot === 'weaponSkin') extV2.equippedWeaponSkin = cosmeticId
   else extV2.equippedFrame = cosmeticId
   p.extV2 = extV2
+  const prem = ensurePremiumState(p)
+  if (def.slot === 'wing' && !prem.fashion.unlockedIds.includes(cosmeticId)) {
+    prem.fashion.unlockedIds.push(cosmeticId)
+    prem.fashion.equipped.wings = cosmeticId
+  }
   saveGame()
   notify()
   return { ok: true, message: `ปลดล็อกและสวมใส่ ${def.name} แล้ว!` }
@@ -3065,7 +3675,11 @@ export function equipCosmeticAction(slot: CosmeticSlot, cosmeticId: string | nul
   if (cosmeticId && !extV2.unlockedCosmetics.includes(cosmeticId)) {
     return { ok: false, message: 'ยังไม่ได้ปลดล็อกแฟชั่นชิ้นนี้' }
   }
-  if (slot === 'wing') extV2.equippedWing = cosmeticId
+  if (slot === 'wing') {
+    extV2.equippedWing = cosmeticId
+    const prem = ensurePremiumState(p)
+    prem.fashion.equipped.wings = cosmeticId
+  }
   else if (slot === 'weaponSkin') extV2.equippedWeaponSkin = cosmeticId
   else extV2.equippedFrame = cosmeticId
   p.extV2 = extV2
@@ -3157,7 +3771,10 @@ export function claimBeginnerGuideStepAction(stepId: string): { ok: boolean; mes
 
   extV2.claimedGuideSteps.push(stepId)
   p.gold += step.rewardGold
-  p.diamonds = (p.diamonds ?? 0) + step.rewardDiamonds
+  commitDiamondDelta(p, step.rewardDiamonds, {
+    source: 'beginner_guide',
+    note: `รางวัลคู่มือผู้เริ่มต้น: ${step.title}`,
+  })
   if (step.rewardStones > 0) addItem('enhance_stone', step.rewardStones)
   extV2.battlePass = grantBattlePassExpToState(extV2.battlePass, 30).next
   p.extV2 = extV2
@@ -3209,6 +3826,7 @@ export function startTownInvasionAction(): { ok: boolean; message: string } {
   game.monsters = []
   spawnTownInvasionWave(1)
   game.panel = null
+  windowBridge?.closeAll()
   say('gm', '★ สัญญาณเตือนภัย! กองทัพมอนสเตอร์บุกเมือง Wave 1/3 — ช่วยกันปราบให้หมด!')
   notify()
   return { ok: true, message: 'เริ่มภารกิจป้องกันเมือง Wave 1/3 แล้ว!' }
@@ -3417,7 +4035,12 @@ export function applyCompletedTradeAction(params: {
 export function applyFieldBossRewardAction(reward: { gold: number; diamonds: number; stones: number; bossName: string }) {
   const p = player()
   p.gold += Math.max(0, reward.gold)
-  p.diamonds = (p.diamonds ?? 0) + Math.max(0, reward.diamonds)
+  if (reward.diamonds > 0) {
+    commitDiamondDelta(p, reward.diamonds, {
+      source: 'field_boss',
+      note: `รางวัลปราบบอสแมพ ${reward.bossName}`,
+    })
+  }
   if (reward.stones > 0) addItem('enhance_stone', reward.stones)
   saveGame()
   notify()
@@ -3448,7 +4071,12 @@ export function claimMailboxRewardAction(reward: {
     }
   }
   if (reward.gold) p.gold += reward.gold
-  if (reward.diamonds) p.diamonds = (p.diamonds ?? 0) + reward.diamonds
+  if (reward.diamonds && reward.diamonds > 0) {
+    commitDiamondDelta(p, reward.diamonds, {
+      source: 'mailbox_gift',
+      note: 'รับเพชรจากจดหมาย/ของขวัญ',
+    })
+  }
   saveGame()
   notify()
   return { ok: true, message: 'รับไอเทมจากจดหมายเข้ากระเป๋าแล้ว!' }
@@ -3457,7 +4085,12 @@ export function claimMailboxRewardAction(reward: {
 export function recordCoopDungeonClearAction(gold: number, diamonds: number, exp: number, stones: number) {
   const p = player()
   p.gold += Math.max(0, gold)
-  p.diamonds = (p.diamonds ?? 0) + Math.max(0, diamonds)
+  if (diamonds > 0) {
+    commitDiamondDelta(p, diamonds, {
+      source: 'coop_dungeon',
+      note: 'รางวัลดันเจี้ยนปาร์ตี้ Co-op',
+    })
+  }
   if (stones > 0) addItem('enhance_stone', stones)
   const extV2 = sanitizeExtV2(p.extV2)
   extV2.coopClears += 1
@@ -3466,6 +4099,526 @@ export function recordCoopDungeonClearAction(gold: number, diamonds: number, exp
   gainExp(exp)
   saveGame()
   notify()
+}
+
+/* ---------------- Premium MMORPG Server-Verified Actions (Sandbox Only) ---------------- */
+
+async function callPremiumApi<T extends Record<string, unknown>>(
+  endpoint: string,
+  payload: Record<string, unknown>,
+): Promise<{ ok: boolean; data?: T; message?: string; duplicate?: boolean }> {
+  const token = await firebaseAuth.currentUser?.getIdToken().catch(() => null)
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers.Authorization = `Bearer ${token}`
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
+  })
+  const json = (await res.json().catch(() => null)) as (T & { ok?: boolean; message?: string; duplicate?: boolean }) | null
+  if (!res.ok || !json?.ok) {
+    return {
+      ok: false,
+      duplicate: Boolean(json?.duplicate),
+      message: json?.message || `คำขอไม่สำเร็จ (${res.status})`,
+    }
+  }
+  return { ok: true, data: json }
+}
+
+export async function sandboxGrantDiamondsAction(
+  amount: number,
+  requestId?: string,
+): Promise<{ ok: boolean; message: string; balance?: number; txId?: string }> {
+  const p = player()
+  const safeAmount = Math.floor(Number(amount) || 0)
+  const reqId = requestId || generateUniqueTxId('SBREQ')
+  if (inFlightPremiumLocks.has('sandbox_grant') || inFlightPremiumLocks.has(reqId)) {
+    return { ok: false, message: 'กำลังดำเนินการเติมเพชรทดลองอยู่ กรุณารอสักครู่' }
+  }
+  if (safeAmount < 1 || safeAmount > 100_000) {
+    return { ok: false, message: 'ระบุจำนวนเพชรทดลองระหว่าง 1 – 100,000 D' }
+  }
+
+  inFlightPremiumLocks.add('sandbox_grant')
+  inFlightPremiumLocks.add(reqId)
+  try {
+    const prem = ensurePremiumState(p)
+    const apiRes = await callPremiumApi<{
+      txId: string
+      requestId: string
+      actorUid: string
+      isGm: boolean
+      amount: number
+      timestampMs: number
+      serverVerified: boolean
+      serverSignature: string
+      message: string
+    }>('/api/premium/sandbox-grant', {
+      amount: safeAmount,
+      characterId: prem.wallet.characterId,
+      requestId: reqId,
+      mode: 'sandbox',
+    })
+
+    if (!apiRes.ok || !apiRes.data) {
+      return { ok: false, message: apiRes.message || 'ไม่สามารถรับเพชรทดลองได้' }
+    }
+
+    const txRes = commitDiamondDelta(p, apiRes.data.amount, {
+      type: 'sandbox_grant',
+      source: 'sandbox_console',
+      note: `เติมเพชรทดลอง Sandbox +${apiRes.data.amount.toLocaleString()} D (ไม่ใช่เงินจริง)`,
+      requestId: apiRes.data.requestId,
+      txId: apiRes.data.txId,
+      actorUid: apiRes.data.actorUid,
+      isGm: apiRes.data.isGm,
+      serverVerified: apiRes.data.serverVerified,
+      serverSignature: apiRes.data.serverSignature,
+      timestampMs: apiRes.data.timestampMs,
+    })
+
+    if (!txRes.ok) {
+      return { ok: false, message: txRes.message }
+    }
+
+    logPremiumAudit(p, {
+      action: 'SANDBOX_GRANT',
+      txId: txRes.tx?.txId,
+      details: `Sandbox Test Console เติม +${apiRes.data.amount.toLocaleString()} D (คงเหลือ ${p.diamonds.toLocaleString()} D)`,
+      verifiedByServer: true,
+    })
+    say('loot', `★ [Sandbox] เติมเพชรทดลอง +${apiRes.data.amount.toLocaleString()} D (คงเหลือ ${p.diamonds.toLocaleString()} D)`)
+    saveGame()
+    notify()
+    return { ok: true, message: apiRes.data.message, balance: p.diamonds, txId: txRes.tx?.txId }
+  } finally {
+    inFlightPremiumLocks.delete('sandbox_grant')
+    inFlightPremiumLocks.delete(reqId)
+  }
+}
+
+export async function purchasePremiumProductAction(
+  productId: string,
+  qty = 1,
+  requestId?: string,
+): Promise<{ ok: boolean; message: string; receipt?: PurchaseReceipt }> {
+  const p = player()
+  const prem = ensurePremiumState(p)
+  const product = getPremiumProduct(productId)
+  if (!product) return { ok: false, message: 'ไม่พบสินค้าในระบบร้านค้าพรีเมียม' }
+
+  const safeQty = Math.max(1, Math.min(99, Math.floor(Number(qty) || 1)))
+  const lockKey = `buy:${productId}`
+  const reqId = requestId || generateUniqueTxId('BUYREQ')
+  if (inFlightPremiumLocks.has(lockKey) || inFlightPremiumLocks.has(reqId)) {
+    return { ok: false, message: 'กำลังดำเนินการสั่งซื้อสินค้านี้ กรุณาอย่ากดซ้ำ' }
+  }
+
+  // Client pre-checks for instant UX feedback
+  if (prem.wallet.processedRequestIds.includes(reqId)) {
+    return { ok: false, message: 'คำสั่งซื้อนี้ถูกดำเนินการไปแล้ว' }
+  }
+  const prevCount = prem.purchaseCounts[product.productId] ?? 0
+  if (product.purchaseLimit !== null && prevCount + safeQty > product.purchaseLimit) {
+    return { ok: false, message: `เกินจำกัดการซื้อ (${product.purchaseLimit} ครั้ง/ตัวละคร)` }
+  }
+  if (product.rewardKind === 'gem_fashion' || product.rewardKind === 'gem_companion') {
+    if (p.ownedGemItems.includes(product.itemId)) {
+      return { ok: false, message: 'คุณเป็นเจ้าของไอเทมพรีเมียมชิ้นนี้แล้ว' }
+    }
+  }
+  if (product.rewardKind === 'fashion' && product.payload?.fashionId) {
+    if (prem.fashion.unlockedIds.includes(product.payload.fashionId)) {
+      return { ok: false, message: 'คุณมีแฟชั่นชิ้นนี้ในคลังแล้ว' }
+    }
+  }
+  if (product.rewardKind === 'bag_expansion') {
+    const addSlots = (product.payload?.bagSlots ?? 10) * safeQty
+    if (prem.storage.extraInventorySlots + addSlots > EXTRA_INVENTORY_SCROLL_CAP && prem.storage.extraInventorySlots >= EXTRA_INVENTORY_SCROLL_CAP) {
+      return { ok: false, message: `ขยายช่องกระเป๋าพรีเมียมครบขีดจำกัด +${EXTRA_INVENTORY_SCROLL_CAP} ช่องแล้ว` }
+    }
+  }
+  if (product.rewardKind === 'storage_expansion') {
+    if (prem.storage.extraStorageSlots >= EXTRA_STORAGE_SCROLL_CAP) {
+      return { ok: false, message: `ขยายช่องคลังพรีเมียมครบขีดจำกัด +${EXTRA_STORAGE_SCROLL_CAP} ช่องแล้ว` }
+    }
+  }
+  if (product.rewardKind === 'item' && !ITEMS[product.itemId]) {
+    return { ok: false, message: 'ไม่พบข้อมูลไอเทมในระบบ' }
+  }
+  if (product.rewardKind === 'item') {
+    const stackExisting = stackable(ITEMS[product.itemId]) && p.inventory.some((i) => i.itemId === product.itemId)
+    if (!stackExisting && p.inventory.length >= getInventoryCapacity(p)) {
+      return { ok: false, message: 'กระเป๋าเต็ม กรุณาเคลียร์ช่องก่อนซื้อ' }
+    }
+  }
+
+  inFlightPremiumLocks.add(lockKey)
+  inFlightPremiumLocks.add(reqId)
+  try {
+    const apiRes = await callPremiumApi<{
+      txId: string
+      receiptId: string
+      requestId: string
+      actorUid: string
+      isGm: boolean
+      unitPrice: number
+      totalCost: number
+      nextDiamonds: number
+      timestampMs: number
+      serverVerified: boolean
+      serverSignature: string
+      message: string
+    }>('/api/premium/purchase', {
+      productId: product.productId,
+      qty: safeQty,
+      characterId: prem.wallet.characterId,
+      requestId: reqId,
+      currentDiamonds: p.diamonds ?? 0,
+      previousPurchaseCount: prevCount,
+      vip: prem.vip,
+    })
+
+    if (!apiRes.ok || !apiRes.data) {
+      return { ok: false, message: apiRes.message || 'การสั่งซื้อไม่สำเร็จ' }
+    }
+
+    const totalCost = apiRes.data.totalCost
+    const txRes = commitDiamondDelta(p, -totalCost, {
+      type: 'spend',
+      source: 'premium_shop',
+      productId: product.productId,
+      itemId: product.itemId,
+      note: `ซื้อ ${product.name} x${safeQty}`,
+      requestId: apiRes.data.requestId,
+      txId: apiRes.data.txId,
+      actorUid: apiRes.data.actorUid,
+      isGm: apiRes.data.isGm,
+      serverVerified: apiRes.data.serverVerified,
+      serverSignature: apiRes.data.serverSignature,
+      timestampMs: apiRes.data.timestampMs,
+    })
+
+    if (!txRes.ok || !txRes.tx) {
+      return { ok: false, message: txRes.message }
+    }
+
+    // Deliver product payload atomically
+    const now = Date.now()
+    const grantQty = (product.qty ?? 1) * safeQty
+    if (product.rewardKind === 'item') {
+      addItem(product.itemId, grantQty)
+    } else if (product.rewardKind === 'gem_fashion') {
+      if (!p.ownedGemItems.includes(product.itemId)) p.ownedGemItems.push(product.itemId)
+      p.equippedGemFashion = product.itemId
+      const fId = product.payload?.fashionId
+      if (fId && !prem.fashion.unlockedIds.includes(fId)) prem.fashion.unlockedIds.push(fId)
+      const fDef = fId ? getFashionItemDef(fId) : null
+      if (fDef) prem.fashion.equipped[fDef.slot] = fDef.id
+    } else if (product.rewardKind === 'gem_companion') {
+      if (!p.ownedGemItems.includes(product.itemId)) p.ownedGemItems.push(product.itemId)
+      p.petState = sanitizePetState(p.petState, p.ownedGemItems, p.equippedGemCompanion)
+      p.petState.activePetId = product.itemId
+      p.equippedGemCompanion = product.itemId
+      if (product.itemId === 'aurora_cloud_dragon') {
+        p.mountState = sanitizeMountState(p.mountState, p.ownedGemItems)
+        p.mountState.activeMountId = 'aurora_cloud_dragon'
+        p.mountState.mounted = true
+      }
+    } else if (product.rewardKind === 'fashion' && product.payload?.fashionId) {
+      const fId = product.payload.fashionId
+      if (!prem.fashion.unlockedIds.includes(fId)) prem.fashion.unlockedIds.push(fId)
+      const fDef = getFashionItemDef(fId)
+      if (fDef) {
+        prem.fashion.equipped[fDef.slot] = fDef.id
+        if (fDef.linkedLegacyCosmeticId) {
+          const extV2 = sanitizeExtV2(p.extV2)
+          if (!extV2.unlockedCosmetics.includes(fDef.linkedLegacyCosmeticId)) {
+            extV2.unlockedCosmetics.push(fDef.linkedLegacyCosmeticId)
+          }
+          if (fDef.slot === 'wings') extV2.equippedWing = fDef.linkedLegacyCosmeticId
+          p.extV2 = extV2
+        }
+      }
+    } else if (product.rewardKind === 'vip_pass' || product.rewardKind === 'vip_exp') {
+      const days = (product.payload?.vipDays ?? 7) * safeQty
+      const expGain = (product.payload?.vipExp ?? 150) * safeQty
+      const baseTime = prem.vip.expiresAtMs && prem.vip.expiresAtMs > now ? prem.vip.expiresAtMs : now
+      prem.vip.expiresAtMs = baseTime + days * 24 * 60 * 60 * 1000
+      prem.vip.vipExp += expGain
+      const floor = product.payload?.vipTierFloor ?? 1
+      prem.vip.vipLevel = Math.max(floor, prem.vip.vipLevel, resolveVipLevelFromExp(prem.vip.vipExp)) as VipTierId
+      const bonus = getEffectiveVipBonuses(prem.vip, now)
+      for (const fId of bonus.exclusiveFashionIds) {
+        if (!prem.fashion.unlockedIds.includes(fId)) prem.fashion.unlockedIds.push(fId)
+      }
+    } else if (product.rewardKind === 'bag_expansion') {
+      const addBag = (product.payload?.bagSlots ?? 10) * safeQty
+      prem.storage.extraInventorySlots = Math.min(EXTRA_INVENTORY_SCROLL_CAP, prem.storage.extraInventorySlots + addBag)
+    } else if (product.rewardKind === 'storage_expansion') {
+      const addStor = (product.payload?.storageSlots ?? 15) * safeQty
+      prem.storage.extraStorageSlots = Math.min(EXTRA_STORAGE_SCROLL_CAP, prem.storage.extraStorageSlots + addStor)
+    } else if (product.rewardKind === 'bundle') {
+      const pl = product.payload
+      if (pl?.bundleVipDays) {
+        const baseTime = prem.vip.expiresAtMs && prem.vip.expiresAtMs > now ? prem.vip.expiresAtMs : now
+        prem.vip.expiresAtMs = baseTime + pl.bundleVipDays * safeQty * 24 * 60 * 60 * 1000
+        prem.vip.vipLevel = Math.max(pl.vipTierFloor ?? 1, prem.vip.vipLevel) as VipTierId
+      }
+      if (pl?.storageSlots) {
+        prem.storage.extraStorageSlots = Math.min(EXTRA_STORAGE_SCROLL_CAP, prem.storage.extraStorageSlots + pl.storageSlots * safeQty)
+      }
+      if (pl?.bundleFashionId && !prem.fashion.unlockedIds.includes(pl.bundleFashionId)) {
+        prem.fashion.unlockedIds.push(pl.bundleFashionId)
+        const fDef = getFashionItemDef(pl.bundleFashionId)
+        if (fDef) prem.fashion.equipped[fDef.slot] = fDef.id
+      }
+      if (pl?.bundleItems) {
+        for (const bi of pl.bundleItems) {
+          addItem(bi.itemId, bi.qty * safeQty)
+        }
+      }
+    }
+
+    // Grant VIP EXP bonus from purchase (except vip_pass/vip_exp which already counted payload.vipExp)
+    if (product.vipExpGrant && product.rewardKind !== 'vip_pass' && product.rewardKind !== 'vip_exp') {
+      prem.vip.vipExp += product.vipExpGrant * safeQty
+      if (isVipActive(prem.vip, now)) {
+        prem.vip.vipLevel = Math.max(prem.vip.vipLevel, resolveVipLevelFromExp(prem.vip.vipExp)) as VipTierId
+      }
+    }
+
+    const receipt: PurchaseReceipt = {
+      receiptId: apiRes.data.receiptId,
+      txId: txRes.tx.txId,
+      requestId: txRes.tx.requestId,
+      characterId: prem.wallet.characterId,
+      productId: product.productId,
+      itemId: product.itemId,
+      productName: product.name,
+      category: product.category,
+      qty: safeQty,
+      diamondPrice: apiRes.data.unitPrice,
+      totalPaid: totalCost,
+      purchasedAtMs: apiRes.data.timestampMs,
+      status: 'completed',
+      serverVerified: true,
+    }
+    appendPurchaseReceipt(prem, receipt)
+    logPremiumAudit(p, {
+      action: 'PREMIUM_PURCHASE',
+      txId: txRes.tx.txId,
+      details: `ซื้อ ${product.name} x${safeQty} (-${totalCost.toLocaleString()} D) · ใบเสร็จ ${receipt.receiptId}`,
+      verifiedByServer: true,
+    })
+
+    say('loot', `★ ซื้อ ${product.name} x${safeQty} สำเร็จ (-${totalCost.toLocaleString()} D)`)
+    saveGame()
+    notify()
+    return { ok: true, message: `ซื้อ ${product.name} สำเร็จ!`, receipt }
+  } finally {
+    inFlightPremiumLocks.delete(lockKey)
+    inFlightPremiumLocks.delete(reqId)
+  }
+}
+
+export async function claimVipTierRewardAction(
+  tierLevel: number,
+  requestId?: string,
+): Promise<{ ok: boolean; message: string }> {
+  const p = player()
+  const prem = ensurePremiumState(p)
+  const reqId = requestId || generateUniqueTxId('VIPTREQ')
+  const lockKey = `vip_tier:${tierLevel}`
+  if (inFlightPremiumLocks.has(lockKey)) {
+    return { ok: false, message: 'กำลังดำเนินการรับรางวัล VIP อยู่' }
+  }
+
+  inFlightPremiumLocks.add(lockKey)
+  try {
+    const apiRes = await callPremiumApi<{
+      txId: string
+      requestId: string
+      actorUid: string
+      isGm: boolean
+      diamondDelta: number
+      timestampMs: number
+      serverVerified: boolean
+      serverSignature: string
+      message: string
+    }>('/api/premium/claim', {
+      claimType: 'vip_tier',
+      characterId: prem.wallet.characterId,
+      requestId: reqId,
+      vip: prem.vip,
+      tierLevel,
+    })
+
+    if (!apiRes.ok || !apiRes.data) {
+      return { ok: false, message: apiRes.message || 'ไม่สามารถรับรางวัล VIP ได้' }
+    }
+    const def = getVipTierDef(tierLevel as VipTierId)
+    if (!def) return { ok: false, message: 'ไม่พบระดับ VIP' }
+
+    prem.vip.claimedTierRewards.push(def.level)
+    p.gold += def.tierReward.gold
+    if (def.tierReward.enhanceStones > 0) addItem('enhance_stone', def.tierReward.enhanceStones)
+    if (def.tierReward.fashionId && !prem.fashion.unlockedIds.includes(def.tierReward.fashionId)) {
+      prem.fashion.unlockedIds.push(def.tierReward.fashionId)
+    }
+    if (apiRes.data.diamondDelta > 0) {
+      commitDiamondDelta(p, apiRes.data.diamondDelta, {
+        source: 'vip_tier_reward',
+        note: `รางวัลเลื่อนขั้น ${def.name}`,
+        requestId: apiRes.data.requestId,
+        txId: apiRes.data.txId,
+        actorUid: apiRes.data.actorUid,
+        isGm: apiRes.data.isGm,
+        serverVerified: true,
+        serverSignature: apiRes.data.serverSignature,
+        timestampMs: apiRes.data.timestampMs,
+      })
+    }
+    logPremiumAudit(p, {
+      action: 'VIP_CLAIM_TIER',
+      txId: apiRes.data.txId,
+      details: `รับรางวัล ${def.name}: ${def.tierReward.label}`,
+      verifiedByServer: true,
+    })
+    say('loot', `★ รับรางวัล ${def.name} สำเร็จ: ${def.tierReward.label}`)
+    saveGame()
+    notify()
+    return { ok: true, message: `รับรางวัล ${def.name} สำเร็จ!` }
+  } finally {
+    inFlightPremiumLocks.delete(lockKey)
+  }
+}
+
+export async function claimVipDailyRewardAction(requestId?: string): Promise<{ ok: boolean; message: string }> {
+  const p = player()
+  const prem = ensurePremiumState(p)
+  const today = todayIsoDate()
+  const reqId = requestId || generateUniqueTxId('VIPDREQ')
+  if (inFlightPremiumLocks.has('vip_daily')) {
+    return { ok: false, message: 'กำลังดำเนินการรับรางวัลรายวันอยู่' }
+  }
+  inFlightPremiumLocks.add('vip_daily')
+  try {
+    const apiRes = await callPremiumApi<{
+      txId: string
+      requestId: string
+      actorUid: string
+      isGm: boolean
+      diamondDelta: number
+      timestampMs: number
+      serverVerified: boolean
+      serverSignature: string
+      message: string
+    }>('/api/premium/claim', {
+      claimType: 'vip_daily',
+      characterId: prem.wallet.characterId,
+      requestId: reqId,
+      vip: prem.vip,
+      todayIso: today,
+    })
+
+    if (!apiRes.ok || !apiRes.data) {
+      return { ok: false, message: apiRes.message || 'ไม่สามารถรับรางวัล VIP รายวันได้' }
+    }
+    const bonuses = getEffectiveVipBonuses(prem.vip)
+    const def = bonuses.tierDef ?? VIP_TIERS[0]
+    prem.vip.lastDailyClaimDate = today
+    p.gold += def.dailyReward.gold
+    if (def.dailyReward.enhanceStones > 0) addItem('enhance_stone', def.dailyReward.enhanceStones)
+    if (def.dailyReward.petEssence > 0) addItem('pet_essence', def.dailyReward.petEssence)
+    if (apiRes.data.diamondDelta > 0) {
+      commitDiamondDelta(p, apiRes.data.diamondDelta, {
+        source: 'vip_daily_reward',
+        note: `รางวัลรายวัน ${def.name} (${today})`,
+        requestId: apiRes.data.requestId,
+        txId: apiRes.data.txId,
+        actorUid: apiRes.data.actorUid,
+        isGm: apiRes.data.isGm,
+        serverVerified: true,
+        serverSignature: apiRes.data.serverSignature,
+        timestampMs: apiRes.data.timestampMs,
+      })
+    }
+    logPremiumAudit(p, {
+      action: 'VIP_CLAIM_DAILY',
+      txId: apiRes.data.txId,
+      details: `รับรางวัลรายวัน ${def.name}: ${def.dailyReward.label}`,
+      verifiedByServer: true,
+    })
+    say('loot', `★ รับรางวัลรายวัน ${def.name}: ${def.dailyReward.label}`)
+    saveGame()
+    notify()
+    return { ok: true, message: `รับรางวัลรายวัน ${def.name} สำเร็จ!` }
+  } finally {
+    inFlightPremiumLocks.delete('vip_daily')
+  }
+}
+
+export function equipFashionAction(slot: FashionSlot, fashionId: string | null): { ok: boolean; message: string } {
+  const p = player()
+  const prem = ensurePremiumState(p)
+  const bonuses = getEffectiveVipBonuses(prem.vip)
+
+  if (fashionId === null) {
+    const prevId = prem.fashion.equipped[slot]
+    prem.fashion.equipped[slot] = null
+    if (prevId) {
+      const prevDef = getFashionItemDef(prevId)
+      if (prevDef?.linkedGemItemId && p.equippedGemFashion === prevDef.linkedGemItemId) {
+        p.equippedGemFashion = null
+      }
+      if (prevDef?.linkedLegacyCosmeticId) {
+        const extV2 = sanitizeExtV2(p.extV2)
+        if (extV2.equippedWing === prevDef.linkedLegacyCosmeticId) extV2.equippedWing = null
+        p.extV2 = extV2
+      }
+    }
+    logPremiumAudit(p, { action: 'FASHION_EQUIP', details: `ถอดแฟชั่นช่อง ${slot}`, verifiedByServer: false })
+    saveGame()
+    notify()
+    return { ok: true, message: 'ถอดแฟชั่นแล้ว' }
+  }
+
+  const def = getFashionItemDef(fashionId)
+  if (!def || def.slot !== slot) return { ok: false, message: 'ไม่พบแฟชั่นในหมวดหมู่นี้' }
+  const isVipExclusive = bonuses.active && bonuses.exclusiveFashionIds.includes(fashionId)
+  const unlocked = prem.fashion.unlockedIds.includes(fashionId) || isVipExclusive
+  if (!unlocked) {
+    return { ok: false, message: 'ยังไม่ได้ปลดล็อกแฟชั่นชิ้นนี้' }
+  }
+  if (def.vipRequired && (!bonuses.active || bonuses.level < def.vipRequired)) {
+    return { ok: false, message: `ต้องมี VIP ${def.vipRequired} ที่ยังไม่หมดอายุจึงจะสวมใส่ได้` }
+  }
+
+  if (!prem.fashion.unlockedIds.includes(fashionId)) {
+    prem.fashion.unlockedIds.push(fashionId)
+  }
+  prem.fashion.equipped[slot] = fashionId
+
+  if (def.linkedGemItemId) {
+    if (!p.ownedGemItems.includes(def.linkedGemItemId)) p.ownedGemItems.push(def.linkedGemItemId)
+    p.equippedGemFashion = def.linkedGemItemId
+  }
+  if (def.linkedLegacyCosmeticId) {
+    const extV2 = sanitizeExtV2(p.extV2)
+    if (!extV2.unlockedCosmetics.includes(def.linkedLegacyCosmeticId)) {
+      extV2.unlockedCosmetics.push(def.linkedLegacyCosmeticId)
+    }
+    if (def.slot === 'wings') extV2.equippedWing = def.linkedLegacyCosmeticId
+    p.extV2 = extV2
+  }
+
+  logPremiumAudit(p, { action: 'FASHION_EQUIP', details: `สวมใส่ ${def.name} (${slot})`, verifiedByServer: false })
+  say('system', `สวมใส่แฟชั่น ${def.name} แล้ว`)
+  saveGame()
+  notify()
+  return { ok: true, message: `สวมใส่ ${def.name} สำเร็จ!` }
 }
 
 /* ---------------- chat & commands ---------------- */
@@ -3584,7 +4737,12 @@ function runCommand(text: string) {
     if (currentBalance + amount > maxBalance) {
       return say('error', `ยอดเพชรสูงสุดคือ ${maxBalance.toLocaleString()} เพชร`)
     }
-    p.diamonds = currentBalance + amount
+    commitDiamondDelta(p, amount, {
+      type: 'sandbox_grant',
+      source: 'gm_chat_command',
+      note: `GM /gem +${amount.toLocaleString()} D`,
+      isGm: true,
+    })
     say('gm', `เสกเพชรสำเร็จ +${amount.toLocaleString()} | ยอดรวม ${p.diamonds.toLocaleString()} เพชร`)
   }
 
@@ -3977,6 +5135,9 @@ function resetRuntime() {
   game.projectiles = []
   game.chat = []
   game.panel = null
+  game.blockingUi = false
+  game.itemCd = {}
+  windowBridge?.closeAll()
   game.partyPanelOpen = false
   game.partyRoleBuffs = {
     tanks: 0,
@@ -4090,7 +5251,7 @@ export function loadGame(d: SaveData) {
     equippedGemFashion: GEM_SHOP_ITEMS.some((item) => item.id === d.equippedGemFashion && item.category === 'fashion' && d.ownedGemItems?.includes(item.id)) ? d.equippedGemFashion : null,
     equippedGemCompanion: GEM_SHOP_ITEMS.some((item) => item.id === d.equippedGemCompanion && item.category === 'companions' && d.ownedGemItems?.includes(item.id)) ? d.equippedGemCompanion : null,
     lootMagnetUntil: Number.isFinite(d.lootMagnetUntil) ? Math.max(0, d.lootMagnetUntil) : 0,
-    inventoryCapacityBonus: Math.floor(finiteInt(d.inventoryCapacityBonus, 0, 60, 0) / 20) * 20,
+    inventoryCapacityBonus: Math.floor(finiteInt(d.inventoryCapacityBonus, 0, 60, 0) / 10) * 10,
     inventory,
     storage: sanitizeList(d.storage),
     storageGold: finiteInt(d.storageGold, 0, Number.MAX_SAFE_INTEGER, 0),
@@ -4123,6 +5284,14 @@ export function loadGame(d: SaveData) {
     towerState: sanitizeTowerState(d.towerState),
     rpgExt: sanitizeRpgExt(d.rpgExt),
     extV2: sanitizeExtV2(d.extV2),
+    premium: sanitizePremiumState(d.premium, {
+      characterId: getActiveCharacterSlot(),
+      diamonds: finiteInt(d.diamonds, 0, Number.MAX_SAFE_INTEGER, 0),
+      ownedGemItems: d.ownedGemItems,
+      equippedGemFashion: d.equippedGemFashion,
+      unlockedCosmetics: d.extV2?.unlockedCosmetics,
+      equippedWing: d.extV2?.equippedWing,
+    }),
     blockedUids: Array.isArray(d.blockedUids) ? [...new Set(d.blockedUids.filter((x): x is string => typeof x === 'string').slice(0, 50))] : [],
     appliedTradeIds: Array.isArray(d.appliedTradeIds) ? [...new Set(d.appliedTradeIds.filter((x): x is string => typeof x === 'string').slice(-40))] : [],
   }
@@ -4184,6 +5353,7 @@ export function newGame(name: string, starterJobId = 'swordsman') {
     towerState: createDefaultTowerState(),
     rpgExt: createDefaultRpgExt(),
     extV2: createDefaultExtV2(),
+    premium: createDefaultPremiumState(getActiveCharacterSlot(), 0),
   }
   const s = getStats(p)
   p.hp = s.maxHp
@@ -4237,6 +5407,10 @@ export function update(dt: number) {
   game.gatherCd = Math.max(0, game.gatherCd - dt)
   game.partySupportCd = Math.max(0, game.partySupportCd - dt)
   for (const k in game.skillCd) game.skillCd[k] -= dt
+  for (const k in game.itemCd) {
+    game.itemCd[k] -= dt
+    if (game.itemCd[k] <= 0) delete game.itemCd[k]
+  }
   game.combatT += dt
   if (game.comboCount > 0 && game.time > game.comboUntil) {
     game.comboCount = 0
@@ -4256,9 +5430,10 @@ export function update(dt: number) {
     uiDirty = true
   }
 
+  const inputBlocked = game.blockingUi || game.panel === 'trade'
   let mx = 0
   let my = 0
-  if (!game.panel)
+  if (!inputBlocked)
     for (const k of game.keys) {
       const v = KEYMAP[k]
       if (v) {
@@ -4296,7 +5471,7 @@ export function update(dt: number) {
   }
 
   if (game.attackHeld) basicAttack()
-  if (game.autoFarm && !game.panel) {
+  if (game.autoFarm && !inputBlocked) {
     if (game.autoSkills && currentJob().skills.length) castSkill(game.autoSkillIndex % currentJob().skills.length)
     else basicAttack()
   }
@@ -4382,7 +5557,12 @@ export function update(dt: number) {
       game.invasion = null
       game.monsters = []
       p.gold += 800
-      p.diamonds = (p.diamonds ?? 0) + rewardD
+      if (rewardD > 0) {
+        commitDiamondDelta(p, rewardD, {
+          source: 'town_invasion',
+          note: 'รางวัลป้องกันเมืองสำเร็จ',
+        })
+      }
       const extV2 = sanitizeExtV2(p.extV2)
       extV2.invasionWavesCleared += 1
       extV2.battlePass = grantBattlePassExpToState(extV2.battlePass, 50).next
