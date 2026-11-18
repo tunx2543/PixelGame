@@ -1,9 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { onAuthStateChanged } from 'firebase/auth'
+import { auth } from '@/lib/firebase/client'
 import { Eye, RotateCw } from 'lucide-react'
 import { ITEMS } from '@/lib/game/data'
-import { game, toggleZenHud } from '@/lib/game/engine'
+import { game, say, toggleZenHud, verifyStripeTopupAction } from '@/lib/game/engine'
 import { useUiLayout } from '@/lib/game/ui-layout'
 import { useGame } from '@/lib/game/use-game'
 import { CharacterBar } from './character-bar'
@@ -57,10 +59,53 @@ export function Game() {
   const [touchOverride, setTouchOverride] = useState<boolean | null>(null)
   const [narrowPortrait, setNarrowPortrait] = useState(false)
   const [portraitDismissed, setPortraitDismissed] = useState(false)
+  const handledTopupSessionRef = useRef<string | null>(null)
+  const isPlaying = Boolean(g.p)
 
   useEffect(() => {
-    document.body.dataset.state = g.p ? 'playing' : 'title'
-  }, [g.p])
+    document.body.dataset.state = isPlaying ? 'playing' : 'title'
+  }, [isPlaying])
+
+  useEffect(() => {
+    if (!isPlaying || typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const sessionId = params.get('topup_session_id')?.trim()
+    const cancelled = params.get('topup_cancelled')
+
+    const cleanUrl = () => {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('topup_session_id')
+      url.searchParams.delete('topup_order')
+      url.searchParams.delete('topup_cancelled')
+      window.history.replaceState({}, '', url.pathname + (url.search ? url.search : '') + url.hash)
+    }
+
+    if (cancelled === '1') {
+      cleanUrl()
+      say('system', 'ยกเลิกการชำระเงินเติมเพชรแล้ว')
+      return
+    }
+
+    if (!sessionId || handledTopupSessionRef.current === sessionId) return
+
+    const tryVerify = () => {
+      const user = auth.currentUser
+      if (!user || !user.emailVerified || handledTopupSessionRef.current === sessionId) return
+      handledTopupSessionRef.current = sessionId
+      void verifyStripeTopupAction({ sessionId }).then((res) => {
+        cleanUrl()
+        if (!res.ok) {
+          say('system', res.message)
+        }
+      })
+    }
+
+    tryVerify()
+    const unsub = onAuthStateChanged(auth, () => {
+      tryVerify()
+    })
+    return () => unsub()
+  }, [isPlaying])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -86,6 +131,8 @@ export function Game() {
   const showTouch = touchOverride ?? isTouchDevice
   const isCompactHud = g.zenHud || uiLayout.preferences.compactHud
   const isMobileViewport = uiLayout.viewport.width < 768
+  const isShortViewport = uiLayout.viewport.height < 560
+  const isNarrowTouch = showTouch && uiLayout.viewport.width < 620
 
   return (
     <div className="relative h-full w-full select-none overflow-hidden">
@@ -95,12 +142,12 @@ export function Game() {
         {showTouch && <TouchControls />}
 
         {/* ZONE 1 & 3: มุมซ้ายบน (Profile, HP/MP/EXP, Gold/Diamond/CP) + ด้านซ้าย (Quest Tracker) */}
-        <div className="pointer-events-none absolute left-2 top-2 z-20 flex w-[11rem] flex-col gap-1 sm:w-[14.75rem]">
+        <div className="pointer-events-none absolute left-1.5 top-1.5 z-20 flex w-[10.25rem] flex-col gap-0.5 sm:left-2 sm:top-2 sm:w-[11.25rem] sm:gap-1 lg:w-[14rem]">
           <CharacterBar compact={isCompactHud} />
-          <Hud compact={isCompactHud} />
+          <Hud compact={isCompactHud} slim={isShortViewport} />
           {!g.zenHud && (
             <>
-              <QuestTrackerWidget />
+              <QuestTrackerWidget compactViewport={isShortViewport} />
               <GmToolsWidget />
             </>
           )}
@@ -137,20 +184,24 @@ export function Game() {
             {/* Bottom Center: Separated Skill Bar & 10-Slot Quick Item Bar */}
             <div
               className={`pointer-events-none absolute left-1/2 z-20 flex -translate-x-1/2 flex-col items-center gap-1 ${
-                showTouch && uiLayout.viewport.width < 920 ? 'bottom-[9.75rem]' : 'bottom-2'
+                isNarrowTouch ? 'bottom-[9.25rem]' : 'bottom-1.5 sm:bottom-2'
               }`}
             >
               {!showTouch && <SkillBar compactTouchMode={isMobileViewport} />}
-              <QuickItemBar compact={isMobileViewport || showTouch} />
+              <QuickItemBar compact={isMobileViewport || showTouch || isShortViewport} />
             </div>
 
             {/* Bottom Right: Character Controls (Auto-Farm, Mount, Gather, Combo) */}
             <div
-              className={`pointer-events-none absolute right-2 z-20 ${
-                showTouch ? 'bottom-[13.5rem]' : 'bottom-2'
+              className={`pointer-events-none absolute right-1.5 z-20 sm:right-2 ${
+                showTouch
+                  ? uiLayout.viewport.width < 1024
+                    ? 'bottom-[5.75rem]'
+                    : 'bottom-[7.25rem]'
+                  : 'bottom-2'
               }`}
             >
-              <CharacterControlBar compactTouchMode={showTouch || isMobileViewport} />
+              <CharacterControlBar compactTouchMode={showTouch || isMobileViewport || isShortViewport} />
             </div>
           </>
         )}

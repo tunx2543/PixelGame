@@ -34,7 +34,10 @@
         "role": {
           "type": "string",
           "description": "Account role ('gm' for sole developer account, 'player' otherwise).",
-          "enum": ["gm", "player"]
+          "enum": [
+            "gm",
+            "player"
+          ]
         },
         "createdAt": {
           "type": "string",
@@ -47,7 +50,15 @@
           "description": "Server timestamp when the account profile was last updated."
         }
       },
-      "required": ["uid", "email", "displayName", "gameUid", "role", "createdAt", "updatedAt"]
+      "required": [
+        "uid",
+        "email",
+        "displayName",
+        "gameUid",
+        "role",
+        "createdAt",
+        "updatedAt"
+      ]
     },
     "CharacterSave": {
       "title": "CharacterSave",
@@ -183,7 +194,13 @@
           "description": "Server timestamp when progress or claim state was last updated."
         }
       },
-      "required": ["dateKey", "ownerId", "missions", "createdAt", "updatedAt"]
+      "required": [
+        "dateKey",
+        "ownerId",
+        "missions",
+        "createdAt",
+        "updatedAt"
+      ]
     },
     "PlayerUidDirectory": {
       "title": "PlayerUidDirectory",
@@ -317,7 +334,11 @@
         "status": {
           "type": "string",
           "description": "Friendship status.",
-          "enum": ["pending", "accepted", "declined"]
+          "enum": [
+            "pending",
+            "accepted",
+            "declined"
+          ]
         },
         "createdAt": {
           "type": "string",
@@ -407,7 +428,12 @@
         "facing": {
           "type": "string",
           "description": "Sprite facing direction.",
-          "enum": ["up", "down", "left", "right"]
+          "enum": [
+            "up",
+            "down",
+            "left",
+            "right"
+          ]
         },
         "moving": {
           "type": "boolean",
@@ -416,7 +442,12 @@
         "status": {
           "type": "string",
           "description": "Live activity status displayed in world presence list.",
-          "enum": ["town", "idle", "moving", "combat"]
+          "enum": [
+            "town",
+            "idle",
+            "moving",
+            "combat"
+          ]
         },
         "attackAnim": {
           "type": "number",
@@ -582,7 +613,11 @@
         "status": {
           "type": "string",
           "description": "Invitation status.",
-          "enum": ["pending", "accepted", "declined"]
+          "enum": [
+            "pending",
+            "accepted",
+            "declined"
+          ]
         },
         "createdAt": {
           "type": "string",
@@ -616,347 +651,1402 @@
       "description": "Public player-created guild with member roster, donation level, and passive buffs.",
       "type": "object",
       "properties": {
-        "guildId": { "type": "string", "minLength": 3, "maxLength": 48, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "name": { "type": "string", "minLength": 2, "maxLength": 28 },
-        "tag": { "type": "string", "minLength": 2, "maxLength": 6 },
-        "leaderId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "leaderName": { "type": "string", "minLength": 1, "maxLength": 24 },
-        "level": { "type": "integer", "minimum": 1, "maximum": 50 },
-        "exp": { "type": "integer", "minimum": 0 },
-        "totalDonatedGold": { "type": "integer", "minimum": 0 },
-        "memberIds": { "type": "array", "maxItems": 30, "items": { "type": "string" } },
-        "memberCount": { "type": "integer", "minimum": 1, "maximum": 30 },
-        "notice": { "type": "string", "maxLength": 140 },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "updatedAt": { "type": "string", "format": "date-time" }
+        "guildId": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 48,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 28
+        },
+        "tag": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 6
+        },
+        "leaderId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "leaderName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "level": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        },
+        "exp": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "totalDonatedGold": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "memberIds": {
+          "type": "array",
+          "maxItems": 30,
+          "items": {
+            "type": "string"
+          }
+        },
+        "memberCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30
+        },
+        "notice": {
+          "type": "string",
+          "maxLength": 140
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
       },
-      "required": ["guildId", "name", "tag", "leaderId", "leaderName", "level", "exp", "totalDonatedGold", "memberIds", "memberCount", "notice", "createdAt", "updatedAt"]
+      "required": [
+        "guildId",
+        "name",
+        "tag",
+        "leaderId",
+        "leaderName",
+        "level",
+        "exp",
+        "totalDonatedGold",
+        "memberIds",
+        "memberCount",
+        "notice",
+        "createdAt",
+        "updatedAt"
+      ]
     },
     "LeaderboardHero": {
       "title": "LeaderboardHero",
       "description": "Public non-PII character snapshot for Hall of Fame and Async PvP Arena.",
       "type": "object",
       "properties": {
-        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "gameUid": { "type": "string", "minLength": 4, "maxLength": 8, "pattern": "^[0-9]{4,8}$" },
-        "name": { "type": "string", "minLength": 1, "maxLength": 24 },
-        "jobId": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "level": { "type": "integer", "minimum": 1, "maximum": 999 },
-        "rebirthCount": { "type": "integer", "minimum": 0, "maximum": 6 },
-        "combatPower": { "type": "integer", "minimum": 1 },
-        "arenaRating": { "type": "integer", "minimum": 100, "maximum": 9999 },
-        "arenaWins": { "type": "integer", "minimum": 0 },
-        "highestTowerFloor": { "type": "integer", "minimum": 0 },
-        "activeTitle": { "type": "string", "maxLength": 64 },
-        "guildName": { "type": "string", "maxLength": 32 },
-        "updatedAt": { "type": "string", "format": "date-time" }
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "gameUid": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 8,
+          "pattern": "^[0-9]{4,8}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "jobId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "level": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 999
+        },
+        "rebirthCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 6
+        },
+        "combatPower": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "arenaRating": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 9999
+        },
+        "arenaWins": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "highestTowerFloor": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "activeTitle": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "guildName": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
       },
-      "required": ["userId", "gameUid", "name", "jobId", "level", "rebirthCount", "combatPower", "arenaRating", "arenaWins", "highestTowerFloor", "updatedAt"]
+      "required": [
+        "userId",
+        "gameUid",
+        "name",
+        "jobId",
+        "level",
+        "rebirthCount",
+        "combatPower",
+        "arenaRating",
+        "arenaWins",
+        "highestTowerFloor",
+        "updatedAt"
+      ]
     },
     "WorldBossRaid": {
       "title": "WorldBossRaid",
       "description": "Shared timed World Boss instance keyed by hourly rotation cycleKey.",
       "type": "object",
       "properties": {
-        "cycleKey": { "type": "string", "minLength": 4, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "bossId": { "type": "string", "minLength": 2, "maxLength": 48, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "name": { "type": "string", "minLength": 1, "maxLength": 64 },
-        "maxHp": { "type": "integer", "minimum": 1000 },
-        "currentHp": { "type": "integer", "minimum": 0 },
-        "totalDamageDealt": { "type": "integer", "minimum": 0 },
-        "updatedAt": { "type": "string", "format": "date-time" }
+        "cycleKey": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "bossId": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 48,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "maxHp": {
+          "type": "integer",
+          "minimum": 1000
+        },
+        "currentHp": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "totalDamageDealt": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
       },
-      "required": ["cycleKey", "bossId", "name", "maxHp", "currentHp", "totalDamageDealt", "updatedAt"]
+      "required": [
+        "cycleKey",
+        "bossId",
+        "name",
+        "maxHp",
+        "currentHp",
+        "totalDamageDealt",
+        "updatedAt"
+      ]
     },
     "WorldBossContribution": {
       "title": "WorldBossContribution",
       "description": "Player damage contribution record for a timed World Boss cycle.",
       "type": "object",
       "properties": {
-        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "name": { "type": "string", "minLength": 1, "maxLength": 24 },
-        "jobId": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "level": { "type": "integer", "minimum": 1, "maximum": 999 },
-        "damage": { "type": "integer", "minimum": 0 },
-        "updatedAt": { "type": "string", "format": "date-time" }
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "jobId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "level": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 999
+        },
+        "damage": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
       },
-      "required": ["userId", "name", "jobId", "level", "damage", "updatedAt"]
+      "required": [
+        "userId",
+        "name",
+        "jobId",
+        "level",
+        "damage",
+        "updatedAt"
+      ]
     },
     "GuildMessage": {
       "title": "GuildMessage",
       "description": "Real-time guild chat message restricted to members of the parent guild.",
       "type": "object",
       "properties": {
-        "messageId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "senderUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "senderName": { "type": "string", "minLength": 1, "maxLength": 24 },
-        "senderGameUid": { "type": "string", "minLength": 4, "maxLength": 8, "pattern": "^[0-9]{4,8}$" },
-        "jobId": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "text": { "type": "string", "minLength": 1, "maxLength": 180 },
-        "createdAtMs": { "type": "integer", "minimum": 0 },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "senderUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "senderName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "senderGameUid": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 8,
+          "pattern": "^[0-9]{4,8}$"
+        },
+        "jobId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 180
+        },
+        "createdAtMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
       },
-      "required": ["messageId", "senderUid", "senderName", "senderGameUid", "jobId", "text", "createdAtMs", "createdAt"]
+      "required": [
+        "messageId",
+        "senderUid",
+        "senderName",
+        "senderGameUid",
+        "jobId",
+        "text",
+        "createdAtMs",
+        "createdAt"
+      ]
     },
     "GuildRaid": {
       "title": "GuildRaid",
       "description": "Shared cooperative Guild Raid Boss instance owned by a guild.",
       "type": "object",
       "properties": {
-        "raidId": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "guildId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "bossName": { "type": "string", "minLength": 1, "maxLength": 64 },
-        "level": { "type": "integer", "minimum": 1, "maximum": 999 },
-        "maxHp": { "type": "integer", "minimum": 1000 },
-        "currentHp": { "type": "integer", "minimum": 0 },
-        "clears": { "type": "integer", "minimum": 0 },
-        "lastHitter": { "type": "string", "maxLength": 24 },
-        "updatedAt": { "type": "string", "format": "date-time" }
+        "raidId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "guildId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "bossName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "level": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 999
+        },
+        "maxHp": {
+          "type": "integer",
+          "minimum": 1000
+        },
+        "currentHp": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "clears": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "lastHitter": {
+          "type": "string",
+          "maxLength": 24
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
       },
-      "required": ["raidId", "guildId", "bossName", "level", "maxHp", "currentHp", "clears", "lastHitter", "updatedAt"]
+      "required": [
+        "raidId",
+        "guildId",
+        "bossName",
+        "level",
+        "maxHp",
+        "currentHp",
+        "clears",
+        "lastHitter",
+        "updatedAt"
+      ]
     },
     "MarketListing": {
       "title": "MarketListing",
       "description": "Public auction house item listing posted by verified players.",
       "type": "object",
       "properties": {
-        "listingId": { "type": "string", "minLength": 4, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "sellerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "sellerName": { "type": "string", "minLength": 1, "maxLength": 24 },
-        "sellerGameUid": { "type": "string", "minLength": 4, "maxLength": 8, "pattern": "^[0-9]{4,8}$" },
-        "itemId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "itemName": { "type": "string", "minLength": 1, "maxLength": 64 },
-        "kind": { "type": "string", "minLength": 1, "maxLength": 24 },
-        "qty": { "type": "integer", "minimum": 1, "maximum": 999 },
-        "plus": { "type": "integer", "minimum": 0, "maximum": 20 },
-        "priceGold": { "type": "integer", "minimum": 1, "maximum": 100000000 },
-        "status": { "type": "string", "enum": ["open", "sold", "cancelled"] },
-        "buyerUid": { "type": "string", "maxLength": 128 },
-        "buyerName": { "type": "string", "maxLength": 24 },
-        "sellerClaimed": { "type": "boolean" },
-        "rarity": { "type": "string", "maxLength": 16 },
-        "affixes": { "type": "array", "maxItems": 4 },
-        "createdAtMs": { "type": "integer", "minimum": 0 },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "updatedAt": { "type": "string", "format": "date-time" }
+        "listingId": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "sellerUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "sellerName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "sellerGameUid": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 8,
+          "pattern": "^[0-9]{4,8}$"
+        },
+        "itemId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "itemName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "qty": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 999
+        },
+        "plus": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20
+        },
+        "priceGold": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000000
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "sold",
+            "cancelled"
+          ]
+        },
+        "buyerUid": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "buyerName": {
+          "type": "string",
+          "maxLength": 24
+        },
+        "sellerClaimed": {
+          "type": "boolean"
+        },
+        "rarity": {
+          "type": "string",
+          "maxLength": 16
+        },
+        "affixes": {
+          "type": "array",
+          "maxItems": 4
+        },
+        "createdAtMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
       },
-      "required": ["listingId", "sellerUid", "sellerName", "sellerGameUid", "itemId", "itemName", "kind", "qty", "plus", "priceGold", "status", "createdAtMs", "createdAt", "updatedAt"]
+      "required": [
+        "listingId",
+        "sellerUid",
+        "sellerName",
+        "sellerGameUid",
+        "itemId",
+        "itemName",
+        "kind",
+        "qty",
+        "plus",
+        "priceGold",
+        "status",
+        "createdAtMs",
+        "createdAt",
+        "updatedAt"
+      ]
     },
     "MailMessage": {
       "title": "MailMessage",
       "description": "In-game mailbox message and friend gift attachment stored under the recipient user.",
       "type": "object",
       "properties": {
-        "mailId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "senderUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "senderName": { "type": "string", "minLength": 1, "maxLength": 24 },
-        "senderGameUid": { "type": "string", "minLength": 4, "maxLength": 8, "pattern": "^[0-9]{4,8}$" },
-        "subject": { "type": "string", "minLength": 1, "maxLength": 64 },
-        "body": { "type": "string", "minLength": 1, "maxLength": 240 },
-        "gold": { "type": "integer", "minimum": 0, "maximum": 10000000 },
-        "diamonds": { "type": "integer", "minimum": 0, "maximum": 100000 },
-        "itemId": { "type": "string", "maxLength": 64 },
-        "qty": { "type": "integer", "minimum": 0, "maximum": 999 },
-        "plus": { "type": "integer", "minimum": 0, "maximum": 20 },
-        "claimed": { "type": "boolean" },
-        "createdAtMs": { "type": "integer", "minimum": 0 },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "updatedAt": { "type": "string", "format": "date-time" }
+        "mailId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "senderUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "senderName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "senderGameUid": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 8,
+          "pattern": "^[0-9]{4,8}$"
+        },
+        "subject": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "body": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "gold": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000000
+        },
+        "diamonds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "itemId": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "qty": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999
+        },
+        "plus": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20
+        },
+        "claimed": {
+          "type": "boolean"
+        },
+        "createdAtMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
       },
-      "required": ["mailId", "senderUid", "senderName", "senderGameUid", "subject", "body", "gold", "diamonds", "qty", "plus", "claimed", "createdAtMs", "createdAt", "updatedAt"]
+      "required": [
+        "mailId",
+        "senderUid",
+        "senderName",
+        "senderGameUid",
+        "subject",
+        "body",
+        "gold",
+        "diamonds",
+        "qty",
+        "plus",
+        "claimed",
+        "createdAtMs",
+        "createdAt",
+        "updatedAt"
+      ]
     },
     "PartyCoop": {
       "title": "PartyCoop",
       "description": "Shared cooperative dungeon boss instance restricted to members of the parent party.",
       "type": "object",
       "properties": {
-        "coopId": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "partyId": { "type": "string", "minLength": 4, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "dungeonName": { "type": "string", "minLength": 1, "maxLength": 64 },
-        "bossName": { "type": "string", "minLength": 1, "maxLength": 64 },
-        "level": { "type": "integer", "minimum": 1, "maximum": 999 },
-        "maxHp": { "type": "integer", "minimum": 1000 },
-        "currentHp": { "type": "integer", "minimum": 0 },
-        "clears": { "type": "integer", "minimum": 0 },
-        "participants": { "type": "array", "maxItems": 8, "items": { "type": "string" } },
-        "lastHitter": { "type": "string", "maxLength": 24 },
-        "updatedAt": { "type": "string", "format": "date-time" }
+        "coopId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "partyId": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "dungeonName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "bossName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "level": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 999
+        },
+        "maxHp": {
+          "type": "integer",
+          "minimum": 1000
+        },
+        "currentHp": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "clears": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "participants": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "string"
+          }
+        },
+        "lastHitter": {
+          "type": "string",
+          "maxLength": 24
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
       },
-      "required": ["coopId", "partyId", "dungeonName", "bossName", "level", "maxHp", "currentHp", "clears", "participants", "lastHitter", "updatedAt"]
+      "required": [
+        "coopId",
+        "partyId",
+        "dungeonName",
+        "bossName",
+        "level",
+        "maxHp",
+        "currentHp",
+        "clears",
+        "participants",
+        "lastHitter",
+        "updatedAt"
+      ]
     },
     "WorldChatMessage": {
       "title": "WorldChatMessage",
       "description": "Real-time multi-channel chat message across world, map, party, and trade channels.",
       "type": "object",
       "properties": {
-        "messageId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "channel": { "type": "string", "enum": ["world", "map", "party", "trade"] },
-        "mapId": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "partyId": { "type": "string", "maxLength": 64 },
-        "senderUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "senderName": { "type": "string", "minLength": 1, "maxLength": 24 },
-        "senderGameUid": { "type": "string", "minLength": 4, "maxLength": 8, "pattern": "^[0-9]{4,8}$" },
-        "jobId": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "isGm": { "type": "boolean" },
-        "text": { "type": "string", "minLength": 1, "maxLength": 180 },
-        "createdAtMs": { "type": "integer", "minimum": 0 },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "channel": {
+          "type": "string",
+          "enum": [
+            "world",
+            "map",
+            "party",
+            "trade"
+          ]
+        },
+        "mapId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "partyId": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "senderUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "senderName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "senderGameUid": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 8,
+          "pattern": "^[0-9]{4,8}$"
+        },
+        "jobId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "isGm": {
+          "type": "boolean"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 180
+        },
+        "createdAtMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
       },
-      "required": ["messageId", "channel", "mapId", "senderUid", "senderName", "senderGameUid", "jobId", "isGm", "text", "createdAtMs", "createdAt"]
+      "required": [
+        "messageId",
+        "channel",
+        "mapId",
+        "senderUid",
+        "senderName",
+        "senderGameUid",
+        "jobId",
+        "isGm",
+        "text",
+        "createdAtMs",
+        "createdAt"
+      ]
     },
     "WhisperMessage": {
       "title": "WhisperMessage",
       "description": "Private 1-on-1 whisper message between two verified players.",
       "type": "object",
       "properties": {
-        "whisperId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "fromUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "toUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "fromGameUid": { "type": "string", "minLength": 4, "maxLength": 8, "pattern": "^[0-9]{4,8}$" },
-        "toGameUid": { "type": "string", "minLength": 4, "maxLength": 8, "pattern": "^[0-9]{4,8}$" },
-        "fromName": { "type": "string", "minLength": 1, "maxLength": 24 },
-        "toName": { "type": "string", "minLength": 1, "maxLength": 24 },
-        "body": { "type": "string", "minLength": 1, "maxLength": 240 },
-        "createdAtMs": { "type": "integer", "minimum": 0 },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "whisperId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "fromUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "toUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "fromGameUid": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 8,
+          "pattern": "^[0-9]{4,8}$"
+        },
+        "toGameUid": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 8,
+          "pattern": "^[0-9]{4,8}$"
+        },
+        "fromName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "toName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "body": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "createdAtMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
       },
-      "required": ["whisperId", "fromUid", "toUid", "fromGameUid", "toGameUid", "fromName", "toName", "body", "createdAtMs", "createdAt"]
+      "required": [
+        "whisperId",
+        "fromUid",
+        "toUid",
+        "fromGameUid",
+        "toGameUid",
+        "fromName",
+        "toName",
+        "body",
+        "createdAtMs",
+        "createdAt"
+      ]
     },
     "TradeSession": {
       "title": "TradeSession",
       "description": "Live 1-on-1 player trade session with mutually confirmed offers.",
       "type": "object",
       "properties": {
-        "tradeId": { "type": "string", "minLength": 4, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "status": { "type": "string", "enum": ["pending", "active", "completed", "declined", "cancelled"] },
-        "senderUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "recipientUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "senderGameUid": { "type": "string", "minLength": 4, "maxLength": 8, "pattern": "^[0-9]{4,8}$" },
-        "recipientGameUid": { "type": "string", "minLength": 4, "maxLength": 8, "pattern": "^[0-9]{4,8}$" },
-        "senderName": { "type": "string", "minLength": 1, "maxLength": 24 },
-        "recipientName": { "type": "string", "minLength": 1, "maxLength": 24 },
-        "senderItems": { "type": "array", "maxItems": 12 },
-        "recipientItems": { "type": "array", "maxItems": 12 },
-        "senderGold": { "type": "integer", "minimum": 0, "maximum": 100000000 },
-        "recipientGold": { "type": "integer", "minimum": 0, "maximum": 100000000 },
-        "senderGemItems": { "type": "array", "maxItems": 8 },
-        "recipientGemItems": { "type": "array", "maxItems": 8 },
-        "senderReady": { "type": "boolean" },
-        "recipientReady": { "type": "boolean" },
-        "createdAtMs": { "type": "integer", "minimum": 0 },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "updatedAt": { "type": "string", "format": "date-time" }
+        "tradeId": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "active",
+            "completed",
+            "declined",
+            "cancelled"
+          ]
+        },
+        "senderUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "recipientUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "senderGameUid": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 8,
+          "pattern": "^[0-9]{4,8}$"
+        },
+        "recipientGameUid": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 8,
+          "pattern": "^[0-9]{4,8}$"
+        },
+        "senderName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "recipientName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "senderItems": {
+          "type": "array",
+          "maxItems": 12
+        },
+        "recipientItems": {
+          "type": "array",
+          "maxItems": 12
+        },
+        "senderGold": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000000
+        },
+        "recipientGold": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000000
+        },
+        "senderGemItems": {
+          "type": "array",
+          "maxItems": 8
+        },
+        "recipientGemItems": {
+          "type": "array",
+          "maxItems": 8
+        },
+        "senderReady": {
+          "type": "boolean"
+        },
+        "recipientReady": {
+          "type": "boolean"
+        },
+        "createdAtMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
       },
-      "required": ["tradeId", "status", "senderUid", "recipientUid", "senderGameUid", "recipientGameUid", "senderName", "recipientName", "senderItems", "recipientItems", "senderGold", "recipientGold", "senderGemItems", "recipientGemItems", "senderReady", "recipientReady", "createdAtMs", "createdAt", "updatedAt"]
+      "required": [
+        "tradeId",
+        "status",
+        "senderUid",
+        "recipientUid",
+        "senderGameUid",
+        "recipientGameUid",
+        "senderName",
+        "recipientName",
+        "senderItems",
+        "recipientItems",
+        "senderGold",
+        "recipientGold",
+        "senderGemItems",
+        "recipientGemItems",
+        "senderReady",
+        "recipientReady",
+        "createdAtMs",
+        "createdAt",
+        "updatedAt"
+      ]
     },
     "PartyListing": {
       "title": "PartyListing",
       "description": "Public Party Finder recruitment board keyed by partyId.",
       "type": "object",
       "properties": {
-        "listingId": { "type": "string", "minLength": 4, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "partyId": { "type": "string", "minLength": 4, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "partyName": { "type": "string", "minLength": 1, "maxLength": 32 },
-        "leaderUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "leaderName": { "type": "string", "minLength": 1, "maxLength": 24 },
-        "leaderGameUid": { "type": "string", "minLength": 4, "maxLength": 8, "pattern": "^[0-9]{4,8}$" },
-        "leaderJobId": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "targetActivity": { "type": "string", "minLength": 1, "maxLength": 64 },
-        "minLevel": { "type": "integer", "minimum": 1, "maximum": 999 },
-        "memberCount": { "type": "integer", "minimum": 1, "maximum": 4 },
-        "maxMembers": { "type": "integer", "minimum": 2, "maximum": 4 },
-        "status": { "type": "string", "enum": ["open", "closed"] },
-        "createdAtMs": { "type": "integer", "minimum": 0 },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "updatedAt": { "type": "string", "format": "date-time" }
+        "listingId": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "partyId": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "partyName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "leaderUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "leaderName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "leaderGameUid": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 8,
+          "pattern": "^[0-9]{4,8}$"
+        },
+        "leaderJobId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "targetActivity": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "minLevel": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 999
+        },
+        "memberCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4
+        },
+        "maxMembers": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 4
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "closed"
+          ]
+        },
+        "createdAtMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
       },
-      "required": ["listingId", "partyId", "partyName", "leaderUid", "leaderName", "leaderGameUid", "leaderJobId", "targetActivity", "minLevel", "memberCount", "maxMembers", "status", "createdAtMs", "createdAt", "updatedAt"]
+      "required": [
+        "listingId",
+        "partyId",
+        "partyName",
+        "leaderUid",
+        "leaderName",
+        "leaderGameUid",
+        "leaderJobId",
+        "targetActivity",
+        "minLevel",
+        "memberCount",
+        "maxMembers",
+        "status",
+        "createdAtMs",
+        "createdAt",
+        "updatedAt"
+      ]
     },
     "FieldBoss": {
       "title": "FieldBoss",
       "description": "Shared field boss encounter state per combat map.",
       "type": "object",
       "properties": {
-        "mapId": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "bossId": { "type": "string", "minLength": 2, "maxLength": 48, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "bossName": { "type": "string", "minLength": 1, "maxLength": 64 },
-        "level": { "type": "integer", "minimum": 1, "maximum": 999 },
-        "maxHp": { "type": "integer", "minimum": 1000 },
-        "currentHp": { "type": "integer", "minimum": 0 },
-        "defeatedAtMs": { "type": "integer", "minimum": 0 },
-        "respawnAtMs": { "type": "integer", "minimum": 0 },
-        "lastHitter": { "type": "string", "maxLength": 24 },
-        "clearCount": { "type": "integer", "minimum": 0 },
-        "contributors": { "type": "object" },
-        "claimedUids": { "type": "array", "maxItems": 30 },
-        "updatedAt": { "type": "string", "format": "date-time" }
+        "mapId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "bossId": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 48,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "bossName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "level": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 999
+        },
+        "maxHp": {
+          "type": "integer",
+          "minimum": 1000
+        },
+        "currentHp": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "defeatedAtMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "respawnAtMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "lastHitter": {
+          "type": "string",
+          "maxLength": 24
+        },
+        "clearCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "contributors": {
+          "type": "object"
+        },
+        "claimedUids": {
+          "type": "array",
+          "maxItems": 30
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
       },
-      "required": ["mapId", "bossId", "bossName", "level", "maxHp", "currentHp", "defeatedAtMs", "respawnAtMs", "lastHitter", "clearCount", "contributors", "claimedUids", "updatedAt"]
+      "required": [
+        "mapId",
+        "bossId",
+        "bossName",
+        "level",
+        "maxHp",
+        "currentHp",
+        "defeatedAtMs",
+        "respawnAtMs",
+        "lastHitter",
+        "clearCount",
+        "contributors",
+        "claimedUids",
+        "updatedAt"
+      ]
     },
     "DuelMatch": {
       "title": "DuelMatch",
       "description": "Live 1-on-1 turn-based PvP duel session between two verified players.",
       "type": "object",
       "properties": {
-        "duelId": { "type": "string", "minLength": 4, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "status": { "type": "string", "enum": ["pending", "active", "completed", "declined", "cancelled"] },
-        "challengerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "opponentUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "challengerName": { "type": "string", "minLength": 1, "maxLength": 24 },
-        "opponentName": { "type": "string", "minLength": 1, "maxLength": 24 },
-        "challengerGameUid": { "type": "string", "minLength": 4, "maxLength": 8, "pattern": "^[0-9]{4,8}$" },
-        "opponentGameUid": { "type": "string", "minLength": 4, "maxLength": 8, "pattern": "^[0-9]{4,8}$" },
-        "turnNumber": { "type": "integer", "minimum": 1, "maximum": 999 },
-        "activeTurnUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "fighters": { "type": "object" },
-        "logs": { "type": "array", "maxItems": 30 },
-        "winnerUid": { "type": "string", "maxLength": 128 },
-        "createdAtMs": { "type": "integer", "minimum": 0 },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "updatedAt": { "type": "string", "format": "date-time" }
+        "duelId": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "active",
+            "completed",
+            "declined",
+            "cancelled"
+          ]
+        },
+        "challengerUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "opponentUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "challengerName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "opponentName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "challengerGameUid": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 8,
+          "pattern": "^[0-9]{4,8}$"
+        },
+        "opponentGameUid": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 8,
+          "pattern": "^[0-9]{4,8}$"
+        },
+        "turnNumber": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 999
+        },
+        "activeTurnUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "fighters": {
+          "type": "object"
+        },
+        "logs": {
+          "type": "array",
+          "maxItems": 30
+        },
+        "winnerUid": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "createdAtMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
       },
-      "required": ["duelId", "status", "challengerUid", "opponentUid", "challengerName", "opponentName", "challengerGameUid", "opponentGameUid", "turnNumber", "activeTurnUid", "fighters", "logs", "createdAtMs", "createdAt", "updatedAt"]
+      "required": [
+        "duelId",
+        "status",
+        "challengerUid",
+        "opponentUid",
+        "challengerName",
+        "opponentName",
+        "challengerGameUid",
+        "opponentGameUid",
+        "turnNumber",
+        "activeTurnUid",
+        "fighters",
+        "logs",
+        "createdAtMs",
+        "createdAt",
+        "updatedAt"
+      ]
     },
     "PlayerReport": {
       "title": "PlayerReport",
       "description": "Player abuse/cheat report submitted for GM review.",
       "type": "object",
       "properties": {
-        "reportId": { "type": "string", "minLength": 4, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "reporterUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "targetUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "targetGameUid": { "type": "string", "minLength": 4, "maxLength": 8, "pattern": "^[0-9]{4,8}$" },
-        "targetName": { "type": "string", "minLength": 1, "maxLength": 24 },
-        "reason": { "type": "string", "minLength": 1, "maxLength": 80 },
-        "details": { "type": "string", "maxLength": 240 },
-        "createdAtMs": { "type": "integer", "minimum": 0 },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "reportId": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "reporterUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "targetUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "targetGameUid": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 8,
+          "pattern": "^[0-9]{4,8}$"
+        },
+        "targetName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "details": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "createdAtMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
       },
-      "required": ["reportId", "reporterUid", "targetUid", "targetGameUid", "targetName", "reason", "details", "createdAtMs", "createdAt"]
+      "required": [
+        "reportId",
+        "reporterUid",
+        "targetUid",
+        "targetGameUid",
+        "targetName",
+        "reason",
+        "details",
+        "createdAtMs",
+        "createdAt"
+      ]
     },
     "DiamondTransaction": {
       "title": "DiamondTransaction",
       "description": "Immutable Diamond currency ledger entry for a player character.",
       "type": "object",
       "properties": {
-        "txId": { "type": "string", "minLength": 4, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "requestId": { "type": "string", "minLength": 4, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "characterId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "type": { "type": "string", "enum": ["earn", "spend", "sandbox_grant", "refund"] },
-        "source": { "type": "string", "minLength": 1, "maxLength": 48 },
-        "amount": { "type": "integer", "minimum": 0, "maximum": 1000000000 },
-        "balanceBefore": { "type": "integer", "minimum": 0, "maximum": 1000000000 },
-        "balanceAfter": { "type": "integer", "minimum": 0, "maximum": 1000000000 },
-        "productId": { "type": ["string", "null"], "maxLength": 64 },
-        "itemId": { "type": ["string", "null"], "maxLength": 64 },
-        "note": { "type": "string", "minLength": 1, "maxLength": 180 },
-        "actorUid": { "type": "string", "minLength": 1, "maxLength": 128 },
-        "isGm": { "type": "boolean" },
-        "serverVerified": { "type": "boolean" },
-        "serverSignature": { "type": ["string", "null"], "maxLength": 64 },
-        "createdAtMs": { "type": "integer", "minimum": 0 },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "txId": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "requestId": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "characterId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "earn",
+            "spend",
+            "sandbox_grant",
+            "refund"
+          ]
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 48
+        },
+        "amount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "balanceBefore": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "balanceAfter": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "productId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "itemId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 180
+        },
+        "actorUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "isGm": {
+          "type": "boolean"
+        },
+        "serverVerified": {
+          "type": "boolean"
+        },
+        "serverSignature": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "createdAtMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
       },
       "required": [
         "txId",
@@ -984,17 +2074,64 @@
       "description": "Immutable security and action audit log for premium operations.",
       "type": "object",
       "properties": {
-        "logId": { "type": "string", "minLength": 4, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "characterId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "action": { "type": "string", "minLength": 2, "maxLength": 40 },
-        "actorUid": { "type": "string", "minLength": 1, "maxLength": 128 },
-        "actorRole": { "type": "string", "enum": ["gm", "player"] },
-        "txId": { "type": ["string", "null"], "maxLength": 64 },
-        "details": { "type": "string", "minLength": 1, "maxLength": 240 },
-        "verifiedByServer": { "type": "boolean" },
-        "createdAtMs": { "type": "integer", "minimum": 0 },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "logId": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "characterId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "action": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 40
+        },
+        "actorUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "actorRole": {
+          "type": "string",
+          "enum": [
+            "gm",
+            "player"
+          ]
+        },
+        "txId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "details": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "verifiedByServer": {
+          "type": "boolean"
+        },
+        "createdAtMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
       },
       "required": [
         "logId",
@@ -1009,111 +2146,291 @@
         "createdAtMs",
         "createdAt"
       ]
+    },
+    "TopupOrder": {
+      "title": "TopupOrder",
+      "description": "Immutable verified real-money top-up order record owned by the character owner.",
+      "type": "object",
+      "properties": {
+        "orderId": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "characterId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "packageId": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "packageName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "provider": {
+          "type": "string",
+          "enum": [
+            "stripe_promptpay",
+            "stripe_checkout",
+            "promptpay_slip"
+          ]
+        },
+        "gatewayRef": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 128
+        },
+        "amountThb": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        },
+        "baseDiamonds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "bonusDiamonds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "totalDiamonds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2000000
+        },
+        "vipExpGranted": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "credited"
+          ]
+        },
+        "txId": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "serverVerified": {
+          "type": "boolean"
+        },
+        "serverSignature": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 64
+        },
+        "createdAtMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "orderId",
+        "ownerId",
+        "characterId",
+        "packageId",
+        "packageName",
+        "provider",
+        "gatewayRef",
+        "amountThb",
+        "baseDiamonds",
+        "bonusDiamonds",
+        "totalDiamonds",
+        "vipExpGranted",
+        "status",
+        "txId",
+        "serverVerified",
+        "serverSignature",
+        "createdAtMs",
+        "createdAt"
+      ]
     }
   },
   "firestore": {
     "/users/{userId}": {
-      "schema": { "$ref": "#/entities/UserProfile" },
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
       "description": "Private user account profiles keyed by Firebase Auth UID."
     },
     "/users/{userId}/characters/{characterId}": {
-      "schema": { "$ref": "#/entities/CharacterSave" },
+      "schema": {
+        "$ref": "#/entities/CharacterSave"
+      },
       "description": "Player character slots and cloud RPG saves owned by the parent user."
     },
     "/users/{userId}/characters/{characterId}/diamondTransactions/{txId}": {
-      "schema": { "$ref": "#/entities/DiamondTransaction" },
+      "schema": {
+        "$ref": "#/entities/DiamondTransaction"
+      },
       "description": "Immutable Diamond transaction ledger owned by the character owner."
     },
     "/users/{userId}/characters/{characterId}/auditLogs/{logId}": {
-      "schema": { "$ref": "#/entities/PremiumAuditLog" },
+      "schema": {
+        "$ref": "#/entities/PremiumAuditLog"
+      },
       "description": "Immutable Premium audit log entries owned by the character owner."
     },
+    "/users/{userId}/characters/{characterId}/topupOrders/{orderId}": {
+      "schema": {
+        "$ref": "#/entities/TopupOrder"
+      },
+      "description": "Immutable verified real-money top-up orders owned by the character owner."
+    },
     "/users/{userId}/dailyMissions/{dateKey}": {
-      "schema": { "$ref": "#/entities/DailyMissionBoard" },
+      "schema": {
+        "$ref": "#/entities/DailyMissionBoard"
+      },
       "description": "Per-day randomly assigned missions, progress, and reward claim status owned by the parent user."
     },
     "/playerUids/{gameUid}": {
-      "schema": { "$ref": "#/entities/PlayerUidDirectory" },
+      "schema": {
+        "$ref": "#/entities/PlayerUidDirectory"
+      },
       "description": "Public non-PII Game UID lookup directory mapping short numeric UIDs to player accounts."
     },
     "/friendRequests/{requestId}": {
-      "schema": { "$ref": "#/entities/FriendRequest" },
+      "schema": {
+        "$ref": "#/entities/FriendRequest"
+      },
       "description": "Friend requests and accepted friendships between players."
     },
     "/worldPresence/{userId}": {
-      "schema": { "$ref": "#/entities/WorldPresence" },
+      "schema": {
+        "$ref": "#/entities/WorldPresence"
+      },
       "description": "Non-PII live map presence documents for rendering nearby players in real time."
     },
     "/parties/{partyId}": {
-      "schema": { "$ref": "#/entities/Party" },
+      "schema": {
+        "$ref": "#/entities/Party"
+      },
       "description": "Active multiplayer RPG parties keyed by partyId with memberIds array membership gate."
     },
     "/partyInvites/{inviteId}": {
-      "schema": { "$ref": "#/entities/PartyInvite" },
+      "schema": {
+        "$ref": "#/entities/PartyInvite"
+      },
       "description": "Pending and resolved party invitations keyed as {partyId}__{toUid}."
     },
     "/guilds/{guildId}": {
-      "schema": { "$ref": "#/entities/Guild" },
+      "schema": {
+        "$ref": "#/entities/Guild"
+      },
       "description": "Player guilds with collective donation progression and passive RPG buffs."
     },
     "/leaderboard/{userId}": {
-      "schema": { "$ref": "#/entities/LeaderboardHero" },
+      "schema": {
+        "$ref": "#/entities/LeaderboardHero"
+      },
       "description": "Public non-PII hero combat power & arena leaderboard snapshots."
     },
     "/worldBoss/{cycleKey}": {
-      "schema": { "$ref": "#/entities/WorldBossRaid" },
+      "schema": {
+        "$ref": "#/entities/WorldBossRaid"
+      },
       "description": "Active timed World Boss raid instances."
     },
     "/worldBoss/{cycleKey}/contributions/{userId}": {
-      "schema": { "$ref": "#/entities/WorldBossContribution" },
+      "schema": {
+        "$ref": "#/entities/WorldBossContribution"
+      },
       "description": "Per-player damage ranking inside a World Boss raid cycle."
     },
     "/guilds/{guildId}/messages/{messageId}": {
-      "schema": { "$ref": "#/entities/GuildMessage" },
+      "schema": {
+        "$ref": "#/entities/GuildMessage"
+      },
       "description": "Real-time guild chat messages restricted to guild members."
     },
     "/guilds/{guildId}/raids/{raidId}": {
-      "schema": { "$ref": "#/entities/GuildRaid" },
+      "schema": {
+        "$ref": "#/entities/GuildRaid"
+      },
       "description": "Shared cooperative Guild Raid Boss encounters."
     },
     "/marketListings/{listingId}": {
-      "schema": { "$ref": "#/entities/MarketListing" },
+      "schema": {
+        "$ref": "#/entities/MarketListing"
+      },
       "description": "Public player Auction House marketplace listings."
     },
     "/users/{userId}/mailbox/{mailId}": {
-      "schema": { "$ref": "#/entities/MailMessage" },
+      "schema": {
+        "$ref": "#/entities/MailMessage"
+      },
       "description": "Player mailbox messages and friend gifts."
     },
     "/parties/{partyId}/coops/{coopId}": {
-      "schema": { "$ref": "#/entities/PartyCoop" },
+      "schema": {
+        "$ref": "#/entities/PartyCoop"
+      },
       "description": "Shared Co-op Party Dungeon boss instances."
     },
     "/worldChat/{messageId}": {
-      "schema": { "$ref": "#/entities/WorldChatMessage" },
+      "schema": {
+        "$ref": "#/entities/WorldChatMessage"
+      },
       "description": "Multi-channel real-time public world/map/party/trade chat messages."
     },
     "/whispers/{whisperId}": {
-      "schema": { "$ref": "#/entities/WhisperMessage" },
+      "schema": {
+        "$ref": "#/entities/WhisperMessage"
+      },
       "description": "Private 1-on-1 whispers isolated strictly to sender and recipient."
     },
     "/trades/{tradeId}": {
-      "schema": { "$ref": "#/entities/TradeSession" },
+      "schema": {
+        "$ref": "#/entities/TradeSession"
+      },
       "description": "Real-time 1-on-1 player trade sessions isolated strictly to participants."
     },
     "/partyListings/{listingId}": {
-      "schema": { "$ref": "#/entities/PartyListing" },
+      "schema": {
+        "$ref": "#/entities/PartyListing"
+      },
       "description": "Open Party Finder recruitment listings."
     },
     "/fieldBosses/{mapId}": {
-      "schema": { "$ref": "#/entities/FieldBoss" },
+      "schema": {
+        "$ref": "#/entities/FieldBoss"
+      },
       "description": "Shared per-map Field Boss HP & contributor records."
     },
     "/duels/{duelId}": {
-      "schema": { "$ref": "#/entities/DuelMatch" },
+      "schema": {
+        "$ref": "#/entities/DuelMatch"
+      },
       "description": "Live 1-on-1 PvP duel sessions isolated strictly to participants."
     },
     "/playerReports/{reportId}": {
-      "schema": { "$ref": "#/entities/PlayerReport" },
+      "schema": {
+        "$ref": "#/entities/PlayerReport"
+      },
       "description": "Player abuse and exploit reports submitted for GM moderation."
     }
   }

@@ -11,6 +11,7 @@ import {
   setDoc,
   where,
 } from 'firebase/firestore'
+import type { TopupOrderRecord, TopupProvider } from '@/lib/game/premium/topup'
 import type { AuditLogEntry, DiamondTransaction } from '@/lib/game/premium/types'
 import { OperationType, auth, db, handleFirestoreError } from './client'
 
@@ -26,11 +27,9 @@ export async function recordDiamondTransaction(
 ): Promise<void> {
   const currentUser = auth.currentUser
   if (!currentUser || !currentUser.emailVerified || currentUser.uid !== userId) return
-
   const safeCharId = safeDocId(characterId, 'slot_1')
   const safeTxId = safeDocId(tx.txId, `TX-${Date.now()}`)
   const path = `users/${userId}/characters/${safeCharId}/diamondTransactions/${safeTxId}`
-
   try {
     await setDoc(doc(db, 'users', userId, 'characters', safeCharId, 'diamondTransactions', safeTxId), {
       txId: safeTxId,
@@ -64,11 +63,9 @@ export async function recordPremiumAuditLog(
 ): Promise<void> {
   const currentUser = auth.currentUser
   if (!currentUser || !currentUser.emailVerified || currentUser.uid !== userId) return
-
   const safeCharId = safeDocId(characterId, 'slot_1')
   const safeLogId = safeDocId(entry.logId, `AUD-${Date.now()}`)
   const path = `users/${userId}/characters/${safeCharId}/auditLogs/${safeLogId}`
-
   try {
     await setDoc(doc(db, 'users', userId, 'characters', safeCharId, 'auditLogs', safeLogId), {
       logId: safeLogId,
@@ -88,6 +85,115 @@ export async function recordPremiumAuditLog(
   }
 }
 
+export async function recordTopupOrder(
+  userId: string,
+  characterId: string,
+  order: TopupOrderRecord,
+): Promise<void> {
+  const currentUser = auth.currentUser
+  if (!currentUser || !currentUser.emailVerified || currentUser.uid !== userId) return
+  const safeCharId = safeDocId(characterId, 'slot_1')
+  const safeOrderId = safeDocId(order.orderId, `ORD-${Date.now()}`)
+  const safeTxId = safeDocId(order.txId, `TOPTX-${Date.now()}`)
+  const baseDiamonds = Math.max(1, Math.floor(order.baseDiamonds))
+  const bonusDiamonds = Math.max(0, Math.floor(order.bonusDiamonds))
+  const path = `users/${userId}/characters/${safeCharId}/topupOrders/${safeOrderId}`
+  try {
+    await setDoc(doc(db, 'users', userId, 'characters', safeCharId, 'topupOrders', safeOrderId), {
+      orderId: safeOrderId,
+      ownerId: userId,
+      characterId: safeCharId,
+      packageId: safeDocId(order.packageId, 'topup_starter'),
+      packageName: String(order.packageName || 'Topup Package').slice(0, 120),
+      provider: order.provider,
+      gatewayRef: String(order.gatewayRef || safeOrderId).slice(0, 128),
+      amountThb: Math.max(1, Math.floor(order.amountThb)),
+      baseDiamonds,
+      bonusDiamonds,
+      totalDiamonds: baseDiamonds + bonusDiamonds,
+      vipExpGranted: Math.max(0, Math.floor(order.vipExpGranted)),
+      status: 'credited',
+      txId: safeTxId,
+      serverVerified: true,
+      serverSignature: String(order.serverSignature || '').slice(0, 64),
+      createdAtMs: Math.max(0, Math.floor(order.createdAtMs || Date.now())),
+      createdAt: serverTimestamp(),
+    })
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path)
+  }
+}
+
+export async function listRecentTopupOrders(
+  userId: string,
+  characterId: string,
+  maxRows = 30,
+): Promise<TopupOrderRecord[]> {
+  const currentUser = auth.currentUser
+  if (!currentUser || !currentUser.emailVerified || currentUser.uid !== userId) return []
+  const safeCharId = safeDocId(characterId, 'slot_1')
+  const path = `users/${userId}/characters/${safeCharId}/topupOrders`
+  try {
+    const q = query(
+      collection(db, 'users', userId, 'characters', safeCharId, 'topupOrders'),
+      where('ownerId', '==', userId),
+      orderBy('createdAtMs', 'desc'),
+      limit(Math.max(1, Math.min(100, maxRows))),
+    )
+    const snap = await getDocs(q)
+    return snap.docs.map((d) => {
+      const data = d.data()
+      return {
+        orderId: String(data.orderId ?? d.id),
+        characterId: String(data.characterId ?? safeCharId),
+        packageId: String(data.packageId ?? ''),
+        packageName: String(data.packageName ?? ''),
+        provider: (data.provider ?? 'stripe_promptpay') as TopupProvider,
+        gatewayRef: String(data.gatewayRef ?? ''),
+        amountThb: Number(data.amountThb ?? 0),
+        baseDiamonds: Number(data.baseDiamonds ?? 0),
+        bonusDiamonds: Number(data.bonusDiamonds ?? 0),
+        totalDiamonds: Number(data.totalDiamonds ?? 0),
+        vipExpGranted: Number(data.vipExpGranted ?? 0),
+        status: 'credited',
+        txId: String(data.txId ?? ''),
+        serverVerified: Boolean(data.serverVerified),
+        serverSignature: String(data.serverSignature ?? ''),
+        createdAtMs: Number(data.createdAtMs ?? 0),
+      } satisfies TopupOrderRecord
+    })
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path)
+    return []
+  }
+}
+
+export async function isGatewayRefRecorded(
+  userId: string,
+  characterId: string,
+  gatewayRef: string,
+): Promise<boolean> {
+  const currentUser = auth.currentUser
+  if (!currentUser || !currentUser.emailVerified || currentUser.uid !== userId) return false
+  const safeCharId = safeDocId(characterId, 'slot_1')
+  const safeRef = String(gatewayRef || '').trim().slice(0, 128)
+  if (!safeRef) return false
+  const path = `users/${userId}/characters/${safeCharId}/topupOrders`
+  try {
+    const q = query(
+      collection(db, 'users', userId, 'characters', safeCharId, 'topupOrders'),
+      where('ownerId', '==', userId),
+      where('gatewayRef', '==', safeRef),
+      limit(1),
+    )
+    const snap = await getDocs(q)
+    return !snap.empty
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path)
+    return false
+  }
+}
+
 export async function listRecentDiamondTransactions(
   userId: string,
   characterId: string,
@@ -95,7 +201,6 @@ export async function listRecentDiamondTransactions(
 ): Promise<DiamondTransaction[]> {
   const currentUser = auth.currentUser
   if (!currentUser || !currentUser.emailVerified || currentUser.uid !== userId) return []
-
   const safeCharId = safeDocId(characterId, 'slot_1')
   const path = `users/${userId}/characters/${safeCharId}/diamondTransactions`
   try {
@@ -140,7 +245,6 @@ export async function listRecentAuditLogs(
 ): Promise<AuditLogEntry[]> {
   const currentUser = auth.currentUser
   if (!currentUser || !currentUser.emailVerified || currentUser.uid !== userId) return []
-
   const safeCharId = safeDocId(characterId, 'slot_1')
   const path = `users/${userId}/characters/${safeCharId}/auditLogs`
   try {

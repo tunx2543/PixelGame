@@ -154,7 +154,7 @@ export function MenuDock({
       ref={containerRef}
       aria-label="แถบเมนูหลักมุมบนขวา"
       data-testid="menu-dock"
-      className="pointer-events-auto relative flex items-center gap-1 pixel-panel bg-[#1b1414]/95 p-1 shadow-lg"
+      className="pointer-events-auto relative flex items-center gap-0.5 pixel-panel bg-[#1b1414]/95 p-0.5 shadow-lg sm:gap-1 sm:p-1"
     >
       {/* Desktop / Tablet Primary Buttons (7 core menus) */}
       <div className="hidden items-center gap-1 lg:flex">

@@ -10,13 +10,13 @@ export function SocialBar() {
 
   return (
     <div data-testid="social-bar" className="pointer-events-auto flex w-full flex-col items-end gap-1">
-      <div className="pixel-panel grid w-full grid-cols-2 gap-1 p-1 shadow-lg">
+      <div className="pixel-panel grid w-full grid-cols-2 gap-0.5 p-0.5 shadow-lg sm:gap-1 sm:p-1">
         <button
           type="button"
           onClick={() => openPanel('friends')}
           aria-label="เปิดหน้าต่างรายชื่อเพื่อน"
           title="เปิดหน้าต่างรายชื่อเพื่อน"
-          className="pixel-btn flex items-center justify-center gap-1 whitespace-nowrap bg-accent/20 px-1.5 py-1 text-[10px] font-semibold text-accent hover:bg-accent/30"
+          className="pixel-btn flex items-center justify-center gap-1 whitespace-nowrap bg-accent/20 px-1 py-0.5 text-[9px] sm:px-1.5 sm:py-1 sm:text-[10px] font-semibold text-accent hover:bg-accent/30"
         >
           <UsersRound className="size-3 shrink-0" aria-hidden />
           <span>เพื่อน</span>
@@ -27,7 +27,7 @@ export function SocialBar() {
           onClick={() => openPanel('party')}
           aria-label="เปิดหน้าต่างระบบปาร์ตี้"
           title="เปิดหน้าต่างระบบปาร์ตี้"
-          className={`pixel-btn flex items-center justify-center gap-1 whitespace-nowrap px-1.5 py-1 text-[10px] font-semibold ${
+          className={`pixel-btn flex items-center justify-center gap-1 whitespace-nowrap px-1 py-0.5 text-[9px] font-semibold sm:px-1.5 sm:py-1 sm:text-[10px] ${
             game.partyInvites.length > 0
               ? 'bg-purple-500/35 text-purple-100'
               : 'bg-purple-500/20 text-purple-200 hover:bg-purple-500/30'
@@ -49,7 +49,7 @@ export function SocialBar() {
         <button
           type="button"
           onClick={() => openPanel('party')}
-          className={`pixel-panel flex w-full items-center justify-between gap-2 px-2 py-1 text-[9px] font-semibold shadow-md transition-colors ${
+          className={`pixel-panel flex w-full items-center justify-between gap-2 px-1.5 py-0.5 text-[8.5px] font-semibold shadow-md sm:px-2 sm:text-[9px] transition-colors ${
             game.partySameMapCount > 0
               ? 'border-emerald-400/50 text-emerald-200'
               : 'border-purple-400/50 text-purple-200'

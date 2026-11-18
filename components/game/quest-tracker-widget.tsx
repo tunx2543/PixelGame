@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { CheckCircle2, ChevronDown, ChevronUp, Eye, EyeOff, ScrollText } from 'lucide-react'
 import { useDailyMissions } from '@/lib/game/daily-missions'
 import { openPanel } from '@/lib/game/engine'
@@ -23,14 +24,16 @@ interface TrackedQuestItem {
   tag: string
 }
 
-export function QuestTrackerWidget() {
+export function QuestTrackerWidget({ compactViewport = false }: { compactViewport?: boolean }) {
   const { p } = useGame()
   const dailyMissions = useDailyMissions()
   const layout = useUiLayout()
+  const [shortExpanded, setShortExpanded] = useState(false)
 
   if (!p) return null
 
   const { questTrackerCollapsed, questTrackerHidden } = layout.preferences
+  const effectiveCollapsed = compactViewport ? !shortExpanded : questTrackerCollapsed
 
   if (questTrackerHidden) {
     return (
@@ -123,13 +126,16 @@ export function QuestTrackerWidget() {
         <div className="flex shrink-0 items-center gap-0.5">
           <button
             type="button"
-            onClick={() => updateUiPref('questTrackerCollapsed', !questTrackerCollapsed)}
-            aria-expanded={!questTrackerCollapsed}
-            aria-label={questTrackerCollapsed ? 'ขยายแถบภารกิจ' : 'ย่อแถบภารกิจ'}
-            title={questTrackerCollapsed ? 'ขยาย' : 'ย่อ'}
+            onClick={() => {
+              if (compactViewport) setShortExpanded((v) => !v)
+              else updateUiPref('questTrackerCollapsed', !questTrackerCollapsed)
+            }}
+            aria-expanded={!effectiveCollapsed}
+            aria-label={effectiveCollapsed ? 'ขยายแถบภารกิจ' : 'ย่อแถบภารกิจ'}
+            title={effectiveCollapsed ? 'ขยาย' : 'ย่อ'}
             className="rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
           >
-            {questTrackerCollapsed ? <ChevronDown className="size-3.5" aria-hidden /> : <ChevronUp className="size-3.5" aria-hidden />}
+            {effectiveCollapsed ? <ChevronDown className="size-3.5" aria-hidden /> : <ChevronUp className="size-3.5" aria-hidden />}
           </button>
           <button
             type="button"
@@ -143,8 +149,8 @@ export function QuestTrackerWidget() {
         </div>
       </div>
 
-      {!questTrackerCollapsed && (
-        <div className="mt-1.5 space-y-1 border-t border-border/60 pt-1.5">
+      {!effectiveCollapsed && (
+        <div className={`mt-1.5 space-y-1 border-t border-border/60 pt-1.5 ${compactViewport ? 'max-h-24 overflow-y-auto' : ''}`}>
           {tracked.length === 0 ? (
             <button
               type="button"

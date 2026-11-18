@@ -11,7 +11,7 @@ import type { VipState } from '@/lib/game/premium/types'
 export async function POST(req: Request) {
   try {
     const auth = await resolveActorFromRequest(req)
-    if (!auth.ok) {
+    if (!('actor' in auth)) {
       return NextResponse.json({ ok: false, message: auth.message }, { status: auth.status })
     }
 

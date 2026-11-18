@@ -231,7 +231,7 @@ export function MapMinimap() {
   const displayTy = coords.mapId === map.id ? coords.ty : Math.floor(p.y / TILE)
 
   return (
-    <div className="pointer-events-auto pixel-panel w-[8.75rem] p-1.5 shadow-lg sm:w-44 sm:p-2">
+    <div className="pointer-events-auto pixel-panel w-full px-1.5 py-1 shadow-lg sm:px-2 sm:py-1.5">
       <button
         type="button"
         onClick={() => setExpanded((prev) => !prev)}

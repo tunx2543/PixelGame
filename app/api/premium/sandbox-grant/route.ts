@@ -13,7 +13,7 @@ const MAX_GM_GRANT = 1_000_000
 export async function POST(req: Request) {
   try {
     const auth = await resolveActorFromRequest(req)
-    if (!auth.ok) {
+    if (!('actor' in auth)) {
       return NextResponse.json({ ok: false, message: auth.message }, { status: auth.status })
     }
 

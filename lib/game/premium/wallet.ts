@@ -1,4 +1,5 @@
 import { sanitizeFashionState } from './fashion-pet'
+import type { TopupOrderRecord } from './topup'
 import type {
   AuditLogEntry,
   DiamondTransaction,
@@ -54,6 +55,8 @@ export function createDefaultPremiumState(characterId = 'slot_1', initialBalance
     purchaseCounts: {},
     purchaseHistory: [],
     auditLogs: [],
+    firstTopupPackages: [],
+    topupOrders: [],
   }
 }
 
@@ -141,6 +144,16 @@ export function sanitizePremiumState(
         .slice(0, MAX_PURCHASE_HISTORY_LOCAL)
     : []
 
+  const firstTopupPackages = Array.isArray(obj.firstTopupPackages)
+    ? [...new Set(obj.firstTopupPackages.filter((id): id is string => typeof id === 'string'))].slice(0, 32)
+    : []
+
+  const topupOrders = Array.isArray(obj.topupOrders)
+    ? obj.topupOrders
+        .filter((o): o is TopupOrderRecord => Boolean(o && typeof o.orderId === 'string' && typeof o.totalDiamonds === 'number'))
+        .slice(0, 40)
+    : []
+
   // Audit logs
   const auditLogs = Array.isArray(obj.auditLogs)
     ? obj.auditLogs
@@ -157,6 +170,8 @@ export function sanitizePremiumState(
     purchaseCounts,
     purchaseHistory,
     auditLogs,
+    firstTopupPackages,
+    topupOrders,
   }
 }
 

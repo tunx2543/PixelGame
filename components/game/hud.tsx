@@ -27,25 +27,27 @@ function VitalBar({
   current,
   max,
   percent,
+  slim = false,
 }: {
   barKey: 'hp' | 'mp' | 'exp'
   label: string
   current: number
   max: number
   percent: number
+  slim?: boolean
 }) {
   const tone = BAR_STYLES[barKey]
 
   return (
-    <div className="flex items-center gap-1.5 text-[9px]">
-      <span className={`w-6 shrink-0 font-bold tracking-wide ${tone.text}`}>{label}</span>
+    <div className={`flex items-center gap-1 ${slim ? 'text-[8.5px]' : 'text-[9px]'}`}>
+      <span className={`w-5 shrink-0 font-bold tracking-wide ${tone.text}`}>{label}</span>
       <div
         role="progressbar"
         aria-label={label}
         aria-valuemin={0}
         aria-valuemax={max}
         aria-valuenow={current}
-        className="relative h-2.5 flex-1 overflow-hidden rounded-full border border-[#3d281f] bg-[#160f10]/90 shadow-inner"
+        className={`relative flex-1 overflow-hidden rounded-full border border-[#3d281f] bg-[#160f10]/90 shadow-inner ${slim ? 'h-2' : 'h-2.5'}`}
       >
         <div
           className={`h-full rounded-full ${tone.fill} transition-[width] duration-150`}
@@ -56,14 +58,14 @@ function VitalBar({
           className="pointer-events-none absolute inset-x-1 top-0.5 h-[2px] rounded-full bg-white/30"
         />
       </div>
-      <span className="w-[4.1rem] shrink-0 text-right font-mono text-[9px] text-amber-100/80 tabular-nums">
+      <span className={`shrink-0 text-right font-mono text-amber-100/80 tabular-nums ${slim ? 'w-[3.4rem] text-[8.5px]' : 'w-[4.1rem] text-[9px]'}`}>
         {formatNum(current)}/{formatNum(max)}
       </span>
     </div>
   )
 }
 
-export function Hud({ compact = false }: { compact?: boolean }) {
+export function Hud({ compact = false, slim = false }: { compact?: boolean; slim?: boolean }) {
   const { p } = useGame()
   if (!p) return null
 
@@ -85,9 +87,9 @@ export function Hud({ compact = false }: { compact?: boolean }) {
     <section
       aria-label="แถบสถานะพลังชีวิตและทรัพยากร"
       data-testid="vitals-hud"
-      className="pointer-events-auto pixel-panel w-full px-2 py-1.5 shadow-lg"
+      className={`pointer-events-auto pixel-panel w-full shadow-lg ${slim ? 'px-1.5 py-1' : 'px-2 py-1.5'}`}
     >
-      <div className="flex flex-col gap-1">
+      <div className={`flex flex-col ${slim ? 'gap-0.5' : 'gap-1'}`}>
         {bars.map((bar) => (
           <VitalBar
             key={bar.key}
@@ -96,12 +98,13 @@ export function Hud({ compact = false }: { compact?: boolean }) {
             current={bar.current}
             max={bar.max}
             percent={bar.percent}
+            slim={slim}
           />
         ))}
       </div>
 
       {!compact && (
-        <div className="mt-1.5 flex items-center justify-between gap-2 border-t border-[#c9963b]/30 pt-1 text-[10px] font-semibold">
+        <div className={`flex items-center justify-between gap-1 border-t border-[#c9963b]/30 font-semibold ${slim ? 'mt-1 pt-0.5 text-[9px]' : 'mt-1.5 pt-1 text-[10px]'}`}>
           <span className="flex items-center gap-1 text-gold tabular-nums">
             <img src="/assets/hd/ui/coin_gold.png" alt="" width={14} height={14} className="size-3.5 shrink-0 object-contain" />
             <span>{formatNum(vitals.gold)} G</span>

@@ -2,43 +2,63 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import {
+  AlertCircle,
   Archive,
   Award,
   Backpack,
   Check,
   Clock,
   Coins,
+  CreditCard,
   Crown,
+  ExternalLink,
   FlaskConical,
   Gem,
   History,
   Lock,
+  LogIn,
   Package,
   PawPrint,
+  QrCode,
   Receipt,
   RefreshCw,
   ShieldCheck,
   Sparkles,
   Store,
   Tag,
+  Upload,
   UserCheck,
   Warehouse,
   X,
 } from 'lucide-react'
+import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth'
+import { auth, signInWithGoogle } from '@/lib/firebase/client'
 import {
   claimBattlePassTierAction,
   claimExpiredPassArchiveAction,
   claimVipDailyRewardAction,
   claimVipTierRewardAction,
+  createTopupCheckoutAction,
+  createTopupIntentAction,
   ensurePremiumState,
   equipFashionAction,
+  fetchTopupGatewayConfig,
   getInventoryCapacityBreakdown,
   getStorageCapacityBreakdown,
   openPanel,
   purchasePremiumProductAction,
   sandboxGrantDiamondsAction,
   unlockBattlePassPremiumAction,
+  verifySlipTopupAction,
+  verifyStripeTopupAction,
+  type TopupGatewayStatus,
 } from '@/lib/game/engine'
+import {
+  TOPUP_PACKAGES,
+  calculateTopupReward,
+  type TopupPackage,
+  type TopupProvider,
+} from '@/lib/game/premium/topup'
 import { ITEMS } from '@/lib/game/data'
 import {
   BATTLE_PASS_TIERS,
@@ -104,7 +124,7 @@ type StoreCategoryFilter = 'all' | PremiumCategory
 
 const TABS: Array<{ id: PremiumTabId; label: string; icon: typeof Store }> = [
   { id: 'overview', label: 'ภาพรวม & ร้านค้า', icon: Store },
-  { id: 'diamond', label: 'เพชร & Sandbox', icon: Gem },
+  { id: 'diamond', label: 'เติมเงิน & กระเป๋าเพชร', icon: Gem },
   { id: 'vip', label: 'สมาชิก VIP', icon: Crown },
   { id: 'pass', label: 'Season Pass', icon: Award },
   { id: 'fashion', label: 'แฟชั่น 5 ส่วน', icon: Sparkles },
@@ -207,11 +227,68 @@ export function PremiumShopPanel() {
   const [inFlight, setInFlight] = useState(false)
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null)
   const [nowMs, setNowMs] = useState(() => Date.now())
+  const [fbUser, setFbUser] = useState<FirebaseUser | null>(() => auth.currentUser)
+  const [gatewayConfig, setGatewayConfig] = useState<TopupGatewayStatus | null>(null)
+  const [selectedTopupPkg, setSelectedTopupPkg] = useState<TopupPackage | null>(null)
+  const [topupChannel, setTopupChannel] = useState<TopupProvider>('stripe_promptpay')
+  const [topupLoading, setTopupLoading] = useState(false)
+  const [activeIntent, setActiveIntent] = useState<{
+    provider: TopupProvider
+    orderId: string
+    paymentIntentId?: string
+    sessionId?: string
+    checkoutUrl?: string
+    qrImageUrl?: string | null
+    hostedUrl?: string | null
+    amountThb: number
+    totalDiamonds: number
+  } | null>(null)
+  const [slipFile, setSlipFile] = useState<File | null>(null)
 
   useEffect(() => {
     const id = setInterval(() => setNowMs(Date.now()), 30_000)
     return () => clearInterval(id)
   }, [])
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      setFbUser(user)
+    })
+    return () => unsub()
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    void fetchTopupGatewayConfig().then((cfg) => {
+      if (active && cfg) {
+        setGatewayConfig(cfg)
+        if (!cfg.stripeEnabled && cfg.slipVerifyEnabled) {
+          setTopupChannel('promptpay_slip')
+        }
+      }
+    })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!selectedTopupPkg || !activeIntent?.paymentIntentId || activeIntent.provider !== 'stripe_promptpay') {
+      return
+    }
+    const piId = activeIntent.paymentIntentId
+    const timer = setInterval(() => {
+      void verifyStripeTopupAction({ paymentIntentId: piId }).then((res) => {
+        if (res.paid && res.ok) {
+          playQuestClaimSfx(true)
+          setNotice({ ok: true, text: res.message })
+          setActiveIntent(null)
+          setSelectedTopupPkg(null)
+        }
+      })
+    }, 4500)
+    return () => clearInterval(timer)
+  }, [selectedTopupPkg, activeIntent])
 
   const catalogFiltered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
@@ -285,6 +362,109 @@ export function PremiumShopPanel() {
       setNotice({ ok: res.ok, text: res.message })
     } finally {
       setInFlight(false)
+    }
+  }
+
+  const handleGoogleSignInForTopup = async () => {
+    setTopupLoading(true)
+    try {
+      await signInWithGoogle()
+      setNotice({ ok: true, text: 'เข้าสู่ระบบ Google สำเร็จ พร้อมเติมเงินจริงแล้ว!' })
+    } catch (err) {
+      setNotice({
+        ok: false,
+        text: err instanceof Error ? err.message : 'เข้าสู่ระบบ Google ไม่สำเร็จ',
+      })
+    } finally {
+      setTopupLoading(false)
+    }
+  }
+
+  const openTopupModal = (pkg: TopupPackage) => {
+    setSelectedTopupPkg(pkg)
+    setActiveIntent(null)
+    setSlipFile(null)
+    if (gatewayConfig && !gatewayConfig.stripeEnabled && gatewayConfig.slipVerifyEnabled) {
+      setTopupChannel('promptpay_slip')
+    } else {
+      setTopupChannel('stripe_promptpay')
+    }
+  }
+
+  const handleStartTopupChannel = async (channel: TopupProvider) => {
+    if (!selectedTopupPkg || topupLoading) return
+    setTopupChannel(channel)
+    setActiveIntent(null)
+    setTopupLoading(true)
+    try {
+      if (channel === 'stripe_checkout') {
+        const res = await createTopupCheckoutAction(selectedTopupPkg.packageId)
+        if (!res.ok || !res.checkoutUrl || !res.sessionId || !res.orderId) {
+          setNotice({ ok: false, text: res.message || 'ไม่สามารถสร้างลิงก์ Stripe Checkout ได้' })
+          return
+        }
+        setActiveIntent({
+          provider: 'stripe_checkout',
+          orderId: res.orderId,
+          sessionId: res.sessionId,
+          checkoutUrl: res.checkoutUrl,
+          amountThb: res.amountThb ?? selectedTopupPkg.priceThb,
+          totalDiamonds: res.reward?.totalDiamonds ?? selectedTopupPkg.baseDiamonds + selectedTopupPkg.bonusDiamonds,
+        })
+        return
+      }
+      const res = await createTopupIntentAction(selectedTopupPkg.packageId, channel)
+      if (!res.ok || !res.orderId) {
+        setNotice({ ok: false, text: res.message || 'ไม่สามารถสร้าง QR ชำระเงินได้' })
+        return
+      }
+      setActiveIntent({
+        provider: channel,
+        orderId: res.orderId,
+        paymentIntentId: res.paymentIntentId,
+        qrImageUrl: res.qrImageUrl ?? null,
+        hostedUrl: res.hostedUrl ?? null,
+        amountThb: res.amountThb ?? selectedTopupPkg.priceThb,
+        totalDiamonds: res.reward?.totalDiamonds ?? selectedTopupPkg.baseDiamonds + selectedTopupPkg.bonusDiamonds,
+      })
+    } finally {
+      setTopupLoading(false)
+    }
+  }
+
+  const handleManualVerifyStripe = async () => {
+    if (!activeIntent || topupLoading) return
+    setTopupLoading(true)
+    try {
+      const res = await verifyStripeTopupAction({
+        paymentIntentId: activeIntent.paymentIntentId,
+        sessionId: activeIntent.sessionId,
+      })
+      setNotice({ ok: res.ok && Boolean(res.paid), text: res.message })
+      if (res.paid && res.ok) {
+        playQuestClaimSfx(true)
+        setActiveIntent(null)
+        setSelectedTopupPkg(null)
+      }
+    } finally {
+      setTopupLoading(false)
+    }
+  }
+
+  const handleVerifySlipUpload = async () => {
+    if (!selectedTopupPkg || !slipFile || topupLoading) return
+    setTopupLoading(true)
+    try {
+      const res = await verifySlipTopupAction(selectedTopupPkg.packageId, slipFile)
+      setNotice({ ok: res.ok, text: res.message })
+      if (res.ok) {
+        playQuestClaimSfx(true)
+        setActiveIntent(null)
+        setSelectedTopupPkg(null)
+        setSlipFile(null)
+      }
+    } finally {
+      setTopupLoading(false)
     }
   }
 
@@ -380,19 +560,27 @@ export function PremiumShopPanel() {
 
   return (
     <PanelFrame
-      title="ศูนย์พรีเมียม & ร้านค้าเพชร (Sandbox MMORPG)"
-      subtitle="Diamond Wallet · VIP 1–5 · Season Pass · แฟชั่น 5 ส่วน · สัตว์เลี้ยง · ขยายกระเป๋า/คลัง"
+      title="ศูนย์พรีเมียม & เติมเงินเพชร (Real Top-Up)"
+      subtitle="เติมเงินจริง (PromptPay / Stripe / ตรวจสลิป) · VIP 1–5 · Season Pass · แฟชั่น 5 ส่วน · ขยายกระเป๋า/คลัง"
     >
-      {/* Top Banner: Sandbox Notice + Wallet Strip */}
+      {/* Top Banner: Verified Payment & Wallet Strip */}
       <div className="mb-3 space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2 border-2 border-cyan-400/40 bg-cyan-950/30 px-3 py-2">
           <div className="flex items-center gap-2 text-[11px] text-cyan-100">
-            <FlaskConical className="size-4 shrink-0 text-cyan-300" aria-hidden />
+            <ShieldCheck className="size-4 shrink-0 text-emerald-300" aria-hidden />
             <span>
-              <strong className="text-cyan-200">Sandbox Only:</strong> เพชรและรายการเติมทั้งหมดเป็นการจำลองทดสอบในเกมเท่านั้น
-              ไม่มีการเชื่อมต่อเงินจริง บัตรเครดิต หรือบัญชีธนาคาร
+              <strong className="text-emerald-300">ระบบเติมเงินจริง (Server-Verified):</strong>{' '}
+              รองรับ PromptPay QR, บัตรเครดิต/เดบิต Stripe และสลิปธนาคารอัตโนมัติ (เติมเข้าตัวละครทันที)
             </span>
           </div>
+          <PxButton
+            variant="accent"
+            onClick={() => setActiveTab('diamond')}
+            className="px-2.5 py-1 text-[10px]"
+          >
+            <CreditCard className="mr-1 inline size-3" aria-hidden />
+            เติมเพชร
+          </PxButton>
           <div className="flex flex-wrap items-center gap-2">
             {vipActive && vipBonuses.tierDef && (
               <span
@@ -580,60 +768,145 @@ export function PremiumShopPanel() {
         </div>
       )}
 
-      {/* TAB 2: DIAMOND WALLET & SANDBOX TEST CONSOLE */}
+      {/* TAB 2: REAL TOP-UP STOREFRONT & DIAMOND WALLET */}
       {activeTab === 'diamond' && (
         <div className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-2.5 border-2 border-cyan-400/40 bg-cyan-950/20 p-3">
-              <div className="flex items-center justify-between">
-                <h3 className="flex items-center gap-1.5 text-sm font-bold text-cyan-200">
-                  <FlaskConical className="size-4" aria-hidden />
-                  Sandbox Test Console (เติมเพชรทดลอง)
-                </h3>
-                <span className="border border-cyan-300/40 bg-cyan-400/15 px-1.5 py-0.5 text-[9px] font-bold text-cyan-200">
-                  SANDBOX
+          {/* Account & Gateway Readiness */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-2 border-emerald-400/35 bg-emerald-950/20 p-3">
+            <div className="space-y-1 text-xs">
+              <div className="flex flex-wrap items-center gap-2">
+                <ShieldCheck className="size-4 text-emerald-300" aria-hidden />
+                <span className="font-bold text-foreground">
+                  บัญชีเติมเงิน: {fbUser?.email ? fbUser.email : 'ผู้เล่นทั่วไป (Guest)'}
+                </span>
+                {fbUser && fbUser.emailVerified ? (
+                  <span className="border border-emerald-400/50 bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-200">
+                    ยืนยันบัญชีแล้ว
+                  </span>
+                ) : (
+                  <span className="border border-amber-400/50 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">
+                    ต้องล็อกอิน Google ก่อนเติมเงินจริง
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+                <span
+                  className={cn(
+                    'border px-1.5 py-0.5',
+                    gatewayConfig?.stripeEnabled
+                      ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200'
+                      : 'border-amber-400/40 bg-amber-500/10 text-amber-200',
+                  )}
+                >
+                  Stripe PromptPay / Card: {gatewayConfig?.stripeEnabled ? 'พร้อมใช้งาน' : 'รอตั้งค่า STRIPE_SECRET_KEY'}
+                </span>
+                <span
+                  className={cn(
+                    'border px-1.5 py-0.5',
+                    gatewayConfig?.slipVerifyEnabled
+                      ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200'
+                      : 'border-amber-400/40 bg-amber-500/10 text-amber-200',
+                  )}
+                >
+                  PromptPay + SlipOK: {gatewayConfig?.slipVerifyEnabled ? 'พร้อมใช้งาน' : 'รอตั้งค่า PROMPTPAY_ID & SLIPOK'}
                 </span>
               </div>
-              <p className="text-[11px] leading-relaxed text-slate-300">
-                ปุ่มด้านล่างสำหรับทดสอบระบบ Premium MMORPG ด้วยเพชรจำลองเท่านั้น ห้ามใช้เงินจริง และทุกธุรกรรมจะถูกบันทึกพร้อม
-                <code className="mx-1 text-cyan-200">txId</code> และลายเซ็นตรวจสอบจากเซิร์ฟเวอร์
-              </p>
-              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-                {SANDBOX_PRESETS.map((amt) => (
-                  <PxButton
-                    key={amt}
-                    variant="accent"
-                    disabled={inFlight}
-                    onClick={() => void handleSandboxGrant(amt)}
-                    className="py-2 text-[11px] tabular-nums"
-                  >
-                    +{formatNum(amt)} D
-                  </PxButton>
-                ))}
+            </div>
+            {(!fbUser || !fbUser.emailVerified) && (
+              <PxButton variant="accent" disabled={topupLoading} onClick={() => void handleGoogleSignInForTopup()}>
+                <LogIn className="mr-1 inline size-3.5" aria-hidden />
+                เข้าสู่ระบบ Google
+              </PxButton>
+            )}
+          </div>
+
+          {/* Real-Money THB Packages */}
+          <div className="space-y-2.5 border-2 border-border bg-muted/40 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="flex items-center gap-1.5 text-sm font-bold text-primary">
+                  <Gem className="size-4 text-cyan-300" aria-hidden />
+                  แพ็กเกจเติมเพชร (THB)
+                </h3>
+                <p className="text-[11px] text-muted-foreground">
+                  รับโบนัสเพชรพื้นฐาน x2 ทันทีเมื่อเติมครั้งแรกของแต่ละแพ็กเกจ + รับ VIP EXP อัตโนมัติ
+                </p>
               </div>
-              <form
-                className="flex gap-1.5 pt-1"
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  void handleSandboxGrant(Number(customDiamonds) || 0)
-                }}
-              >
-                <input
-                  type="number"
-                  min={1}
-                  max={100000}
-                  value={customDiamonds}
-                  onChange={(e) => setCustomDiamonds(e.target.value)}
-                  aria-label="จำนวนเพชรทดลอง"
-                  className="min-w-0 flex-1 border border-border bg-background px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-cyan-400"
-                />
-                <PxButton type="submit" disabled={inFlight}>
-                  <Gem className="mr-1 inline size-3.5" aria-hidden />
-                  เติมเพชรทดลอง
-                </PxButton>
-              </form>
+              <span className="border border-border bg-background px-2 py-1 text-[10px] text-muted-foreground">
+                เข้าตัวละคร: <strong className="text-foreground">{wallet.characterId}</strong>
+              </span>
             </div>
 
+            <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+              {(gatewayConfig?.packages?.length ? gatewayConfig.packages : TOPUP_PACKAGES).map((pkg) => {
+                const isFirst = !(prem.firstTopupPackages ?? []).includes(pkg.packageId)
+                const reward = calculateTopupReward(pkg, isFirst)
+                const anyGatewayReady = Boolean(gatewayConfig?.stripeEnabled || gatewayConfig?.slipVerifyEnabled)
+                return (
+                  <div
+                    key={pkg.packageId}
+                    className={cn(
+                      'flex flex-col justify-between gap-2.5 border-2 p-3 transition-colors',
+                      pkg.featured
+                        ? 'border-cyan-400/55 bg-cyan-950/20'
+                        : 'border-border bg-background/80 hover:border-cyan-400/40',
+                    )}
+                  >
+                    <div className="space-y-1.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h4 className="text-xs font-bold text-foreground">{pkg.name}</h4>
+                          <p className="text-[10px] text-muted-foreground">{pkg.subtitle}</p>
+                        </div>
+                        {pkg.badge && (
+                          <span className="shrink-0 border border-amber-400/60 bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold text-amber-200">
+                            {pkg.badge}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="border border-border/70 bg-muted/60 p-2">
+                        <div className="flex items-baseline justify-between gap-1">
+                          <span className="text-base font-bold text-cyan-200 tabular-nums">
+                            {formatNum(reward.totalDiamonds)} D
+                          </span>
+                          {isFirst && (
+                            <span className="border border-fuchsia-400/60 bg-fuchsia-500/20 px-1.5 py-0.5 text-[9px] font-bold text-fuchsia-200">
+                              ครั้งแรก x2!
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-0.5 text-[10px] text-muted-foreground tabular-nums">
+                          พื้นฐาน {formatNum(reward.baseDiamonds)} D + โบนัส {formatNum(reward.bonusDiamonds)} D · +{pkg.vipExp} VIP EXP
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-2">
+                      <span className="text-sm font-bold text-emerald-300 tabular-nums">
+                        ฿{formatNum(pkg.priceThb)}
+                      </span>
+                      <PxButton
+                        variant={pkg.featured ? 'accent' : 'primary'}
+                        disabled={!fbUser?.emailVerified || !anyGatewayReady}
+                        onClick={() => openTopupModal(pkg)}
+                        className="px-2.5 py-1 text-[10px]"
+                      >
+                        {!fbUser?.emailVerified
+                          ? 'ล็อกอินก่อน'
+                          : !anyGatewayReady
+                            ? 'ยังไม่เปิดเกตเวย์'
+                            : 'เติมเงินเลย'}
+                      </PxButton>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Wallet Summary & Real Topup Orders */}
+          <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-2 border-2 border-border bg-muted/50 p-3">
               <h3 className="flex items-center gap-1.5 text-sm font-bold text-primary">
                 <ShieldCheck className="size-4" aria-hidden />
@@ -647,9 +920,9 @@ export function PremiumShopPanel() {
                   </dd>
                 </div>
                 <div className="border border-border/60 bg-background/70 p-2">
-                  <dt className="text-[10px] text-muted-foreground">จำนวนธุรกรรมทั้งหมด</dt>
-                  <dd className="mt-0.5 text-base font-bold text-foreground tabular-nums">
-                    {wallet.transactionHistory.length} รายการ
+                  <dt className="text-[10px] text-muted-foreground">รายการเติมเงินจริง</dt>
+                  <dd className="mt-0.5 text-base font-bold text-emerald-300 tabular-nums">
+                    {(prem.topupOrders ?? []).length} บิล
                   </dd>
                 </div>
                 <div className="border border-border/60 bg-background/70 p-2">
@@ -666,6 +939,40 @@ export function PremiumShopPanel() {
                 </div>
               </dl>
             </div>
+
+            <div className="space-y-2 border-2 border-border bg-muted/50 p-3">
+              <h3 className="flex items-center gap-1.5 text-sm font-bold text-primary">
+                <Receipt className="size-4" aria-hidden />
+                ประวัติคำสั่งเติมเงินจริงล่าสุด
+              </h3>
+              {(prem.topupOrders ?? []).length === 0 ? (
+                <p className="py-5 text-center text-xs text-muted-foreground">
+                  ยังไม่มีรายการเติมเงินจริงในตัวละครนี้
+                </p>
+              ) : (
+                <div className="max-h-40 space-y-1.5 overflow-y-auto">
+                  {(prem.topupOrders ?? []).slice(0, 12).map((ord) => (
+                    <div
+                      key={ord.orderId}
+                      className="flex items-center justify-between gap-2 border border-border/60 bg-background/70 px-2.5 py-1.5 text-[11px]"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-bold text-foreground">
+                          {ord.packageName} · ฿{formatNum(ord.amountThb)}
+                        </p>
+                        <p className="truncate font-mono text-[9px] text-muted-foreground">
+                          {ord.provider} · {ord.orderId}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="font-bold text-cyan-200 tabular-nums">+{formatNum(ord.totalDiamonds)} D</p>
+                        <p className="text-[9px] text-emerald-300">{formatDateTime(ord.createdAtMs)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Transaction History Table */}
@@ -673,10 +980,10 @@ export function PremiumShopPanel() {
             <h3 className="text-xs font-bold text-primary">ประวัติการรับและใช้เพชร (Diamond Ledger)</h3>
             {wallet.transactionHistory.length === 0 ? (
               <p className="py-4 text-center text-xs text-muted-foreground">
-                ยังไม่มีประวัติธุรกรรมเพชร — ลองกดเติมเพชรทดลองด้านบนเพื่อเริ่มทดสอบ
+                ยังไม่มีประวัติธุรกรรมเพชร
               </p>
             ) : (
-              <div className="max-h-60 overflow-y-auto border border-border/60">
+              <div className="max-h-56 overflow-y-auto border border-border/60">
                 <table className="w-full text-left text-[11px]">
                   <thead className="sticky top-0 bg-secondary text-muted-foreground">
                     <tr>
@@ -735,6 +1042,56 @@ export function PremiumShopPanel() {
               </div>
             )}
           </div>
+
+          {/* Secondary Developer Sandbox Console */}
+          <details className="border-2 border-border bg-muted/30 p-3">
+            <summary className="flex cursor-pointer items-center justify-between text-xs font-bold text-muted-foreground hover:text-foreground">
+              <span className="inline-flex items-center gap-1.5">
+                <FlaskConical className="size-3.5 text-cyan-300" aria-hidden />
+                Sandbox Test Console (เติมเพชรจำลองสำหรับทดสอบระบบ)
+              </span>
+              <span className="border border-border bg-background px-1.5 py-0.5 text-[9px]">DEV / SANDBOX</span>
+            </summary>
+            <div className="mt-3 space-y-2.5 border-t border-border/60 pt-3">
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                เครื่องมือทดสอบระบบร้านค้าและ VIP ด้วยเพชรจำลอง (ไม่ใช่เงินจริง)
+              </p>
+              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                {SANDBOX_PRESETS.map((amt) => (
+                  <PxButton
+                    key={amt}
+                    variant="secondary"
+                    disabled={inFlight}
+                    onClick={() => void handleSandboxGrant(amt)}
+                    className="py-1.5 text-[11px] tabular-nums"
+                  >
+                    +{formatNum(amt)} D
+                  </PxButton>
+                ))}
+              </div>
+              <form
+                className="flex gap-1.5"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  void handleSandboxGrant(Number(customDiamonds) || 0)
+                }}
+              >
+                <input
+                  type="number"
+                  min={1}
+                  max={100000}
+                  value={customDiamonds}
+                  onChange={(e) => setCustomDiamonds(e.target.value)}
+                  aria-label="จำนวนเพชรทดลอง"
+                  className="min-w-0 flex-1 border border-border bg-background px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-cyan-400"
+                />
+                <PxButton type="submit" variant="secondary" disabled={inFlight}>
+                  <Gem className="mr-1 inline size-3.5" aria-hidden />
+                  เติมเพชรทดลอง
+                </PxButton>
+              </form>
+            </div>
+          </details>
         </div>
       )}
 
@@ -1367,7 +1724,7 @@ export function PremiumShopPanel() {
 
             <dl className="space-y-1.5 border border-border bg-muted/60 p-2.5 text-xs tabular-nums">
               <div className="flex justify-between">
-                <dt className="text-muted-foreground">ยอดชำระ (Sandbox Diamonds)</dt>
+                <dt className="text-muted-foreground">ยอดชำระ (Diamonds)</dt>
                 <dd className="font-bold text-cyan-200">
                   {formatNum(confirmProduct.diamondPrice * confirmQty)} D
                 </dd>
@@ -1416,6 +1773,215 @@ export function PremiumShopPanel() {
                 )}
               </PxButton>
             </div>
+          </div>
+        </div>
+      )}
+      {/* REAL-MONEY TOP-UP CHECKOUT MODAL */}
+      {selectedTopupPkg && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`ชำระเงินแพ็กเกจ ${selectedTopupPkg.name}`}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3"
+          onPointerDown={(e) => {
+            if (e.target === e.currentTarget && !topupLoading) {
+              setSelectedTopupPkg(null)
+              setActiveIntent(null)
+            }
+          }}
+        >
+          <div className="pixel-panel max-h-[90vh] w-full max-w-lg space-y-3 overflow-y-auto border-2 border-emerald-400/60 bg-slate-950 p-4 shadow-2xl">
+            <div className="flex items-start justify-between gap-2 border-b border-border pb-2">
+              <div>
+                <h3 className="text-sm font-bold text-foreground">
+                  เติมเงิน: {selectedTopupPkg.name} (฿{formatNum(selectedTopupPkg.priceThb)})
+                </h3>
+                <p className="text-[11px] text-cyan-200 tabular-nums">
+                  รับ{' '}
+                  {formatNum(
+                    calculateTopupReward(
+                      selectedTopupPkg,
+                      !(prem.firstTopupPackages ?? []).includes(selectedTopupPkg.packageId),
+                    ).totalDiamonds,
+                  )}{' '}
+                  Diamonds + {selectedTopupPkg.vipExp} VIP EXP
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={topupLoading}
+                onClick={() => {
+                  setSelectedTopupPkg(null)
+                  setActiveIntent(null)
+                }}
+                className="text-muted-foreground hover:text-foreground"
+                aria-label="ปิดหน้าต่างเติมเงิน"
+              >
+                <X className="size-4" aria-hidden />
+              </button>
+            </div>
+
+            {/* Channel Selector */}
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+              <button
+                type="button"
+                disabled={!gatewayConfig?.stripeEnabled || topupLoading}
+                onClick={() => void handleStartTopupChannel('stripe_promptpay')}
+                className={cn(
+                  'pixel-btn flex items-center justify-center gap-1.5 px-2 py-2 text-[11px]',
+                  topupChannel === 'stripe_promptpay' && activeIntent?.provider === 'stripe_promptpay'
+                    ? 'bg-cyan-300 text-slate-950'
+                    : 'bg-secondary text-foreground',
+                  !gatewayConfig?.stripeEnabled && 'opacity-50',
+                )}
+              >
+                <QrCode className="size-3.5" aria-hidden />
+                PromptPay (Stripe)
+              </button>
+              <button
+                type="button"
+                disabled={!gatewayConfig?.stripeEnabled || topupLoading}
+                onClick={() => void handleStartTopupChannel('stripe_checkout')}
+                className={cn(
+                  'pixel-btn flex items-center justify-center gap-1.5 px-2 py-2 text-[11px]',
+                  topupChannel === 'stripe_checkout' && activeIntent?.provider === 'stripe_checkout'
+                    ? 'bg-cyan-300 text-slate-950'
+                    : 'bg-secondary text-foreground',
+                  !gatewayConfig?.stripeEnabled && 'opacity-50',
+                )}
+              >
+                <CreditCard className="size-3.5" aria-hidden />
+                บัตร / Stripe Web
+              </button>
+              <button
+                type="button"
+                disabled={!gatewayConfig?.slipVerifyEnabled || topupLoading}
+                onClick={() => void handleStartTopupChannel('promptpay_slip')}
+                className={cn(
+                  'pixel-btn flex items-center justify-center gap-1.5 px-2 py-2 text-[11px]',
+                  topupChannel === 'promptpay_slip' && activeIntent?.provider === 'promptpay_slip'
+                    ? 'bg-cyan-300 text-slate-950'
+                    : 'bg-secondary text-foreground',
+                  !gatewayConfig?.slipVerifyEnabled && 'opacity-50',
+                )}
+              >
+                <Upload className="size-3.5" aria-hidden />
+                โอน + อัปโหลดสลิป
+              </button>
+            </div>
+
+            {!activeIntent && !topupLoading && (
+              <div className="flex items-center gap-2 border border-border bg-muted/50 p-3 text-xs text-muted-foreground">
+                <AlertCircle className="size-4 shrink-0 text-cyan-300" aria-hidden />
+                <span>เลือกช่องทางชำระเงินด้านบนเพื่อสร้าง QR Code หรือลิงก์ชำระเงิน</span>
+              </div>
+            )}
+
+            {topupLoading && (
+              <div className="flex items-center justify-center gap-2 border border-border bg-muted/50 p-6 text-xs text-cyan-200">
+                <RefreshCw className="size-4 animate-spin" aria-hidden />
+                <span>กำลังเชื่อมต่อระบบชำระเงิน...</span>
+              </div>
+            )}
+
+            {activeIntent && !topupLoading && (
+              <div className="space-y-3 border border-border bg-muted/40 p-3">
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span>Order ID: {activeIntent.orderId}</span>
+                  <span className="font-bold text-emerald-300">฿{formatNum(activeIntent.amountThb)}</span>
+                </div>
+
+                {activeIntent.provider === 'stripe_promptpay' && (
+                  <div className="space-y-2.5 text-center">
+                    {activeIntent.qrImageUrl ? (
+                      <div className="mx-auto inline-block border-4 border-white bg-white p-2">
+                        <img
+                          src={activeIntent.qrImageUrl}
+                          alt="Stripe PromptPay QR"
+                          className="size-52 object-contain"
+                        />
+                      </div>
+                    ) : null}
+                    <p className="text-[11px] text-slate-300">
+                      สแกน PromptPay QR ด้วยแอปธนาคารใดก็ได้ ระบบจะตรวจสอบยอดเงินให้อัตโนมัติทุก 4 วินาที
+                    </p>
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <PxButton variant="accent" onClick={() => void handleManualVerifyStripe()}>
+                        <RefreshCw className="mr-1 inline size-3.5" aria-hidden />
+                        ตรวจสอบยอดชำระตอนนี้
+                      </PxButton>
+                      {activeIntent.hostedUrl && (
+                        <a
+                          href={activeIntent.hostedUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="pixel-btn inline-flex items-center gap-1 bg-secondary px-3 py-1.5 text-[11px] font-semibold text-foreground hover:bg-secondary/80"
+                        >
+                          เปิดหน้า QR สำรอง <ExternalLink className="size-3" aria-hidden />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {activeIntent.provider === 'stripe_checkout' && activeIntent.checkoutUrl && (
+                  <div className="space-y-2.5 text-center">
+                    <p className="text-xs text-slate-200">
+                      กดปุ่มด้านล่างเพื่อไปยังหน้าชำระเงิน Stripe (รองรับบัตรเครดิต/เดบิต และ PromptPay)
+                    </p>
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <a
+                        href={activeIntent.checkoutUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="pixel-btn inline-flex items-center gap-1.5 bg-cyan-300 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-cyan-200"
+                      >
+                        <ExternalLink className="size-3.5" aria-hidden />
+                        ไปหน้าชำระเงิน Stripe
+                      </a>
+                      <PxButton variant="secondary" onClick={() => void handleManualVerifyStripe()}>
+                        <Check className="mr-1 inline size-3.5" aria-hidden />
+                        ชำระเสร็จแล้ว · ตรวจสอบยอด
+                      </PxButton>
+                    </div>
+                  </div>
+                )}
+
+                {activeIntent.provider === 'promptpay_slip' && (
+                  <div className="space-y-3 text-center">
+                    {activeIntent.qrImageUrl && (
+                      <div className="mx-auto inline-block border-4 border-white bg-white p-2">
+                        <img
+                          src={activeIntent.qrImageUrl}
+                          alt="PromptPay QR"
+                          className="size-48 object-contain"
+                        />
+                      </div>
+                    )}
+                    <p className="text-[11px] text-slate-300">
+                      โอนยอด <strong>฿{formatNum(activeIntent.amountThb)}</strong> เข้า PromptPay ({gatewayConfig?.promptPayMaskedId || 'ร้านค้า'}) แล้วแนบรูปสลิปเพื่อรับเพชรทันที
+                    </p>
+                    <div className="flex flex-col items-center gap-2">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        aria-label="อัปโหลดสลิปโอนเงิน"
+                        onChange={(e) => setSlipFile(e.target.files?.[0] ?? null)}
+                        className="w-full max-w-xs border border-border bg-background p-1.5 text-[11px] text-foreground"
+                      />
+                      <PxButton
+                        variant="accent"
+                        disabled={!slipFile}
+                        onClick={() => void handleVerifySlipUpload()}
+                      >
+                        <Upload className="mr-1 inline size-3.5" aria-hidden />
+                        ตรวจสอบสลิปและรับเพชรทันที
+                      </PxButton>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

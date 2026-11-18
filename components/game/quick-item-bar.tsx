@@ -28,7 +28,7 @@ function CooldownSweep({ remaining, duration }: { remaining: number; duration: n
 
   return (
     <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-md bg-black/65">
-      <svg viewBox="0 0 36 36" className="size-7 -rotate-90" aria-hidden>
+      <svg viewBox="0 0 36 36" className="size-5 sm:size-6 -rotate-90" aria-hidden>
         <circle cx="18" cy="18" r={r} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="3" />
         <circle
           cx="18"
@@ -42,7 +42,7 @@ function CooldownSweep({ remaining, duration }: { remaining: number; duration: n
           strokeLinecap="round"
         />
       </svg>
-      <span className="absolute font-mono text-[9px] font-bold text-white tabular-nums">
+      <span className="absolute font-mono text-[8px] font-bold text-white tabular-nums">
         {remaining.toFixed(1)}
       </span>
     </div>
@@ -117,8 +117,10 @@ export function QuickItemBar({ compact = false }: { compact?: boolean }) {
 
       <div
         className={cn(
-          'pixel-panel flex items-center gap-1 bg-[#161113]/95 p-1 shadow-xl',
-          compact ? 'max-w-[calc(100vw-1rem)] overflow-x-auto' : '',
+          'pixel-panel flex items-center bg-[#161113]/92 shadow-xl',
+          compact
+            ? 'max-w-[calc(100vw-0.75rem)] gap-0.5 overflow-x-auto p-0.5'
+            : 'gap-1 p-1',
         )}
       >
         {Array.from({ length: QUICK_SLOT_COUNT }).map((_, idx) => {
@@ -180,7 +182,7 @@ export function QuickItemBar({ compact = false }: { compact?: boolean }) {
                 }
                 className={cn(
                   'pixel-btn relative flex shrink-0 items-center justify-center overflow-hidden rounded-md transition',
-                  compact ? 'size-10' : 'size-9 sm:size-10',
+                  compact ? 'size-7' : 'size-8 sm:size-9',
                   dragOverIdx === idx
                     ? 'border-accent bg-accent/25 ring-2 ring-accent'
                     : hasItem
@@ -190,20 +192,23 @@ export function QuickItemBar({ compact = false }: { compact?: boolean }) {
               >
                 {hasItem && itemId ? (
                   <>
-                    <ItemIcon itemId={itemId} size={compact ? 26 : 24} />
+                    <ItemIcon itemId={itemId} size={compact ? 18 : 22} />
                     <span
                       data-testid={`quick-slot-qty-${idx}`}
-                      className="absolute bottom-0 right-0.5 rounded bg-black/80 px-1 font-mono text-[9px] font-bold leading-tight text-amber-200 tabular-nums"
+                      className={cn(
+                        "absolute bottom-0 right-0 rounded bg-black/85 font-mono font-bold leading-none text-amber-200 tabular-nums",
+                        compact ? "px-0.5 text-[8px]" : "px-1 text-[9px]",
+                      )}
                     >
                       {qty}
                     </span>
                     <CooldownSweep remaining={cdRem} duration={cdDur} />
                   </>
                 ) : (
-                  <Plus className="size-3.5 text-muted-foreground/45 group-hover:text-primary/70" aria-hidden />
+                  <Plus className={cn("text-muted-foreground/45 group-hover:text-primary/70", compact ? "size-2.5" : "size-3.5")} aria-hidden />
                 )}
 
-                <span className="pointer-events-none absolute left-0.5 top-0 font-mono text-[8px] font-bold text-white/85 drop-shadow">
+                <span className={cn("pointer-events-none absolute left-0.5 top-0 font-mono font-bold leading-none text-white/85 drop-shadow", compact ? "text-[7px]" : "text-[8px]")}>
                   {hotkeyDisplay}
                 </span>
               </button>

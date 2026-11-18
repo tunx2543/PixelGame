@@ -1,3 +1,5 @@
+import type { TopupOrderRecord } from './topup'
+
 export type DiamondTxType = 'earn' | 'spend' | 'sandbox_grant' | 'refund'
 
 export interface DiamondTransaction {
@@ -219,4 +221,6 @@ export interface PremiumState {
   purchaseCounts: Record<string, number>
   purchaseHistory: PurchaseReceipt[]
   auditLogs: AuditLogEntry[]
+  firstTopupPackages?: string[]
+  topupOrders?: TopupOrderRecord[]
 }

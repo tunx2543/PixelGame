@@ -14,6 +14,7 @@ import {
   filterBlockedMessages,
   type ChatChannel,
 } from '@/lib/game/mmo-systems'
+import { useUiLayout } from '@/lib/game/ui-layout'
 import { useGame } from '@/lib/game/use-game'
 import { cn } from '@/lib/utils'
 
@@ -55,6 +56,8 @@ interface DisplayChatItem {
 
 export function ChatBox({ offsetTouch = false }: { offsetTouch?: boolean }) {
   const g = useGame()
+  const layout = useUiLayout()
+  const inlineNextToDpad = offsetTouch && layout.viewport.width >= 760
   const [text, setText] = useState('')
   const [isOpen, setIsOpen] = useState(false)
   const [remoteMessages, setRemoteMessages] = useState<WorldChatMessageRecord[]>([])
@@ -156,9 +159,14 @@ export function ChatBox({ offsetTouch = false }: { offsetTouch?: boolean }) {
       data-testid="chat-box"
       onPointerDown={(event) => event.stopPropagation()}
       className={cn(
-        'pointer-events-auto pixel-panel absolute z-20 flex flex-col bg-card/90 shadow-lg transition-[width]',
-        offsetTouch ? 'bottom-[13.5rem] left-2 md:bottom-2 md:left-[10.5rem]' : 'bottom-2 left-2',
-        isOpen ? 'w-[min(20.5rem,calc(100vw-1rem))]' : 'w-28 sm:w-36',
+        'pointer-events-auto pixel-panel absolute flex flex-col bg-card/90 shadow-lg transition-[width]',
+        isOpen ? 'z-40 w-[min(19rem,calc(100vw-1rem))]' : 'z-20',
+        !isOpen && (inlineNextToDpad ? 'w-[5.75rem]' : 'w-24 sm:w-32'),
+        offsetTouch
+          ? inlineNextToDpad
+            ? 'bottom-1.5 left-[8.25rem] lg:left-[10.25rem]'
+            : 'bottom-[8.75rem] left-2'
+          : 'bottom-2 left-2',
       )}
     >
       <button

@@ -452,6 +452,95 @@ service cloud.firestore {
         (!next.claimed || next.progress >= next.target);
     }
 
+    function isValidTopupOrder(data, orderId, characterId) {
+      return data.keys().hasAll([
+          'orderId',
+          'ownerId',
+          'characterId',
+          'packageId',
+          'packageName',
+          'provider',
+          'gatewayRef',
+          'amountThb',
+          'baseDiamonds',
+          'bonusDiamonds',
+          'totalDiamonds',
+          'vipExpGranted',
+          'status',
+          'txId',
+          'serverVerified',
+          'serverSignature',
+          'createdAtMs',
+          'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'orderId',
+          'ownerId',
+          'characterId',
+          'packageId',
+          'packageName',
+          'provider',
+          'gatewayRef',
+          'amountThb',
+          'baseDiamonds',
+          'bonusDiamonds',
+          'totalDiamonds',
+          'vipExpGranted',
+          'status',
+          'txId',
+          'serverVerified',
+          'serverSignature',
+          'createdAtMs',
+          'createdAt'
+        ]) &&
+        isValidId(data.orderId) &&
+        data.orderId == orderId &&
+        data.orderId.size() <= 64 &&
+        isValidId(data.ownerId) &&
+        data.ownerId == request.auth.uid &&
+        isValidId(data.characterId) &&
+        data.characterId == characterId &&
+        data.characterId.size() <= 64 &&
+        isValidId(data.packageId) &&
+        data.packageId.size() >= 2 &&
+        data.packageId.size() <= 64 &&
+        data.packageName is string &&
+        data.packageName.size() >= 1 &&
+        data.packageName.size() <= 120 &&
+        data.provider in ['stripe_promptpay', 'stripe_checkout', 'promptpay_slip'] &&
+        data.gatewayRef is string &&
+        data.gatewayRef.size() >= 4 &&
+        data.gatewayRef.size() <= 128 &&
+        data.amountThb is int &&
+        data.amountThb >= 1 &&
+        data.amountThb <= 100000 &&
+        data.baseDiamonds is int &&
+        data.baseDiamonds >= 1 &&
+        data.baseDiamonds <= 1000000 &&
+        data.bonusDiamonds is int &&
+        data.bonusDiamonds >= 0 &&
+        data.bonusDiamonds <= 1000000 &&
+        data.totalDiamonds is int &&
+        data.totalDiamonds >= 1 &&
+        data.totalDiamonds <= 2000000 &&
+        data.totalDiamonds == data.baseDiamonds + data.bonusDiamonds &&
+        data.vipExpGranted is int &&
+        data.vipExpGranted >= 0 &&
+        data.vipExpGranted <= 100000 &&
+        data.status == 'credited' &&
+        isValidId(data.txId) &&
+        data.txId.size() >= 4 &&
+        data.txId.size() <= 64 &&
+        data.serverVerified is bool &&
+        data.serverVerified == true &&
+        data.serverSignature is string &&
+        data.serverSignature.size() >= 16 &&
+        data.serverSignature.size() <= 64 &&
+        data.createdAtMs is int &&
+        data.createdAtMs >= 0 &&
+        data.createdAt is timestamp;
+    }
+
     function isValidDailyMissionBoard(data, dateKey) {
       return data.keys().hasAll(['dateKey', 'ownerId', 'missions', 'createdAt', 'updatedAt']) &&
         data.keys().hasOnly(['dateKey', 'ownerId', 'missions', 'createdAt', 'updatedAt']) &&
@@ -1956,6 +2045,38 @@ service cloud.firestore {
             isValidId(logId) &&
             userId == request.auth.uid &&
             isValidPremiumAuditLog(incoming(), logId, characterId) &&
+            incoming().createdAt == request.time &&
+            isUserAccountOwner(userId);
+
+          allow update, delete: if false;
+        }
+
+        match /topupOrders/{orderId} {
+          allow get: if isSignedIn() &&
+            isEmailVerified() &&
+            isValidId(userId) &&
+            isValidId(characterId) &&
+            isValidId(orderId) &&
+            userId == request.auth.uid &&
+            isUserAccountOwner(userId) &&
+            (resource == null || existing().ownerId == request.auth.uid);
+
+          allow list: if isSignedIn() &&
+            isEmailVerified() &&
+            isValidId(userId) &&
+            isValidId(characterId) &&
+            userId == request.auth.uid &&
+            existing().ownerId == request.auth.uid &&
+            request.query.limit != null &&
+            request.query.limit <= 100;
+
+          allow create: if isSignedIn() &&
+            isEmailVerified() &&
+            isValidId(userId) &&
+            isValidId(characterId) &&
+            isValidId(orderId) &&
+            userId == request.auth.uid &&
+            isValidTopupOrder(incoming(), orderId, characterId) &&
             incoming().createdAt == request.time &&
             isUserAccountOwner(userId);
 

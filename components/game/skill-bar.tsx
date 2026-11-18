@@ -187,7 +187,12 @@ export function CharacterControlBar({ compactTouchMode = false }: { compactTouch
         </div>
       )}
 
-      <div className="pointer-events-auto pixel-panel flex items-center gap-1 p-1 shadow-lg">
+      <div
+        className={cn(
+          'pointer-events-auto pixel-panel flex items-center shadow-lg',
+          compactTouchMode ? 'gap-0.5 p-0.5' : 'gap-1 p-1',
+        )}
+      >
         {hasMount && (
           <button
             type="button"
@@ -195,7 +200,8 @@ export function CharacterControlBar({ compactTouchMode = false }: { compactTouch
             onClick={() => toggleMountRiding()}
             title="ขึ้นขี่ / ลงจากสัตว์ขี่ [M]"
             className={cn(
-              'pixel-btn flex items-center gap-1 whitespace-nowrap px-2 py-1 text-[10px] font-semibold',
+              'pixel-btn flex items-center gap-1 whitespace-nowrap font-semibold',
+              compactTouchMode ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-1 text-[10px]',
               isMounted
                 ? 'bg-amber-500/30 text-amber-200 hover:bg-amber-500/40'
                 : 'bg-secondary text-muted-foreground hover:text-foreground',
@@ -215,13 +221,14 @@ export function CharacterControlBar({ compactTouchMode = false }: { compactTouch
             notify()
           }}
           className={cn(
-            'pixel-btn flex items-center gap-1 whitespace-nowrap px-2 py-1 text-[10px] font-semibold',
+            'pixel-btn flex items-center gap-1 whitespace-nowrap font-semibold',
+            compactTouchMode ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-1 text-[10px]',
             game.autoFarm
               ? 'bg-emerald-500/25 text-emerald-300'
               : 'bg-secondary text-muted-foreground hover:text-foreground',
           )}
         >
-          <Bot className="size-3.5" aria-hidden />
+          <Bot className={compactTouchMode ? 'size-3' : 'size-3.5'} aria-hidden />
           {game.autoFarm ? 'หยุดออโต้' : 'ออโต้ฟาร์ม'}
         </button>
 
@@ -234,13 +241,14 @@ export function CharacterControlBar({ compactTouchMode = false }: { compactTouch
             notify()
           }}
           className={cn(
-            'pixel-btn flex items-center gap-1 whitespace-nowrap px-2 py-1 text-[10px] font-semibold disabled:opacity-45',
+            'pixel-btn flex items-center gap-1 whitespace-nowrap font-semibold disabled:opacity-45',
+            compactTouchMode ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-1 text-[10px]',
             game.autoSkills && game.autoFarm
               ? 'bg-purple-500/25 text-purple-200'
               : 'bg-secondary text-muted-foreground hover:text-foreground',
           )}
         >
-          <Zap className="size-3.5" aria-hidden />
+          <Zap className={compactTouchMode ? 'size-3' : 'size-3.5'} aria-hidden />
           ออโต้สกิล
         </button>
       </div>

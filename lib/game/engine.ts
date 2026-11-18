@@ -168,9 +168,16 @@ import {
   generateUniqueTxId,
   sanitizePremiumState,
 } from './premium/wallet'
+import type {
+  TopupOrderRecord,
+  TopupPackage,
+  TopupProvider,
+} from './premium/topup'
 import {
+  isGatewayRefRecorded,
   recordDiamondTransaction,
   recordPremiumAuditLog,
+  recordTopupOrder,
 } from '@/lib/firebase/premium-ledger'
 
 if (typeof window !== 'undefined') {
@@ -4619,6 +4626,265 @@ export function equipFashionAction(slot: FashionSlot, fashionId: string | null):
   saveGame()
   notify()
   return { ok: true, message: `สวมใส่ ${def.name} สำเร็จ!` }
+}
+
+/* ---------------- Real-Money Top-Up Actions ---------------- */
+
+export interface TopupGatewayStatus {
+  stripeEnabled: boolean
+  slipVerifyEnabled: boolean
+  promptPayQrEnabled: boolean
+  promptPayMaskedId: string | null
+  currency: 'THB'
+  packages: TopupPackage[]
+}
+
+export async function fetchTopupGatewayConfig(): Promise<TopupGatewayStatus | null> {
+  try {
+    const res = await fetch('/api/topup/config', { cache: 'no-store' })
+    const json = (await res.json().catch(() => null)) as (TopupGatewayStatus & { ok?: boolean }) | null
+    if (!res.ok || !json?.ok) return null
+    return {
+      stripeEnabled: Boolean(json.stripeEnabled),
+      slipVerifyEnabled: Boolean(json.slipVerifyEnabled),
+      promptPayQrEnabled: Boolean(json.promptPayQrEnabled),
+      promptPayMaskedId: json.promptPayMaskedId ?? null,
+      currency: 'THB',
+      packages: Array.isArray(json.packages) ? json.packages : [],
+    }
+  } catch {
+    return null
+  }
+}
+
+export async function applyVerifiedTopupAction(
+  order: TopupOrderRecord,
+): Promise<{ ok: boolean; duplicate?: boolean; message: string; order?: TopupOrderRecord }> {
+  const p = player()
+  const prem = ensurePremiumState(p)
+  const existingLocal = (prem.topupOrders ?? []).some(
+    (o) => o.orderId === order.orderId || (order.gatewayRef && o.gatewayRef === order.gatewayRef),
+  )
+  if (existingLocal) {
+    return { ok: false, duplicate: true, message: 'รายการเติมเงินนี้ถูกเติมเข้าตัวละครไปแล้ว' }
+  }
+
+  const fbUser = firebaseAuth.currentUser
+  const slotId = prem.wallet.characterId || getActiveCharacterSlot()
+  if (fbUser && fbUser.emailVerified && order.gatewayRef) {
+    const alreadyInCloud = await isGatewayRefRecorded(fbUser.uid, slotId, order.gatewayRef).catch(() => false)
+    if (alreadyInCloud) {
+      return { ok: false, duplicate: true, message: 'รายการชำระเงินนี้ถูกบันทึกในบัญชีแล้ว' }
+    }
+  }
+
+  const txRes = commitDiamondDelta(p, order.totalDiamonds, {
+    type: 'earn',
+    source: order.provider,
+    productId: order.packageId,
+    note: `เติมเงินจริง ${order.packageName} (฿${order.amountThb.toLocaleString()}) +${order.totalDiamonds.toLocaleString()} D`,
+    requestId: order.orderId,
+    txId: order.txId,
+    actorUid: fbUser?.uid ?? 'guest',
+    isGm: false,
+    serverVerified: order.serverVerified,
+    serverSignature: order.serverSignature,
+    timestampMs: order.createdAtMs,
+  })
+  if (!txRes.ok) {
+    return { ok: false, duplicate: txRes.duplicate, message: txRes.message }
+  }
+
+  if (!prem.firstTopupPackages) prem.firstTopupPackages = []
+  if (!prem.firstTopupPackages.includes(order.packageId)) {
+    prem.firstTopupPackages.push(order.packageId)
+  }
+
+  if (order.vipExpGranted > 0) {
+    prem.vip.vipExp += order.vipExpGranted
+    if (isVipActive(prem.vip)) {
+      prem.vip.vipLevel = Math.max(prem.vip.vipLevel, resolveVipLevelFromExp(prem.vip.vipExp)) as VipTierId
+    }
+  }
+
+  if (!prem.topupOrders) prem.topupOrders = []
+  prem.topupOrders.unshift(order)
+  if (prem.topupOrders.length > 40) prem.topupOrders.length = 40
+
+  logPremiumAudit(p, {
+    action: 'DIAMOND_EARN',
+    txId: order.txId,
+    details: `เติมเงินจริง [${order.provider}] ${order.packageName} ฿${order.amountThb} -> +${order.totalDiamonds.toLocaleString()} D (Ref: ${order.gatewayRef})`,
+    verifiedByServer: true,
+  })
+
+  if (fbUser && fbUser.emailVerified) {
+    void recordTopupOrder(fbUser.uid, slotId, order).catch(() => {})
+  }
+
+  say(
+    'loot',
+    `★ เติมเงินสำเร็จ! ${order.packageName} (฿${order.amountThb.toLocaleString()}) รับ +${order.totalDiamonds.toLocaleString()} D`,
+  )
+  saveGame()
+  notify()
+  return {
+    ok: true,
+    order,
+    message: `เติมเงินสำเร็จ! รับ +${order.totalDiamonds.toLocaleString()} D และ +${order.vipExpGranted} VIP EXP`,
+  }
+}
+
+export async function createTopupIntentAction(
+  packageId: string,
+  provider: Extract<TopupProvider, 'stripe_promptpay' | 'promptpay_slip'>,
+): Promise<{
+  ok: boolean
+  message?: string
+  provider?: 'stripe_promptpay' | 'promptpay_slip'
+  orderId?: string
+  paymentIntentId?: string
+  amountThb?: number
+  qrImageUrl?: string | null
+  qrData?: string | null
+  hostedUrl?: string | null
+  reward?: { baseDiamonds: number; bonusDiamonds: number; totalDiamonds: number; vipExp: number }
+}> {
+  const p = player()
+  const prem = ensurePremiumState(p)
+  const isFirstPurchase = !(prem.firstTopupPackages ?? []).includes(packageId)
+  const res = await callPremiumApi<{
+    provider: 'stripe_promptpay' | 'promptpay_slip'
+    orderId: string
+    paymentIntentId?: string
+    amountThb: number
+    qrImageUrl?: string | null
+    qrData?: string | null
+    hostedUrl?: string | null
+    reward: { baseDiamonds: number; bonusDiamonds: number; totalDiamonds: number; vipExp: number }
+  }>('/api/topup/create-intent', {
+    packageId,
+    provider,
+    characterId: prem.wallet.characterId || getActiveCharacterSlot(),
+    isFirstPurchase,
+  })
+  if (!res.ok || !res.data) {
+    return { ok: false, message: res.message || 'ไม่สามารถสร้าง QR ชำระเงินได้' }
+  }
+  return { ok: true, ...res.data }
+}
+
+export async function createTopupCheckoutAction(packageId: string): Promise<{
+  ok: boolean
+  message?: string
+  orderId?: string
+  sessionId?: string
+  checkoutUrl?: string
+  amountThb?: number
+  reward?: { baseDiamonds: number; bonusDiamonds: number; totalDiamonds: number; vipExp: number }
+}> {
+  const p = player()
+  const prem = ensurePremiumState(p)
+  const isFirstPurchase = !(prem.firstTopupPackages ?? []).includes(packageId)
+  const res = await callPremiumApi<{
+    orderId: string
+    sessionId: string
+    checkoutUrl: string
+    amountThb: number
+    reward: { baseDiamonds: number; bonusDiamonds: number; totalDiamonds: number; vipExp: number }
+  }>('/api/topup/create-checkout', {
+    packageId,
+    characterId: prem.wallet.characterId || getActiveCharacterSlot(),
+    isFirstPurchase,
+  })
+  if (!res.ok || !res.data) {
+    return { ok: false, message: res.message || 'ไม่สามารถสร้างลิงก์ Stripe Checkout ได้' }
+  }
+  return { ok: true, ...res.data }
+}
+
+export async function verifyStripeTopupAction(params: {
+  paymentIntentId?: string
+  sessionId?: string
+}): Promise<{ ok: boolean; paid?: boolean; status?: string; message: string; order?: TopupOrderRecord }> {
+  const lockKey = `topup_verify:${params.paymentIntentId || params.sessionId || ''}`
+  if (inFlightPremiumLocks.has(lockKey)) {
+    return { ok: false, message: 'กำลังตรวจสอบการชำระเงิน...' }
+  }
+  inFlightPremiumLocks.add(lockKey)
+  try {
+    const res = await callPremiumApi<{
+      paid: boolean
+      status?: string
+      order?: TopupOrderRecord
+      message?: string
+    }>('/api/topup/verify', params)
+    if (!res.ok || !res.data) {
+      return { ok: false, message: res.message || 'ตรวจสอบยอดชำระไม่สำเร็จ' }
+    }
+    if (!res.data.paid || !res.data.order) {
+      return {
+        ok: true,
+        paid: false,
+        status: res.data.status,
+        message: res.data.message || 'รอการชำระเงิน...',
+      }
+    }
+    const credited = await applyVerifiedTopupAction(res.data.order)
+    return {
+      ok: credited.ok,
+      paid: true,
+      order: res.data.order,
+      message: credited.message,
+    }
+  } finally {
+    inFlightPremiumLocks.delete(lockKey)
+  }
+}
+
+export async function verifySlipTopupAction(
+  packageId: string,
+  file: File,
+): Promise<{ ok: boolean; message: string; order?: TopupOrderRecord }> {
+  const p = player()
+  const prem = ensurePremiumState(p)
+  const lockKey = `topup_slip:${packageId}`
+  if (inFlightPremiumLocks.has(lockKey)) {
+    return { ok: false, message: 'กำลังตรวจสอบสลิปอยู่ กรุณารอสักครู่' }
+  }
+  inFlightPremiumLocks.add(lockKey)
+  try {
+    const token = await firebaseAuth.currentUser?.getIdToken().catch(() => null)
+    if (!token) {
+      return { ok: false, message: 'กรุณาเข้าสู่ระบบด้วย Google ก่อนอัปโหลดสลิป' }
+    }
+    const form = new FormData()
+    form.append('slip', file)
+    form.append('packageId', packageId)
+    form.append('characterId', prem.wallet.characterId || getActiveCharacterSlot())
+    form.append('isFirstPurchase', String(!(prem.firstTopupPackages ?? []).includes(packageId)))
+    const res = await fetch('/api/topup/verify-slip', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    })
+    const json = (await res.json().catch(() => null)) as {
+      ok?: boolean
+      message?: string
+      order?: TopupOrderRecord
+    } | null
+    if (!res.ok || !json?.ok || !json.order) {
+      return { ok: false, message: json?.message || `ตรวจสอบสลิปไม่ผ่าน (${res.status})` }
+    }
+    const credited = await applyVerifiedTopupAction(json.order)
+    return {
+      ok: credited.ok,
+      message: credited.message,
+      order: json.order,
+    }
+  } finally {
+    inFlightPremiumLocks.delete(lockKey)
+  }
 }
 
 /* ---------------- chat & commands ---------------- */
