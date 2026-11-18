@@ -348,6 +348,48 @@ export const PET_SKILL_MAP: Record<string, PetSkillDef> = {
   phao_gold_naga: { id: 'naga_orb', name: 'แก้วมรกตนาคา', description: 'พ่นลูกแก้วนาคาและเพิ่มทองดรอปต่อเนื่อง', triggerLabel: 'โจมตีอัตโนมัติ + Gold Aura' },
   phao_celestial: { id: 'planetary_ray', name: 'ลำแสงดาวเคราะห์', description: 'ยิงคลื่นสุริยะ-จันทราความเร็วสูง', triggerLabel: 'โจมตีอัตโนมัติ + Dual Buff' },
   phao_phantom: { id: 'abyss_soul', name: 'วิญญาณอเวจี', description: 'โจมตีระยะไกลแรงสูงและเสริมพลังโจมตีตัวละคร', triggerLabel: 'โจมตีอัตโนมัติ + ATK Surge' },
+
+  // Common (Lv.1-10) Phao Beasts
+  phao_water_slime: { id: 'hydro_bubble', name: 'ฟองน้ำกระแทก', description: 'พ่นฟองน้ำบริสุทธิ์ช่วยโจมตีและเพิ่มเลือดสูงสุด', triggerLabel: 'โจมตีอัตโนมัติ + Hydro HP' },
+  phao_dawn_rooster: { id: 'dawn_peck', name: 'จิกจู่โจมรุ่งอรุณ', description: 'พุ่งจิกอย่างรวดเร็วพร้อมเสียงขันปลุกขวัญเพิ่ม ATK', triggerLabel: 'โจมตีไว + Dawn ATK' },
+  phao_husky_kitten: { id: 'collar_pounce', name: 'กรงเล็บกระดิ่งแดง', description: 'กระโจนข่วนต่อเนื่องและเพิ่มโอกาสรับ EXP', triggerLabel: 'โจมตีอัตโนมัติ + Agile Claw' },
+  phao_shiba_scarf: { id: 'scarf_dash', name: 'เขี้ยวชิบะผ้าพันคอ', description: 'พุ่งกัดว่องไวและนำโชคลาภทองคำให้เจ้านาย', triggerLabel: 'โจมตีอัตโนมัติ + Lucky Gold' },
+
+  // Uncommon (Lv.11-20) Phao Beasts
+  phao_spear_goblin: { id: 'goblin_thrust', name: 'แทงหอกสายฟ้าแลบ', description: 'ควงหอกไม้ปลายทองแทงทะลวงเกราะศัตรู', triggerLabel: 'โจมตีประชิด/ไกล + Spear Pierce' },
+  phao_silver_wolf: { id: 'silver_fang', name: 'เขี้ยวหมาป่าขนเงิน', description: 'ขย้ำศัตรูด้วยเขี้ยวเงินและเสริมพลังโจมตี', triggerLabel: 'โจมตีอัตโนมัติ + Wolf Pack' },
+  phao_ribbon_bunny: { id: 'ribbon_hop', name: 'กระโดดฟาดโบว์ชมพู', description: 'กระโดดหมุนตัวปล่อยคลื่นพลังน่ารักฟื้นพลังเวท', triggerLabel: 'โจมตีอัตโนมัติ + MP Blessing' },
+  phao_acorn_squirrel: { id: 'acorn_barrage', name: 'กระสุนลูกโอ๊กทอง', description: 'ขว้างลูกโอ๊กแม่นยำและเพิ่มทองจากการล่า', triggerLabel: 'ยิงรัว + Harvest Gold' },
+
+  // Rare (Lv.21-30) Phao Beasts
+  phao_ember_ninetail: { id: 'ember_tails', name: 'เพลิงเก้าหางปะทุ', description: 'สะบัดหางเพลิงเก้าแฉกเผาผลาญมอนสเตอร์เป็นชุด', triggerLabel: 'โจมตีไฟ + Ember Surge' },
+  phao_sky_eagle: { id: 'gale_talon', name: 'กรงเล็บพายุเวหา', description: 'โฉบโจมตีจากฟ้าด้วยคลื่นลมกรดคมกริบ', triggerLabel: 'โจมตีไว + Sky Critical' },
+  phao_frost_penguin: { id: 'chill_slide', name: 'สไลด์พายุหิมะ', description: 'ปล่อยเกล็ดน้ำแข็งเย็นเยือกเสริมพลังป้องกัน', triggerLabel: 'โจมตีน้ำแข็ง + Frost DEF' },
+  phao_stone_tortoise: { id: 'bastion_shell', name: 'กระดองศิลาสะท้อน', description: 'กระแทกคลื่นปฐพีและมอบเกราะแข็งแกร่งให้ผู้สวมผอบ', triggerLabel: 'กระแทกศิลา + Iron Guard' },
+
+  // Epic (Lv.31-40) Phao Beasts
+  phao_crimson_dragon: { id: 'crimson_flame', name: 'ลมหายใจมังกรแดง', description: 'พ่นเพลิงมังกรสีชาดรุนแรงและเพิ่มพลังโจมตีสูง', triggerLabel: 'พ่นไฟมังกร + Dragon ATK' },
+  phao_prism_unicorn: { id: 'prism_beam', name: 'ลำแสงรุ้งสวรรค์', description: 'ยิงลำแสงเจ็ดสีจากเขาคริสตัลเพิ่ม EXP และ MP', triggerLabel: 'ลำแสงรุ้ง + Wisdom EXP' },
+  phao_sapphire_wisp: { id: 'comet_spark', name: 'ดาวตกเพลิงคราม', description: 'ยิงลูกไฟดาวหางสีครามถี่สูงและเสริมพลังเวท', triggerLabel: 'ยิงดาวหาง + Arcane Surge' },
+  phao_abyss_neko: { id: 'shadow_flare', name: 'กรงเล็บเพลิงม่วงอเวจี', description: 'ฟาดเพลิงเงาอเวจีเจาะเกราะและดูดทรัพย์ทองคำ', triggerLabel: 'เพลิงเงา + Abyss Fortune' },
+
+  // Legendary (Lv.41-50) Phao Beasts
+  phao_sacred_kitsune: { id: 'sacred_illusion', name: 'มนตราเก้าหางศักดิ์สิทธิ์', description: 'ปล่อยลูกแก้วปราณสวรรค์ฟื้นฟูพลังและเร่ง EXP', triggerLabel: 'มนตราเทพ + Sacred EXP' },
+  phao_solar_phoenix: { id: 'solar_nova', name: 'ปีกเพลิงสุริยัน', description: 'กางปีกฟีนิกซ์สาดเปลวสุริยะเผาผลาญศัตรูรอบด้าน', triggerLabel: 'เปลวสุริยะ + Phoenix Rebirth' },
+  phao_glacial_wolf: { id: 'glacier_howl', name: 'เขี้ยวเหมันต์ปีกน้ำแข็ง', description: 'โผบินปล่อยคมดาบน้ำแข็งทะลุทะลวงพร้อมเกราะเยือกแข็ง', triggerLabel: 'คมน้ำแข็ง + Frost Armor' },
+  phao_armored_lion: { id: 'royal_roar', name: 'คำรามราชสีห์เกราะทอง', description: 'พุ่งชนด้วยเกราะนักรบทองคำเสริม ATK/DEF มหาศาล', triggerLabel: 'คำรามพิชิต + Paladin Aura' },
+
+  // Mythic (Lv.51-60) Phao Beasts
+  phao_obsidian_dragon: { id: 'bloodmoon_breath', name: 'เพลิงโลหิตมังกรทมิฬ', description: 'พ่นอัคคีสีชาดแห่งรัตติกาลสร้างความเสียหายรุนแรงมาก', triggerLabel: 'เพลิงทมิฬ + Mythic ATK' },
+  phao_seraph_cat: { id: 'halo_sanctuary', name: 'วงแหวนเหมียวทูตสวรรค์', description: 'ปลดปล่อยแสงศักดิ์สิทธิ์จากวงแหวนทองและโบนัสทอง', triggerLabel: 'แสงวงแหวน + Angelic Blessing' },
+  phao_violet_hound: { id: 'void_pounce', name: 'เขี้ยวอสูรเงาม่วง', description: 'กระพือปีกอสูรพุ่งขย้ำความมืดและเร่งการโจมตี', triggerLabel: 'อสูรเงา + Rapid Void Strike' },
+  phao_rune_golem: { id: 'rune_cannon', name: 'ปืนใหญ่แกนรูนโบราณ', description: 'ยิงคลื่นพลังงานรูนสีฟ้าจากไหล่เกราะศิลา', triggerLabel: 'ลำแสงรูน + Fortress DEF' },
+
+  // Divine (Lv.61+) Phao Beasts
+  phao_astral_dragon: { id: 'galaxy_breath', name: 'ลมหายใจดาราจักรคริสตัล', description: 'ปลดปล่อยคลื่นกาแล็กซีคริสตัลรุนแรงระดับเทพเจ้า', triggerLabel: 'ดาราจักร + Divine Dragon' },
+  phao_frost_stag: { id: 'celestial_frost', name: 'กวางเทพดาราเหมันต์', description: 'ฟาดเขาผลึกดาราปล่อยพายุหิมะศักดิ์สิทธิ์และเร่ง EXP', triggerLabel: 'ผลึกดารา + Divine Wisdom' },
+  phao_celestial_owl: { id: 'astral_judgement', name: 'พญาวิหคพิพากษาสวรรค์', description: 'สยายปีกหิมะศักดิ์สิทธิ์ยิงลำแสงดาวเคราะห์ถล่มศัตรู', triggerLabel: 'ลำแสงวิหคเทพ + Omni Buff' },
+  phao_golden_seraph: { id: 'seraph_radiance', name: 'มหาพิพากษาเซราฟิมทอง', description: 'อัญเชิญหอกแสงสวรรค์จากปีกเซราฟิมครบเครื่องทุกค่าสถานะ', triggerLabel: 'หอกแสงสวรรค์ + Seraph Aura' },
 }
 
 export function getPetSkillDef(petId: string): PetSkillDef {

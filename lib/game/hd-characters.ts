@@ -1549,6 +1549,215 @@ export function renderHdMonsterSprite(
 
 /* ---------------- HD Pets & Mounts ---------------- */
 
+function drawPhaoSpiritBase(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  footY: number,
+  accent: string,
+  action: SpriteAction,
+  f: number,
+) {
+  const pulse = action === 'attack' ? 1.15 : 0.92 + Math.sin((f / 6) * Math.PI * 2) * 0.08
+  ctx.save()
+  ctx.strokeStyle = accent
+  ctx.fillStyle = accent
+  ctx.globalAlpha = action === 'attack' ? 0.55 : 0.34
+  ctx.lineWidth = 2.2
+  ctx.beginPath()
+  ctx.ellipse(cx, footY + 3, 28 * pulse, 9 * pulse, 0, 0, Math.PI * 2)
+  ctx.stroke()
+
+  ctx.globalAlpha = action === 'attack' ? 0.35 : 0.16
+  ctx.beginPath()
+  ctx.ellipse(cx, footY + 3, 21 * pulse, 6.2 * pulse, 0, 0, Math.PI * 2)
+  ctx.fill()
+
+  // Floating Phao-ob miniature spirit sparkles around seal
+  ctx.globalAlpha = 0.85
+  for (let i = 0; i < 3; i++) {
+    const a = (f / 6) * Math.PI * 2 + (i * Math.PI * 2) / 3
+    const ox = cx + Math.cos(a) * 32 * pulse
+    const oy = footY + Math.sin(a) * 9 * pulse
+    ctx.beginPath()
+    ctx.arc(ox, oy, action === 'attack' ? 3 : 2, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.restore()
+}
+
+function drawPetWings(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  span: number,
+  wingColor: string,
+  tipColor: string,
+  flapDeg: number,
+  feathered: boolean,
+  isSide: boolean,
+  isUp: boolean,
+) {
+  const sides = isSide ? [-1] : [-1, 1]
+  for (const sx of sides) {
+    ctx.save()
+    const anchorX = isSide ? cx - 8 : cx + sx * 12
+    const anchorY = cy - 4
+    ctx.translate(anchorX, anchorY)
+    const ang = isSide ? -0.35 + flapDeg * 0.035 : sx * (-0.28 + flapDeg * 0.038)
+    ctx.rotate(ang)
+
+    const wg = ctx.createLinearGradient(0, -14, sx * span, 10)
+    wg.addColorStop(0, shadeCol(wingColor, 0.25))
+    wg.addColorStop(0.65, wingColor)
+    wg.addColorStop(1, tipColor)
+    ctx.fillStyle = wg
+    ctx.strokeStyle = HD_INK
+    ctx.lineWidth = 2.2
+
+    ctx.beginPath()
+    if (feathered) {
+      ctx.moveTo(0, 0)
+      ctx.quadraticCurveTo(sx * span * 0.45, -18, sx * span, -8)
+      ctx.quadraticCurveTo(sx * span * 0.9, 2, sx * span * 0.65, 6)
+      ctx.quadraticCurveTo(sx * span * 0.42, 11, sx * span * 0.28, 9)
+      ctx.quadraticCurveTo(sx * span * 0.14, 12, 0, 7)
+      ctx.closePath()
+    } else {
+      // Bat / Dragon membrane wing
+      ctx.moveTo(0, 2)
+      ctx.lineTo(sx * span * 0.55, -17)
+      ctx.lineTo(sx * span, -9)
+      ctx.quadraticCurveTo(sx * span * 0.72, 2, sx * span * 0.55, 8)
+      ctx.quadraticCurveTo(sx * span * 0.28, 4, 0, 9)
+      ctx.closePath()
+    }
+    ctx.fill()
+    ctx.stroke()
+
+    // Inner wing feather / membrane rib highlight
+    ctx.strokeStyle = shadeCol(tipColor, 0.35)
+    ctx.lineWidth = 1.6
+    ctx.beginPath()
+    ctx.moveTo(sx * 3, 1)
+    ctx.lineTo(sx * span * 0.72, -6)
+    ctx.stroke()
+    if (isUp) {
+      ctx.beginPath()
+      ctx.moveTo(sx * 2, 4)
+      ctx.lineTo(sx * span * 0.5, 3)
+      ctx.stroke()
+    }
+    ctx.restore()
+  }
+}
+
+function drawPetAttackVfx(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  atkF: number,
+  accent: string,
+  primary: string,
+  kind: 'claw' | 'fire' | 'ice' | 'water' | 'holy' | 'spear' | 'rune' | 'comet' | 'rainbow' | 'stone',
+  isSide: boolean,
+  isUp: boolean,
+) {
+  if (atkF === 0) return
+  const reachX = isSide ? cx + 34 : cx
+  const reachY = isUp ? cy - 30 : cy + (isSide ? -4 : 18)
+  const alpha = atkF === 1 ? 0.65 : atkF === 2 ? 0.95 : 0.4
+  ctx.save()
+  ctx.globalAlpha = alpha
+
+  if (kind === 'claw') {
+    ctx.strokeStyle = '#ffffff'
+    ctx.lineWidth = 3.2
+    for (let i = -1; i <= 1; i++) {
+      ctx.beginPath()
+      ctx.arc(reachX + i * 5, reachY, 15, -0.8, 0.9)
+      ctx.stroke()
+    }
+    ctx.strokeStyle = accent
+    ctx.lineWidth = 2
+    for (let i = -1; i <= 1; i++) {
+      ctx.beginPath()
+      ctx.arc(reachX + i * 5, reachY, 16.5, -0.7, 0.8)
+      ctx.stroke()
+    }
+  } else if (kind === 'fire' || kind === 'comet') {
+    const burst = atkF === 2 ? 17 : 11
+    const fg = ctx.createRadialGradient(reachX, reachY, 2, reachX, reachY, burst)
+    fg.addColorStop(0, '#ffffff')
+    fg.addColorStop(0.45, accent)
+    fg.addColorStop(1, primary)
+    ctx.fillStyle = fg
+    ctx.beginPath()
+    ctx.arc(reachX, reachY, burst, 0, Math.PI * 2)
+    ctx.fill()
+    for (let i = 0; i < 4; i++) {
+      const a = i * (Math.PI / 2) + atkF * 0.5
+      ctx.fillStyle = accent
+      ctx.beginPath()
+      ctx.arc(reachX + Math.cos(a) * (burst + 4), reachY + Math.sin(a) * (burst + 4), 2.6, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  } else if (kind === 'water' || kind === 'ice') {
+    ctx.strokeStyle = accent
+    ctx.fillStyle = '#ffffff'
+    ctx.lineWidth = 2.6
+    ctx.beginPath()
+    ctx.arc(reachX, reachY, atkF === 2 ? 16 : 10, 0, Math.PI * 2)
+    ctx.stroke()
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2 + atkF * 0.4
+      const sx = reachX + Math.cos(a) * 18
+      const sy = reachY + Math.sin(a) * 18
+      ctx.beginPath()
+      ctx.moveTo(sx, sy - 4)
+      ctx.lineTo(sx + 3.5, sy)
+      ctx.lineTo(sx, sy + 4)
+      ctx.lineTo(sx - 3.5, sy)
+      ctx.closePath()
+      ctx.fill()
+    }
+  } else if (kind === 'holy' || kind === 'rainbow') {
+    ctx.strokeStyle = kind === 'rainbow' ? '#f472b6' : accent
+    ctx.lineWidth = 3
+    ctx.beginPath()
+    ctx.arc(reachX, reachY, atkF === 2 ? 18 : 11, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.strokeStyle = '#ffffff'
+    ctx.lineWidth = 2.4
+    ctx.beginPath()
+    ctx.moveTo(reachX - 16, reachY)
+    ctx.lineTo(reachX + 16, reachY)
+    ctx.moveTo(reachX, reachY - 16)
+    ctx.lineTo(reachX, reachY + 16)
+    ctx.stroke()
+  } else if (kind === 'spear') {
+    ctx.strokeStyle = '#ffffff'
+    ctx.lineWidth = 4
+    ctx.beginPath()
+    ctx.moveTo(reachX - 12, reachY + 2)
+    ctx.lineTo(reachX + 22, reachY - 4)
+    ctx.stroke()
+    ctx.strokeStyle = accent
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(reachX - 8, reachY - 4)
+    ctx.lineTo(reachX + 24, reachY - 6)
+    ctx.stroke()
+  } else {
+    // rune / stone shockwave
+    ctx.strokeStyle = accent
+    ctx.lineWidth = 3
+    ctx.beginPath()
+    ctx.ellipse(reachX, reachY + 4, atkF === 2 ? 22 : 14, atkF === 2 ? 9 : 6, 0, 0, Math.PI * 2)
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+
 export function renderHdPetSprite(
   spec: PetModelSpec,
   dir: Dir,
@@ -1556,78 +1765,811 @@ export function renderHdPetSprite(
   f: number,
 ): HTMLCanvasElement {
   const hdScale = 4
-  const W = 28 * hdScale
-  const H = 28 * hdScale
+  const W = 34 * hdScale
+  const H = 34 * hdScale
   const { c, ctx } = makeSmoothCanvas(W, H, hdScale)
+
   const cx = W / 2
-  const cy = H * 0.56 + Math.sin((f / 4) * Math.PI * 2) * 5
+  const footY = H - 18
+  const isSide = dir === 'left' || dir === 'right'
+  const isUp = dir === 'up'
+  const isAtk = action === 'attack'
+  const isWalk = action === 'walk'
+  const atkF = isAtk ? f % 4 : 0
+  const walkPhase = (f % 6) / 6
+
+  // Shared motion kinematics for walk & attack
+  const idleFloat = Math.sin((f / 4) * Math.PI * 2) * (spec.floating ? 4.5 : 2)
+  const walkHop = isWalk ? -Math.abs(Math.sin(walkPhase * Math.PI * 2)) * (spec.floating ? 6 : 8) : 0
+  const atkLungeX = isAtk ? (atkF === 0 ? -4 : atkF === 1 ? 10 : atkF === 2 ? 12 : 3) : 0
+  const atkLungeY = isAtk ? (atkF === 0 ? 4 : atkF === 1 ? -7 : atkF === 2 ? -5 : 0) : 0
+  const stride = isWalk ? Math.sin(walkPhase * Math.PI * 2) * 8 : isAtk && atkF === 2 ? 7 : 0
+  const wingFlap = isWalk
+    ? Math.sin(walkPhase * Math.PI * 2) * 13
+    : isAtk
+      ? [14, -14, -18, 4][atkF]
+      : Math.sin((f / 4) * Math.PI * 2) * 5
+  const tailWag = isWalk ? Math.sin(walkPhase * Math.PI * 2) * 7 : Math.sin((f / 4) * Math.PI * 2) * 4
+
   const c1 = spec.colors.primary
-  const hi = shadeCol(c1, 0.35)
-  const dark = shadeCol(c1, -0.3)
+  const c2 = spec.colors.secondary
+  const acc = spec.colors.accent
+  const hi = shadeCol(c1, 0.34)
+  const dark = shadeCol(c1, -0.28)
+  const angry = isAtk && (atkF === 1 || atkF === 2)
 
   ctx.save()
   if (dir === 'left') {
     ctx.translate(W, 0)
     ctx.scale(-1, 1)
   }
-  ctx.strokeStyle = HD_INK
-  ctx.lineWidth = 2.6
 
+  // Draw Phao spirit vessel ring underneath any phao_* creature
   if (spec.category === 'phao') {
-    // Traditional Thai ornate Phao-Ob glowing spirit orb
-    ctx.fillStyle = gradVert(ctx, cx, cy - 22, cy + 22, hi, dark)
+    drawPhaoSpiritBase(ctx, cx, footY + 2, acc, action, f)
+  }
+
+  // Apply lunge offset in sprite space
+  const drawCx = cx + (isSide ? atkLungeX : 0)
+  const drawBaseY = footY + (spec.floating ? -12 : 0) + idleFloat + walkHop + (isUp ? -atkLungeX * 0.7 : atkLungeY)
+
+  ctx.strokeStyle = HD_INK
+  ctx.lineWidth = 2.4
+
+  const arch = spec.archetype
+
+  // 1) Classic Traditional Ornate Phao Vessels (lid opens on attack!)
+  if (
+    arch === 'phao_lotus' ||
+    arch === 'phao_gold_naga' ||
+    arch === 'phao_celestial' ||
+    arch === 'phao_phantom'
+  ) {
+    const lidLift = isAtk ? [2, 12, 16, 6][atkF] : isWalk ? 2 : 0
+    const cy = drawBaseY - 28
+    // Pedestal base
+    ctx.fillStyle = shadeCol(c2, -0.15)
     ctx.beginPath()
-    ctx.ellipse(cx, cy + 2, 22, 18, 0, 0, Math.PI * 2)
+    ctx.ellipse(drawCx, cy + 20, 17, 6, 0, 0, Math.PI * 2)
     ctx.fill()
     ctx.stroke()
-    ctx.fillStyle = spec.colors.accent
+
+    // Glowing aura core escaping when lid lifts
+    if (lidLift > 4) {
+      const og = ctx.createRadialGradient(drawCx, cy - 6, 2, drawCx, cy - 6, 20)
+      og.addColorStop(0, '#ffffff')
+      og.addColorStop(0.55, acc)
+      og.addColorStop(1, 'rgba(255,255,255,0)')
+      ctx.fillStyle = og
+      ctx.beginPath()
+      ctx.arc(drawCx, cy - 6, 19, 0, Math.PI * 2)
+      ctx.fill()
+    }
+
+    // Main vessel belly
+    ctx.fillStyle = gradVert(ctx, drawCx, cy - 12, cy + 19, hi, c2)
     ctx.beginPath()
-    ctx.moveTo(cx - 14, cy - 12)
-    ctx.lineTo(cx, cy - 34)
-    ctx.lineTo(cx + 14, cy - 12)
+    ctx.ellipse(drawCx, cy + 4, 22, 16, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+
+    // Ornate belt ring
+    ctx.strokeStyle = acc
+    ctx.lineWidth = 2.4
+    ctx.beginPath()
+    ctx.ellipse(drawCx, cy + 4, 21, 5, 0, 0, Math.PI)
+    ctx.stroke()
+    ctx.strokeStyle = HD_INK
+
+    // Lid + Spire (lifts when attacking)
+    ctx.fillStyle = gradVert(ctx, drawCx, cy - 32 - lidLift, cy - 8 - lidLift, acc, c1)
+    ctx.beginPath()
+    ctx.moveTo(drawCx - 16, cy - 8 - lidLift)
+    ctx.quadraticCurveTo(drawCx - 6, cy - 22 - lidLift, drawCx, cy - 34 - lidLift)
+    ctx.quadraticCurveTo(drawCx + 6, cy - 22 - lidLift, drawCx + 16, cy - 8 - lidLift)
     ctx.closePath()
     ctx.fill()
     ctx.stroke()
-    ctx.fillStyle = '#ffffff'
+
+    // Orbiting planets / spirit flames
+    for (let i = 0; i < 2; i++) {
+      const oa = (f / 4) * Math.PI * 2 + i * Math.PI
+      const ox = drawCx + Math.cos(oa) * 28
+      const oy = cy + Math.sin(oa) * 8
+      ctx.fillStyle = acc
+      ctx.beginPath()
+      ctx.arc(ox, oy, 4, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+    }
+    ctx.restore()
+    return c
+  }
+
+  // 2) Slime variants (Water Slime / Buddy Slime)
+  if (arch === 'phao_water_slime' || arch === 'buddy_slime') {
+    const sq = isWalk ? Math.sin(walkPhase * Math.PI * 2) * 0.14 : isAtk && atkF === 0 ? -0.18 : 0
+    const rx = 25 * (1 - sq)
+    const ry = 21 * (1 + sq)
+    const cy = drawBaseY - ry + 2
+
+    ctx.fillStyle = gradVert(ctx, drawCx, cy - ry - 8, cy + ry, acc, c2)
     ctx.beginPath()
-    ctx.arc(cx, cy + 2, 6, 0, Math.PI * 2)
+    ctx.moveTo(drawCx, cy - ry - 8)
+    ctx.bezierCurveTo(drawCx + rx * 0.85, cy - ry * 0.5, drawCx + rx, cy + ry * 0.7, drawCx, cy + ry)
+    ctx.bezierCurveTo(drawCx - rx, cy + ry * 0.7, drawCx - rx * 0.85, cy - ry * 0.5, drawCx, cy - ry - 8)
     ctx.fill()
-  } else {
-    // Cute chibi fairy/dragon/fox creature pet
-    if (spec.floating) {
-      ctx.fillStyle = '#ffffff'
+    ctx.stroke()
+
+    // Glossy water highlight + floating droplet bubbles
+    ctx.fillStyle = '#ffffff'
+    ctx.globalAlpha = 0.75
+    ctx.beginPath()
+    ctx.ellipse(drawCx - 8, cy - 6, 5, 3, -0.5, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.beginPath()
+    ctx.arc(drawCx + 14, cy - ry - 6 - (f % 3) * 2, 3.2, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.globalAlpha = 1
+
+    if (!isUp) {
+      const exOff = isSide ? 7 : 0
+      drawAnimeEye(ctx, drawCx - 7 + exOff, cy + 2, 3.5, 4.4, '#0f172a', false, angry)
+      if (!isSide) drawAnimeEye(ctx, drawCx + 7, cy + 2, 3.5, 4.4, '#0f172a', false, angry)
+      ctx.strokeStyle = HD_INK
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.arc(drawCx + exOff, cy + 7, 3.5, 0.1, Math.PI - 0.1)
+      ctx.stroke()
+    }
+    if (isAtk) drawPetAttackVfx(ctx, drawCx, cy, atkF, acc, c1, 'water', isSide, isUp)
+    ctx.restore()
+    return c
+  }
+
+  // 3) Sapphire Wisp (Luminous floating comet flame)
+  if (arch === 'phao_sapphire_wisp' || arch === 'moonlight_firefly') {
+    const cy = drawBaseY - 26
+    // Swirling flame aura
+    const fg = ctx.createRadialGradient(drawCx, cy, 4, drawCx, cy, 32)
+    fg.addColorStop(0, '#ffffff')
+    fg.addColorStop(0.45, c1)
+    fg.addColorStop(1, 'rgba(29,78,216,0)')
+    ctx.fillStyle = fg
+    ctx.beginPath()
+    ctx.arc(drawCx, cy, 32, 0, Math.PI * 2)
+    ctx.fill()
+
+    // Flame wisps trailing
+    ctx.fillStyle = gradVert(ctx, drawCx, cy - 32, cy + 16, acc, c2)
+    ctx.beginPath()
+    ctx.moveTo(drawCx, cy - 32 - (f % 2) * 3)
+    ctx.quadraticCurveTo(drawCx + 22, cy - 8, drawCx + 15, cy + 14)
+    ctx.quadraticCurveTo(drawCx, cy + 22, drawCx - 15, cy + 14)
+    ctx.quadraticCurveTo(drawCx - 22, cy - 8, drawCx, cy - 32 - (f % 2) * 3)
+    ctx.fill()
+    ctx.stroke()
+
+    if (arch === 'moonlight_firefly') {
+      drawPetWings(ctx, drawCx, cy, 24, acc, '#ffffff', wingFlap, true, isSide, isUp)
+    }
+
+    if (!isUp) {
+      const exOff = isSide ? 6 : 0
+      drawAnimeEye(ctx, drawCx - 6 + exOff, cy + 2, 3.5, 4.4, '#1e3a8a', false, angry)
+      if (!isSide) drawAnimeEye(ctx, drawCx + 6, cy + 2, 3.5, 4.4, '#1e3a8a', false, angry)
+    }
+    if (isAtk) drawPetAttackVfx(ctx, drawCx, cy, atkF, acc, c1, 'comet', isSide, isUp)
+    ctx.restore()
+    return c
+  }
+
+  // 4) Bird / Avians (Chick Rooster, Sky Eagle, Frost Penguin, Solar Phoenix, Crystal Owl, Celestial Owl)
+  if (
+    arch === 'phao_dawn_rooster' ||
+    arch === 'phao_sky_eagle' ||
+    arch === 'phao_frost_penguin' ||
+    arch === 'phao_solar_phoenix' ||
+    arch === 'phao_celestial_owl' ||
+    arch === 'crystal_owl'
+  ) {
+    const isPenguin = arch === 'phao_frost_penguin'
+    const isChicken = arch === 'phao_dawn_rooster'
+    const isPhoenix = arch === 'phao_solar_phoenix'
+    const isOwl = arch === 'phao_celestial_owl' || arch === 'crystal_owl'
+    const isEagle = arch === 'phao_sky_eagle'
+    const cy = drawBaseY - 24
+
+    // Tail feathers behind
+    ctx.fillStyle = isPhoenix ? acc : c2
+    ctx.beginPath()
+    ctx.ellipse(isSide ? drawCx - 18 : drawCx, cy + 10, isPhoenix ? 14 : 9, 6, -0.35 + tailWag * 0.03, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+
+    // Wings
+    if (!isPenguin) {
+      drawPetWings(
+        ctx,
+        drawCx,
+        cy - 2,
+        isPhoenix || isOwl || isEagle ? 30 : 20,
+        isEagle ? '#f8fafc' : c1,
+        isPhoenix ? '#dc2626' : acc,
+        wingFlap,
+        true,
+        isSide,
+        isUp,
+      )
+    }
+
+    // Bird feet
+    ctx.strokeStyle = '#f59e0b'
+    ctx.lineWidth = 3
+    for (const [fx, st] of [
+      [drawCx - 6, stride],
+      [drawCx + 6, -stride],
+    ] as const) {
+      ctx.beginPath()
+      ctx.moveTo(fx, cy + 14)
+      ctx.lineTo(fx + st * 0.45, drawBaseY + 2)
+      ctx.stroke()
+    }
+    ctx.strokeStyle = HD_INK
+    ctx.lineWidth = 2.4
+
+    // Torso & Head
+    ctx.fillStyle = gradVert(ctx, drawCx, cy - 22, cy + 18, hi, c2)
+    ctx.beginPath()
+    ctx.ellipse(drawCx, cy + 2, 18, 17, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+
+    // White belly for Penguin / Eagle chest
+    if (isPenguin || isEagle || isOwl) {
+      ctx.fillStyle = '#f8fafc'
+      ctx.beginPath()
+      ctx.ellipse(drawCx + (isSide ? 5 : 0), cy + 5, 11, 11, 0, 0, Math.PI * 2)
+      ctx.fill()
+    }
+
+    // Head
+    const hx = drawCx + (isSide ? 6 : 0)
+    const hy = cy - 12
+    ctx.fillStyle = isEagle || isOwl ? '#f8fafc' : hi
+    ctx.beginPath()
+    ctx.arc(hx, hy, 14, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+
+    // Penguin winter scarf OR Phoenix / Rooster crest
+    if (isPenguin) {
+      ctx.fillStyle = acc
+      ctx.beginPath()
+      ctx.roundRect(drawCx - 14, cy - 4, 28, 7, 3)
+      ctx.fill()
+      ctx.stroke()
+    } else if (isChicken) {
+      ctx.fillStyle = '#ef4444'
+      ctx.beginPath()
+      ctx.arc(hx - 2, hy - 15, 4.5, 0, Math.PI * 2)
+      ctx.arc(hx + 3, hy - 14, 4, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+    } else if (isPhoenix || isOwl) {
+      ctx.fillStyle = acc
       for (const sx of [-1, 1]) {
         ctx.beginPath()
-        ctx.ellipse(cx + sx * 22, cy - 4, 12, 7, sx * 0.4, 0, Math.PI * 2)
+        ctx.moveTo(hx + sx * 4, hy - 10)
+        ctx.lineTo(hx + sx * 13, hy - 22)
+        ctx.lineTo(hx + sx * 10, hy - 6)
+        ctx.closePath()
         ctx.fill()
         ctx.stroke()
       }
     }
-    ctx.fillStyle = gradVert(ctx, cx, cy - 20, cy + 20, hi, colorOrFallback(c1))
+
+    // Penguin flippers
+    if (isPenguin) {
+      ctx.fillStyle = c2
+      for (const sx of isSide ? [-1] : [-1, 1]) {
+        ctx.beginPath()
+        ctx.ellipse(drawCx + sx * 18, cy + 2 + wingFlap * 0.3, 6, 11, sx * 0.3, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+      }
+    }
+
+    // Beak & Eyes
+    if (!isUp) {
+      ctx.fillStyle = '#fbbf24'
+      ctx.beginPath()
+      const bx = isSide ? hx + 12 : hx
+      ctx.moveTo(bx - 4, hy + 1)
+      ctx.lineTo(bx + (isSide ? 9 : 0), hy + 5)
+      ctx.lineTo(bx + 4, hy + 1)
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+
+      drawAnimeEye(ctx, hx - (isSide ? -3 : 6), hy - 2, 3.4, 4.2, isPhoenix ? '#ef4444' : '#0f172a', false, angry)
+      if (!isSide) drawAnimeEye(ctx, hx + 6, hy - 2, 3.4, 4.2, isPhoenix ? '#ef4444' : '#0f172a', false, angry)
+    }
+
+    if (isAtk) {
+      drawPetAttackVfx(
+        ctx,
+        drawCx,
+        cy,
+        atkF,
+        acc,
+        c1,
+        isPhoenix ? 'fire' : isPenguin ? 'ice' : isOwl ? 'holy' : 'claw',
+        isSide,
+        isUp,
+      )
+    }
+    ctx.restore()
+    return c
+  }
+
+  // 5) Stone Tortoise (armored crystal rock shell)
+  if (arch === 'phao_stone_tortoise') {
+    const cy = drawBaseY - 18
+    // 4 sturdy legs
+    ctx.fillStyle = shadeCol(c1, -0.15)
+    for (const [lx, st] of [
+      [drawCx - 16, stride],
+      [drawCx + 14, -stride],
+      [drawCx - 6, -stride * 0.7],
+      [drawCx + 6, stride * 0.7],
+    ] as const) {
+      ctx.beginPath()
+      ctx.roundRect(lx - 4 + st * 0.35, cy + 8, 8, 12, 3)
+      ctx.fill()
+      ctx.stroke()
+    }
+    // Rock Crystal Shell
+    ctx.fillStyle = gradVert(ctx, drawCx, cy - 18, cy + 12, '#a8a29e', c2)
     ctx.beginPath()
-    ctx.ellipse(cx, cy, 20, 18, 0, 0, Math.PI * 2)
+    ctx.ellipse(drawCx - (isSide ? 4 : 0), cy, 24, 16, 0, Math.PI, Math.PI * 2)
+    ctx.lineTo(drawCx + 24 - (isSide ? 4 : 0), cy + 7)
+    ctx.lineTo(drawCx - 24 - (isSide ? 4 : 0), cy + 7)
+    ctx.closePath()
     ctx.fill()
     ctx.stroke()
-    for (const sx of [-1, 1]) {
+
+    // Cyan gemstone ridges on shell
+    ctx.fillStyle = acc
+    for (const sx of [-10, 0, 10]) {
       ctx.beginPath()
-      ctx.moveTo(cx + sx * 6, cy - 14)
-      ctx.lineTo(cx + sx * 16, cy - 28)
-      ctx.lineTo(cx + sx * 17, cy - 8)
+      ctx.moveTo(drawCx + sx, cy - 17)
+      ctx.lineTo(drawCx + sx + 4, cy - 10)
+      ctx.lineTo(drawCx + sx - 4, cy - 10)
       ctx.closePath()
       ctx.fill()
       ctx.stroke()
     }
-    if (dir !== 'up') {
-      drawAnimeEye(ctx, cx - 7, cy - 2, 3.8, 4.8, '#1e1b4b', false, action === 'attack')
-      drawAnimeEye(ctx, cx + 7, cy - 2, 3.8, 4.8, '#1e1b4b', false, action === 'attack')
+
+    // Turtle head
+    if (!isUp) {
+      const hx = isSide ? drawCx + 22 : drawCx
+      const hy = isSide ? cy + 2 : cy + 6
+      ctx.fillStyle = hi
+      ctx.beginPath()
+      ctx.arc(hx, hy, 10, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+      drawAnimeEye(ctx, hx + (isSide ? 3 : -4), hy - 2, 3, 3.6, '#14532d', false, angry)
+      if (!isSide) drawAnimeEye(ctx, hx + 4, hy - 2, 3, 3.6, '#14532d', false, angry)
+    }
+    if (isAtk) drawPetAttackVfx(ctx, drawCx, cy, atkF, acc, c1, 'stone', isSide, isUp)
+    ctx.restore()
+    return c
+  }
+
+  // 6) Bipedal Warriors & Spirits (Spear Goblin, Acorn Squirrel, Rune Golem, Golden Seraph)
+  if (
+    arch === 'phao_spear_goblin' ||
+    arch === 'phao_acorn_squirrel' ||
+    arch === 'phao_rune_golem' ||
+    arch === 'phao_golden_seraph' ||
+    arch === 'gem_raccoon'
+  ) {
+    const isGoblin = arch === 'phao_spear_goblin'
+    const isSquirrel = arch === 'phao_acorn_squirrel'
+    const isRaccoon = arch === 'gem_raccoon'
+    const isGolem = arch === 'phao_rune_golem'
+    const isSeraph = arch === 'phao_golden_seraph'
+    const cy = drawBaseY - 26
+
+    if (isSeraph) {
+      drawPetWings(ctx, drawCx, cy - 6, 30, '#ffffff', acc, wingFlap, true, isSide, isUp)
+    }
+    if (isSquirrel || isRaccoon) {
+      // Big fluffy curled tail
+      ctx.fillStyle = gradVert(ctx, drawCx - 16, cy - 18, cy + 12, hi, c2)
+      ctx.beginPath()
+      ctx.ellipse(drawCx - (isSide ? 18 : 14), cy - 4 + tailWag * 0.4, 12, 18, -0.5, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+    }
+
+    // Legs
+    ctx.fillStyle = c2
+    for (const [lx, st] of [
+      [drawCx - 7, stride],
+      [drawCx + 7, -stride],
+    ] as const) {
+      ctx.beginPath()
+      ctx.roundRect(lx - 4 + st * 0.4, cy + 12, 8, 13, 3)
+      ctx.fill()
+      ctx.stroke()
+    }
+
+    // Torso
+    ctx.fillStyle = isGolem ? '#e7e5e4' : isSeraph ? '#ffffff' : gradVert(ctx, drawCx, cy - 8, cy + 16, hi, c2)
+    ctx.beginPath()
+    ctx.roundRect(drawCx - (isGolem ? 17 : 12), cy - 6, isGolem ? 34 : 24, 21, 7)
+    ctx.fill()
+    ctx.stroke()
+
+    if (isGolem) {
+      // Golden chest plate & glowing cyan rune core
+      ctx.fillStyle = c2
+      ctx.beginPath()
+      ctx.roundRect(drawCx - 12, cy - 3, 24, 9, 4)
+      ctx.fill()
+      ctx.fillStyle = acc
+      ctx.beginPath()
+      ctx.arc(drawCx, cy + 2, 5, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+    }
+
+    // Head
+    const hx = drawCx + (isSide ? 2 : 0)
+    const hy = cy - 18
+    ctx.fillStyle = isSeraph ? '#ffe6d5' : isGolem ? '#e7e5e4' : hi
+    ctx.beginPath()
+    ctx.arc(hx, hy, isGolem ? 11 : 14, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+
+    // Ears / Hair / Halo
+    if (isGoblin) {
+      ctx.fillStyle = c1
+      for (const sx of [-1, 1]) {
+        ctx.beginPath()
+        ctx.moveTo(hx + sx * 10, hy - 2)
+        ctx.lineTo(hx + sx * 24, hy - 10)
+        ctx.lineTo(hx + sx * 11, hy + 5)
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+      }
+    } else if (isSquirrel || isRaccoon) {
+      ctx.fillStyle = c1
+      for (const sx of [-1, 1]) {
+        ctx.beginPath()
+        ctx.ellipse(hx + sx * 9, hy - 13, 4.5, 7, sx * 0.25, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+      }
+    } else if (isSeraph) {
+      // Golden Hair + Floating Halo
+      ctx.fillStyle = '#fef3c7'
+      ctx.beginPath()
+      ctx.arc(hx, hy - 4, 15, Math.PI, Math.PI * 2)
+      ctx.fill()
+      ctx.strokeStyle = '#fbbf24'
+      ctx.lineWidth = 3
+      ctx.beginPath()
+      ctx.ellipse(hx, hy - 22, 12, 4, 0, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.strokeStyle = HD_INK
+      ctx.lineWidth = 2.4
+    }
+
+    // Held props: Goblin Spear / Squirrel Acorn / Seraph Holy Staff
+    if (isGoblin) {
+      const spearBoost = isAtk ? [ -6, 12, 18, 4 ][atkF] : 0
+      ctx.save()
+      ctx.translate(drawCx + 14 + spearBoost * 0.6, cy + 2)
+      ctx.rotate(isSide ? 0.15 : -0.35)
+      ctx.strokeStyle = '#78350f'
+      ctx.lineWidth = 3.5
+      ctx.beginPath()
+      ctx.moveTo(0, 16)
+      ctx.lineTo(0, -28)
+      ctx.stroke()
+      ctx.fillStyle = acc
+      ctx.beginPath()
+      ctx.moveTo(0, -37)
+      ctx.lineTo(5, -26)
+      ctx.lineTo(-5, -26)
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+      ctx.restore()
+    } else if (isSquirrel) {
+      ctx.fillStyle = '#92400e'
+      ctx.beginPath()
+      ctx.ellipse(drawCx + 11, cy + 4, 5.5, 7, 0.2, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+    }
+
+    if (!isUp) {
+      const exOff = isSide ? 4 : 0
+      drawAnimeEye(
+        ctx,
+        hx - 5 + exOff,
+        hy + 1,
+        3.2,
+        4.1,
+        isGolem ? '#38bdf8' : isSeraph ? '#f59e0b' : '#1e1b4b',
+        false,
+        angry,
+      )
+      if (!isSide) {
+        drawAnimeEye(ctx, hx + 5, hy + 1, 3.2, 4.1, isGolem ? '#38bdf8' : isSeraph ? '#f59e0b' : '#1e1b4b', false, angry)
+      }
+    }
+
+    if (isAtk) {
+      drawPetAttackVfx(
+        ctx,
+        drawCx,
+        cy,
+        atkF,
+        acc,
+        c1,
+        isGoblin ? 'spear' : isGolem ? 'rune' : isSeraph ? 'holy' : 'stone',
+        isSide,
+        isUp,
+      )
+    }
+    ctx.restore()
+    return c
+  }
+
+  // 7) Quadruped Beasts, Dragons, Foxes, Cats, Wolves, Unicorn, Stag, Lion & Hound
+  const isDragon =
+    arch === 'phao_crimson_dragon' ||
+    arch === 'phao_obsidian_dragon' ||
+    arch === 'phao_astral_dragon' ||
+    arch === 'aurora_cloud_dragon'
+  const isFox = arch === 'phao_ember_ninetail' || arch === 'phao_sacred_kitsune' || arch === 'flame_fox'
+  const isBunny = arch === 'phao_ribbon_bunny'
+  const isUnicorn = arch === 'phao_prism_unicorn'
+  const isStag = arch === 'phao_frost_stag'
+  const isCat = arch === 'phao_husky_kitten' || arch === 'phao_abyss_neko' || arch === 'phao_seraph_cat'
+  const isSeraphCat = arch === 'phao_seraph_cat'
+  const isLion = arch === 'phao_armored_lion'
+  const isWingedWolf = arch === 'phao_glacial_wolf' || arch === 'phao_violet_hound'
+  const hasWings = isDragon || isUnicorn || isSeraphCat || isLion || isWingedWolf
+
+  const cy = drawBaseY - 22
+
+  // Flowing Tails (Nine-tails / Fluffy Tail / Dragon Tail)
+  if (isFox) {
+    const fanCount = arch === 'flame_fox' ? 3 : 5
+    for (let t = 0; t < fanCount; t++) {
+      const ang = -0.9 + (t / (fanCount - 1)) * 1.1 + tailWag * 0.03
+      ctx.save()
+      ctx.translate(drawCx - (isSide ? 16 : 0), cy + 6)
+      ctx.rotate(ang)
+      ctx.fillStyle = gradVert(ctx, 0, -24, 0, acc, c1)
+      ctx.beginPath()
+      ctx.ellipse(-6, -15, 6, 15, 0, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+      ctx.restore()
+    }
+  } else {
+    ctx.fillStyle = isUnicorn ? '#c084fc' : c2
+    ctx.beginPath()
+    if (isBunny) {
+      ctx.arc(drawCx - (isSide ? 16 : 0), cy + 8, 6, 0, Math.PI * 2)
+    } else if (isDragon) {
+      ctx.moveTo(drawCx - (isSide ? 12 : 0), cy + 8)
+      ctx.quadraticCurveTo(drawCx - 28, cy + 4 + tailWag, drawCx - 30, cy - 8 + tailWag)
+      ctx.lineTo(drawCx - 24, cy + 12)
+    } else {
+      ctx.ellipse(drawCx - (isSide ? 18 : 10), cy + 2 + tailWag * 0.5, 6, 12, -0.65, 0, Math.PI * 2)
+    }
+    ctx.fill()
+    ctx.stroke()
+  }
+
+  // Wings (for Dragons, Unicorn, Seraph Cat, Glacial Wolf, Violet Hound, Armored Lion)
+  if (hasWings) {
+    drawPetWings(
+      ctx,
+      drawCx,
+      cy - 4,
+      isDragon || isSeraphCat ? 31 : 25,
+      isUnicorn ? '#ffffff' : isLion ? '#fef08a' : c2,
+      acc,
+      wingFlap,
+      !isDragon && arch !== 'phao_violet_hound',
+      isSide,
+      isUp,
+    )
+  }
+
+  // 4 Animated Paws / Hooves
+  ctx.fillStyle = dark
+  const pawPositions: Array<[number, number]> = isSide
+    ? [
+        [drawCx - 12, -stride],
+        [drawCx + 12, stride],
+      ]
+    : [
+        [drawCx - 11, stride],
+        [drawCx + 11, -stride],
+      ]
+  for (const [lx, st] of pawPositions) {
+    ctx.beginPath()
+    ctx.roundRect(lx - 4 + st * 0.45, cy + 9, 8, 14, 3)
+    ctx.fill()
+    ctx.stroke()
+  }
+
+  // Body Torso
+  ctx.fillStyle = gradVert(ctx, drawCx, cy - 10, cy + 16, hi, c1)
+  ctx.beginPath()
+  ctx.ellipse(drawCx, cy + 3, isSide ? 20 : 16, 13, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.stroke()
+
+  // Fluffy chest mane / Collar / Scarf / Bow / Gold armor
+  if (arch === 'phao_husky_kitten' || arch === 'phao_shiba_scarf' || arch === 'phao_ribbon_bunny' || isLion) {
+    ctx.fillStyle = isLion ? '#fde047' : acc
+    ctx.beginPath()
+    ctx.roundRect(drawCx + (isSide ? 3 : -11), cy - 6, isSide ? 14 : 22, 6, 3)
+    ctx.fill()
+    ctx.stroke()
+  }
+
+  // Head
+  const hx = drawCx + (isSide ? 12 : 0)
+  const hy = cy - 13
+  ctx.fillStyle = gradVert(ctx, hx, hy - 14, hy + 14, hi, c1)
+  ctx.beginPath()
+  ctx.ellipse(hx, hy, 15, 13, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.stroke()
+
+  // Ears / Horns / Antlers / Halo
+  if (isStag) {
+    ctx.strokeStyle = acc
+    ctx.lineWidth = 3
+    for (const sx of [-1, 1]) {
+      ctx.beginPath()
+      ctx.moveTo(hx + sx * 5, hy - 10)
+      ctx.lineTo(hx + sx * 13, hy - 26)
+      ctx.moveTo(hx + sx * 9, hy - 18)
+      ctx.lineTo(hx + sx * 17, hy - 21)
+      ctx.stroke()
+    }
+    ctx.strokeStyle = HD_INK
+    ctx.lineWidth = 2.4
+  } else if (isUnicorn) {
+    ctx.fillStyle = '#fde047'
+    ctx.beginPath()
+    ctx.moveTo(hx - 2, hy - 10)
+    ctx.lineTo(hx + (isSide ? 6 : 0), hy - 25)
+    ctx.lineTo(hx + 3, hy - 10)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+  } else if (isBunny) {
+    ctx.fillStyle = hi
+    for (const sx of isSide ? [-0.3, 0.5] : [-1, 1]) {
+      ctx.beginPath()
+      ctx.ellipse(hx + sx * 7, hy - 19, 4.5, 11, sx * 0.12, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+    }
+  } else if (isDragon) {
+    ctx.fillStyle = acc
+    for (const sx of [-1, 1]) {
+      ctx.beginPath()
+      ctx.moveTo(hx + sx * 5, hy - 10)
+      ctx.lineTo(hx + sx * 13, hy - 23)
+      ctx.lineTo(hx + sx * 11, hy - 7)
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+    }
+  } else {
+    // Pointed Ears (Cats, Dogs, Wolves, Foxes, Lion, Hound)
+    ctx.fillStyle = c2
+    for (const sx of [-1, 1]) {
+      ctx.beginPath()
+      ctx.moveTo(hx + sx * 4, hy - 9)
+      ctx.lineTo(hx + sx * 12, hy - 22)
+      ctx.lineTo(hx + sx * 13, hy - 6)
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
     }
   }
+
+  if (isSeraphCat) {
+    ctx.strokeStyle = '#fbbf24'
+    ctx.lineWidth = 2.8
+    ctx.beginPath()
+    ctx.ellipse(hx, hy - 22, 11, 3.8, 0, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.strokeStyle = HD_INK
+    ctx.lineWidth = 2.4
+  }
+
+  // Abyss Neko / Violet Hound flame wisp accent
+  if (arch === 'phao_abyss_neko' || arch === 'phao_violet_hound' || arch === 'phao_ember_ninetail') {
+    ctx.fillStyle = acc
+    ctx.globalAlpha = 0.65
+    for (let i = 0; i < 3; i++) {
+      const a = (f / 4) * Math.PI * 2 + i * 2.1
+      ctx.beginPath()
+      ctx.arc(drawCx + Math.cos(a) * 24, cy - 6 + Math.sin(a) * 14, 3.2, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.globalAlpha = 1
+  }
+
+  // Expressive anime eyes (hidden when facing away)
+  if (!isUp) {
+    const eyeIris =
+      arch === 'phao_obsidian_dragon' || arch === 'phao_violet_hound'
+        ? '#f43f5e'
+        : arch === 'phao_abyss_neko' || arch === 'phao_crimson_dragon'
+          ? '#fbbf24'
+          : arch === 'phao_astral_dragon' || arch === 'phao_glacial_wolf' || arch === 'phao_frost_stag'
+            ? '#38bdf8'
+            : '#1e1b4b'
+    const exOff = isSide ? 4 : 0
+    drawAnimeEye(ctx, hx - 5 + exOff, hy + 1, 3.3, 4.1, eyeIris, false, angry)
+    if (!isSide) drawAnimeEye(ctx, hx + 5, hy + 1, 3.3, 4.1, eyeIris, false, angry)
+    if (isCat) {
+      ctx.strokeStyle = HD_INK
+      ctx.lineWidth = 1.6
+      for (const sx of [-1, 1]) {
+        ctx.beginPath()
+        ctx.moveTo(hx + sx * 9 + exOff, hy + 4)
+        ctx.lineTo(hx + sx * 16 + exOff, hy + 2)
+        ctx.moveTo(hx + sx * 9 + exOff, hy + 7)
+        ctx.lineTo(hx + sx * 16 + exOff, hy + 8)
+        ctx.stroke()
+      }
+    }
+  }
+
+  // Attack VFX
+  if (isAtk) {
+    const vfxKind = isDragon
+      ? arch === 'phao_astral_dragon'
+        ? 'comet'
+        : 'fire'
+      : isUnicorn
+        ? 'rainbow'
+        : isStag || arch === 'phao_glacial_wolf'
+          ? 'ice'
+          : isSeraphCat
+            ? 'holy'
+            : isFox
+              ? arch === 'phao_sacred_kitsune'
+                ? 'holy'
+                : 'fire'
+              : 'claw'
+    drawPetAttackVfx(ctx, drawCx, cy, atkF, acc, c1, vfxKind, isSide, isUp)
+  }
+
   ctx.restore()
   return c
-}
-
-function colorOrFallback(hex: string) {
-  return hex || '#f4a261'
 }
 
 export function renderHdMountSprite(

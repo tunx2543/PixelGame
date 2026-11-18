@@ -9,7 +9,7 @@ import {
   stepSmoothCamera,
 } from './camera'
 import { T, TILE } from './maps'
-import { getMonsterModelSpec } from './models-2d'
+import { getMonsterModelSpec, getPetModelSpec } from './models-2d'
 import { buildTilePropDrawable, buildTownStructureDrawables, drawHdMapObject, type HdDepthDrawable } from './hd-props'
 import { LAYERED_PROP_TILES } from './hd-tiles'
 import {
@@ -780,9 +780,14 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
 
     if (activePetDef) {
       const isPhao = activePetDef.category === 'phao' || activePetDef.id.startsWith('phao_')
+      const petSpec = getPetModelSpec(activePetDef.id)
+      const isFloating = petSpec.floating
       const petOffsetX = other.facing === 'left' ? 14 : other.facing === 'right' ? -14 : -15
-      const petX = remoteX + petOffsetX + Math.sin(t * 2.5 + remoteX * 0.1) * 1.5
-      const petY = remoteY - (isPhao ? 5 : 3) + Math.sin(t * 4 + remoteY * 0.1) * (isPhao ? 2.4 : 1.6)
+      const petX = remoteX + petOffsetX + Math.sin(t * 2.5 + remoteX * 0.1) * 1.4
+      const petY =
+        remoteY -
+        (isFloating ? 5 : 1) +
+        (isFloating ? Math.sin(t * 4 + remoteY * 0.1) * 2.2 : other.moving ? -Math.abs(Math.sin(t * 9)) * 1.8 : 0)
       const petAction: SpriteAction = remoteAttacking ? 'attack' : other.moving ? 'walk' : 'idle'
       const petFrame = remoteAttacking
         ? remoteAtkFrame
@@ -791,7 +796,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           : Math.floor(t * 2.6) % 4
       const pImg = petSprite(activePetDef.id, other.facing, petAction, petFrame, remoteAtkFrame)
       const pHd = pImg.dataset?.hdScale ? Number(pImg.dataset.hdScale) : 1
-      const pScale = (activePetDef.id === 'aurora_cloud_dragon' ? 0.85 : isPhao ? 0.74 : 0.7) / pHd
+      const pScale = (activePetDef.id === 'aurora_cloud_dragon' ? 0.78 : isPhao ? 0.72 : 0.68) / pHd
       const pDrawW = pImg.width * pScale
       const pDrawH = pImg.height * pScale
 
@@ -1067,9 +1072,14 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
 
   if (activePet) {
     const isPhao = activePet.def.category === 'phao' || activePet.petId.startsWith('phao_')
+    const petSpec = getPetModelSpec(activePet.petId)
+    const isFloating = petSpec.floating
     const petOffsetX = game.facing === 'left' ? 14 : game.facing === 'right' ? -14 : -15
-    const petX = p.x + petOffsetX + Math.sin(t * 2.5) * 1.5
-    const petY = p.y - (isPhao ? 5 : 3) + Math.sin(t * 4) * (isPhao ? 2.4 : 1.6)
+    const petX = p.x + petOffsetX + Math.sin(t * 2.5) * 1.4
+    const petY =
+      p.y -
+      (isFloating ? 5 : 1) +
+      (isFloating ? Math.sin(t * 4) * 2.2 : game.moving ? -Math.abs(Math.sin(game.walkT * 9)) * 1.8 : 0)
     const petAttacking = game.petAttackAnim > 0
     const petAtkProgress = petAttacking ? Math.max(0, Math.min(1, 1 - game.petAttackAnim / 0.45)) : 0
     const petAtkFrame = Math.min(3, Math.floor(petAtkProgress * 4))
@@ -1081,7 +1091,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         : Math.floor(t * 2.6) % 4
     const pImg = petSprite(activePet.petId, game.facing, petAction, petFrame, petAtkFrame)
     const pHd = pImg.dataset?.hdScale ? Number(pImg.dataset.hdScale) : 1
-    const pScale = (activePet.petId === 'aurora_cloud_dragon' ? 0.85 : isPhao ? 0.74 : 0.7) / pHd
+    const pScale = (activePet.petId === 'aurora_cloud_dragon' ? 0.78 : isPhao ? 0.72 : 0.68) / pHd
     const pDrawW = pImg.width * pScale
     const pDrawH = pImg.height * pScale
 

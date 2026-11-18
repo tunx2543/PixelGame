@@ -36,16 +36,32 @@ import {
 import { PET_STAT_CAPS } from '@/lib/game/premium/fashion-pet'
 import { useGame } from '@/lib/game/use-game'
 import { formatNum } from '../format'
+import type { Dir } from '@/lib/game/sprites'
+import type { PreviewAction } from '../sprite-model-canvas'
 import { SpriteModelCanvas } from '../sprite-model-canvas'
 import { PanelFrame, PxButton } from './panels'
 
 type MainTab = 'pets' | 'mounts'
 type PetFilter = 'all' | 'phao' | 'companion'
+type RarityFilter = 'all' | 'ทั่วไป' | 'ไม่ธรรมดา' | 'หายาก' | 'อีปิก' | 'ตำนาน' | 'มายา' | 'เทพเจ้า'
+
+const RARITY_BADGE_STYLE: Record<string, string> = {
+  ทั่วไป: 'border-slate-400/50 bg-slate-500/15 text-slate-200',
+  ไม่ธรรมดา: 'border-emerald-400/50 bg-emerald-500/15 text-emerald-300',
+  หายาก: 'border-sky-400/50 bg-sky-500/15 text-sky-300',
+  อีปิก: 'border-purple-400/50 bg-purple-500/15 text-purple-300',
+  ตำนาน: 'border-amber-400/50 bg-amber-500/15 text-amber-300',
+  มายา: 'border-rose-400/50 bg-rose-500/15 text-rose-300',
+  เทพเจ้า: 'border-cyan-300/60 bg-cyan-400/20 text-cyan-200',
+}
 
 export function PetsPanel() {
   const { p } = useGame()
   const [mainTab, setMainTab] = useState<MainTab>('pets')
-  const [petFilter, setPetFilter] = useState<PetFilter>('all')
+  const [petFilter, setPetFilter] = useState<PetFilter>('phao')
+  const [rarityFilter, setRarityFilter] = useState<RarityFilter>('all')
+  const [previewAction, setPreviewAction] = useState<PreviewAction>('auto')
+  const [previewDir, setPreviewDir] = useState<Dir>('right')
   const [notice, setNotice] = useState<string | null>(null)
   if (!p) return null
 
@@ -54,10 +70,14 @@ export function PetsPanel() {
   const mountState = sanitizeMountState(p.mountState, p.ownedGemItems)
   const activeMountBonus = getActiveMountBonuses(mountState, p.ownedGemItems)
 
+  const phaoCount = COMBAT_PETS.filter((pet) => (pet.category ?? (pet.id.startsWith('phao_') ? 'phao' : 'companion')) === 'phao').length
+  const companionCount = COMBAT_PETS.length - phaoCount
+
   const filteredPets = COMBAT_PETS.filter((pet) => {
     const cat = pet.category ?? (pet.id.startsWith('phao_') ? 'phao' : 'companion')
-    if (petFilter === 'phao') return cat === 'phao'
-    if (petFilter === 'companion') return cat === 'companion'
+    if (petFilter === 'phao' && cat !== 'phao') return false
+    if (petFilter === 'companion' && cat !== 'companion') return false
+    if (rarityFilter !== 'all' && pet.rarity !== rarityFilter) return false
     return true
   })
 
@@ -116,8 +136,8 @@ export function PetsPanel() {
                       <SpriteModelCanvas
                         mode="pet"
                         id={activeBonus.petId}
-                        action="auto"
-                        dir="down"
+                        action={previewAction}
+                        dir={previewDir}
                         size={52}
                         label={`พรีวิว ${activeBonus.def.name}`}
                       />
@@ -156,38 +176,94 @@ export function PetsPanel() {
               )}
             </div>
 
-            {/* Pet Category Filter */}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap gap-1.5" role="group" aria-label="กรองประเภทสัตว์เลี้ยงและผอบ">
-                {(
-                  [
-                    ['all', 'ทั้งหมด'],
-                    ['phao', 'ผอบ (Phao-ob)'],
-                    ['companion', 'คู่หูสัตว์'],
-                  ] as const
-                ).map(([key, label]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    aria-pressed={petFilter === key}
-                    onClick={() => setPetFilter(key)}
-                    className={`pixel-btn px-2.5 py-1 text-[11px] font-semibold ${
-                      petFilter === key
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-secondary text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
+            {/* Pet Category Filter + Animation Preview Controls */}
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap gap-1.5" role="group" aria-label="กรองประเภทสัตว์เลี้ยงและผอบ">
+                  {(
+                    [
+                      ['phao', `ผอบ (${phaoCount})`],
+                      ['all', `ทั้งหมด (${COMBAT_PETS.length})`],
+                      ['companion', `คู่หูสัตว์ (${companionCount})`],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      aria-pressed={petFilter === key}
+                      onClick={() => setPetFilter(key)}
+                      className={`pixel-btn px-2.5 py-1 text-[11px] font-semibold ${
+                        petFilter === key
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-secondary text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => openPanel('models')}
+                  className="pixel-btn bg-secondary px-2.5 py-1 text-[11px] text-gold hover:brightness-110"
+                >
+                  ดูคลังโมเดล 2D 4 ทิศทาง
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => openPanel('models')}
-                className="pixel-btn bg-secondary px-2.5 py-1 text-[11px] text-gold hover:brightness-110"
-              >
-                ดูคลังโมเดล 2D 4 ทิศทาง
-              </button>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 border border-border/70 bg-muted/40 p-2">
+                <div className="flex flex-wrap gap-1" role="group" aria-label="กรองระดับความหายาก">
+                  {(['all', 'ทั่วไป', 'ไม่ธรรมดา', 'หายาก', 'อีปิก', 'ตำนาน', 'มายา', 'เทพเจ้า'] as const).map((rar) => (
+                    <button
+                      key={rar}
+                      type="button"
+                      aria-pressed={rarityFilter === rar}
+                      onClick={() => setRarityFilter(rar)}
+                      className={`pixel-btn px-2 py-0.5 text-[10px] font-semibold ${
+                        rarityFilter === rar
+                          ? 'bg-accent text-accent-foreground'
+                          : 'bg-secondary text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {rar === 'all' ? 'ทุกระดับ' : rar}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1" role="group" aria-label="โหมดแอนิเมชั่นพรีวิว">
+                  {(
+                    [
+                      ['auto', 'สลับท่าอัตโนมัติ'],
+                      ['walk', 'ท่าเดิน'],
+                      ['attack', 'ท่าโจมตี'],
+                    ] as const
+                  ).map(([act, label]) => (
+                    <button
+                      key={act}
+                      type="button"
+                      aria-pressed={previewAction === act}
+                      onClick={() => setPreviewAction(act)}
+                      className={`pixel-btn px-2 py-0.5 text-[10px] font-semibold ${
+                        previewAction === act
+                          ? 'bg-emerald-500 text-slate-950'
+                          : 'bg-secondary text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const order: Dir[] = ['down', 'right', 'up', 'left']
+                      setPreviewDir(order[(order.indexOf(previewDir) + 1) % order.length])
+                    }}
+                    className="pixel-btn bg-secondary px-2 py-0.5 text-[10px] text-foreground hover:brightness-110"
+                  >
+                    หัน: {previewDir === 'down' ? 'หน้า' : previewDir === 'right' ? 'ขวา' : previewDir === 'up' ? 'หลัง' : 'ซ้าย'}
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Pet & Phao-ob Roster */}
@@ -204,6 +280,7 @@ export function PetsPanel() {
                 const evolveCost = petEvolveCost(stars)
                 const needExp = petExpToNext(lv)
                 const essenceOwned = countItem('pet_essence')
+                const rarityClass = RARITY_BADGE_STYLE[pet.rarity] ?? 'border-border bg-secondary text-amber-300'
 
                 return (
                   <div
@@ -221,20 +298,25 @@ export function PetsPanel() {
                         <SpriteModelCanvas
                           mode="pet"
                           id={pet.id}
-                          action={isActive ? 'auto' : 'idle'}
-                          dir="down"
-                          size={58}
+                          action={previewAction}
+                          dir={previewDir}
+                          size={60}
                           label={`โมเดล ${pet.name}`}
                         />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-baseline justify-between gap-2">
                           <h3 className="truncate text-sm font-bold text-foreground">{pet.name}</h3>
-                          <span className="shrink-0 text-[11px] font-semibold text-amber-300 tabular-nums">
-                            {isPhao ? 'ผอบ · ' : ''}
+                          <span className={`shrink-0 border px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${rarityClass}`}>
                             {owned ? `Lv.${lv} · ${'★'.repeat(stars)}` : pet.rarity}
                           </span>
                         </div>
+                        {pet.tierLabel && (
+                          <p className="mt-0.5 font-mono text-[10px] text-amber-300/90">
+                            {isPhao ? 'ผอบ · ' : ''}
+                            {pet.tierLabel}
+                          </p>
+                        )}
                         <p className="mt-0.5 text-[11px] text-muted-foreground">{pet.description}</p>
                         <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] tabular-nums text-foreground/90">
                           <span className="inline-flex items-center gap-1">

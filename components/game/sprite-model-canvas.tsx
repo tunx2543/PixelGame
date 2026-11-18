@@ -131,7 +131,7 @@ export function SpriteModelCanvas({
       const isSkill = effectiveAction === 'skill'
       const attackFrame = isAttack ? Math.min(3, Math.floor(attackProgress * 4)) : 0
       const skillFrame = isSkill ? Math.min(3, Math.floor(attackProgress * 4)) : 0
-      const walkMod = 4
+      const walkMod = mode === 'job' ? 4 : 6
       const frame = isSkill
         ? skillFrame
         : isAttack

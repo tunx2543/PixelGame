@@ -570,6 +570,57 @@ export type PetModelArchetype =
   | 'moonlight_firefly'
   | 'gem_raccoon'
   | 'aurora_cloud_dragon'
+  | 'phao_water_slime'
+  | 'phao_dawn_rooster'
+  | 'phao_husky_kitten'
+  | 'phao_shiba_scarf'
+  | 'phao_spear_goblin'
+  | 'phao_silver_wolf'
+  | 'phao_ribbon_bunny'
+  | 'phao_acorn_squirrel'
+  | 'phao_ember_ninetail'
+  | 'phao_sky_eagle'
+  | 'phao_frost_penguin'
+  | 'phao_stone_tortoise'
+  | 'phao_crimson_dragon'
+  | 'phao_prism_unicorn'
+  | 'phao_sapphire_wisp'
+  | 'phao_abyss_neko'
+  | 'phao_sacred_kitsune'
+  | 'phao_solar_phoenix'
+  | 'phao_glacial_wolf'
+  | 'phao_armored_lion'
+  | 'phao_obsidian_dragon'
+  | 'phao_seraph_cat'
+  | 'phao_violet_hound'
+  | 'phao_rune_golem'
+  | 'phao_astral_dragon'
+  | 'phao_frost_stag'
+  | 'phao_celestial_owl'
+  | 'phao_golden_seraph'
+
+const FLOATING_PET_ARCHETYPES = new Set<string>([
+  'phao_lotus',
+  'phao_gold_naga',
+  'phao_celestial',
+  'phao_phantom',
+  'crystal_owl',
+  'moonlight_firefly',
+  'aurora_cloud_dragon',
+  'phao_sky_eagle',
+  'phao_crimson_dragon',
+  'phao_prism_unicorn',
+  'phao_sapphire_wisp',
+  'phao_solar_phoenix',
+  'phao_glacial_wolf',
+  'phao_armored_lion',
+  'phao_obsidian_dragon',
+  'phao_seraph_cat',
+  'phao_violet_hound',
+  'phao_astral_dragon',
+  'phao_celestial_owl',
+  'phao_golden_seraph',
+])
 
 export interface PetModelSpec {
   petId: string
@@ -589,16 +640,12 @@ export interface PetModelSpec {
   }
 }
 
-export const PET_MODEL_CANVAS_SIZE = { width: 28, height: 30 } as const
+export const PET_MODEL_CANVAS_SIZE = { width: 34, height: 34 } as const
 
 function buildPetModelSpec(def: CombatPetDef): PetModelSpec {
   const category = def.category ?? (def.id.startsWith('phao_') ? 'phao' : 'companion')
   const archetype = (def.id as PetModelArchetype) ?? 'buddy_slime'
-  const floating =
-    category === 'phao' ||
-    def.id === 'crystal_owl' ||
-    def.id === 'moonlight_firefly' ||
-    def.id === 'aurora_cloud_dragon'
+  const floating = FLOATING_PET_ARCHETYPES.has(def.id)
   return {
     petId: def.id,
     name: def.name,
