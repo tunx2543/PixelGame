@@ -10,6 +10,7 @@ import {
   getPromptPayId,
   getStripeSecretKey,
 } from '@/lib/server/topup-gateway'
+import { getStoredMerchantQr } from '@/lib/server/topup-store'
 
 export async function POST(req: Request) {
   try {
@@ -36,26 +37,34 @@ export async function POST(req: Request) {
     if (!pkg) {
       return NextResponse.json({ ok: false, message: 'ไม่พบแพ็กเกจเติมเงินที่เลือก' }, { status: 400 })
     }
+
     const characterId =
       typeof body?.characterId === 'string' && body.characterId.trim()
         ? body.characterId.trim().slice(0, 64)
         : 'slot_1'
     const isFirstPurchase = Boolean(body?.isFirstPurchase)
-    const provider = body?.provider === 'promptpay_slip' ? 'promptpay_slip' : 'stripe_promptpay'
+    const provider =
+      body?.provider === 'promptpay_slip' || body?.provider === 'promptpay_manual_gm'
+        ? body.provider
+        : 'stripe_promptpay'
 
-    if (provider === 'promptpay_slip') {
+    if (provider === 'promptpay_slip' || provider === 'promptpay_manual_gm') {
       const ppId = getPromptPayId()
-      if (!ppId) {
+      const stored = getStoredMerchantQr()
+      const customQr = stored?.enabled ? stored.customQrDataUrl : null
+      if (!ppId && !customQr) {
         return NextResponse.json(
-          { ok: false, message: 'ยังไม่ได้ตั้งค่า PROMPTPAY_ID ใน Environment ของเซิร์ฟเวอร์' },
+          { ok: false, message: 'ยังไม่ได้ตั้งค่า QR Code หรือหมายเลข PromptPay ของร้านค้า' },
           { status: 503 },
         )
       }
-      const qrDataUrl = await generatePromptPayQrDataUrl(ppId, pkg.priceThb)
+      const qrDataUrl = ppId
+        ? await generatePromptPayQrDataUrl(ppId, pkg.priceThb).catch(() => customQr)
+        : customQr
       const reward = calculateTopupReward(pkg, isFirstPurchase)
       return NextResponse.json({
         ok: true,
-        provider: 'promptpay_slip',
+        provider,
         orderId: makeServerTxId('ORD'),
         amountThb: pkg.priceThb,
         qrImageUrl: qrDataUrl,

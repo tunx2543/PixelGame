@@ -11,12 +11,14 @@ import {
   Coins,
   CreditCard,
   Crown,
+  Download,
   ExternalLink,
   FlaskConical,
   Gem,
   History,
   Lock,
   LogIn,
+  Maximize2,
   Package,
   PawPrint,
   QrCode,
@@ -33,14 +35,7 @@ import {
 } from 'lucide-react'
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth'
 import { auth, signInWithGoogle } from '@/lib/firebase/client'
-import {
-  getPromptPayShopSettings,
-  listAllTopupSlipRequestsForGm,
-  listMyTopupSlipRequests,
-  reviewTopupSlipRequest,
-  savePromptPayShopSettings,
-} from '@/lib/firebase/topup-requests'
-import { isGmAccountUser } from '@/lib/game/permissions'
+import { isTopupAdminUser } from '@/lib/game/permissions'
 import {
   claimBattlePassTierAction,
   claimExpiredPassArchiveAction,
@@ -50,13 +45,17 @@ import {
   createTopupIntentAction,
   ensurePremiumState,
   equipFashionAction,
+  fetchMerchantQrSettingsAction,
+  fetchSlipRequestsAction,
   fetchTopupGatewayConfig,
   getInventoryCapacityBreakdown,
   getStorageCapacityBreakdown,
   openPanel,
   purchasePremiumProductAction,
   claimApprovedManualTopupAction,
+  reviewSlipRequestAction,
   sandboxGrantDiamondsAction,
+  saveMerchantQrSettingsAction,
   submitManualTopupSlipAction,
   unlockBattlePassPremiumAction,
   verifySlipTopupAction,
@@ -68,7 +67,6 @@ import {
   calculateTopupReward,
   compressImageFileToDataUrl,
   formatPromptPayTarget,
-  generatePromptPayQrDataUrl,
   maskPromptPayId,
   type PromptPayShopSettings,
   type TopupPackage,
@@ -278,7 +276,7 @@ export function PremiumShopPanel() {
   const [gmShopEnabled, setGmShopEnabled] = useState(true)
   const [gmSavingShop, setGmSavingShop] = useState(false)
   const [showGmQrForm, setShowGmQrForm] = useState(false)
-  const [previewSlipUrl, setPreviewSlipUrl] = useState<string | null>(null)
+  const [previewSlipModal, setPreviewSlipModal] = useState<{ title: string; url: string } | null>(null)
 
   useEffect(() => {
     const id = setInterval(() => setNowMs(Date.now()), 30_000)
@@ -293,46 +291,28 @@ export function PremiumShopPanel() {
   }, [])
 
   const refreshTopupCloudData = async (user: FirebaseUser | null) => {
+    const cfg = await fetchTopupGatewayConfig()
+    if (cfg) setGatewayConfig(cfg)
     if (!user || !user.emailVerified) {
       setShopSettings(null)
       setMySlipRequests([])
       setGmSlipQueue([])
       return
     }
-    const [settings, myReqs] = await Promise.all([
-      getPromptPayShopSettings().catch(() => null),
-      listMyTopupSlipRequests(user.uid).catch(() => []),
+    const [merchantRes, slipRes] = await Promise.all([
+      fetchMerchantQrSettingsAction().catch(() => ({ ok: false, isAdmin: false, settings: null })),
+      fetchSlipRequestsAction().catch(() => ({ isAdmin: false, myRequests: [], adminQueue: [] })),
     ])
-    setShopSettings(settings)
-    if (settings) {
-      setGmPpInput(settings.promptPayId)
-      setGmAccountInput(settings.accountName)
-      setGmCustomQrPreview(settings.customQrDataUrl)
-      setGmShopEnabled(settings.enabled)
+    setShopSettings(merchantRes.settings)
+    if (merchantRes.settings) {
+      setGmPpInput(merchantRes.settings.promptPayId || '')
+      setGmAccountInput(merchantRes.settings.accountName || 'ร้าน Pixel Quest')
+      setGmCustomQrPreview(merchantRes.settings.customQrDataUrl)
+      setGmShopEnabled(merchantRes.settings.enabled)
     }
-    setMySlipRequests(myReqs)
-    if (isGmAccountUser(user)) {
-      const queue = await listAllTopupSlipRequestsForGm(40).catch(() => [])
-      setGmSlipQueue(queue)
-    } else {
-      setGmSlipQueue([])
-    }
+    setMySlipRequests(slipRes.myRequests)
+    setGmSlipQueue(slipRes.adminQueue)
   }
-
-  useEffect(() => {
-    let active = true
-    void fetchTopupGatewayConfig().then((cfg) => {
-      if (active && cfg) {
-        setGatewayConfig(cfg)
-        if (!cfg.stripeEnabled && cfg.slipVerifyEnabled) {
-          setTopupChannel('promptpay_slip')
-        }
-      }
-    })
-    return () => {
-      active = false
-    }
-  }, [])
 
   useEffect(() => {
     void refreshTopupCloudData(fbUser)
@@ -446,7 +426,7 @@ export function PremiumShopPanel() {
     }
   }
 
-  const isGmUser = isGmAccountUser(fbUser)
+  const isGmUser = isTopupAdminUser(fbUser)
   const shopQrActive = Boolean(
     shopSettings?.enabled && (formatPromptPayTarget(shopSettings.promptPayId) || shopSettings.customQrDataUrl),
   )
@@ -492,25 +472,17 @@ export function PremiumShopPanel() {
       }
 
       if (channel === 'promptpay_manual_gm') {
-        const isFirst = !(prem.firstTopupPackages ?? []).includes(targetPkg.packageId)
-        const reward = calculateTopupReward(targetPkg, isFirst)
-        let qrUrl: string | null = shopSettings?.customQrDataUrl ?? null
-        if (shopSettings?.promptPayId && formatPromptPayTarget(shopSettings.promptPayId)) {
-          qrUrl = await generatePromptPayQrDataUrl(shopSettings.promptPayId, targetPkg.priceThb).catch(
-            () => shopSettings.customQrDataUrl ?? null,
-          )
-        }
-        if (!qrUrl) {
-          // Fallback to server PROMPTPAY_ID if set on server without SlipOK
-          const srv = await createTopupIntentAction(targetPkg.packageId, 'promptpay_slip').catch(() => null)
-          if (srv?.ok && srv.qrImageUrl) qrUrl = srv.qrImageUrl
+        const res = await createTopupIntentAction(targetPkg.packageId, 'promptpay_manual_gm')
+        if (!res.ok || !res.orderId) {
+          setNotice({ ok: false, text: res.message || 'ไม่สามารถสร้าง QR พร้อมเพย์ได้' })
+          return
         }
         setActiveIntent({
           provider: 'promptpay_manual_gm',
-          orderId: `REQ-${Date.now().toString(36).toUpperCase()}`,
-          qrImageUrl: qrUrl,
-          amountThb: targetPkg.priceThb,
-          totalDiamonds: reward.totalDiamonds,
+          orderId: res.orderId,
+          qrImageUrl: res.qrImageUrl ?? gatewayConfig?.merchantCustomQrUrl ?? null,
+          amountThb: res.amountThb ?? targetPkg.priceThb,
+          totalDiamonds: res.reward?.totalDiamonds ?? targetPkg.baseDiamonds + targetPkg.bonusDiamonds,
         })
         return
       }
@@ -601,15 +573,20 @@ export function PremiumShopPanel() {
     }
     setGmSavingShop(true)
     try {
-      const saved = await savePromptPayShopSettings({
+      const res = await saveMerchantQrSettingsAction({
         promptPayId: digits,
         accountName: gmAccountInput,
         customQrDataUrl: gmCustomQrPreview,
         enabled: gmShopEnabled,
       })
-      setShopSettings(saved)
+      if (!res.ok || !res.settings) {
+        setNotice({ ok: false, text: res.message })
+        return
+      }
+      setShopSettings(res.settings)
       setShowGmQrForm(false)
-      setNotice({ ok: true, text: 'บันทึก QR Code / พร้อมเพย์ร้านค้าเรียบร้อยแล้ว! ผู้เล่นสามารถสแกนเติมเงินได้ทันที' })
+      await refreshTopupCloudData(fbUser)
+      setNotice({ ok: true, text: res.message })
     } catch (err) {
       setNotice({ ok: false, text: formatTopupPanelError(err, 'บันทึก QR ร้านค้าไม่สำเร็จ') })
     } finally {
@@ -631,18 +608,12 @@ export function PremiumShopPanel() {
     if (!isGmUser || topupLoading) return
     setTopupLoading(true)
     try {
-      await reviewTopupSlipRequest(
+      const res = await reviewSlipRequestAction(
         req.requestId,
         decision,
-        decision === 'approved' ? 'GM ตรวจสอบสลิปและอนุมัติแล้ว' : 'สลิปไม่ถูกต้องหรือยอดไม่ตรง',
+        decision === 'approved' ? 'แอดมิน/GM ตรวจสอบสลิปและอนุมัติแล้ว' : 'สลิปไม่ถูกต้องหรือยอดไม่ตรง',
       )
-      setNotice({
-        ok: true,
-        text:
-          decision === 'approved'
-            ? `อนุมัติคำขอ ${req.requestId} (${req.playerName}) แล้ว! ผู้เล่นสามารถกดรับ +${formatNum(req.totalDiamonds)} D ได้ทันที`
-            : `ปฏิเสธคำขอ ${req.requestId} แล้ว`,
-      })
+      setNotice({ ok: res.ok, text: res.message })
       await refreshTopupCloudData(fbUser)
     } catch (err) {
       setNotice({ ok: false, text: formatTopupPanelError(err, 'อัปเดตสถานะสลิปไม่สำเร็จ') })
@@ -1047,8 +1018,8 @@ export function PremiumShopPanel() {
                 </p>
                 <ul className="list-disc space-y-0.5 pl-4 text-amber-100/90">
                   <li>
-                    <strong>วิธีที่ 1 (เพิ่ม QR พร้อมเพย์ทันที):</strong> ให้บัญชี GM (<code>ffsmilepay53@gmail.com</code>)
-                    กดปุ่ม <strong>&ldquo;เพิ่ม QR พร้อมเพย์ร้านค้า&rdquo;</strong> เพื่อใส่เบอร์พร้อมเพย์ หรืออัปโหลดรูป QR Code
+                    <strong>วิธีที่ 1 (เพิ่ม QR พร้อมเพย์ทันที):</strong> ให้บัญชีแอดมิน/GM
+                    กดปุ่ม <strong>&ldquo;เพิ่ม QR พร้อมเพย์ร้านค้า&rdquo;</strong> ด้านล่าง เพื่อใส่เบอร์พร้อมเพย์ หรืออัปโหลดรูป QR Code
                     ของธนาคาร จากนั้นผู้เล่นจะสแกนจ่ายและส่งสลิปได้ทันที
                   </li>
                   <li>
@@ -1067,7 +1038,7 @@ export function PremiumShopPanel() {
               <div className="flex items-center justify-between">
                 <h3 className="flex items-center gap-1.5 text-xs font-bold text-cyan-200">
                   <QrCode className="size-4" aria-hidden />
-                  ตั้งค่า QR Code / พร้อมเพย์ร้านค้า (เฉพาะ GM)
+                  ตั้งค่า QR Code / พร้อมเพย์ร้านค้า (แอดมิน / GM)
                 </h3>
                 <label className="flex items-center gap-1.5 text-[11px] text-foreground">
                   <input
@@ -1245,7 +1216,9 @@ export function PremiumShopPanel() {
                         {!fbUser?.emailVerified
                           ? 'ล็อกอินก่อน'
                           : !anyTopupChannelReady
-                            ? 'รอเพิ่ม QR / เกตเวย์'
+                            ? isGmUser
+                              ? 'ตั้งค่า QR ด้านบนก่อน'
+                              : 'ร้านยังไม่เพิ่ม QR รับเงิน'
                             : 'เติมเงินเลย'}
                       </PxButton>
                     </div>
@@ -1280,7 +1253,12 @@ export function PremiumShopPanel() {
                         {req.slipDataUrl && (
                           <button
                             type="button"
-                            onClick={() => setPreviewSlipUrl(req.slipDataUrl)}
+                            onClick={() =>
+                              setPreviewSlipModal({
+                                title: `รูปสลิปโอนเงิน · ${req.playerName} (฿${formatNum(req.amountThb)})`,
+                                url: req.slipDataUrl,
+                              })
+                            }
                             className="shrink-0 border border-border bg-white p-0.5 hover:border-cyan-400"
                             title="คลิกดูรูปสลิปขนาดใหญ่"
                           >
@@ -2434,21 +2412,51 @@ export function PremiumShopPanel() {
                 {(activeIntent.provider === 'promptpay_slip' || activeIntent.provider === 'promptpay_manual_gm') && (
                   <div className="space-y-3 text-center">
                     {activeIntent.qrImageUrl && (
-                      <div className="mx-auto inline-block border-4 border-white bg-white p-2">
-                        <img
-                          src={activeIntent.qrImageUrl}
-                          alt="PromptPay QR"
-                          className="size-48 object-contain"
-                        />
+                      <div className="space-y-2">
+                        <div className="mx-auto inline-block border-4 border-white bg-white p-2 shadow-md">
+                          <img
+                            src={activeIntent.qrImageUrl}
+                            alt="PromptPay QR"
+                            className="max-h-72 w-auto max-w-[250px] object-contain"
+                          />
+                        </div>
+                        <div className="flex flex-wrap items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPreviewSlipModal({
+                                title: `PromptPay QR · ยอดชำระ ฿${formatNum(activeIntent.amountThb)}`,
+                                url: activeIntent.qrImageUrl ?? '',
+                              })
+                            }
+                            className="pixel-btn inline-flex items-center gap-1 bg-secondary px-2.5 py-1 text-[10px] font-semibold text-foreground hover:bg-secondary/80"
+                          >
+                            <Maximize2 className="size-3" aria-hidden />
+                            ขยายดู QR เต็มจอ
+                          </button>
+                          <a
+                            href={activeIntent.qrImageUrl}
+                            download={`pixelquest-promptpay-${activeIntent.amountThb}thb.jpg`}
+                            className="pixel-btn inline-flex items-center gap-1 bg-secondary px-2.5 py-1 text-[10px] font-semibold text-cyan-200 hover:bg-secondary/80"
+                          >
+                            <Download className="size-3" aria-hidden />
+                            บันทึกรูป QR
+                          </a>
+                        </div>
                       </div>
                     )}
-                    <div className="space-y-0.5 text-[11px] text-slate-300">
+                    <div className="space-y-1 text-[11px] text-slate-300">
                       <p>
                         สแกนโอนเงินยอด <strong className="text-emerald-300">฿{formatNum(activeIntent.amountThb)}</strong> เข้าบัญชี{' '}
                         <strong className="text-foreground">
-                          {shopSettings?.accountName || 'ร้าน Pixel Quest'}
+                          {shopSettings?.accountName || gatewayConfig?.merchantAccountName || 'ร้าน Pixel Quest'}
                         </strong>
                       </p>
+                      {!shopSettings?.promptPayId && (
+                        <p className="mx-auto max-w-sm border border-amber-400/40 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-200">
+                          กรุณาระบุยอดโอน <strong>฿{formatNum(activeIntent.amountThb)}</strong> ในแอปธนาคารให้ตรงแพ็กเกจ แล้วอัปโหลดสลิปด้านล่าง
+                        </p>
+                      )}
                       <p className="text-[10px] text-muted-foreground">
                         พร้อมเพย์:{' '}
                         {gatewayConfig?.promptPayMaskedId ||
@@ -2496,23 +2504,23 @@ export function PremiumShopPanel() {
         </div>
       )}
 
-      {/* FULL SLIP IMAGE PREVIEW MODAL (GM) */}
-      {previewSlipUrl && (
+      {/* FULL IMAGE PREVIEW MODAL (SLIP / QR) */}
+      {previewSlipModal && (
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="ดูรูปสลิปโอนเงิน"
+          aria-label={previewSlipModal.title}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-          onPointerDown={() => setPreviewSlipUrl(null)}
+          onPointerDown={() => setPreviewSlipModal(null)}
         >
           <div className="pixel-panel max-w-md space-y-2 border-2 border-cyan-400/60 bg-slate-950 p-3">
-            <div className="flex items-center justify-between text-xs font-bold text-foreground">
-              <span>รูปสลิปโอนเงิน</span>
-              <button type="button" onClick={() => setPreviewSlipUrl(null)} aria-label="ปิด">
+            <div className="flex items-center justify-between gap-3 text-xs font-bold text-foreground">
+              <span>{previewSlipModal.title}</span>
+              <button type="button" onClick={() => setPreviewSlipModal(null)} aria-label="ปิด">
                 <X className="size-4" aria-hidden />
               </button>
             </div>
-            <img src={previewSlipUrl} alt="Slip Preview" className="max-h-[75vh] w-auto object-contain bg-white" />
+            <img src={previewSlipModal.url} alt={previewSlipModal.title} className="max-h-[75vh] w-auto object-contain bg-white" />
           </div>
         </div>
       )}

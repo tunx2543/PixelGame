@@ -1,6 +1,7 @@
 import type { User } from 'firebase/auth'
 
 export const GM_EMAIL = 'ffsmilepay53@gmail.com'
+export const TOPUP_ADMIN_EMAILS = ['ffsmilepay53@gmail.com', 'berlinxsirith7@gmail.com'] as const
 export const PERMANENT_GM_GAME_UID = '0000'
 export const PERMANENT_GM_UID = 0
 
@@ -10,6 +11,16 @@ export function isGmEmail(email: string | null | undefined): boolean {
 
 export function isGmAccountUser(user: Pick<User, 'email' | 'emailVerified'> | null | undefined): boolean {
   return Boolean(user && user.emailVerified && isGmEmail(user.email))
+}
+
+export function isTopupAdminEmail(email: string | null | undefined): boolean {
+  if (typeof email !== 'string') return false
+  const norm = email.trim().toLowerCase()
+  return (TOPUP_ADMIN_EMAILS as readonly string[]).includes(norm)
+}
+
+export function isTopupAdminUser(user: Pick<User, 'email' | 'emailVerified'> | null | undefined): boolean {
+  return Boolean(user && user.emailVerified && isTopupAdminEmail(user.email))
 }
 
 export function normalizeGameUidInput(raw: string | number | null | undefined): string | null {

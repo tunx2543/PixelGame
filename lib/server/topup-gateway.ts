@@ -11,12 +11,15 @@ import {
   type TopupProvider,
 } from '@/lib/game/premium/topup'
 import { claimServerRequestId, makeServerTxId, signPremiumTx } from './premium-security'
+import { getStoredMerchantQr } from './topup-store'
 
 export interface TopupGatewayPublicConfig {
   stripeEnabled: boolean
   slipVerifyEnabled: boolean
   promptPayQrEnabled: boolean
   promptPayMaskedId: string | null
+  merchantAccountName: string | null
+  merchantCustomQrUrl: string | null
   currency: 'THB'
   packages: TopupPackage[]
 }
@@ -32,9 +35,13 @@ export function getStripeWebhookSecret(): string | null {
 }
 
 export function getPromptPayId(): string | null {
-  const raw = process.env.PROMPTPAY_ID?.trim()
-  if (!raw) return null
-  return formatPromptPayTarget(raw) ? raw : null
+  const envRaw = process.env.PROMPTPAY_ID?.trim()
+  if (envRaw && formatPromptPayTarget(envRaw)) return envRaw
+  const stored = getStoredMerchantQr()
+  if (stored?.enabled && stored.promptPayId && formatPromptPayTarget(stored.promptPayId)) {
+    return stored.promptPayId
+  }
+  return null
 }
 
 export function getSlipOkConfig(): { apiKey: string; branchId: string } | null {
@@ -47,11 +54,18 @@ export function getSlipOkConfig(): { apiKey: string; branchId: string } | null {
 export function getTopupGatewayPublicConfig(): TopupGatewayPublicConfig {
   const ppId = getPromptPayId()
   const slipOk = getSlipOkConfig()
+  const stored = getStoredMerchantQr()
+  const hasCustomQr = Boolean(stored?.enabled && stored.customQrDataUrl)
+  const hasDefaultScbQr = Boolean(
+    hasCustomQr && stored?.customQrDataUrl?.includes('Moment_1794989254278_6a17875f'),
+  )
   return {
     stripeEnabled: Boolean(getStripeSecretKey()),
     slipVerifyEnabled: Boolean(ppId && slipOk),
-    promptPayQrEnabled: Boolean(ppId),
-    promptPayMaskedId: ppId ? maskPromptPayId(ppId) : null,
+    promptPayQrEnabled: Boolean(ppId || hasCustomQr),
+    promptPayMaskedId: ppId ? maskPromptPayId(ppId) : hasDefaultScbQr ? 'xxx-xxx-6682 (SCB)' : null,
+    merchantAccountName: stored?.enabled ? stored.accountName : null,
+    merchantCustomQrUrl: hasCustomQr ? (stored?.customQrDataUrl ?? null) : null,
     currency: 'THB',
     packages: TOPUP_PACKAGES,
   }

@@ -4643,6 +4643,8 @@ export interface TopupGatewayStatus {
   slipVerifyEnabled: boolean
   promptPayQrEnabled: boolean
   promptPayMaskedId: string | null
+  merchantAccountName: string | null
+  merchantCustomQrUrl: string | null
   currency: 'THB'
   packages: TopupPackage[]
 }
@@ -4657,6 +4659,8 @@ export async function fetchTopupGatewayConfig(): Promise<TopupGatewayStatus | nu
       slipVerifyEnabled: Boolean(json.slipVerifyEnabled),
       promptPayQrEnabled: Boolean(json.promptPayQrEnabled),
       promptPayMaskedId: json.promptPayMaskedId ?? null,
+      merchantAccountName: json.merchantAccountName ?? null,
+      merchantCustomQrUrl: json.merchantCustomQrUrl ?? null,
       currency: 'THB',
       packages: Array.isArray(json.packages) ? json.packages : [],
     }
@@ -4745,11 +4749,11 @@ export async function applyVerifiedTopupAction(
 
 export async function createTopupIntentAction(
   packageId: string,
-  provider: Extract<TopupProvider, 'stripe_promptpay' | 'promptpay_slip'>,
+  provider: Extract<TopupProvider, 'stripe_promptpay' | 'promptpay_slip' | 'promptpay_manual_gm'>,
 ): Promise<{
   ok: boolean
   message?: string
-  provider?: 'stripe_promptpay' | 'promptpay_slip'
+  provider?: 'stripe_promptpay' | 'promptpay_slip' | 'promptpay_manual_gm'
   orderId?: string
   paymentIntentId?: string
   amountThb?: number
@@ -4762,7 +4766,7 @@ export async function createTopupIntentAction(
   const prem = ensurePremiumState(p)
   const isFirstPurchase = !(prem.firstTopupPackages ?? []).includes(packageId)
   const res = await callPremiumApi<{
-    provider: 'stripe_promptpay' | 'promptpay_slip'
+    provider: 'stripe_promptpay' | 'promptpay_slip' | 'promptpay_manual_gm'
     orderId: string
     paymentIntentId?: string
     amountThb: number
@@ -4903,6 +4907,84 @@ function formatReadableTopupError(err: unknown, fallback: string): string {
   return raw || fallback
 }
 
+export async function fetchMerchantQrSettingsAction(): Promise<{
+  ok: boolean
+  isAdmin: boolean
+  settings: import('./premium/topup').PromptPayShopSettings | null
+}> {
+  const token = await firebaseAuth.currentUser?.getIdToken().catch(() => null)
+  const res = await fetch('/api/topup/merchant-qr', {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    cache: 'no-store',
+  })
+  const json = (await res.json().catch(() => null)) as {
+    ok?: boolean
+    isAdmin?: boolean
+    settings?: import('./premium/topup').PromptPayShopSettings | null
+  } | null
+  return {
+    ok: Boolean(res.ok && json?.ok),
+    isAdmin: Boolean(json?.isAdmin),
+    settings: json?.settings ?? null,
+  }
+}
+
+export async function saveMerchantQrSettingsAction(input: {
+  promptPayId: string
+  accountName: string
+  customQrDataUrl: string | null
+  enabled: boolean
+}): Promise<{ ok: boolean; message: string; settings?: import('./premium/topup').PromptPayShopSettings }> {
+  const res = await callPremiumApi<{
+    settings: import('./premium/topup').PromptPayShopSettings
+    message: string
+  }>('/api/topup/merchant-qr', input)
+  if (!res.ok || !res.data) {
+    return { ok: false, message: res.message || 'บันทึก QR พร้อมเพย์ไม่สำเร็จ' }
+  }
+  return { ok: true, message: res.data.message, settings: res.data.settings }
+}
+
+export async function fetchSlipRequestsAction(): Promise<{
+  isAdmin: boolean
+  myRequests: TopupSlipRequestRecord[]
+  adminQueue: TopupSlipRequestRecord[]
+}> {
+  const token = await firebaseAuth.currentUser?.getIdToken().catch(() => null)
+  if (!token) return { isAdmin: false, myRequests: [], adminQueue: [] }
+  const res = await fetch('/api/topup/slip-requests', {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: 'no-store',
+  })
+  const json = (await res.json().catch(() => null)) as {
+    ok?: boolean
+    isAdmin?: boolean
+    myRequests?: TopupSlipRequestRecord[]
+    adminQueue?: TopupSlipRequestRecord[]
+  } | null
+  if (!res.ok || !json?.ok) return { isAdmin: false, myRequests: [], adminQueue: [] }
+  return {
+    isAdmin: Boolean(json.isAdmin),
+    myRequests: Array.isArray(json.myRequests) ? json.myRequests : [],
+    adminQueue: Array.isArray(json.adminQueue) ? json.adminQueue : [],
+  }
+}
+
+export async function reviewSlipRequestAction(
+  requestId: string,
+  decision: 'approved' | 'rejected',
+  reviewNote?: string,
+): Promise<{ ok: boolean; message: string; request?: TopupSlipRequestRecord }> {
+  const res = await callPremiumApi<{
+    request: TopupSlipRequestRecord
+    message: string
+  }>('/api/topup/slip-requests/review', { requestId, decision, reviewNote })
+  if (!res.ok || !res.data) {
+    return { ok: false, message: res.message || 'อัปเดตสถานะสลิปไม่สำเร็จ' }
+  }
+  return { ok: true, message: res.data.message, request: res.data.request }
+}
+
 export async function submitManualTopupSlipAction(
   packageId: string,
   file: File,
@@ -4925,28 +5007,27 @@ export async function submitManualTopupSlipAction(
   inFlightPremiumLocks.add(lockKey)
   try {
     const isFirst = !(prem.firstTopupPackages ?? []).includes(pkg.packageId)
-    const reward = calculateTopupReward(pkg, isFirst)
     const slipDataUrl = await compressImageFileToDataUrl(file, 720, 280000)
-    const reqId = generateUniqueTxId('SLIP')
-    const request = await submitManualTopupSlipRequest({
-      requestId: reqId,
+    const res = await callPremiumApi<{
+      request: TopupSlipRequestRecord
+      message: string
+    }>('/api/topup/slip-requests', {
+      packageId: pkg.packageId,
+      characterId: prem.wallet.characterId || getActiveCharacterSlot(),
       playerName: p.name,
       gameUid: p.gameUid,
-      characterId: prem.wallet.characterId || getActiveCharacterSlot(),
-      packageId: pkg.packageId,
-      packageName: pkg.name,
-      amountThb: pkg.priceThb,
-      baseDiamonds: reward.baseDiamonds,
-      bonusDiamonds: reward.bonusDiamonds,
-      vipExpGranted: reward.vipExp,
+      isFirstPurchase: isFirst,
       slipDataUrl,
       slipNote,
     })
-    say('system', `ส่งสลิปเติมเงิน ${pkg.name} (฿${pkg.priceThb}) แล้ว — รอ GM ตรวจสอบ`)
+    if (!res.ok || !res.data) {
+      return { ok: false, message: res.message || 'ส่งสลิปไม่สำเร็จ กรุณาลองใหม่' }
+    }
+    say('system', `ส่งสลิปเติมเงิน ${pkg.name} (฿${pkg.priceThb}) แล้ว — รอแอดมินตรวจสอบ`)
     return {
       ok: true,
-      request,
-      message: `ส่งสลิปสำเร็จ (${reqId})! รอ GM อนุมัติแล้วกดปุ่มรับเพชรได้เลย`,
+      request: res.data.request,
+      message: res.data.message,
     }
   } catch (err) {
     return {
@@ -4966,34 +5047,21 @@ export async function claimApprovedManualTopupAction(
     return { ok: false, message: 'กำลังรับเพชรอยู่ กรุณารอสักครู่' }
   }
   if (req.status !== 'approved') {
-    return { ok: false, message: 'คำขอนี้ยังไม่ได้รับการอนุมัติจาก GM' }
+    return { ok: false, message: 'คำขอนี้ยังไม่ได้รับการอนุมัติ' }
   }
   if (req.claimed) {
     return { ok: false, message: 'รับเพชรจากสลิปนี้ไปแล้ว' }
   }
   inFlightPremiumLocks.add(lockKey)
   try {
-    await markTopupSlipRequestClaimed(req.requestId)
-    const order: TopupOrderRecord = {
-      orderId: generateUniqueTxId('ORD'),
-      characterId: req.characterId || getActiveCharacterSlot(),
-      packageId: req.packageId,
-      packageName: req.packageName,
-      provider: 'promptpay_manual_gm',
-      gatewayRef: req.requestId,
-      amountThb: req.amountThb,
-      baseDiamonds: req.baseDiamonds,
-      bonusDiamonds: req.bonusDiamonds,
-      totalDiamonds: req.totalDiamonds,
-      vipExpGranted: req.vipExpGranted,
-      status: 'credited',
-      txId: generateUniqueTxId('TOPTX'),
-      serverVerified: false,
-      serverSignature: '',
-      createdAtMs: Date.now(),
+    const res = await callPremiumApi<{
+      order: TopupOrderRecord
+      message: string
+    }>('/api/topup/slip-requests/claim', { requestId: req.requestId })
+    if (!res.ok || !res.data?.order) {
+      return { ok: false, message: res.message || 'ไม่สามารถรับเพชรจากคำขอที่อนุมัติได้' }
     }
-    const res = await applyVerifiedTopupAction(order)
-    return res
+    return await applyVerifiedTopupAction(res.data.order)
   } catch (err) {
     return {
       ok: false,
@@ -5003,7 +5071,6 @@ export async function claimApprovedManualTopupAction(
     inFlightPremiumLocks.delete(lockKey)
   }
 }
-
 /* ---------------- chat & commands ---------------- */
 
 export function submitChat(raw: string, channelOverride?: ChatChannel) {
