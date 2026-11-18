@@ -4,7 +4,7 @@ import { useGame } from '@/lib/game/use-game'
 import { getStats } from '@/lib/game/engine'
 import { buildVitalsSnapshot } from '@/lib/game/hud-vitals'
 import { computeCombatPower } from '@/lib/game/rpg-systems'
-import { formatNum } from './format'
+import { formatCompactNum, formatNum } from './format'
 
 const BAR_STYLES = {
   hp: {
@@ -39,7 +39,10 @@ function VitalBar({
   const tone = BAR_STYLES[barKey]
 
   return (
-    <div className={`flex items-center gap-1 ${slim ? 'text-[8.5px]' : 'text-[9px]'}`}>
+    <div
+      title={`${label}: ${formatNum(current)} / ${formatNum(max)}`}
+      className={`flex items-center gap-1 ${slim ? 'text-[8.5px]' : 'text-[9px]'}`}
+    >
       <span className={`w-5 shrink-0 font-bold tracking-wide ${tone.text}`}>{label}</span>
       <div
         role="progressbar"
@@ -58,8 +61,12 @@ function VitalBar({
           className="pointer-events-none absolute inset-x-1 top-0.5 h-[2px] rounded-full bg-white/30"
         />
       </div>
-      <span className={`shrink-0 text-right font-mono text-amber-100/80 tabular-nums ${slim ? 'w-[3.4rem] text-[8.5px]' : 'w-[4.1rem] text-[9px]'}`}>
-        {formatNum(current)}/{formatNum(max)}
+      <span
+        className={`shrink-0 whitespace-nowrap text-right font-mono text-amber-100/85 tabular-nums ${
+          slim ? 'min-w-[3.8rem] text-[8.5px]' : 'min-w-[4.6rem] text-[9px]'
+        }`}
+      >
+        {formatCompactNum(current)}/{formatCompactNum(max)}
       </span>
     </div>
   )
@@ -104,17 +111,30 @@ export function Hud({ compact = false, slim = false }: { compact?: boolean; slim
       </div>
 
       {!compact && (
-        <div className={`flex items-center justify-between gap-1 border-t border-[#c9963b]/30 font-semibold ${slim ? 'mt-1 pt-0.5 text-[9px]' : 'mt-1.5 pt-1 text-[10px]'}`}>
-          <span className="flex items-center gap-1 text-gold tabular-nums">
+        <div
+          className={`flex items-center justify-between gap-1.5 border-t border-[#c9963b]/30 font-semibold ${
+            slim ? 'mt-1 pt-0.5 text-[9px]' : 'mt-1.5 pt-1 text-[10px]'
+          }`}
+        >
+          <span
+            title={`Gold: ${formatNum(vitals.gold)} G`}
+            className="flex shrink-0 items-center gap-1 whitespace-nowrap text-gold tabular-nums"
+          >
             <img src="/assets/hd/ui/coin_gold.png" alt="" width={14} height={14} className="size-3.5 shrink-0 object-contain" />
-            <span>{formatNum(vitals.gold)} G</span>
+            <span>{formatCompactNum(vitals.gold)} G</span>
           </span>
-          <span className="font-mono text-[9px] text-amber-100/75 tabular-nums">
-            CP {formatNum(cp)}
+          <span
+            title={`พลังรบรวม (Combat Power): ${formatNum(cp)}`}
+            className="shrink-0 whitespace-nowrap font-mono text-[9px] text-amber-100/80 tabular-nums"
+          >
+            CP {formatCompactNum(cp)}
           </span>
-          <span className="flex items-center gap-1 text-cyan-200 tabular-nums">
+          <span
+            title={`เพชร (Diamonds): ${formatNum(vitals.diamonds)} D`}
+            className="flex shrink-0 items-center gap-1 whitespace-nowrap text-cyan-200 tabular-nums"
+          >
             <img src="/assets/hd/ui/gem_blue.png" alt="" width={14} height={14} className="size-3.5 shrink-0 object-contain" />
-            <span>{formatNum(vitals.diamonds)} D</span>
+            <span>{formatCompactNum(vitals.diamonds)} D</span>
           </span>
         </div>
       )}

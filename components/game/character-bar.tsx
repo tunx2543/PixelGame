@@ -58,7 +58,7 @@ export function CharacterBar({ compact = false }: { compact?: boolean; layout?: 
       data-testid="character-bar"
       className="pointer-events-auto pixel-panel relative flex w-full items-center justify-between gap-1.5 px-2 py-1 shadow-lg"
     >
-      <div className="flex min-w-0 items-center gap-1.5">
+      <div className="flex min-w-0 flex-1 items-center gap-1.5">
         <div className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-md border-2 border-[#e8b84e] bg-gradient-to-b from-[#3d2922] to-[#1d1414] shadow-inner">
           <SpriteModelCanvas
             mode="job"
@@ -74,9 +74,9 @@ export function CharacterBar({ compact = false }: { compact?: boolean; layout?: 
           />
         </div>
 
-        <div className="min-w-0 leading-tight">
-          <div className="flex items-center gap-1 truncate text-[11px] font-bold text-foreground">
-            {isGmDev && <span className="text-gold">[GM]</span>}
+        <div className="min-w-0 flex-1 leading-tight">
+          <div className="flex items-center gap-1 text-[10.5px] font-bold text-foreground sm:text-[11px]">
+            {isGmDev && <span className="shrink-0 text-gold">[GM]</span>}
             {vipBonus.active && vipBonus.tierDef && (
               <button
                 type="button"
@@ -96,14 +96,14 @@ export function CharacterBar({ compact = false }: { compact?: boolean; layout?: 
                 {vipBonus.tierDef.badgeLabel}
               </button>
             )}
-            <span className="truncate">{p.name}</span>
+            <span className="min-w-0 truncate">{p.name}</span>
           </div>
-          <div className="flex items-center gap-1 truncate text-[9px] text-muted-foreground">
-            <span className="font-semibold text-primary tabular-nums">Lv.{p.level}</span>
-            <span aria-hidden="true">·</span>
-            <span className="truncate">{job.name}</span>
+          <div className="flex items-center gap-1 text-[9px] text-muted-foreground">
+            <span className="shrink-0 font-semibold text-primary tabular-nums">Lv.{p.level}</span>
+            <span aria-hidden="true" className="shrink-0">·</span>
+            <span className="min-w-0 truncate">{job.name}</span>
             {!compact && displayGameUid && (
-              <span className="font-mono text-[9px] tabular-nums">#{displayGameUid}</span>
+              <span className="shrink-0 font-mono text-[8.5px] text-amber-100/75 tabular-nums">#{displayGameUid}</span>
             )}
           </div>
         </div>

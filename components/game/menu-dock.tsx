@@ -206,16 +206,18 @@ export function MenuDock({
       {/* Clean Floating Top Menu Icons */}
       <div className="flex items-start gap-1.5 sm:gap-2.5">
         {TOP_MENU_ITEMS.map(({ panel, label, iconId, FallbackIcon, hideOnXs }) => {
-          const redBadge =
+          const urgentBadge =
+            panel === 'quests'
+              ? claimableQuests
+              : panel === 'gem-shop'
+                ? gemShopBadge
+                : 0
+          const pointBadge =
             panel === 'character'
               ? statPoints
               : panel === 'talents'
                 ? skillPoints
-                : panel === 'quests'
-                  ? claimableQuests
-                  : panel === 'gem-shop'
-                    ? gemShopBadge
-                    : 0
+                : 0
 
           return (
             <button
@@ -223,7 +225,11 @@ export function MenuDock({
               type="button"
               data-testid={`menu-btn-${panel}`}
               onClick={() => openFromMenu(panel)}
-              title={label}
+              title={
+                pointBadge > 0
+                  ? `${label} (มีแต้มคงเหลือ ${pointBadge} แต้ม)`
+                  : label
+              }
               className={cn(
                 'group relative flex min-w-[34px] flex-col items-center gap-0.5 pt-0.5 transition-transform duration-100 hover:-translate-y-0.5 active:translate-y-0 sm:min-w-[40px]',
                 hideOnXs ? 'hidden md:flex' : 'flex',
@@ -244,9 +250,13 @@ export function MenuDock({
                   >
                     {bagPct}%
                   </span>
-                ) : redBadge > 0 ? (
+                ) : urgentBadge > 0 ? (
                   <span className="absolute -right-1 -top-0.5 flex h-[15px] min-w-[16px] items-center justify-center rounded-full border border-white/80 bg-rose-600 px-1 font-mono text-[8px] font-extrabold leading-none text-white shadow tabular-nums">
-                    +{redBadge > 99 ? '99' : redBadge}
+                    +{urgentBadge > 99 ? '99+' : urgentBadge}
+                  </span>
+                ) : pointBadge > 0 ? (
+                  <span className="absolute -right-1 -top-0.5 flex h-[14px] min-w-[14px] items-center justify-center rounded-full border border-amber-100/85 bg-amber-500 px-1 font-mono text-[7.5px] font-extrabold leading-none text-[#1e1204] shadow tabular-nums">
+                    {pointBadge > 99 ? '99+' : `+${pointBadge}`}
                   </span>
                 ) : null}
               </span>

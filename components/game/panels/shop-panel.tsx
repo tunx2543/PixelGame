@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { ITEMS, SHOP_STOCK } from '@/lib/game/data'
 import { buyItem, hasVipRemoteAccess, isNearTownNpcRole, itemLabel, sellItem, sellPrice } from '@/lib/game/engine'
+import { compareEquipmentItem } from '@/lib/game/item-compare'
 import { useGame } from '@/lib/game/use-game'
 import { cn } from '@/lib/utils'
 import { formatNum } from '../format'
@@ -48,11 +49,37 @@ export function ShopPanel() {
             const def = ITEMS[id]
             if (!def) return null
             const stack = def.kind === 'consumable' || def.kind === 'material'
+            const cmp = compareEquipmentItem({ itemId: id, plus: 0 }, p)
             return (
               <li key={id} className="flex items-center gap-3 border-2 border-border bg-muted p-2">
                 <ItemIcon itemId={id} size={36} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm text-foreground">{def.name}</p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <p className="truncate text-sm text-foreground">{def.name}</p>
+                    {cmp && !cmp.isCompatibleJob && (
+                      <span className="rounded bg-slate-700/80 px-1 py-0.5 text-[9px] font-semibold text-slate-300">
+                        ไม่ตรงสาย
+                      </span>
+                    )}
+                    {cmp && cmp.isCompatibleJob && cmp.powerDelta !== 0 && (
+                      <span
+                        title={`เทียบกับ ${cmp.equippedName ?? 'ช่องว่าง'}`}
+                        className={cn(
+                          'rounded px-1.5 py-0.5 font-mono text-[9.5px] font-extrabold tabular-nums',
+                          cmp.powerDelta > 0
+                            ? 'bg-emerald-500/20 text-emerald-300'
+                            : 'bg-rose-500/20 text-rose-300',
+                        )}
+                      >
+                        {cmp.powerDelta > 0 ? `▲ +${cmp.powerDelta} พลัง` : `▼ ${cmp.powerDelta} พลัง`}
+                      </span>
+                    )}
+                    {cmp && cmp.isCompatibleJob && cmp.powerDelta === 0 && (
+                      <span className="rounded bg-secondary px-1 py-0.5 text-[9px] text-muted-foreground">
+                        พลังเท่าเดิม
+                      </span>
+                    )}
+                  </div>
                   <p className="truncate text-[11px] text-muted-foreground">
                     {def.weaponType ? `${TYPE_NAME[def.weaponType]} ATK +${def.atk}` : def.description}
                     {def.reqLevel && def.reqLevel > 1 ? ` • Lv.${def.reqLevel}` : ''}

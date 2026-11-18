@@ -1,12 +1,13 @@
 'use client'
 
-import { Bot, Flame, Leaf, Shield, Swords, Wind, Zap } from 'lucide-react'
+import { Bot, Flame, Leaf, MessageCircle, Shield, Swords, Wind, Zap } from 'lucide-react'
 import {
   action,
   castSkill,
   currentJob,
   game,
   gatherNearbyNodeAction,
+  interact,
   notify,
   skillCooldown,
   toggleMountRiding,
@@ -42,11 +43,20 @@ export function SkillBar({ compactTouchMode = false }: { compactTouchMode?: bool
       <button
         type="button"
         onClick={() => action()}
-        title="โจมตี / คุย NPC / เก็บเกี่ยว (Space)"
-        className="pixel-btn flex h-10 items-center gap-1 bg-primary/20 px-2.5 text-[10px] font-bold text-primary hover:bg-primary/30"
+        title={game.nearNpc && !game.panel ? `คุยกับ ${game.nearNpc.name} (Space / E)` : 'โจมตี / คุย NPC / เก็บเกี่ยว (Space)'}
+        className={cn(
+          'pixel-btn flex h-10 items-center gap-1 px-2.5 text-[10px] font-bold',
+          game.nearNpc && !game.panel
+            ? 'bg-emerald-500/25 text-emerald-200 hover:bg-emerald-500/35'
+            : 'bg-primary/20 text-primary hover:bg-primary/30',
+        )}
       >
-        <Swords className="size-3.5" aria-hidden />
-        <span className="hidden sm:inline">โจมตี</span>
+        {game.nearNpc && !game.panel ? (
+          <MessageCircle className="size-3.5" aria-hidden />
+        ) : (
+          <Swords className="size-3.5" aria-hidden />
+        )}
+        <span className="hidden sm:inline">{game.nearNpc && !game.panel ? 'คุย NPC' : 'โจมตี'}</span>
         <span className="font-mono text-[8px] opacity-80">[Space]</span>
       </button>
 
@@ -154,6 +164,8 @@ export function CharacterControlBar({ compactTouchMode = false }: { compactTouch
   const hasMount = Object.keys(mountState.ownedMounts).length > 0
   const isMounted = Boolean(mountState.activeMountId && mountState.mounted)
 
+  const nearNpc = !game.panel ? game.nearNpc : null
+
   return (
     <div
       data-testid="auto-farm-widget"
@@ -162,8 +174,18 @@ export function CharacterControlBar({ compactTouchMode = false }: { compactTouch
         compactTouchMode ? '' : '',
       )}
     >
-      {(comboActive || game.invasion?.active || nearbyNode) && (
+      {(comboActive || game.invasion?.active || nearbyNode || nearNpc) && (
         <div className="flex flex-wrap items-center justify-end gap-1">
+          {nearNpc && (
+            <button
+              type="button"
+              onClick={() => interact()}
+              className="pointer-events-auto pixel-btn flex items-center gap-1 border border-emerald-300/75 bg-emerald-950/95 px-2.5 py-0.5 text-[10px] font-bold text-emerald-200 shadow-lg hover:brightness-110"
+            >
+              <MessageCircle className="size-3" aria-hidden />
+              คุยกับ {nearNpc.name} [E]
+            </button>
+          )}
           {game.invasion?.active && (
             <div className="pointer-events-auto border border-rose-400/70 bg-rose-950/90 px-2 py-0.5 text-[10px] font-bold text-rose-200 shadow tabular-nums">
               ป้องกันเมือง Wave {game.invasion.wave}/{game.invasion.maxWaves}

@@ -421,14 +421,22 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         const drawH = img.height * baseScale
         const nearHop = near ? -Math.abs(Math.sin(t * 5)) * 1.6 : 0
         shadow(ctx, fx, fy, 6.5 - breath * 0.3)
+        if (near && !game.panel) {
+          const pulse = 0.5 + Math.sin(t * 6) * 0.25
+          ctx.save()
+          ctx.strokeStyle = `rgba(250, 204, 21, ${pulse})`
+          ctx.fillStyle = `rgba(250, 204, 21, ${pulse * 0.22})`
+          ctx.lineWidth = 1.2
+          ctx.beginPath()
+          ctx.ellipse(fx, fy + 1, 11.5, 4.8, 0, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.stroke()
+          ctx.restore()
+        }
         ctx.save()
         ctx.translate(fx, fy + nearHop)
         ctx.scale(scaleX, scaleY)
         ctx.drawImage(img, Math.round(-drawW / 2), Math.round(-drawH + 2), drawW, drawH)
-        if (near) {
-          ctx.fillStyle = `rgba(122, 229, 130, ${0.45 + Math.sin(t * 6) * 0.25})`
-          ctx.fillRect(-1, -drawH - 2, 2, 2)
-        }
         ctx.restore()
       },
     })
@@ -1366,8 +1374,27 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     text(`[${n.title}]`, x, y - 12 * dpr, '#f2c94c', 8.5)
     text(n.name, x, y, '#ffffff', 9.5)
     if (game.nearNpc?.id === n.id && !game.panel) {
-      const [bx, by] = toS(npcWorldX, npcWorldY + 6)
-      text('กด E หรือคลิกเพื่อคุย', bx, by + 8 * dpr, '#7ae582', 9)
+      const bob = Math.sin(t * 6) * 1.5 * dpr
+      const [bx, by] = toS(npcWorldX, npcWorldY + 7)
+      const promptLabel = `คุย (E) · คลิก`
+      ctx.save()
+      ctx.font = `bold ${Math.round(8.2 * dpr * (zoom / 3) * 1.1)}px ${font}`
+      const pw = ctx.measureText(promptLabel).width + 10 * dpr
+      const ph = 13 * dpr
+      const px = bx - pw / 2
+      const py = by + 3 * dpr + bob
+      ctx.fillStyle = 'rgba(6, 78, 59, 0.92)'
+      ctx.strokeStyle = '#6ee7b7'
+      ctx.lineWidth = dpr
+      ctx.beginPath()
+      ctx.roundRect(px, py, pw, ph, 4 * dpr)
+      ctx.fill()
+      ctx.stroke()
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillStyle = '#ecfdf5'
+      ctx.fillText(promptLabel, bx, py + ph / 2)
+      ctx.restore()
     }
   }
 
@@ -1409,23 +1436,24 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     const activeTitleDef = other.activeTitle ? TITLE_DEFS.find((item) => item.id === other.activeTitle) : null
     const vipTierDef = (other.vipLevel ?? 0) > 0 ? getVipTierDef(other.vipLevel ?? 0) : null
     const equippedFrame = getCosmeticDef(other.frameId)
+    const gmPrefix = other.gm ? '[GM] ' : ''
     const guildTagPrefix = other.guildTag ? `[${other.guildTag}] ` : ''
     const vipPrefix = vipTierDef ? `[${vipTierDef.badgeLabel}] ` : ''
-    const displayNameLine = `${vipPrefix}${guildTagPrefix}${other.displayName} [${other.gm ? '0000' : String(other.uid).padStart(5, '0')}] Lv.${other.level}`
+    const displayNameLine = `${gmPrefix}${vipPrefix}${guildTagPrefix}${other.displayName} [${other.gm ? '0000' : String(other.uid).padStart(5, '0')}] Lv.${other.level}`
 
     if (equippedFrame) {
       ctx.save()
       ctx.strokeStyle = equippedFrame.primaryColor
       ctx.fillStyle = equippedFrame.secondaryColor
       ctx.globalAlpha = 0.72
-      const fw = Math.max(76, displayNameLine.length * 4.8) * dpr
+      const fw = Math.max(76, displayNameLine.length * 4.5) * dpr
       const fh = 12 * dpr
       ctx.fillRect(Math.round(x - fw / 2), Math.round(y - 5 * dpr - fh / 2), Math.round(fw), Math.round(fh))
       ctx.lineWidth = 1.2 * dpr
       ctx.strokeRect(Math.round(x - fw / 2), Math.round(y - 5 * dpr - fh / 2), Math.round(fw), Math.round(fh))
       ctx.restore()
     }
-    text(`✦ ${remoteJob.name} ✦`, x, y - 18 * dpr, other.gm ? '#ffd60a' : '#72efdd', 8)
+    text(`✦ ${remoteJob.name} ✦`, x, y - 16 * dpr, other.gm ? '#ffd60a' : '#72efdd', 7.8)
     text(
       displayNameLine,
       x,
@@ -1434,9 +1462,8 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       9.2,
     )
     if (activeTitleDef) {
-      text(`«${activeTitleDef.name}»`, x, y - 31 * dpr, activeTitleDef.color, 7.8)
+      text(`«${activeTitleDef.name}»`, x, y - 27 * dpr, activeTitleDef.color, 7.6)
     }
-    if (other.gm) text('[GM]', x, y - (activeTitleDef ? 43 : 31) * dpr, '#ffd60a', 8)
   }
 
   {
@@ -1460,22 +1487,23 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       ctx.fillRect(Math.round(x - bw / 2), Math.round(barY + hpH + 0.5 * dpr), Math.round(bw * Math.max(0, Math.min(1, p.mp / Math.max(1, stats.maxMp)))), Math.round(mpH))
     }
     const activeTitleDef = p.rpgExt?.activeTitle ? TITLE_DEFS.find((item) => item.id === p.rpgExt?.activeTitle) : null
+    const gmPrefix = p.gm ? '[GM] ' : ''
     const guildTagPrefix = p.rpgExt?.guildTag ? `[${p.rpgExt.guildTag}] ` : ''
     const vipPrefix = vipBonus.active && vipBonus.tierDef ? `[${vipBonus.tierDef.badgeLabel}] ` : ''
-    const displayNameLine = `${vipPrefix}${guildTagPrefix}${p.name} [${p.uid === undefined ? 'Guest' : String(p.uid).padStart(5, '0')}]`
+    const displayNameLine = `${gmPrefix}${vipPrefix}${guildTagPrefix}${p.name} [${p.uid === undefined ? 'Guest' : String(p.uid).padStart(5, '0')}]`
     if (equippedFrame) {
       ctx.save()
       ctx.strokeStyle = equippedFrame.primaryColor
       ctx.fillStyle = equippedFrame.secondaryColor
       ctx.globalAlpha = 0.72
-      const fw = Math.max(76, displayNameLine.length * 4.8) * dpr
+      const fw = Math.max(76, displayNameLine.length * 4.5) * dpr
       const fh = 12 * dpr
       ctx.fillRect(Math.round(x - fw / 2), Math.round(y - 5 * dpr - fh / 2), Math.round(fw), Math.round(fh))
       ctx.lineWidth = 1.2 * dpr
       ctx.strokeRect(Math.round(x - fw / 2), Math.round(y - 5 * dpr - fh / 2), Math.round(fw), Math.round(fh))
       ctx.restore()
     }
-    text(`✦ ${job.name} ✦`, x, y - 18 * dpr, p.gm ? '#ffd60a' : '#72efdd', 8)
+    text(`✦ ${job.name} ✦`, x, y - 16 * dpr, p.gm ? '#ffd60a' : '#72efdd', 7.8)
     text(
       displayNameLine,
       x,
@@ -1484,13 +1512,12 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       9.5,
     )
     if (activeTitleDef) {
-      text(`«${activeTitleDef.name}»`, x, y - 31 * dpr, activeTitleDef.color, 7.8)
+      text(`«${activeTitleDef.name}»`, x, y - 27 * dpr, activeTitleDef.color, 7.6)
     }
-    if (p.gm) text('[GM]', x, y - (activeTitleDef ? 43 : 31) * dpr, '#ffd60a', 8)
     if (game.bubble) {
       ctx.font = `${Math.round(11 * dpr * (zoom / 3) * 1.2)}px ${font}`
       const tw = Math.min(ctx.measureText(game.bubble.text).width, 260 * dpr)
-      const by = y - (p.gm ? 56 : activeTitleDef ? 48 : 38) * dpr
+      const by = y - (activeTitleDef ? 42 : 31) * dpr
       ctx.fillStyle = 'rgba(255,250,235,0.95)'
       ctx.fillRect(x - tw / 2 - 6 * dpr, by - 10 * dpr, tw + 12 * dpr, 20 * dpr)
       ctx.fillStyle = 'rgba(10,8,20,0.9)'

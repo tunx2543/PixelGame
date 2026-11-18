@@ -161,7 +161,7 @@ export function Game() {
         {showTouch && <TouchControls />}
 
         {/* ZONE 1 & 3: มุมซ้ายบน (Profile, HP/MP/EXP, Gold/Diamond/CP) + ด้านซ้าย (Quest Tracker) */}
-        <div className="pointer-events-none absolute left-1.5 top-1.5 z-20 flex w-[10.25rem] flex-col gap-0.5 sm:left-2 sm:top-2 sm:w-[11.25rem] sm:gap-1 lg:w-[14rem]">
+        <div className="pointer-events-none absolute left-1.5 top-1.5 z-20 flex w-[11.75rem] flex-col gap-0.5 sm:left-2 sm:top-2 sm:w-[13rem] sm:gap-1 lg:w-[15.25rem]">
           <CharacterBar compact={isCompactHud || isMobileCleanCombat} />
           <Hud compact={isCompactHud || isMobileCleanCombat} slim={isShortViewport || isMobileCleanCombat} />
           {!g.zenHud && !hideLeftSecondaryHud && (

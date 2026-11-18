@@ -1,11 +1,12 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { Shield } from 'lucide-react'
+import { MessageCircle, Shield } from 'lucide-react'
 import {
   basicAttack,
   castSkill,
   currentJob,
+  currentMap,
   game,
   interact,
   skillCooldown,
@@ -61,6 +62,8 @@ function HoldButton({
 export function TouchControls() {
   const g = useGame()
   const job = currentJob()
+  const nearNpc = !g.panel ? g.nearNpc : null
+  const inSafeZone = currentMap().safe
 
   const setKey = (key: string, active: boolean) => {
     if (active) game.keys.add(key)
@@ -83,6 +86,16 @@ export function TouchControls() {
         </div>
 
         <div className="flex flex-col items-end gap-1 lg:gap-1.5">
+          {nearNpc && !inSafeZone && (
+            <HoldButton
+              label={`คุยกับ ${nearNpc.name}`}
+              onDown={() => interact()}
+              className="h-8 gap-1.5 rounded-full border-2 border-emerald-300/80 bg-emerald-900/95 px-3 text-[10.5px] font-bold text-emerald-100 shadow-lg"
+            >
+              <MessageCircle className="size-3.5" aria-hidden />
+              <span>คุยกับ {nearNpc.name}</span>
+            </HoldButton>
+          )}
           <div className="flex items-center gap-1 lg:gap-1.5">
             <HoldButton
               label="ป้องกัน (การ์ด)"
@@ -121,17 +134,33 @@ export function TouchControls() {
             ))}
           </div>
           <HoldButton
-            label="โจมตีหรือคุยกับ NPC"
+            label={nearNpc ? `คุยกับ ${nearNpc.name}` : 'โจมตี'}
             onDown={() => {
+              if (nearNpc && inSafeZone) {
+                interact()
+                return
+              }
               game.attackHeld = true
               if (!interact()) basicAttack()
             }}
             onUp={() => {
               game.attackHeld = false
             }}
-            className="h-10 min-w-[5.75rem] rounded-xl border-2 border-amber-200/80 bg-gradient-to-b from-amber-400 to-amber-600 px-2.5 text-[11px] font-extrabold text-[#241409] shadow-lg lg:h-12 lg:min-w-[7rem] lg:rounded-2xl lg:px-3 lg:text-xs"
+            className={cn(
+              'h-10 min-w-[5.75rem] gap-1.5 rounded-xl border-2 px-2.5 text-[11px] font-extrabold shadow-lg lg:h-12 lg:min-w-[7rem] lg:rounded-2xl lg:px-3 lg:text-xs',
+              nearNpc && inSafeZone
+                ? 'border-emerald-200/85 bg-gradient-to-b from-emerald-400 to-emerald-600 text-[#052e16]'
+                : 'border-amber-200/80 bg-gradient-to-b from-amber-400 to-amber-600 text-[#241409]',
+            )}
           >
-            โจมตี / คุย
+            {nearNpc && inSafeZone ? (
+              <>
+                <MessageCircle className="size-3.5 shrink-0" aria-hidden />
+                <span className="max-w-[9rem] truncate">คุย: {nearNpc.name}</span>
+              </>
+            ) : (
+              'โจมตี / คุย'
+            )}
           </HoldButton>
         </div>
       </div>

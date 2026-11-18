@@ -768,43 +768,148 @@ export function drawHdMapObject(
       return
     }
     case 'anvil_forge': {
-      drawSoftShadow(ctx, ox, oy + 1, 14, 4.5, 0.28)
-      // Stone hearth arch
-      const stoneG = ctx.createLinearGradient(ox - 12, oy - 20, ox + 4, oy)
-      stoneG.addColorStop(0, '#94a3b8')
-      stoneG.addColorStop(1, '#475569')
-      ctx.fillStyle = stoneG
-      ctx.strokeStyle = '#291713'
-      ctx.lineWidth = 1.3
+      drawSoftShadow(ctx, ox + 1, oy + 1, 15, 5, 0.32)
+      // Soot hearth stone pad
+      ctx.fillStyle = '#334155'
       ctx.beginPath()
-      ctx.roundRect(ox - 12, oy - 19, 14, 19, 3)
+      ctx.ellipse(ox, oy, 13.5, 4.2, 0, 0, Math.PI * 2)
+      ctx.fill()
+
+      // Drifting forge chimney smoke wisps
+      for (let i = 0; i < 3; i++) {
+        const phase = ((t * 0.7 + obj.tx * 0.31 + i * 0.33) % 1)
+        const sx = ox - 5 + Math.sin(t * 2.2 + i * 2.1) * (1.8 + phase * 2.5)
+        const sy = oy - 24 - phase * 11
+        ctx.fillStyle = `rgba(226, 232, 240, ${(1 - phase) * 0.28})`
+        ctx.beginPath()
+        ctx.arc(sx, sy, 1.8 + phase * 2.4, 0, Math.PI * 2)
+        ctx.fill()
+      }
+
+      // Chimney stack
+      const chimG = ctx.createLinearGradient(ox - 10, oy - 25, ox - 2, oy - 16)
+      chimG.addColorStop(0, '#64748b')
+      chimG.addColorStop(1, '#334155')
+      ctx.fillStyle = chimG
+      ctx.strokeStyle = '#1e1b24'
+      ctx.lineWidth = 1.15
+      ctx.beginPath()
+      ctx.roundRect(ox - 9.5, oy - 24, 9, 8, [1.5, 1.5, 0, 0])
       ctx.fill()
       ctx.stroke()
-      // Glowing fire mouth
-      const glow = 0.8 + Math.sin(t * 10 + obj.tx) * 0.2
+      // Chimney iron rim cap
+      ctx.fillStyle = '#1f2937'
+      ctx.beginPath()
+      ctx.roundRect(ox - 10.5, oy - 25, 11, 2.4, 1)
+      ctx.fill()
+      ctx.stroke()
+
+      // Main brick & mortar forge body
+      const stoneG = ctx.createLinearGradient(ox - 13, oy - 18, ox + 2, oy)
+      stoneG.addColorStop(0, '#94a3b8')
+      stoneG.addColorStop(0.5, '#64748b')
+      stoneG.addColorStop(1, '#3b4252')
+      ctx.fillStyle = stoneG
+      ctx.beginPath()
+      ctx.roundRect(ox - 13, oy - 18, 15, 18, [3, 3, 1.5, 1.5])
+      ctx.fill()
+      ctx.stroke()
+
+      // Stone masonry courses
+      ctx.strokeStyle = 'rgba(15, 23, 42, 0.45)'
+      ctx.lineWidth = 0.8
+      ctx.beginPath()
+      ctx.moveTo(ox - 12.5, oy - 13.5)
+      ctx.lineTo(ox + 1.5, oy - 13.5)
+      ctx.moveTo(ox - 8, oy - 18)
+      ctx.lineTo(ox - 8, oy - 13.5)
+      ctx.moveTo(ox - 3, oy - 18)
+      ctx.lineTo(ox - 3, oy - 13.5)
+      ctx.stroke()
+
+      // Stone arch border + dark hearth recess
+      ctx.fillStyle = '#1a1110'
+      ctx.strokeStyle = '#475569'
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.roundRect(ox - 10.5, oy - 11.5, 10, 10, [5, 5, 1, 1])
+      ctx.fill()
+      ctx.stroke()
+
+      // Glowing charcoal embers & animated flame tongue
+      const glow = 0.82 + Math.sin(t * 10 + obj.tx) * 0.18
+      const flickerX = Math.sin(t * 13 + obj.ty) * 0.7
+      ctx.fillStyle = '#9a3412'
+      ctx.beginPath()
+      ctx.roundRect(ox - 9.5, oy - 4.5, 8, 2.6, 1)
+      ctx.fill()
       ctx.fillStyle = '#ea580c'
       ctx.beginPath()
-      ctx.roundRect(ox - 10, oy - 11, 10, 9, [4, 4, 1, 1])
+      ctx.arc(ox - 5.5, oy - 5.2, 3.6 * glow, 0, Math.PI * 2)
       ctx.fill()
-      ctx.fillStyle = `rgba(253, 224, 71, ${glow})`
+      ctx.fillStyle = '#f59e0b'
       ctx.beginPath()
-      ctx.arc(ox - 5, oy - 6, 3.3, 0, Math.PI * 2)
+      ctx.moveTo(ox - 8, oy - 3.5)
+      ctx.quadraticCurveTo(ox - 5.5 + flickerX, oy - 10.5, ox - 3, oy - 3.5)
+      ctx.closePath()
       ctx.fill()
-      // Heavy forged anvil + wooden block base on right
-      ctx.fillStyle = '#7c4a28'
+      ctx.fillStyle = `rgba(254, 240, 138, ${glow})`
       ctx.beginPath()
-      ctx.roundRect(ox + 3, oy - 6, 8, 6, 1)
+      ctx.arc(ox - 5.5 + flickerX * 0.4, oy - 5.3, 1.8, 0, Math.PI * 2)
+      ctx.fill()
+
+      // Oak wood chopping/anvil stump on right
+      const woodG = ctx.createLinearGradient(ox + 4, oy - 6, ox + 12, oy)
+      woodG.addColorStop(0, '#9a5b2d')
+      woodG.addColorStop(1, '#5c3317')
+      ctx.fillStyle = woodG
+      ctx.strokeStyle = '#291713'
+      ctx.lineWidth = 1.1
+      ctx.beginPath()
+      ctx.roundRect(ox + 4, oy - 6, 8, 6.2, 1.2)
       ctx.fill()
       ctx.stroke()
-      ctx.fillStyle = '#cbd5e1'
+      ctx.strokeStyle = 'rgba(41, 23, 19, 0.5)'
+      ctx.lineWidth = 0.7
       ctx.beginPath()
-      ctx.moveTo(ox + 1, oy - 10)
-      ctx.lineTo(ox + 13, oy - 10)
-      ctx.lineTo(ox + 11, oy - 6)
-      ctx.lineTo(ox + 3, oy - 6)
+      ctx.moveTo(ox + 6.5, oy - 5)
+      ctx.lineTo(ox + 6.5, oy - 0.5)
+      ctx.moveTo(ox + 9.5, oy - 4.5)
+      ctx.lineTo(ox + 9.5, oy - 0.5)
+      ctx.stroke()
+
+      // Horned iron blacksmith anvil sitting on the oak stump
+      const anvilG = ctx.createLinearGradient(ox + 2, oy - 11.5, ox + 14, oy - 6)
+      anvilG.addColorStop(0, '#cbd5e1')
+      anvilG.addColorStop(0.45, '#64748b')
+      anvilG.addColorStop(1, '#334155')
+      ctx.fillStyle = anvilG
+      ctx.strokeStyle = '#0f172a'
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(ox + 2.2, oy - 10.2) // tapered horn tip
+      ctx.lineTo(ox + 13.2, oy - 10.2) // heel
+      ctx.lineTo(ox + 12.2, oy - 8.2)
+      ctx.lineTo(ox + 10.6, oy - 8.2)
+      ctx.lineTo(ox + 11.4, oy - 5.8) // base foot right
+      ctx.lineTo(ox + 4.6, oy - 5.8) // base foot left
+      ctx.lineTo(ox + 5.6, oy - 8.4)
+      ctx.lineTo(ox + 2.2, oy - 9.4)
       ctx.closePath()
       ctx.fill()
       ctx.stroke()
+
+      // Specular anvil face shine + resting smithing hammer
+      ctx.fillStyle = 'rgba(248, 250, 252, 0.6)'
+      ctx.fillRect(ox + 5.2, oy - 9.8, 6.8, 0.9)
+      ctx.strokeStyle = '#78350f'
+      ctx.lineWidth = 1.1
+      ctx.beginPath()
+      ctx.moveTo(ox + 7.5, oy - 10.3)
+      ctx.lineTo(ox + 10.8, oy - 12.6)
+      ctx.stroke()
+      ctx.fillStyle = '#94a3b8'
+      ctx.fillRect(ox + 9.8, oy - 13.6, 2.8, 1.8)
       ctx.restore()
       return
     }

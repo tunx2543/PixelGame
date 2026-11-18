@@ -41,6 +41,7 @@ import {
 } from '@/lib/game/extended-systems'
 import { GEM_SHOP_ITEMS } from '@/lib/game/gem-shop'
 import { getMountDef, sanitizeMountState } from '@/lib/game/mounts'
+import { compareEquipmentItem } from '@/lib/game/item-compare'
 import {
   EQUIPMENT_RARITY_META,
   formatAffixLabel,
@@ -614,6 +615,7 @@ export function InventoryPanel() {
                 const isSelected = selectedUid === item.uid
                 const equipable = def.kind === 'weapon' || def.kind === 'armor'
                 const consumable = def.kind === 'consumable'
+                const cardCmp = equipable ? compareEquipmentItem(item, p) : null
 
                 return (
                   <div
@@ -660,10 +662,22 @@ export function InventoryPanel() {
                         <p className={cn('truncate text-[11px] font-bold', rMeta.textColorClass)}>
                           {itemLabel(item)}
                         </p>
-                        <p className="flex items-center gap-1 text-[9px] text-muted-foreground">
+                        <p className="flex flex-wrap items-center gap-1 text-[9px] text-muted-foreground">
                           <span>{rMeta.thaiLabel}</span>
                           {def.reqLevel && def.reqLevel > 1 ? <span>· Lv.{def.reqLevel}</span> : null}
                           {item.bound && <Lock className="size-2.5 text-amber-300" aria-label="ผูกมัด" />}
+                          {cardCmp && cardCmp.isCompatibleJob && cardCmp.powerDelta !== 0 && (
+                            <span
+                              className={cn(
+                                'rounded px-1 font-mono text-[8.5px] font-extrabold tabular-nums',
+                                cardCmp.powerDelta > 0
+                                  ? 'bg-emerald-500/20 text-emerald-300'
+                                  : 'bg-rose-500/20 text-rose-300',
+                              )}
+                            >
+                              {cardCmp.powerDelta > 0 ? `▲ +${cardCmp.powerDelta}` : `▼ ${cardCmp.powerDelta}`}
+                            </span>
+                          )}
                         </p>
                       </div>
                     </button>
@@ -765,16 +779,22 @@ export function InventoryPanel() {
                 {(() => {
                   const meta = getItemMeta(inspectDef)
                   const isEq = inspectDef.kind === 'weapon' || inspectDef.kind === 'armor'
-                  const slot: EquipmentSlot | null = isEq
-                    ? inspectDef.slot ?? (inspectDef.kind === 'weapon' ? 'weapon' : 'armor')
-                    : null
-                  const equippedInSlot = slot ? p.equipment[slot] : null
-                  const delta = isEq ? itemPower(inspectInvItem) - (equippedInSlot ? itemPower(equippedInSlot) : 0) : null
+                  const cmp = isEq ? compareEquipmentItem(inspectInvItem, p) : null
                   const equipErr = isEq ? canEquip(inspectInvItem) : null
+
+                  const statBadges = cmp
+                    ? [
+                        { label: 'พลัง', val: cmp.powerDelta, suffix: '' },
+                        { label: 'ATK', val: cmp.atkDelta, suffix: '' },
+                        { label: 'DEF', val: cmp.defDelta, suffix: '' },
+                        { label: 'HP', val: cmp.hpDelta, suffix: '' },
+                        { label: 'Crit', val: cmp.critDeltaPct, suffix: '%' },
+                      ].filter((b) => b.val !== 0)
+                    : []
 
                   return (
                     <div className="mt-2.5 space-y-2 border-t border-border/60 pt-2 text-[11px]">
-                      <div className="grid grid-cols-2 gap-x-3 gap-y-1 sm:grid-cols-4">
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1 sm:grid-cols-3">
                         <div>
                           <span className="text-muted-foreground">ประเภท: </span>
                           <span className="text-foreground">{meta.slot}</span>
@@ -787,15 +807,33 @@ export function InventoryPanel() {
                           <span className="text-muted-foreground">เลเวลขั้นต่ำ: </span>
                           <span className="text-foreground">Lv.{meta.level}</span>
                         </div>
-                        {delta !== null && (
-                          <div>
-                            <span className="text-muted-foreground">เทียบที่ใส่อยู่: </span>
-                            <span className={delta > 0 ? 'font-bold text-emerald-300' : delta < 0 ? 'font-bold text-rose-300' : 'text-foreground'}>
-                              {delta > 0 ? `+${delta}` : delta === 0 ? '±0' : delta} พลัง
-                            </span>
-                          </div>
-                        )}
                       </div>
+
+                      {cmp && (
+                        <div className="flex flex-wrap items-center gap-1.5 rounded border border-border/70 bg-background/60 px-2 py-1 text-[10.5px]">
+                          <span className="text-muted-foreground">
+                            เทียบกับที่ใส่อยู่ ({cmp.equippedName ?? 'ช่องว่าง'}):
+                          </span>
+                          {statBadges.length === 0 ? (
+                            <span className="font-semibold text-slate-300">ค่าสถานะเท่าเดิม</span>
+                          ) : (
+                            statBadges.map((b) => (
+                              <span
+                                key={b.label}
+                                className={cn(
+                                  'rounded px-1.5 py-0.5 font-mono font-bold tabular-nums',
+                                  b.val > 0
+                                    ? 'bg-emerald-500/20 text-emerald-300'
+                                    : 'bg-rose-500/20 text-rose-300',
+                                )}
+                              >
+                                {b.label} {b.val > 0 ? `+${b.val}` : b.val}
+                                {b.suffix}
+                              </span>
+                            ))
+                          )}
+                        </div>
+                      )}
 
                       {isEq && (
                         <div className="flex flex-wrap items-center justify-between gap-2">
