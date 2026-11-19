@@ -13,6 +13,7 @@ import {
   type CloudCharacterRecord,
   type UserAccountIdentity,
 } from '@/lib/firebase/characters'
+import { syncLatestMonsterAssetsAndFirestore } from '@/lib/firebase/monster-sync'
 import { PERMANENT_GM_UID } from '@/lib/game/permissions'
 import { JOBS, normalizeJobId } from '@/lib/game/data'
 import { MODEL_DIRS, type ModelDir } from '@/lib/game/models-2d'
@@ -73,7 +74,7 @@ export function TitleScreen() {
     setConfirmDeleteId(null)
     setCloudError('')
     try {
-      await flushCloudSave()
+      await Promise.all([flushCloudSave(), syncLatestMonsterAssetsAndFirestore()])
       if (currentUser) {
         const identity = await ensureUserProfile(currentUser)
         setAccountIdentity(identity)

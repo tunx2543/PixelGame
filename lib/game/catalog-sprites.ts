@@ -1,4 +1,11 @@
 import catalogAtlasData from './catalog-atlas.json'
+import {
+  getMonsterCacheRevision,
+  invalidateMonsterAssetCache,
+  purgeStaleLocalMonsterCaches,
+  subscribeMonsterCacheInvalidation,
+  withMonsterCacheBust,
+} from './monster-cache'
 import type { SheetFrameDrawSpec } from './sprite-sheets'
 import type { Dir, SpriteAction } from './sprites'
 
@@ -37,20 +44,46 @@ interface CatalogAtlasFile {
   monsters: Record<string, CatalogAtlasEntry>
 }
 
+interface CachedCatalogPage {
+  revision: string
+  img: HTMLImageElement
+  failed: boolean
+}
+
 const CATALOG_MONSTERS = (catalogAtlasData as unknown as CatalogAtlasFile).monsters
 
-const pageImageCache = new Map<string, HTMLImageElement>()
+const pageImageCache = new Map<string, CachedCatalogPage>()
 const preloadedBiomes = new Set<string>()
+
+subscribeMonsterCacheInvalidation(() => {
+  pageImageCache.clear()
+  preloadedBiomes.clear()
+})
 
 function requestCatalogPageImage(url: string): HTMLImageElement | null {
   if (typeof Image === 'undefined') return null
-  let img = pageImageCache.get(url)
-  if (!img) {
-    img = new Image()
-    img.src = url
-    pageImageCache.set(url, img)
+  purgeStaleLocalMonsterCaches()
+  const revision = getMonsterCacheRevision()
+  const existing = pageImageCache.get(url)
+  if (existing && existing.revision === revision && !existing.failed) {
+    return existing.img.complete && existing.img.naturalWidth > 0 ? existing.img : null
   }
+
+  const img = new Image()
+  const entry: CachedCatalogPage = { revision, img, failed: false }
+  img.onerror = () => {
+    entry.failed = true
+  }
+  img.src = withMonsterCacheBust(url, revision)
+  pageImageCache.set(url, entry)
   return img.complete && img.naturalWidth > 0 ? img : null
+}
+
+export function refreshCatalogMonsterSprites(revision?: string): string {
+  const nextRev = invalidateMonsterAssetCache(revision)
+  pageImageCache.clear()
+  preloadedBiomes.clear()
+  return nextRev
 }
 
 export function hasCatalogMonsterAtlas(defId?: string | null): boolean {
@@ -76,8 +109,12 @@ export function getCatalogMonsterFrameCount(defId: string, action: SpriteAction)
   return anim?.frames.length ?? 4
 }
 
-export function preloadMapCatalogSprites(mapId: string): void {
-  if (typeof Image === 'undefined' || preloadedBiomes.has(mapId)) return
+export function preloadMapCatalogSprites(mapId: string, forceRefresh = false): void {
+  if (typeof Image === 'undefined') return
+  if (forceRefresh) {
+    preloadedBiomes.delete(mapId)
+  }
+  if (preloadedBiomes.has(mapId)) return
   preloadedBiomes.add(mapId)
   for (const entry of Object.values(CATALOG_MONSTERS)) {
     if (entry.biome === mapId) {

@@ -390,10 +390,10 @@ export interface FieldBossSpec {
 export const FIELD_BOSS_SPECS: Record<FieldBossSpec['mapId'], FieldBossSpec> = {
   meadow: {
     mapId: 'meadow',
-    bossId: 'fb_king_slime',
-    name: 'ราชาสไลม์ทองคำ (บอสแมพทุ่งหญ้า)',
+    bossId: 'meadow_dewmother',
+    name: 'มารดาน้ำค้าง (บอสแมพทุ่งหญ้า)',
     level: 10,
-    element: 'earth',
+    element: 'water',
     maxHp: 6500,
     def: 12,
     respawnSec: 180,
@@ -404,8 +404,8 @@ export const FIELD_BOSS_SPECS: Record<FieldBossSpec['mapId'], FieldBossSpec> = {
   },
   forest: {
     mapId: 'forest',
-    bossId: 'fb_elder_treant',
-    name: 'พฤกษาโบราณต้องสาป (บอสแมพป่าสน)',
+    bossId: 'forest_tusk_overlord',
+    name: 'จ้าวเขี้ยวยักษ์ (บอสแมพป่าลึก)',
     level: 20,
     element: 'earth',
     maxHp: 16000,
@@ -418,8 +418,8 @@ export const FIELD_BOSS_SPECS: Record<FieldBossSpec['mapId'], FieldBossSpec> = {
   },
   cave: {
     mapId: 'cave',
-    bossId: 'fb_crystal_golem',
-    name: 'โกเลมคริสตัลยักษ์ (บอสแมพถ้ำมืด)',
+    bossId: 'cave_drill_colossus',
+    name: 'ยักษ์สว่านศิลา (บอสแมพถ้ำมืด)',
     level: 32,
     element: 'earth',
     maxHp: 35000,
@@ -432,8 +432,8 @@ export const FIELD_BOSS_SPECS: Record<FieldBossSpec['mapId'], FieldBossSpec> = {
   },
   volcano: {
     mapId: 'volcano',
-    bossId: 'fb_ifrit_lord',
-    name: 'อิฟรีทจ้าวอัคคี (บอสแมพภูเขาไฟ)',
+    bossId: 'volcano_inferno_sovereign',
+    name: 'ราชันย์อัคคีนรก (บอสแมพภูเขาไฟ)',
     level: 45,
     element: 'fire',
     maxHp: 72000,

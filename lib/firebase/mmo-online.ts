@@ -4,6 +4,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocFromServer,
   getDocs,
   limit,
   onSnapshot,
@@ -17,6 +18,8 @@ import {
   where,
 } from 'firebase/firestore'
 import { auth, db, handleFirestoreError, OperationType } from './client'
+import { MONSTERS } from '@/lib/game/data'
+import { purgeStaleLocalMonsterCaches } from '@/lib/game/monster-cache'
 import { isGmAccountUser, normalizeGameUidInput } from '@/lib/game/permissions'
 import { SEED_RIVAL_HEROES, type LeaderboardHeroEntry } from '@/lib/game/rpg-systems'
 import {
@@ -759,10 +762,26 @@ function createDefaultFieldBossState(mapId: string): FieldBossOnlineState | null
   }
 }
 
+function normalizeFieldBossState(mapId: string, raw: FieldBossOnlineState | null): FieldBossOnlineState | null {
+  if (!raw) return null
+  const spec = getFieldBossForMap(mapId)
+  if (!spec) return raw
+  if (raw.bossId === spec.bossId && raw.bossName === spec.name && raw.bossId in MONSTERS) {
+    return raw
+  }
+  return {
+    ...raw,
+    bossId: spec.bossId,
+    bossName: spec.name,
+    level: spec.level,
+  }
+}
+
 export function subscribeFieldBoss(
   mapId: string,
   onChange: (state: FieldBossOnlineState | null) => void,
 ): () => void {
+  purgeStaleLocalMonsterCaches()
   const spec = getFieldBossForMap(mapId)
   if (!spec) {
     onChange(null)
@@ -770,26 +789,52 @@ export function subscribeFieldBoss(
   }
 
   const localMap = readLocalJson<Record<string, FieldBossOnlineState>>(LOCAL_FIELD_BOSS_KEY, {})
-  const fallback = localMap[mapId] ?? createDefaultFieldBossState(mapId)
+  const rawFallback = localMap[mapId] ?? createDefaultFieldBossState(mapId)
+  const fallback = normalizeFieldBossState(mapId, rawFallback)
 
   if (!isSignedInVerified()) {
     onChange(fallback)
     return () => {}
   }
 
-  return onSnapshot(
-    doc(db, 'fieldBosses', mapId),
-    (snap) => {
+  let active = true
+  const bossRef = doc(db, 'fieldBosses', mapId)
+
+  // Always force a fresh server read immediately on subscribe to bypass any stale IndexedDB/memory cache
+  void getDocFromServer(bossRef)
+    .then((snap) => {
+      if (!active) return
       if (!snap.exists()) {
         onChange(createDefaultFieldBossState(mapId))
         return
       }
-      onChange(snap.data() as FieldBossOnlineState)
+      onChange(normalizeFieldBossState(mapId, snap.data() as FieldBossOnlineState))
+    })
+    .catch(() => {
+      // Snapshot listener below handles fallback cleanly
+    })
+
+  const unsubscribe = onSnapshot(
+    bossRef,
+    { includeMetadataChanges: true },
+    (snap) => {
+      if (!active) return
+      if (snap.metadata.fromCache) return
+      if (!snap.exists()) {
+        onChange(createDefaultFieldBossState(mapId))
+        return
+      }
+      onChange(normalizeFieldBossState(mapId, snap.data() as FieldBossOnlineState))
     },
     () => {
-      onChange(fallback)
+      if (active) onChange(fallback)
     },
   )
+
+  return () => {
+    active = false
+    unsubscribe()
+  }
 }
 
 export async function attackFieldBossOnline(
@@ -824,6 +869,7 @@ export async function attackFieldBossOnline(
       }
       base = {
         ...createDefaultFieldBossState(mapId)!,
+        bossId: prev.bossId,
         clearCount: base.clearCount,
       }
     }
@@ -843,6 +889,7 @@ export async function attackFieldBossOnline(
     const defeatedNow = nextHp === 0
     const next: FieldBossOnlineState = {
       ...base,
+      bossName: spec.name,
       currentHp: nextHp,
       lastHitter: cleanName,
       defeatedAtMs: defeatedNow ? now : base.defeatedAtMs,
@@ -868,7 +915,7 @@ export async function attackFieldBossOnline(
       })
       return {
         ok: outcome.respawningSec === 0,
-        state: outcome.next,
+        state: normalizeFieldBossState(mapId, outcome.next),
         defeatedNow: outcome.defeatedNow,
         respawningSec: outcome.respawningSec,
         error: outcome.respawningSec > 0 ? `ฟิลด์บอสกำลังเกิดใหม่ในอีก ${outcome.respawningSec} วินาที` : undefined,
@@ -879,7 +926,7 @@ export async function attackFieldBossOnline(
   }
 
   const localMap = readLocalJson<Record<string, FieldBossOnlineState>>(LOCAL_FIELD_BOSS_KEY, {})
-  const base = localMap[mapId] ?? createDefaultFieldBossState(mapId)!
+  const base = normalizeFieldBossState(mapId, localMap[mapId] ?? null) ?? createDefaultFieldBossState(mapId)!
   const res = applyStep(base)
   if (res.respawningSec === 0) {
     localMap[mapId] = res.next
@@ -887,7 +934,7 @@ export async function attackFieldBossOnline(
   }
   return {
     ok: res.respawningSec === 0,
-    state: res.next,
+    state: normalizeFieldBossState(mapId, res.next),
     defeatedNow: res.defeatedNow,
     respawningSec: res.respawningSec,
     error: res.respawningSec > 0 ? `ฟิลด์บอสกำลังเกิดใหม่ในอีก ${res.respawningSec} วินาที` : undefined,

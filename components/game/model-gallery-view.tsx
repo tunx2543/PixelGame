@@ -1,7 +1,8 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Crown, Eye, Flame, Footprints, Pause, PawPrint, Play, RotateCw, Shield, Sparkles, Swords, Wind } from 'lucide-react'
+import { syncLatestMonsterAssetsAndFirestore } from '@/lib/firebase/monster-sync'
 import { BIOME_CATALOG_SPECS, MONSTER_BIOME_MAP, MONSTER_CATALOG_META } from '@/lib/game/biome-monsters'
 import { ITEMS } from '@/lib/game/data'
 import {
@@ -157,6 +158,10 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
   const [previewRebirth, setPreviewRebirth] = useState<number>(1)
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null)
   const [vfxNonce, setVfxNonce] = useState<number>(0)
+
+  useEffect(() => {
+    void syncLatestMonsterAssetsAndFirestore()
+  }, [])
 
   const filteredMonsterModels = useMemo(() => {
     if (monsterBiomeFilter === 'all') return monsterModels

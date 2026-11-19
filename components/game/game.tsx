@@ -13,6 +13,7 @@ import {
   verifyStripeTopupAction,
 } from '@/lib/game/engine'
 import { preloadTileAssets } from '@/lib/game/hd-assets'
+import { syncLatestMonsterAssetsAndFirestore } from '@/lib/firebase/monster-sync'
 import { useUiLayout } from '@/lib/game/ui-layout'
 import { useGame } from '@/lib/game/use-game'
 import { CharacterBar } from './character-bar'
@@ -72,6 +73,7 @@ export function Game() {
 
   useEffect(() => {
     preloadTileAssets()
+    void syncLatestMonsterAssetsAndFirestore({ mapId: game.p?.mapId })
   }, [])
 
   useEffect(() => {

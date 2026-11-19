@@ -6,7 +6,9 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocFromServer,
   getDocs,
+  getDocsFromServer,
   query,
   serverTimestamp,
   setDoc,
@@ -14,6 +16,7 @@ import {
   where,
 } from 'firebase/firestore'
 import type { SaveData } from '@/lib/game/engine'
+import { sanitizeRpgExt } from '@/lib/game/rpg-systems'
 import {
   PERMANENT_GM_GAME_UID,
   isGmAccountUser,
@@ -185,6 +188,7 @@ function sanitizeCharacterPayload(userId: string, characterId: string, save: Sav
     statPoints: safeStatPoints,
     skillPoints: safeSkillPoints,
     playTime: safePlayTime,
+    rpgExt: sanitizeRpgExt(save.rpgExt),
   })
 
   return {
@@ -385,27 +389,37 @@ export async function listUserCharacters(userId: string): Promise<CloudCharacter
   const colPath = `users/${userId}/characters`
   try {
     const q = query(collection(db, 'users', userId, 'characters'), where('ownerId', '==', userId))
-    const snapshot = await getDocs(q)
+    let snapshot
+    try {
+      snapshot = await getDocsFromServer(q)
+    } catch {
+      snapshot = await getDocs(q)
+    }
     const records: CloudCharacterRecord[] = []
     snapshot.forEach((docSnap) => {
       const d = docSnap.data()
       if (d && typeof d.saveData === 'object' && d.saveData !== null) {
+        const rawSave = d.saveData as SaveData
+        const normalizedSave: SaveData = {
+          ...rawSave,
+          rpgExt: sanitizeRpgExt(rawSave.rpgExt),
+        }
         records.push({
           id: docSnap.id,
           ownerId: String(d.ownerId ?? userId),
-          name: String(d.name ?? d.saveData.name ?? 'นักผจญภัย'),
-          jobId: String(d.jobId ?? d.saveData.jobId ?? 'swordsman'),
-          level: toSafeInt(d.level ?? d.saveData.level, 1, 999, 1),
-          exp: toSafeInt(d.exp ?? d.saveData.exp, 0, Number.MAX_SAFE_INTEGER, 0),
-          hp: toSafeInt(d.hp ?? d.saveData.hp, 0, Number.MAX_SAFE_INTEGER, 1),
-          mp: toSafeInt(d.mp ?? d.saveData.mp, 0, Number.MAX_SAFE_INTEGER, 0),
-          gold: toSafeInt(d.gold ?? d.saveData.gold, 0, Number.MAX_SAFE_INTEGER, 0),
-          diamonds: toSafeInt(d.diamonds ?? d.saveData.diamonds, 0, Number.MAX_SAFE_INTEGER, 0),
-          mapId: String(d.mapId ?? d.saveData.mapId ?? 'town'),
-          playTime: typeof (d.playTime ?? d.saveData.playTime) === 'number' && Number.isFinite(d.playTime ?? d.saveData.playTime)
-            ? Math.max(0, Number(d.playTime ?? d.saveData.playTime))
+          name: String(d.name ?? normalizedSave.name ?? 'นักผจญภัย'),
+          jobId: String(d.jobId ?? normalizedSave.jobId ?? 'swordsman'),
+          level: toSafeInt(d.level ?? normalizedSave.level, 1, 999, 1),
+          exp: toSafeInt(d.exp ?? normalizedSave.exp, 0, Number.MAX_SAFE_INTEGER, 0),
+          hp: toSafeInt(d.hp ?? normalizedSave.hp, 0, Number.MAX_SAFE_INTEGER, 1),
+          mp: toSafeInt(d.mp ?? normalizedSave.mp, 0, Number.MAX_SAFE_INTEGER, 0),
+          gold: toSafeInt(d.gold ?? normalizedSave.gold, 0, Number.MAX_SAFE_INTEGER, 0),
+          diamonds: toSafeInt(d.diamonds ?? normalizedSave.diamonds, 0, Number.MAX_SAFE_INTEGER, 0),
+          mapId: String(d.mapId ?? normalizedSave.mapId ?? 'town'),
+          playTime: typeof (d.playTime ?? normalizedSave.playTime) === 'number' && Number.isFinite(d.playTime ?? normalizedSave.playTime)
+            ? Math.max(0, Number(d.playTime ?? normalizedSave.playTime))
             : 0,
-          saveData: d.saveData as SaveData,
+          saveData: normalizedSave,
         })
       }
     })
@@ -434,7 +448,11 @@ async function performSaveUserCharacter(userId: string, characterId: string, sav
 
   let existingSnap
   try {
-    existingSnap = await getDoc(charRef)
+    try {
+      existingSnap = await getDocFromServer(charRef)
+    } catch {
+      existingSnap = await getDoc(charRef)
+    }
   } catch (error) {
     handleFirestoreError(error, OperationType.GET, charPath)
   }

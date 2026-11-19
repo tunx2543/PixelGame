@@ -5,7 +5,9 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocFromServer,
   getDocs,
+  getDocsFromServer,
   limit,
   onSnapshot,
   orderBy,
@@ -17,9 +19,12 @@ import {
   where,
 } from 'firebase/firestore'
 import { auth, db } from './client'
+import { MONSTERS } from '@/lib/game/data'
+import { purgeStaleLocalMonsterCaches } from '@/lib/game/monster-cache'
 import {
   getActiveWorldBoss,
   guildExpToNext,
+  normalizeMonsterId,
   SEED_RIVAL_HEROES,
   type LeaderboardHeroEntry,
 } from '@/lib/game/rpg-systems'
@@ -380,6 +385,7 @@ export async function fetchLeaderboardHeroes(selfEntry?: LeaderboardHeroEntry): 
 /* ========================================================================== */
 
 export async function fetchWorldBossState(): Promise<WorldBossRaidState> {
+  purgeStaleLocalMonsterCaches()
   const spec = getActiveWorldBoss()
   const fallbackLocal = readLocalJson<WorldBossRaidState>(LOCAL_WB_KEY, {
     cycleKey: spec.cycleKey,
@@ -391,8 +397,10 @@ export async function fetchWorldBossState(): Promise<WorldBossRaidState> {
     contributions: [],
   })
 
+  const normalizedLocalBossId = normalizeMonsterId(fallbackLocal.bossId)
+  const localBossValid = Boolean(MONSTERS[normalizedLocalBossId]) && normalizedLocalBossId === spec.bossId
   const activeLocal =
-    fallbackLocal.cycleKey === spec.cycleKey
+    fallbackLocal.cycleKey === spec.cycleKey && localBossValid
       ? fallbackLocal
       : {
           cycleKey: spec.cycleKey,
@@ -411,7 +419,12 @@ export async function fetchWorldBossState(): Promise<WorldBossRaidState> {
 
   try {
     const raidRef = doc(db, 'worldBoss', spec.cycleKey)
-    const raidSnap = await getDoc(raidRef)
+    let raidSnap
+    try {
+      raidSnap = await getDocFromServer(raidRef)
+    } catch {
+      raidSnap = await getDoc(raidRef)
+    }
     let raidData = raidSnap.exists() ? (raidSnap.data() as Omit<WorldBossRaidState, 'contributions'>) : null
     if (!raidData) {
       await setDoc(raidRef, {
@@ -431,15 +444,28 @@ export async function fetchWorldBossState(): Promise<WorldBossRaidState> {
         currentHp: spec.maxHp,
         totalDamageDealt: 0,
       }
+    } else {
+      const normalizedCloudBossId = normalizeMonsterId(raidData.bossId)
+      if (!MONSTERS[normalizedCloudBossId] || normalizedCloudBossId !== spec.bossId) {
+        raidData = {
+          ...raidData,
+          bossId: spec.bossId,
+          name: spec.name,
+        }
+      }
     }
-    const contribSnap = await getDocs(
-      query(
-        collection(db, 'worldBoss', spec.cycleKey, 'contributions'),
-        where('damage', '>=', 0),
-        orderBy('damage', 'desc'),
-        limit(20),
-      ),
+    const contribQuery = query(
+      collection(db, 'worldBoss', spec.cycleKey, 'contributions'),
+      where('damage', '>=', 0),
+      orderBy('damage', 'desc'),
+      limit(20),
     )
+    let contribSnap
+    try {
+      contribSnap = await getDocsFromServer(contribQuery)
+    } catch {
+      contribSnap = await getDocs(contribQuery)
+    }
     const contributions = contribSnap.docs.map((d) => d.data() as WorldBossContributionRecord)
     return { ...raidData, contributions }
   } catch {
