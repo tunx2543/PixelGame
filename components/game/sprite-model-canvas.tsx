@@ -4,12 +4,16 @@ import { useEffect, useRef } from 'react'
 import { JOBS, MONSTERS, normalizeJobId, type WeaponType } from '@/lib/game/data'
 import { getJobModelSpec, getMonsterModelSpec, getMountModelSpec, getPetModelSpec } from '@/lib/game/models-2d'
 import {
+  canvasToResolvedDrawable,
   type Dir,
-  humanSprite,
+  drawResolvedDrawable,
+  drawResolvedPortrait,
   jobHumanColors,
-  monsterSprite,
   mountSprite,
   petSprite,
+  type ResolvedDrawable,
+  resolveHumanDrawable,
+  resolveMonsterDrawable,
   type SpriteAction,
 } from '@/lib/game/sprites'
 import { drawRebirthAura } from '@/lib/game/vfx-canvas'
@@ -80,9 +84,12 @@ export function SpriteModelCanvas({
             (entries) => {
               const visible = entries[0]?.isIntersecting ?? true
               isVisible = visible
-              if (visible && !reducedMotion && rafId === 0) {
+              if (visible) {
+                lastSig = ''
                 lastDrawAt = 0
-                rafId = requestAnimationFrame(renderFrame)
+                if (!reducedMotion && rafId === 0) {
+                  rafId = requestAnimationFrame(renderFrame)
+                }
               }
             },
             { threshold: 0.05 },
@@ -93,6 +100,7 @@ export function SpriteModelCanvas({
     const renderFrame = (now: number) => {
       rafId = 0
       if (!isVisible) return
+      if (canvas.width === 0 || canvas.height === 0) return
 
       const elapsed = reducedMotion ? 0 : (now - start) / 1000
       let effectiveAction: SpriteAction = action === 'auto' ? 'idle' : action
@@ -120,7 +128,14 @@ export function SpriteModelCanvas({
         phaseCallbackRef.current?.(effectiveAction)
       }
 
-      const throttleMs = mode === 'monster' && effectiveAction === 'walk' ? 40 : effectiveAction === 'idle' ? 110 : 75
+      const throttleMs =
+        variant === 'portrait' && effectiveAction === 'idle'
+          ? 240
+          : mode === 'monster' && effectiveAction === 'walk'
+            ? 40
+            : effectiveAction === 'idle'
+              ? 120
+              : 75
       if (!reducedMotion && lastDrawAt > 0 && now - lastDrawAt < throttleMs) {
         rafId = requestAnimationFrame(renderFrame)
         return
@@ -142,7 +157,7 @@ export function SpriteModelCanvas({
               ? -1
               : Math.floor(elapsed * 2.6) % 4
 
-      let spriteImg: HTMLCanvasElement
+      let drawable: ResolvedDrawable
       let auraColor: string | undefined
       let isFlying = false
       let isGhost = false
@@ -154,7 +169,7 @@ export function SpriteModelCanvas({
         const colors = jobHumanColors(jobDef.id, jobDef.colors, false)
         const weapon = weaponOverride !== undefined ? weaponOverride : (jobDef.weaponTypes[0] ?? 'stick')
         const wColor = weaponColorOverride ?? jobDef.colors.accent
-        spriteImg = humanSprite(
+        drawable = resolveHumanDrawable(
           colors,
           dir,
           frame,
@@ -168,19 +183,19 @@ export function SpriteModelCanvas({
       } else if (mode === 'pet') {
         const spec = getPetModelSpec(id)
         const petAction: SpriteAction = effectiveAction === 'skill' ? 'attack' : effectiveAction
-        spriteImg = petSprite(spec.petId, dir, petAction, frame, attackFrame)
+        drawable = canvasToResolvedDrawable(petSprite(spec.petId, dir, petAction, frame, attackFrame))
         auraColor = spec.auraColor
         isFlying = spec.floating
       } else if (mode === 'mount') {
         const spec = getMountModelSpec(id)
         const mountAction: SpriteAction = effectiveAction === 'skill' ? 'attack' : effectiveAction
-        spriteImg = mountSprite(spec.mountId, dir, mountAction, frame, attackFrame)
+        drawable = canvasToResolvedDrawable(mountSprite(spec.mountId, dir, mountAction, frame, attackFrame))
         auraColor = spec.auraColor
         isFlying = spec.flying
       } else {
         const monDef = MONSTERS[id] ?? MONSTERS.slime
         const spec = getMonsterModelSpec(monDef.id, monDef.sprite, monDef.color)
-        spriteImg = monsterSprite(
+        drawable = resolveMonsterDrawable(
           monDef.sprite,
           monDef.color,
           frame,
@@ -207,38 +222,41 @@ export function SpriteModelCanvas({
         showAura && (auraColor || hasRebirth) && !reducedMotion
           ? Math.round(elapsed * 8)
           : 0
-      const gmReady = spriteImg.dataset?.gmReady === '1'
+      const gmReady = Boolean(drawable.gmReady)
       const mMotionBucket =
         mode === 'monster' && (effectiveAction === 'walk' || effectiveAction === 'idle') && !reducedMotion
           ? Math.round(elapsed * 24)
           : 0
-      const sheetId = spriteImg.dataset?.sheetId ?? ''
-      const sig = `${effectiveAction}|${frame}|${hoverY}|${lungeOffset}|${slashBucket}|${auraBucket}|${rebirthCount}|${gmReady ? '1' : '0'}|${sheetId}|${mMotionBucket}`
+      const sheetId = drawable.sheetId ?? ''
+      const sourceReady = drawable.sheetSpec
+        ? drawable.sheetSpec.image.complete && drawable.sheetSpec.image.naturalWidth > 0
+        : Boolean(drawable.canvas && drawable.canvas.width > 0 && drawable.canvas.height > 0)
+      const sig = `${effectiveAction}|${frame}|${hoverY}|${lungeOffset}|${slashBucket}|${auraBucket}|${rebirthCount}|${gmReady ? '1' : '0'}|${sheetId}|${sourceReady ? '1' : '0'}|${mMotionBucket}|${canvas.width}x${canvas.height}`
 
       if (sig !== lastSig) {
         lastSig = sig
         ctx.clearRect(0, 0, canvas.width, canvas.height)
         ctx.imageSmoothingEnabled = true
-        ctx.imageSmoothingQuality = 'high'
+        ctx.imageSmoothingQuality = 'medium'
 
-        const hdScale = spriteImg.dataset?.hdScale ? Number(spriteImg.dataset.hdScale) : 1
+        const hdScale = drawable.hdScale
         if (variant === 'portrait' && mode === 'job') {
-          const isSheet = Boolean(spriteImg.dataset?.sheetId)
+          const isSheet = Boolean(drawable.sheetId)
           const baseCropW = gmReady ? 30 : isSheet ? 30 : 28
           const baseCropH = gmReady ? 26 : isSheet ? 28 : 24
-          const cropW = Math.min(spriteImg.width, Math.round(baseCropW * hdScale))
-          const cropH = Math.min(spriteImg.height, Math.round(baseCropH * hdScale))
-          const sx = Math.max(0, Math.round((spriteImg.width - cropW) / 2))
+          const cropW = Math.min(drawable.width, Math.round(baseCropW * hdScale))
+          const cropH = Math.min(drawable.height, Math.round(baseCropH * hdScale))
+          const sx = Math.max(0, Math.round((drawable.width - cropW) / 2))
           const sy = gmReady ? 7 : Math.round((isSheet ? 5 : 3) * hdScale)
-          ctx.drawImage(spriteImg, sx, sy, cropW, cropH, 0, 0, canvas.width, canvas.height)
+          drawResolvedPortrait(ctx, drawable, sx, sy, cropW, cropH, 0, 0, canvas.width, canvas.height)
         } else {
           const padW = canvas.width * (hasRebirth && showAura ? (rebirthCount >= 5 ? 0.54 : 0.66) : gmReady ? 0.98 : 0.9)
           const padH = canvas.height * (hasRebirth && showAura ? (rebirthCount >= 5 ? 0.54 : 0.66) : gmReady ? 0.96 : 0.86)
           const computedScale =
             scale ??
-            Math.max(0.4, Math.min(padW / spriteImg.width, padH / spriteImg.height))
-          const drawW = Math.round(spriteImg.width * computedScale)
-          const drawH = Math.round(spriteImg.height * computedScale)
+            Math.max(0.4, Math.min(padW / Math.max(1, drawable.width), padH / Math.max(1, drawable.height)))
+          const drawW = Math.round(drawable.width * computedScale)
+          const drawH = Math.round(drawable.height * computedScale)
 
           const centerX = Math.round(canvas.width / 2)
           const baseFloorY = Math.round(canvas.height * (hasRebirth && showAura ? (rebirthCount >= 5 ? 0.81 : 0.84) : 0.89))
@@ -285,7 +303,16 @@ export function SpriteModelCanvas({
           }
           const isMonsterWalk = mode === 'monster' && effectiveAction === 'walk' && !reducedMotion
           const isMonsterIdle = mode === 'monster' && effectiveAction === 'idle' && !reducedMotion
-          const isBouncyMonster = mode === 'monster' && (id.includes('slime') || id === 'mushroom' || id === 'rabbit')
+          const isBouncyMonster =
+            mode === 'monster' &&
+            (id.includes('slime') ||
+              id === 'mushroom' ||
+              id === 'rabbit' ||
+              id.startsWith('meadow_blob') ||
+              id === 'meadow_capling' ||
+              id === 'meadow_hopper' ||
+              id === 'meadow_big_hopper' ||
+              id === 'meadow_dewmother')
           const mBounce = isMonsterWalk
             ? -Math.abs(Math.sin(elapsed * 9.0)) * (isBouncyMonster ? 6 : isFlying ? 3 : 4)
             : 0
@@ -307,8 +334,9 @@ export function SpriteModelCanvas({
           ctx.translate(drawX, drawAnchorY)
           if (mTilt !== 0) ctx.rotate(mTilt)
           ctx.scale(mSx, mSy)
-          ctx.drawImage(
-            spriteImg,
+          drawResolvedDrawable(
+            ctx,
+            drawable,
             Math.round(-drawW / 2),
             Math.round(-drawH + footPad),
             drawW,
@@ -316,7 +344,7 @@ export function SpriteModelCanvas({
           )
           ctx.restore()
 
-          if (isAttack && !gmReady && !spriteImg.dataset?.sheetId && attackProgress > 0.2 && attackProgress < 0.85) {
+          if (isAttack && !gmReady && !drawable.sheetId && attackProgress > 0.2 && attackProgress < 0.85) {
             const slashAlpha = Math.max(0, 1 - Math.abs(attackProgress - 0.5) * 2.4)
             ctx.globalAlpha = slashAlpha
             ctx.strokeStyle = auraColor ?? '#ffd60a'

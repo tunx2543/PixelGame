@@ -87,7 +87,11 @@ export function GameCanvas() {
     let uiAcc = 0
 
     const resize = () => {
-      dpr = Math.min(window.devicePixelRatio || 1, 2)
+      const isCompact =
+        window.innerWidth <= 960 ||
+        window.innerHeight <= 560 ||
+        (typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches)
+      dpr = Math.min(window.devicePixelRatio || 1, isCompact ? 1.5 : 2)
       const r = canvas.getBoundingClientRect()
       canvas.width = Math.max(1, Math.floor(r.width * dpr))
       canvas.height = Math.max(1, Math.floor(r.height * dpr))

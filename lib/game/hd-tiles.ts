@@ -1,5 +1,5 @@
-import { T, type MapDef } from './maps'
-import { getHdImage, getHdLoadVersion, HD_TILE, preloadHdAssets, type HdAssetKey } from './hd-assets'
+import { T, TILE, type MapDef } from './maps'
+import { getHdImage, getHdTileLoadVersion, HD_TILE, preloadTileAssets, type HdAssetKey } from './hd-assets'
 
 // Tiles that represent vertical 3D objects/buildings/trees rendered in the depth-sorted entity & overhead pass.
 // On Layer 0 (ground canvas), we paint clean underlying terrain beneath them so characters can walk behind & in front!
@@ -538,33 +538,88 @@ function paintProceduralHdTile(
   }
 }
 
+const MAX_TILE_CACHE = 96
+const MAX_CHUNK_CACHE = 80
+const MAX_FULL_MAP_CACHE = 1
+const CHUNK_TILES = 4
+
 const tileHdCache = new Map<string, HTMLCanvasElement>()
-let lastCacheVersion = -1
+const chunkHdCache = new Map<string, HTMLCanvasElement>()
+const mapHdCache = new Map<string, HTMLCanvasElement>()
+let lastTileCacheVersion = -1
+
+function releaseCanvas(c: HTMLCanvasElement | undefined) {
+  if (!c) return
+  try {
+    c.width = 0
+    c.height = 0
+  } catch {
+    // ignore cleanup errors
+  }
+}
+
+function clearCanvasCache(target: Map<string, HTMLCanvasElement>) {
+  for (const c of target.values()) {
+    releaseCanvas(c)
+  }
+  target.clear()
+}
+
+function touchLru<T extends HTMLCanvasElement>(mapCache: Map<string, T>, key: string): T | undefined {
+  const hit = mapCache.get(key)
+  if (!hit) return undefined
+  if (hit.width === 0 || hit.height === 0) {
+    mapCache.delete(key)
+    return undefined
+  }
+  mapCache.delete(key)
+  mapCache.set(key, hit)
+  return hit
+}
+
+function setLru(mapCache: Map<string, HTMLCanvasElement>, key: string, value: HTMLCanvasElement, limit: number) {
+  const prev = mapCache.get(key)
+  if (prev && prev !== value) {
+    releaseCanvas(prev)
+  }
+  mapCache.delete(key)
+  mapCache.set(key, value)
+  while (mapCache.size > limit) {
+    const oldestKey = mapCache.keys().next().value
+    if (oldestKey === undefined) break
+    const oldestCanvas = mapCache.get(oldestKey)
+    mapCache.delete(oldestKey)
+    releaseCanvas(oldestCanvas)
+  }
+}
+
+function syncTileCacheVersion() {
+  preloadTileAssets()
+  const curVer = getHdTileLoadVersion()
+  if (curVer !== lastTileCacheVersion) {
+    clearCanvasCache(tileHdCache)
+    clearCanvasCache(chunkHdCache)
+    clearCanvasCache(mapHdCache)
+    lastTileCacheVersion = curVer
+  }
+}
 
 function getHdTileCanvas(tile: number, base: number, variant: number, theme: string): HTMLCanvasElement {
-  const curVer = getHdLoadVersion()
-  if (curVer !== lastCacheVersion) {
-    tileHdCache.clear()
-    mapHdCache.clear()
-    lastCacheVersion = curVer
-  }
+  syncTileCacheVersion()
   const key = `${tile}|${base}|${variant}|${theme}`
-  let hit = tileHdCache.get(key)
+  let hit = touchLru(tileHdCache, key)
   if (!hit) {
     const made = makeHdCanvas(HD_TILE, HD_TILE)
     paintProceduralHdTile(made.ctx, tile, base, variant, theme)
     hit = made.c
-    tileHdCache.set(key, hit)
+    setLru(tileHdCache, key, hit, MAX_TILE_CACHE)
   }
   return hit
 }
 
-const mapHdCache = new Map<string, HTMLCanvasElement>()
-
 function groundTileUnderProp(map: MapDef, tx: number, ty: number, tile: number): number {
   if (tile === T.FOUNTAIN) return T.PLAZA
   if (map.id === 'town' && TOWN_BUILDING_TILE_MASK.has(tile)) {
-    // Check neighbors below/around building for cobblestone/wood_floor/plaza vs grass
     const below = map.tiles[(ty + 1) * map.width + tx]
     if (below === T.PLAZA || below === T.COBBLESTONE) return below
     if (ty <= 7 && tx < 16) return T.COBBLESTONE
@@ -573,7 +628,6 @@ function groundTileUnderProp(map: MapDef, tx: number, ty: number, tile: number):
     return T.COBBLESTONE
   }
   if (LAYERED_PROP_TILES.has(tile)) {
-    // Look at nearby walkable tile to match ground cleanly
     for (const [dx, dy] of [
       [0, 1],
       [-1, 0],
@@ -594,42 +648,38 @@ function groundTileUnderProp(map: MapDef, tx: number, ty: number, tile: number):
   return tile
 }
 
-export function buildHdMapCanvas(map: MapDef): HTMLCanvasElement {
-  preloadHdAssets()
-  const curVer = getHdLoadVersion()
-  if (curVer !== lastCacheVersion) {
-    tileHdCache.clear()
-    mapHdCache.clear()
-    lastCacheVersion = curVer
-  }
-
-  let cached = mapHdCache.get(map.id)
-  if (cached) return cached
-
-  const made = makeHdCanvas(map.width * HD_TILE, map.height * HD_TILE)
-  const ctx = made.ctx
-
-  // Pass 1: Paint every tile's HD ground layer (replacing layered tree/bush/building tiles with clean ground)
-  for (let y = 0; y < map.height; y++) {
-    for (let x = 0; x < map.width; x++) {
+function paintMapTileRect(
+  ctx: CanvasRenderingContext2D,
+  map: MapDef,
+  txStart: number,
+  tyStart: number,
+  txEnd: number,
+  tyEnd: number,
+  offsetX = 0,
+  offsetY = 0,
+) {
+  for (let y = tyStart; y < tyEnd; y++) {
+    for (let x = txStart; x < txEnd; x++) {
       const rawTile = map.tiles[y * map.width + x]
       const drawTile =
         rawTile === T.CAVEWALL || rawTile === T.CASTLE_WALL
           ? rawTile
           : groundTileUnderProp(map, x, y, rawTile)
       const variant = (x * 7 + y * 13) & 3
-      ctx.drawImage(getHdTileCanvas(drawTile, map.base, variant, map.theme), x * HD_TILE, y * HD_TILE)
+      ctx.drawImage(
+        getHdTileCanvas(drawTile, map.base, variant, map.theme),
+        (x - txStart) * HD_TILE + offsetX,
+        (y - tyStart) * HD_TILE + offsetY,
+      )
     }
   }
 
-  // Pass 2: Soft ambient shoreline & cobblestone edge transitions + wall drop shadows
-  for (let y = 0; y < map.height; y++) {
-    for (let x = 0; x < map.width; x++) {
+  for (let y = tyStart; y < tyEnd; y++) {
+    for (let x = txStart; x < txEnd; x++) {
       const t = map.tiles[y * map.width + x]
-      const px = x * HD_TILE
-      const py = y * HD_TILE
+      const px = (x - txStart) * HD_TILE + offsetX
+      const py = (y - tyStart) * HD_TILE + offsetY
 
-      // Soft stone/grass lip bordering water & lava
       if (t === T.WATER || t === T.LAVA) {
         const up = y > 0 ? map.tiles[(y - 1) * map.width + x] : t
         const left = x > 0 ? map.tiles[y * map.width + x - 1] : t
@@ -637,7 +687,6 @@ export function buildHdMapCanvas(map: MapDef): HTMLCanvasElement {
         const down = y < map.height - 1 ? map.tiles[(y + 1) * map.width + x] : t
         if (up !== t && up !== T.BRIDGE_H && up !== T.BRIDGE_V) {
           if (t === T.WATER && map.theme === 'town') {
-            // Crisp stone canal coping + warm reflection shadow
             ctx.fillStyle = '#9b8d7e'
             ctx.fillRect(px, py, HD_TILE, 8)
             ctx.fillStyle = '#d6cab8'
@@ -666,7 +715,6 @@ export function buildHdMapCanvas(map: MapDef): HTMLCanvasElement {
         }
       }
 
-      // Soft ground shadow south of castle/cave walls
       if (t !== T.CASTLE_WALL && t !== T.CAVEWALL && y > 0) {
         const north = map.tiles[(y - 1) * map.width + x]
         if (north === T.CASTLE_WALL || north === T.CAVEWALL) {
@@ -679,7 +727,87 @@ export function buildHdMapCanvas(map: MapDef): HTMLCanvasElement {
       }
     }
   }
+}
 
-  mapHdCache.set(map.id, made.c)
+function getHdMapChunkCanvas(map: MapDef, cx: number, cy: number): HTMLCanvasElement {
+  syncTileCacheVersion()
+  const key = `${map.id}|${cx}|${cy}`
+  const existing = touchLru(chunkHdCache, key)
+  if (existing) return existing
+
+  const txStart = cx * CHUNK_TILES
+  const tyStart = cy * CHUNK_TILES
+  const txEnd = Math.min(map.width, txStart + CHUNK_TILES)
+  const tyEnd = Math.min(map.height, tyStart + CHUNK_TILES)
+  const w = Math.max(1, (txEnd - txStart) * HD_TILE)
+  const h = Math.max(1, (tyEnd - tyStart) * HD_TILE)
+
+  const made = makeHdCanvas(w, h)
+  paintMapTileRect(made.ctx, map, txStart, tyStart, txEnd, tyEnd, 0, 0)
+  setLru(chunkHdCache, key, made.c, MAX_CHUNK_CACHE)
+  return made.c
+}
+
+/**
+ * Draws only the visible world viewport [vx0, vy0, vx1, vy1] onto the target context
+ * using bounded 512x512 HD map chunks. Prevents multi-megabyte full-map texture exhaustion on mobile.
+ */
+export function drawHdMapViewport(
+  ctx: CanvasRenderingContext2D,
+  map: MapDef,
+  vx0: number,
+  vy0: number,
+  vx1: number,
+  vy1: number,
+): void {
+  if (vx1 <= vx0 || vy1 <= vy0) return
+  syncTileCacheVersion()
+
+  const minTx = Math.max(0, Math.floor(vx0 / TILE))
+  const maxTx = Math.min(map.width - 1, Math.floor((vx1 - 0.001) / TILE))
+  const minTy = Math.max(0, Math.floor(vy0 / TILE))
+  const maxTy = Math.min(map.height - 1, Math.floor((vy1 - 0.001) / TILE))
+
+  const minCx = Math.floor(minTx / CHUNK_TILES)
+  const maxCx = Math.floor(maxTx / CHUNK_TILES)
+  const minCy = Math.floor(minTy / CHUNK_TILES)
+  const maxCy = Math.floor(maxTy / CHUNK_TILES)
+  const hdPerWorld = HD_TILE / TILE
+
+  for (let cy = minCy; cy <= maxCy; cy++) {
+    for (let cx = minCx; cx <= maxCx; cx++) {
+      const chunkCanvas = getHdMapChunkCanvas(map, cx, cy)
+      if (chunkCanvas.width <= 0 || chunkCanvas.height <= 0) continue
+
+      const chunkWorldX0 = cx * CHUNK_TILES * TILE
+      const chunkWorldY0 = cy * CHUNK_TILES * TILE
+      const chunkWorldX1 = Math.min(map.width * TILE, chunkWorldX0 + CHUNK_TILES * TILE)
+      const chunkWorldY1 = Math.min(map.height * TILE, chunkWorldY0 + CHUNK_TILES * TILE)
+
+      const ix0 = Math.max(vx0, chunkWorldX0)
+      const iy0 = Math.max(vy0, chunkWorldY0)
+      const ix1 = Math.min(vx1, chunkWorldX1)
+      const iy1 = Math.min(vy1, chunkWorldY1)
+      if (ix1 <= ix0 || iy1 <= iy0) continue
+
+      const sx = (ix0 - chunkWorldX0) * hdPerWorld
+      const sy = (iy0 - chunkWorldY0) * hdPerWorld
+      const sw = (ix1 - ix0) * hdPerWorld
+      const sh = (iy1 - iy0) * hdPerWorld
+
+      ctx.drawImage(chunkCanvas, sx, sy, sw, sh, ix0, iy0, ix1 - ix0, iy1 - iy0)
+    }
+  }
+}
+
+export function buildHdMapCanvas(map: MapDef): HTMLCanvasElement {
+  syncTileCacheVersion()
+
+  const cached = touchLru(mapHdCache, map.id)
+  if (cached) return cached
+
+  const made = makeHdCanvas(map.width * HD_TILE, map.height * HD_TILE)
+  paintMapTileRect(made.ctx, map, 0, 0, map.width, map.height, 0, 0)
+  setLru(mapHdCache, map.id, made.c, MAX_FULL_MAP_CACHE)
   return made.c
 }

@@ -12,6 +12,7 @@ import {
   toggleZenHud,
   verifyStripeTopupAction,
 } from '@/lib/game/engine'
+import { preloadTileAssets } from '@/lib/game/hd-assets'
 import { useUiLayout } from '@/lib/game/ui-layout'
 import { useGame } from '@/lib/game/use-game'
 import { CharacterBar } from './character-bar'
@@ -68,6 +69,10 @@ export function Game() {
   const [mobileCombatReveal, setMobileCombatReveal] = useState(false)
   const handledTopupSessionRef = useRef<string | null>(null)
   const isPlaying = Boolean(g.p)
+
+  useEffect(() => {
+    preloadTileAssets()
+  }, [])
 
   useEffect(() => {
     document.body.dataset.state = isPlaying ? 'playing' : 'title'

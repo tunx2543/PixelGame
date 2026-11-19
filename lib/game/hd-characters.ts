@@ -1,4 +1,5 @@
 import type { MonsterSprite, WeaponType } from './data'
+import { isMeadowMonsterArchetype, renderMeadowMonster } from './hd-meadow-monsters'
 import type { MountModelSpec, PetModelSpec, MonsterModelArchetype } from './models-2d'
 import type { Dir, HumanColors, SpriteAction } from './sprites'
 
@@ -1273,6 +1274,11 @@ export function renderHdMonsterSprite(
 
   ctx.strokeStyle = HD_INK
   ctx.lineWidth = 3.2
+
+  if (isMeadowMonsterArchetype(archetype) && renderMeadowMonster(ctx, archetype, W, H, dir, action, f)) {
+    ctx.restore()
+    return c
+  }
 
   if (archetype === 'slime' || archetype === 'slime_blue' || archetype === 'pink_slime') {
     const rX = W * 0.34 * squashX

@@ -498,11 +498,7 @@ export function buildTilePropDrawable(
         if (img) {
           const dw = 20
           const dh = Math.round(dw * (img.height / img.width))
-          ctx.save()
-          ctx.imageSmoothingEnabled = true
-          ctx.imageSmoothingQuality = 'high'
           ctx.drawImage(img, cx - dw / 2, baseY - dh + 2, dw, dh)
-          ctx.restore()
         } else {
           ctx.fillStyle = '#2d7a36'
           ctx.beginPath()
@@ -522,11 +518,7 @@ export function buildTilePropDrawable(
         if (img) {
           const dw = 18
           const dh = Math.round(dw * (img.height / img.width))
-          ctx.save()
-          ctx.imageSmoothingEnabled = true
-          ctx.imageSmoothingQuality = 'high'
           ctx.drawImage(img, cx - dw / 2, baseY - dh + 1, dw, dh)
-          ctx.restore()
         } else {
           ctx.fillStyle = '#9c6644'
           ctx.strokeStyle = '#2d1c15'
@@ -547,11 +539,7 @@ export function buildTilePropDrawable(
         if (img) {
           const dh = 24
           const dw = Math.round(dh * (img.width / img.height))
-          ctx.save()
-          ctx.imageSmoothingEnabled = true
-          ctx.imageSmoothingQuality = 'high'
           ctx.drawImage(img, cx - dw / 2, baseY - dh + 2, dw, dh)
-          ctx.restore()
         } else {
           ctx.fillStyle = '#8b5a34'
           ctx.fillRect(cx - 1.5, baseY - 12, 3, 12)
@@ -656,18 +644,14 @@ export function drawHdMapObject(
     const dh = spec.targetH
     const dw = Math.round(dh * (img.width / img.height))
     drawSoftShadow(ctx, ox, oy, Math.min(18, dw * 0.42), 4.5, 0.25)
-    ctx.save()
-    ctx.imageSmoothingEnabled = true
-    ctx.imageSmoothingQuality = 'high'
     ctx.drawImage(img, ox - dw / 2, oy - dh + 3, dw, dh)
-    ctx.restore()
     return
   }
 
   // Hand-drawn HD Canvas2D renderings for biome-specific objects not in the Town sheet
   ctx.save()
   ctx.imageSmoothingEnabled = true
-  ctx.imageSmoothingQuality = 'high'
+  ctx.imageSmoothingQuality = 'medium'
   switch (obj.kind) {
     case 'sakura_tree': {
       drawSoftShadow(ctx, ox, oy + 1, 18, 6, 0.28)

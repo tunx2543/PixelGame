@@ -7,6 +7,11 @@ export interface BiomeMonsterSeed {
   color: string
   boss?: boolean
   levelOffset?: number
+  speed?: number
+  aggro?: number
+  hpMult?: number
+  atkMult?: number
+  defMult?: number
   drops?: { itemId: string; chance: number }[]
 }
 
@@ -73,10 +78,10 @@ function defaultDropsForBiome(mapId: string, isBoss: boolean): { itemId: string;
 function buildBiomeMonsterDef(mapId: string, baseLevel: number, index: number, seed: BiomeMonsterSeed): MonsterDef {
   const isBoss = Boolean(seed.boss)
   const level = Math.max(1, baseLevel + (seed.levelOffset ?? Math.floor(index * 0.25)) + (isBoss ? 4 : 0))
-  const hpBase = Math.round((24 + Math.pow(level, 1.88) * 2.8) * (isBoss ? 5.2 : 1))
-  const atk = Math.round((5 + level * 4.4) * (isBoss ? 1.45 : 1))
-  const def = Math.round((1 + level * 1.45) * (isBoss ? 1.5 : 1))
-  const exp = Math.round((7 + Math.pow(level, 1.55) * 2.2) * (isBoss ? 4.8 : 1))
+  const hpBase = Math.round((24 + Math.pow(level, 1.88) * 2.8) * (isBoss ? 5.2 : 1) * (seed.hpMult ?? 1))
+  const atk = Math.round((5 + level * 4.4) * (isBoss ? 1.45 : 1) * (seed.atkMult ?? 1))
+  const def = Math.round((1 + level * 1.45) * (isBoss ? 1.5 : 1) * (seed.defMult ?? 1))
+  const exp = Math.round((7 + Math.pow(level, 1.55) * 2.2) * (isBoss ? 4.8 : 1) * Math.max(1, ((seed.hpMult ?? 1) + (seed.atkMult ?? 1)) * 0.5))
   const goldMin = Math.max(2, Math.round(level * (isBoss ? 22 : 2.6)))
   const goldMax = Math.max(goldMin + 2, Math.round(goldMin * 2.0))
 
@@ -89,8 +94,8 @@ function buildBiomeMonsterDef(mapId: string, baseLevel: number, index: number, s
     def,
     exp,
     gold: [goldMin, goldMax],
-    speed: seed.sprite === 'golem' || seed.sprite === 'earth_golem' ? 30 : seed.sprite === 'bat' ? 50 : 38,
-    aggro: isBoss ? 150 : level <= 6 ? 45 : 105,
+    speed: seed.speed ?? (seed.sprite === 'golem' || seed.sprite === 'earth_golem' ? 30 : seed.sprite === 'bat' ? 50 : 38),
+    aggro: seed.aggro ?? (isBoss ? 150 : level <= 6 ? 45 : 105),
     sprite: seed.sprite,
     color: seed.color,
     boss: isBoss || undefined,
@@ -99,30 +104,162 @@ function buildBiomeMonsterDef(mapId: string, baseLevel: number, index: number, s
 }
 
 /**
- * 15 Biome Roster Tables matching 00-overview_b403ad0d.png (Total = 288 monsters).
+ * 15 Biome Roster Tables matching 00-overview_b403ad0d.png & detail sheets (Total = 288 monsters).
  * Existing monster IDs keep their legacy definitions from data.ts; all new IDs are generated cleanly
  * and automatically pick up custom spritesheets once placed under /public/assets/hd/monsters/<id>/sheet.png.
  */
 export const BIOME_CATALOG_SPECS: BiomeMonsterCatalogSpec[] = [
-  // 1. ทุ่งหญ้า (meadow · 13)
+  // 1. ทุ่งหญ้า (meadow · 13 ตัว — มอน 13 · บอส 0 ตาม 01-meadow_0b089b02.png)
   {
     mapId: 'meadow',
     biomeName: 'ทุ่งหญ้า',
     baseLevel: 1,
     entries: [
-      { id: 'meadow_caterpillar', name: 'หนอนใบไม้', sprite: 'slime', color: '#84cc16', levelOffset: 0 },
-      { id: 'meadow_chick_puff', name: 'ลูกเจี๊ยบปุยเมฆ', sprite: 'rabbit', color: '#fef3c7', levelOffset: 1 },
-      { id: 'meadow_beetle', name: 'ด้วงทุ่งหญ้า', sprite: 'spider', color: '#78350f', levelOffset: 2 },
-      { id: 'pink_slime', name: 'สไลม์ชมพู', sprite: 'slime', color: '#ff8fab', levelOffset: 3 },
-      { id: 'slime', name: 'สไลม์เขียว', sprite: 'slime', color: '#57cc99', levelOffset: 0 },
-      { id: 'meadow_cocoon', name: 'ดักแด้พฤกษา', sprite: 'slime', color: '#a16207', levelOffset: 4 },
-      { id: 'meadow_spotted_egg', name: 'ไข่ปริศนาลายจุด', sprite: 'slime', color: '#a855f7', levelOffset: 5 },
-      { id: 'meadow_flower_sprite', name: 'ภูตบุปผาแดง', sprite: 'mushroom', color: '#ef4444', levelOffset: 5 },
-      { id: 'mushroom', name: 'เห็ดพิษ', sprite: 'mushroom', color: '#e76f51', levelOffset: 5 },
-      { id: 'rabbit', name: 'กระต่ายป่า', sprite: 'rabbit', color: '#e9d8a6', levelOffset: 7 },
-      { id: 'meadow_stag_knight', name: 'อัศวินด้วงคราม', sprite: 'goblin', color: '#3b82f6', levelOffset: 7 },
-      { id: 'meadow_hare_scout', name: 'กระต่ายนักสู้', sprite: 'rabbit', color: '#d97706', levelOffset: 8 },
-      { id: 'meadow_moss_spirit', name: 'ภูตมอสสายลม', sprite: 'slime', color: '#34d399', levelOffset: 9 },
+      // เล็ก · ★1
+      {
+        id: 'meadow_larva',
+        name: 'หนอนน้อย (Larva)',
+        sprite: 'slime',
+        color: '#57a79a',
+        levelOffset: 0,
+        speed: 26,
+        aggro: 30,
+        drops: [{ itemId: 'herb_green', chance: 0.4 }, { itemId: 'torn_cloth', chance: 0.3 }, { itemId: 'red_potion', chance: 0.1 }],
+      },
+      {
+        id: 'meadow_fuzzfly',
+        name: 'ผีเสื้อขนปุย (Fuzzfly)',
+        sprite: 'bat',
+        color: '#f5cbb3',
+        levelOffset: 1,
+        speed: 50,
+        aggro: 35,
+        hpMult: 0.9,
+        drops: [{ itemId: 'herb_green', chance: 0.42 }, { itemId: 'red_potion', chance: 0.12 }, { itemId: 'enhance_stone', chance: 0.03 }],
+      },
+      {
+        id: 'meadow_beetle',
+        name: 'ด้วงเขา (Beetle)',
+        sprite: 'spider',
+        color: '#6b2748',
+        levelOffset: 1,
+        speed: 32,
+        aggro: 40,
+        defMult: 1.15,
+        drops: [{ itemId: 'monster_scrap', chance: 0.45 }, { itemId: 'ore_iron', chance: 0.15 }, { itemId: 'red_potion', chance: 0.1 }],
+      },
+      {
+        id: 'meadow_blob',
+        name: 'ก้อนเมือก (Blob)',
+        sprite: 'slime',
+        color: '#f28489',
+        levelOffset: 2,
+        speed: 28,
+        aggro: 35,
+        drops: [{ itemId: 'slime_gel', chance: 0.55 }, { itemId: 'red_potion', chance: 0.12 }],
+      },
+      {
+        id: 'meadow_blob_drop',
+        name: 'หยดเมือก (Blob Drop)',
+        sprite: 'slime',
+        color: '#f5a957',
+        levelOffset: 2,
+        speed: 30,
+        aggro: 40,
+        atkMult: 1.1,
+        drops: [{ itemId: 'slime_gel', chance: 0.55 }, { itemId: 'red_potion', chance: 0.12 }],
+      },
+      {
+        id: 'meadow_cocoon',
+        name: 'ดักแด้ (Cocoon)',
+        sprite: 'slime',
+        color: '#6d4c5c',
+        levelOffset: 3,
+        speed: 10,
+        aggro: 0, // เฉื่อย — ไม่โจมตีก่อน
+        defMult: 1.25,
+        drops: [{ itemId: 'torn_cloth', chance: 0.55 }, { itemId: 'herb_green', chance: 0.35 }, { itemId: 'enhance_stone', chance: 0.04 }],
+      },
+      // กลาง · ★1
+      {
+        id: 'meadow_beetle_egg',
+        name: 'ไข่ด้วง (Beetle Egg)',
+        sprite: 'slime',
+        color: '#a0486a',
+        levelOffset: 3,
+        speed: 8,
+        aggro: 0, // เฉื่อย — ไม่โจมตีก่อน
+        hpMult: 1.2,
+        defMult: 1.3,
+        drops: [{ itemId: 'monster_scrap', chance: 0.45 }, { itemId: 'enhance_stone', chance: 0.05 }, { itemId: 'red_potion', chance: 0.12 }],
+      },
+      {
+        id: 'meadow_bloomlet',
+        name: 'ดอกไม้จิ๋ว (Bloomlet)',
+        sprite: 'mushroom',
+        color: '#b92b3a',
+        levelOffset: 4,
+        speed: 28,
+        aggro: 45,
+        drops: [{ itemId: 'herb_green', chance: 0.55 }, { itemId: 'red_potion', chance: 0.14 }],
+      },
+      {
+        id: 'meadow_capling',
+        name: 'เห็ดน้อย (Capling)',
+        sprite: 'mushroom',
+        color: '#9c7bb8',
+        levelOffset: 4,
+        speed: 32,
+        aggro: 50,
+        drops: [{ itemId: 'mushroom_cap', chance: 0.55 }, { itemId: 'blue_potion', chance: 0.1 }, { itemId: 'enhance_stone', chance: 0.04 }],
+      },
+      {
+        id: 'meadow_hopper',
+        name: 'กระต่ายน้อย (Hopper)',
+        sprite: 'rabbit',
+        color: '#f8f6fb',
+        levelOffset: 5,
+        speed: 52,
+        aggro: 45,
+        drops: [{ itemId: 'herb_green', chance: 0.4 }, { itemId: 'red_potion', chance: 0.18 }, { itemId: 'enhance_stone', chance: 0.04 }],
+      },
+      {
+        id: 'meadow_fiddlehop',
+        name: 'จิ้งหรีดนักดนตรี (Fiddlehop)',
+        sprite: 'goblin',
+        color: '#536b8e',
+        levelOffset: 6,
+        speed: 36,
+        aggro: 55,
+        atkMult: 1.12,
+        drops: [{ itemId: 'monster_scrap', chance: 0.5 }, { itemId: 'blue_potion', chance: 0.14 }, { itemId: 'enhance_stone', chance: 0.05 }],
+      },
+      // ใหญ่ · ★2 (ไม่ใช่บอส)
+      {
+        id: 'meadow_big_hopper',
+        name: 'กระต่ายยักษ์ (Big Hopper)',
+        sprite: 'rabbit',
+        color: '#d89238',
+        levelOffset: 7,
+        speed: 48,
+        aggro: 115, // ตีก่อน
+        hpMult: 1.45,
+        atkMult: 1.35,
+        drops: [{ itemId: 'cracked_claw', chance: 0.5 }, { itemId: 'orange_potion', chance: 0.15 }, { itemId: 'enhance_stone', chance: 0.08 }],
+      },
+      {
+        id: 'meadow_dewmother',
+        name: 'มารดาหยดน้ำค้าง (Dewmother)',
+        sprite: 'slime',
+        color: '#82d6be',
+        levelOffset: 8,
+        speed: 24,
+        aggro: 110, // แทงก์ + ตีก่อน
+        hpMult: 1.85,
+        defMult: 1.65,
+        atkMult: 1.15,
+        drops: [{ itemId: 'slime_gel', chance: 0.75 }, { itemId: 'blue_potion', chance: 0.25 }, { itemId: 'enhance_stone', chance: 0.1 }],
+      },
     ],
   },
 

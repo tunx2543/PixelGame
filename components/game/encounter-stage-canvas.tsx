@@ -9,7 +9,14 @@ import type { FloatingDamagePopup } from '@/lib/game/floating-damage'
 import { registerCombatAudioHandler } from '@/lib/game/combat-audio'
 import { computeShakeFrame, type ScreenShakeEvent } from '@/lib/game/screen-shake'
 import { getMonsterModelSpec } from '@/lib/game/models-2d'
-import { humanSprite, jobHumanColors, monsterSprite, petSprite, type SpriteAction } from '@/lib/game/sprites'
+import {
+  drawResolvedDrawable,
+  jobHumanColors,
+  petSprite,
+  resolveHumanDrawable,
+  resolveMonsterDrawable,
+  type SpriteAction,
+} from '@/lib/game/sprites'
 import { getActivePetBonuses } from '@/lib/game/systems'
 import { drawRebirthAura, drawStageSkillEffect } from '@/lib/game/vfx-canvas'
 
@@ -306,7 +313,7 @@ export function EncounterStageCanvas({
                 ? -1
                 : Math.floor(t * (ph === 'FIGHTING' ? 3.2 : 2.2)) % 4
           const styledJobColors = jobHumanColors(job.id, job.colors, false)
-          const heroSprite = humanSprite(
+          const heroDrawable = resolveHumanDrawable(
             styledJobColors,
             'right',
             heroFrame,
@@ -316,14 +323,14 @@ export function EncounterStageCanvas({
             heroAction,
             heroAttackFrame,
           )
-          const isGmEpic = heroSprite.dataset?.gmReady === '1'
-          const heroHd = heroSprite.dataset?.hdScale ? Number(heroSprite.dataset.hdScale) : 1
+          const isGmEpic = Boolean(heroDrawable.gmReady)
+          const heroHd = heroDrawable.hdScale
           const heroTargetHeight = isGmEpic ? 112 : 82
           const heroScale = isGmEpic
-            ? Math.max(1.5, Math.min(3.0, heroTargetHeight / Math.max(1, heroSprite.height)))
-            : heroTargetHeight / Math.max(1, heroSprite.height)
-          const hw = heroSprite.width * heroScale
-          const hh = heroSprite.height * heroScale
+            ? Math.max(1.5, Math.min(3.0, heroTargetHeight / Math.max(1, heroDrawable.height)))
+            : heroTargetHeight / Math.max(1, heroDrawable.height)
+          const hw = heroDrawable.width * heroScale
+          const hh = heroDrawable.height * heroScale
           const heroFootOffset = isGmEpic ? 9 * heroScale : 2 * heroScale * heroHd
 
           // Hero shadow
@@ -349,7 +356,7 @@ export function EncounterStageCanvas({
           if (ph === 'DEFEAT') ctx.globalAlpha = 0.45
           else if (isPlayerHurt) ctx.globalAlpha = 0.65
           ctx.translate(heroX + heroLunge + heroShake, floorY)
-          ctx.drawImage(heroSprite, Math.round(-hw / 2), Math.round(-hh + heroFootOffset), hw, hh)
+          drawResolvedDrawable(ctx, heroDrawable, Math.round(-hw / 2), Math.round(-hh + heroFootOffset), hw, hh)
           ctx.restore()
 
           if ((s.rebirthCount ?? 0) > 0 && ph !== 'DEFEAT') {
@@ -386,7 +393,9 @@ export function EncounterStageCanvas({
             ctx.ellipse(petX, floorY + 1, 14, 4.5, 0, 0, Math.PI * 2)
             ctx.fill()
 
-            ctx.drawImage(pImg, Math.round(petX - pw / 2), Math.round(petY - phPx + 6), pw, phPx)
+            if (pImg.width > 0 && pImg.height > 0) {
+              ctx.drawImage(pImg, Math.round(petX - pw / 2), Math.round(petY - phPx + 6), pw, phPx)
+            }
 
             if (petAtk > 0 && petBoltAge >= 0 && petBoltAge < 1 && mon) {
               const bx = petX + (enemyX - petX) * petBoltAge
@@ -424,7 +433,7 @@ export function EncounterStageCanvas({
                 : flying
                   ? Math.floor(t * 8) % 6
                   : Math.floor(t * 2.8) % 4
-            const mImg = monsterSprite(
+            const mDrawable = resolveMonsterDrawable(
               mon.def.sprite,
               mon.def.color,
               mFrame,
@@ -436,9 +445,9 @@ export function EncounterStageCanvas({
             )
 
             const targetHeight = mon.rarity === 'boss' ? 94 : mon.rarity === 'elite' ? 82 : 74
-            const baseMonsterScale = targetHeight / Math.max(1, mImg.height)
-            const mw = mImg.width * baseMonsterScale
-            const mh = mImg.height * baseMonsterScale
+            const baseMonsterScale = targetHeight / Math.max(1, mDrawable.height)
+            const mw = mDrawable.width * baseMonsterScale
+            const mh = mDrawable.height * baseMonsterScale
 
             // Shadow
             ctx.fillStyle = 'rgba(0,0,0,0.38)'
@@ -469,8 +478,8 @@ export function EncounterStageCanvas({
               ctx.rotate(0.45)
               ctx.scale(1.15, 0.45)
             }
-            const mHd = mImg.dataset?.hdScale ? Number(mImg.dataset.hdScale) : 1
-            ctx.drawImage(mImg, Math.round(-mw / 2), Math.round(-mh + 2 * baseMonsterScale * mHd), mw, mh)
+            const mHd = mDrawable.hdScale
+            drawResolvedDrawable(ctx, mDrawable, Math.round(-mw / 2), Math.round(-mh + 2 * baseMonsterScale * mHd), mw, mh)
 
             if (isEnemyHurt && !isDead) {
               ctx.globalAlpha = 0.55

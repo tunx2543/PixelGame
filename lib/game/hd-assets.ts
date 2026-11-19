@@ -72,13 +72,57 @@ export const HD_ASSET_PATHS = {
 
 export type HdAssetKey = keyof typeof HD_ASSET_PATHS
 
+const TILE_ASSET_KEYS = new Set<HdAssetKey>([
+  'grassPlain',
+  'grassFlower1',
+  'grassFlower2',
+  'grassFlower3',
+  'dirtGrass',
+  'dirtSand',
+  'cobbleGrey',
+  'cobbleTan',
+  'tileTan',
+  'slateStone',
+  'water1',
+  'water2',
+  'bridgeWood',
+  'bridgeStone',
+])
+
+const TILE_ASSET_PATHS = new Set<string>(
+  Array.from(TILE_ASSET_KEYS, (k) => HD_ASSET_PATHS[k]),
+)
+
 const imgCache = new Map<string, HTMLImageElement>()
 const listeners = new Set<() => void>()
+const settledTilePaths = new Set<string>()
 let loadVersion = 0
+let tileLoadVersion = 0
+let tileFlushTimer: ReturnType<typeof setTimeout> | null = null
 let preloaded = false
+let tilesPreloaded = false
 
-function notifyLoaded() {
+function flushTileVersion() {
+  if (tileFlushTimer !== null) {
+    clearTimeout(tileFlushTimer)
+    tileFlushTimer = null
+  }
+  tileLoadVersion++
+}
+
+function notifyLoaded(src: string) {
   loadVersion++
+  if (TILE_ASSET_PATHS.has(src)) {
+    settledTilePaths.add(src)
+    if (settledTilePaths.size >= TILE_ASSET_PATHS.size) {
+      flushTileVersion()
+    } else if (typeof setTimeout !== 'undefined') {
+      if (tileFlushTimer !== null) clearTimeout(tileFlushTimer)
+      tileFlushTimer = setTimeout(flushTileVersion, 120)
+    } else {
+      tileLoadVersion++
+    }
+  }
   for (const cb of listeners) {
     try {
       cb()
@@ -88,8 +132,21 @@ function notifyLoaded() {
   }
 }
 
+function notifyTileError(src: string) {
+  if (TILE_ASSET_PATHS.has(src)) {
+    settledTilePaths.add(src)
+    if (settledTilePaths.size >= TILE_ASSET_PATHS.size) {
+      flushTileVersion()
+    }
+  }
+}
+
 export function getHdLoadVersion(): number {
   return loadVersion
+}
+
+export function getHdTileLoadVersion(): number {
+  return tileLoadVersion
 }
 
 export function subscribeHdAssets(cb: () => void): () => void {
@@ -103,16 +160,26 @@ export function getHdImage(keyOrPath: HdAssetKey | string): HTMLImageElement | n
   let img = imgCache.get(src)
   if (!img) {
     img = new Image()
-    img.onload = () => notifyLoaded()
+    img.onload = () => notifyLoaded(src)
+    img.onerror = () => notifyTileError(src)
     img.src = src
     imgCache.set(src, img)
   }
   return img.complete && img.naturalWidth > 0 ? img : null
 }
 
+export function preloadTileAssets(): void {
+  if (tilesPreloaded || typeof Image === 'undefined') return
+  tilesPreloaded = true
+  for (const path of TILE_ASSET_PATHS) {
+    getHdImage(path)
+  }
+}
+
 export function preloadHdAssets(): void {
   if (preloaded || typeof Image === 'undefined') return
   preloaded = true
+  preloadTileAssets()
   for (const path of Object.values(HD_ASSET_PATHS)) {
     getHdImage(path)
   }

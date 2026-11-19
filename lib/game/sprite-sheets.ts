@@ -22,7 +22,6 @@ export type MonsterSheetId =
   | 'slime_green'
   | 'slime_pink'
   | 'mushroom'
-  | 'rabbit'
   | 'boss_wolf'
   | 'wolf'
   | 'goblin'
@@ -162,7 +161,6 @@ export const MONSTER_SPRITE_SHEETS: Record<MonsterSheetId, SpriteSheetSpec> = {
   slime_green: makeMonsterSheetSpec('slime_green', 112, 104, 94, 26),
   slime_pink: makeMonsterSheetSpec('slime_pink', 112, 104, 94, 26),
   mushroom: makeMonsterSheetSpec('mushroom', 128, 104, 94, 26),
-  rabbit: makeMonsterSheetSpec('rabbit', 112, 104, 94, 26),
   boss_wolf: makeMonsterSheetSpec('boss_wolf', 136, 128, 118, 32),
   wolf: makeMonsterSheetSpec('wolf', 120, 96, 88, 24),
   goblin: makeMonsterSheetSpec('goblin', 112, 104, 96, 26),
@@ -250,11 +248,26 @@ export const JOB_TO_HERO_SHEET: Record<string, HeroSheetId> = {
  * 3. Point MONSTER_ID_TO_SHEET[<id>] = <id>
  */
 export const MONSTER_ID_TO_SHEET: Record<string, MonsterSheetId | null> = {
+  // Meadow 13 bespoke procedural HD animated models
+  meadow_larva: null,
+  meadow_fuzzfly: null,
+  meadow_beetle: null,
+  meadow_blob: null,
+  meadow_blob_drop: null,
+  meadow_cocoon: null,
+  meadow_beetle_egg: null,
+  meadow_bloomlet: null,
+  meadow_capling: null,
+  meadow_hopper: null,
+  meadow_fiddlehop: null,
+  meadow_big_hopper: null,
+  meadow_dewmother: null,
+
   slime: 'slime_green',
   slime_blue: 'slime_blue',
   pink_slime: 'slime_pink',
   mushroom: 'mushroom',
-  rabbit: 'rabbit',
+  rabbit: null,
   boss_wolf: 'boss_wolf',
   wolf: 'wolf',
   goblin: 'goblin',
@@ -335,6 +348,20 @@ export function resolveMonsterSheetSpec(
   return null
 }
 
+export interface SheetFrameDrawSpec {
+  image: HTMLImageElement
+  sx: number
+  sy: number
+  sw: number
+  sh: number
+  flipX: boolean
+  hdScale: number
+  sheetId: string
+  anchorX: number
+  anchorY: number
+}
+
+const MAX_SLICED_FRAMES = 48
 const sheetImageCache = new Map<string, HTMLImageElement>()
 const slicedFrameCache = new Map<string, HTMLCanvasElement>()
 let sheetsPreloaded = false
@@ -353,83 +380,67 @@ function getSheetImage(sheetPath: string): HTMLImageElement | null {
 export function preloadAllSpriteSheets(): void {
   if (sheetsPreloaded || typeof Image === 'undefined') return
   sheetsPreloaded = true
-  for (const spec of Object.values(HERO_SPRITE_SHEETS)) {
-    getSheetImage(spec.sheetPath)
-  }
-  for (const spec of Object.values(MONSTER_SPRITE_SHEETS)) {
-    getSheetImage(spec.sheetPath)
-  }
   for (const spec of Object.values(NPC_SPRITE_SHEETS)) {
     getSheetImage(spec.sheetPath)
   }
 }
 
-export function getNpcSheetFrame(npcId: string, frame: number): HTMLCanvasElement | null {
-  const spec = NPC_SPRITE_SHEETS[npcId as NpcSheetId]
-  if (!spec) return null
-  return sliceSheetFrame(spec, 0, Math.abs(frame) % 4, false)
-}
-
-export function sliceSheetFrame(
+function buildFrameDrawSpec(
   spec: SpriteSheetSpec,
   row: number,
   col: number,
   flipX = false,
-): HTMLCanvasElement | null {
-  if (typeof document === 'undefined') return null
-  preloadAllSpriteSheets()
+): SheetFrameDrawSpec | null {
   const img = getSheetImage(spec.sheetPath)
   if (!img) return null
-
   const safeRow = Math.max(0, Math.min(spec.rows - 1, row))
   const safeCol = Math.max(0, Math.min(spec.cols - 1, col))
-  const key = `${spec.id}|${safeRow}|${safeCol}|${flipX ? 1 : 0}`
-  const existing = slicedFrameCache.get(key)
-  if (existing) return existing
-
-  const canvas = document.createElement('canvas')
-  canvas.width = spec.frameWidth
-  canvas.height = spec.frameHeight
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return null
-
-  const sx = safeCol * spec.frameWidth
-  const sy = safeRow * spec.frameHeight
-
-  ctx.save()
-  ctx.imageSmoothingEnabled = true
-  ctx.imageSmoothingQuality = 'high'
-  if (flipX) {
-    ctx.translate(spec.frameWidth, 0)
-    ctx.scale(-1, 1)
+  return {
+    image: img,
+    sx: safeCol * spec.frameWidth,
+    sy: safeRow * spec.frameHeight,
+    sw: spec.frameWidth,
+    sh: spec.frameHeight,
+    flipX,
+    hdScale: spec.hdScale,
+    sheetId: spec.id,
+    anchorX: spec.anchorX,
+    anchorY: spec.anchorY,
   }
-  ctx.drawImage(
-    img,
-    sx,
-    sy,
-    spec.frameWidth,
-    spec.frameHeight,
-    0,
-    0,
-    spec.frameWidth,
-    spec.frameHeight,
-  )
-  ctx.restore()
-
-  canvas.dataset.hdScale = String(spec.hdScale)
-  canvas.dataset.sheetId = spec.id
-  canvas.dataset.anchorX = String(spec.anchorX)
-  canvas.dataset.anchorY = String(spec.anchorY)
-  slicedFrameCache.set(key, canvas)
-  return canvas
 }
 
-export function getHeroSheetFrame(
+export function drawSheetFrameSpec(
+  ctx: CanvasRenderingContext2D,
+  spec: SheetFrameDrawSpec,
+  dx: number,
+  dy: number,
+  dw: number,
+  dh: number,
+): void {
+  if (!spec.image.complete || spec.image.naturalWidth <= 0) return
+  if (!spec.flipX) {
+    ctx.drawImage(spec.image, spec.sx, spec.sy, spec.sw, spec.sh, dx, dy, dw, dh)
+    return
+  }
+  ctx.save()
+  ctx.translate(dx + dw, dy)
+  ctx.scale(-1, 1)
+  ctx.drawImage(spec.image, spec.sx, spec.sy, spec.sw, spec.sh, 0, 0, dw, dh)
+  ctx.restore()
+}
+
+export function getNpcSheetFrameSpec(npcId: string, frame: number): SheetFrameDrawSpec | null {
+  const spec = NPC_SPRITE_SHEETS[npcId as NpcSheetId]
+  if (!spec) return null
+  return buildFrameDrawSpec(spec, 0, Math.abs(frame) % 4, false)
+}
+
+export function getHeroSheetFrameSpec(
   jobId: string | undefined,
   dir: Dir,
   action: SpriteAction,
   frame: number,
-): HTMLCanvasElement | null {
+): SheetFrameDrawSpec | null {
   const spec = resolveHeroSheetSpec(jobId)
   if (!spec) return null
 
@@ -454,7 +465,6 @@ export function getHeroSheetFrame(
   }
 
   const rowSpec = spec.actions[rowKey] ?? spec.actions.walk_down
-  // On idle, alternate calmly between frame 0 and 1 (or 0 on blink -1)
   const col =
     action === 'idle'
       ? frame < 0
@@ -464,16 +474,16 @@ export function getHeroSheetFrame(
           : 0
       : Math.abs(frame) % rowSpec.frames
 
-  return sliceSheetFrame(spec, rowSpec.row, col, flipX)
+  return buildFrameDrawSpec(spec, rowSpec.row, col, flipX)
 }
 
-export function getMonsterSheetFrame(
+export function getMonsterSheetFrameSpec(
   defId: string | undefined,
   spriteFallback: string | undefined,
   dir: Dir,
   action: SpriteAction,
   frame: number,
-): HTMLCanvasElement | null {
+): SheetFrameDrawSpec | null {
   const spec = resolveMonsterSheetSpec(defId, spriteFallback)
   if (!spec) return null
 
@@ -495,5 +505,122 @@ export function getMonsterSheetFrame(
       ? Math.abs(frame) % 2
       : Math.abs(frame) % rowSpec.frames
 
-  return sliceSheetFrame(spec, rowSpec.row, col, flipX)
+  return buildFrameDrawSpec(spec, rowSpec.row, col, flipX)
+}
+
+export function getNpcSheetFrame(npcId: string, frame: number): HTMLCanvasElement | null {
+  const spec = NPC_SPRITE_SHEETS[npcId as NpcSheetId]
+  if (!spec) return null
+  return sliceSheetFrame(spec, 0, Math.abs(frame) % 4, false)
+}
+
+export function sliceSheetFrame(
+  spec: SpriteSheetSpec,
+  row: number,
+  col: number,
+  flipX = false,
+): HTMLCanvasElement | null {
+  if (typeof document === 'undefined') return null
+  const img = getSheetImage(spec.sheetPath)
+  if (!img) return null
+
+  const safeRow = Math.max(0, Math.min(spec.rows - 1, row))
+  const safeCol = Math.max(0, Math.min(spec.cols - 1, col))
+  const key = `${spec.id}|${safeRow}|${safeCol}|${flipX ? 1 : 0}`
+  const existing = slicedFrameCache.get(key)
+  if (existing) {
+    if (existing.width > 0 && existing.height > 0) {
+      slicedFrameCache.delete(key)
+      slicedFrameCache.set(key, existing)
+      return existing
+    }
+    slicedFrameCache.delete(key)
+  }
+
+  const canvas = document.createElement('canvas')
+  canvas.width = spec.frameWidth
+  canvas.height = spec.frameHeight
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+
+  const sx = safeCol * spec.frameWidth
+  const sy = safeRow * spec.frameHeight
+
+  ctx.save()
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'medium'
+  if (flipX) {
+    ctx.translate(spec.frameWidth, 0)
+    ctx.scale(-1, 1)
+  }
+  ctx.drawImage(
+    img,
+    sx,
+    sy,
+    spec.frameWidth,
+    spec.frameHeight,
+    0,
+    0,
+    spec.frameWidth,
+    spec.frameHeight,
+  )
+  ctx.restore()
+
+  canvas.dataset.hdScale = String(spec.hdScale)
+  canvas.dataset.sheetId = spec.id
+  canvas.dataset.anchorX = String(spec.anchorX)
+  canvas.dataset.anchorY = String(spec.anchorY)
+  slicedFrameCache.set(key, canvas)
+  while (slicedFrameCache.size > MAX_SLICED_FRAMES) {
+    const oldestKey = slicedFrameCache.keys().next().value
+    if (oldestKey === undefined) break
+    const oldest = slicedFrameCache.get(oldestKey)
+    slicedFrameCache.delete(oldestKey)
+    if (oldest) {
+      try {
+        oldest.width = 0
+        oldest.height = 0
+      } catch {
+        // ignore
+      }
+    }
+  }
+  return canvas
+}
+
+export function getHeroSheetFrame(
+  jobId: string | undefined,
+  dir: Dir,
+  action: SpriteAction,
+  frame: number,
+): HTMLCanvasElement | null {
+  const frameSpec = getHeroSheetFrameSpec(jobId, dir, action, frame)
+  if (!frameSpec) return null
+  const spec = resolveHeroSheetSpec(jobId)
+  if (!spec) return null
+  return sliceSheetFrame(
+    spec,
+    Math.round(frameSpec.sy / spec.frameHeight),
+    Math.round(frameSpec.sx / spec.frameWidth),
+    frameSpec.flipX,
+  )
+}
+
+export function getMonsterSheetFrame(
+  defId: string | undefined,
+  spriteFallback: string | undefined,
+  dir: Dir,
+  action: SpriteAction,
+  frame: number,
+): HTMLCanvasElement | null {
+  const frameSpec = getMonsterSheetFrameSpec(defId, spriteFallback, dir, action, frame)
+  if (!frameSpec) return null
+  const spec = resolveMonsterSheetSpec(defId, spriteFallback)
+  if (!spec) return null
+  return sliceSheetFrame(
+    spec,
+    Math.round(frameSpec.sy / spec.frameHeight),
+    Math.round(frameSpec.sx / spec.frameWidth),
+    frameSpec.flipX,
+  )
 }

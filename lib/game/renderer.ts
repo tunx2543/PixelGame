@@ -12,16 +12,17 @@ import { T, TILE, type PortalDirection, type PortalGateStyle } from './maps'
 import { getHdImage } from './hd-assets'
 import { getMonsterModelSpec, getPetModelSpec } from './models-2d'
 import { buildTilePropDrawable, buildTownStructureDrawables, drawHdMapObject, type HdDepthDrawable } from './hd-props'
-import { LAYERED_PROP_TILES } from './hd-tiles'
+import { drawHdMapViewport, LAYERED_PROP_TILES } from './hd-tiles'
 import {
   type Dir,
-  humanSprite,
+  drawResolvedDrawable,
   jobHumanColors,
-  mapCanvas,
   mapObjectSprite,
-  monsterSprite,
   mountSprite,
   petSprite,
+  resolveHumanDrawable,
+  resolveMonsterDrawable,
+  resolveNpcDrawable,
   type SpriteAction,
 } from './sprites'
 import { getActivePetBonuses, getCombatPetDef } from './systems'
@@ -29,7 +30,6 @@ import { getActiveMountBonuses, getMountDef } from './mounts'
 import { TITLE_DEFS } from './rpg-systems'
 import { GATHERING_NODES, getCosmeticDef, getWorldTimePhase, sanitizeExtV2 } from './extended-systems'
 import { drawOverworldSkillEffect, drawRebirthAura } from './vfx-canvas'
-import { getNpcSheetFrame, preloadAllSpriteSheets } from './sprite-sheets'
 import { getFashionItemDef } from './premium/fashion-pet'
 import { getEffectiveVipBonuses, getVipTierDef } from './premium/vip'
 import { sanitizePremiumState } from './premium/wallet'
@@ -195,7 +195,6 @@ function monsterFacing(
 }
 
 export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dpr: number, font: string) {
-  preloadAllSpriteSheets()
   const p = game.p
   if (!p) return
   const map = currentMap()
@@ -222,25 +221,12 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   ctx.fillStyle = THEME_BG[map.theme]
   ctx.fillRect(0, 0, cw, ch)
   ctx.setTransform(s, 0, 0, s, -camX * s, -camY * s)
-  const mc = mapCanvas(map)
-  const hdScaleX = mc.width / mapW
-  const hdScaleY = mc.height / mapH
   const vx0 = Math.max(0, camX)
   const vy0 = Math.max(0, camY)
   const vx1 = Math.min(mapW, camX + viewW)
   const vy1 = Math.min(mapH, camY + viewH)
   if (vx1 > vx0 && vy1 > vy0) {
-    ctx.drawImage(
-      mc,
-      vx0 * hdScaleX,
-      vy0 * hdScaleY,
-      (vx1 - vx0) * hdScaleX,
-      (vy1 - vy0) * hdScaleY,
-      vx0,
-      vy0,
-      vx1 - vx0,
-      vy1 - vy0,
-    )
+    drawHdMapViewport(ctx, map, vx0, vy0, vx1, vy1)
   }
 
   const minTx = Math.max(0, Math.floor(camX / TILE) - 2)
@@ -463,12 +449,8 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       y: dir === 'north' ? baseY - 12 : baseY,
       draw: () => {
         shadow(ctx, gx, baseY - 1, Math.min(18, dw * 0.42))
-        if (gateImg) {
-          ctx.save()
-          ctx.imageSmoothingEnabled = true
-          ctx.imageSmoothingQuality = 'high'
+        if (gateImg && gateImg.naturalWidth > 0) {
           ctx.drawImage(gateImg, Math.round(gx - dw / 2), Math.round(baseY - dh + 2), dw, dh)
-          ctx.restore()
         } else {
           ctx.save()
           ctx.fillStyle = gate === 'crystalShrine' ? '#67e8f9' : '#c8956b'
@@ -482,9 +464,15 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     })
   }
 
+  const cullX0 = camX - 80
+  const cullX1 = camX + viewW + 80
+  const cullY0 = camY - 64
+  const cullY1 = camY + viewH + 96
+
   for (const n of map.npcs) {
     const fx = n.x * TILE
     const fy = n.y * TILE + 8
+    if (fx < cullX0 || fx > cullX1 || fy < cullY0 || fy > cullY1) continue
     const near = game.nearNpc?.id === n.id
     ents.push({
       y: fy,
@@ -494,12 +482,11 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         const scaleX = 1 - breath * 0.018
         const scaleY = 1 + breath * 0.022
         const idleF = Math.sin(t * 1.1 + fx) > 0.96 ? -1 : Math.floor(t * 2 + fx) % 4
-        const npcSheetImg = getNpcSheetFrame(n.id, Math.floor(t * 2.2 + fx) % 4)
-        const img = npcSheetImg ?? humanSprite(n.colors, 'down', idleF, null, '#ced4da', false, 'idle')
+        const drawable = resolveNpcDrawable(n.id, n.colors, idleF, Math.floor(t * 2.2 + fx) % 4)
         const targetNpcH = 34
-        const baseScale = targetNpcH / Math.max(1, img.height)
-        const drawW = img.width * baseScale
-        const drawH = img.height * baseScale
+        const baseScale = targetNpcH / Math.max(1, drawable.height)
+        const drawW = drawable.width * baseScale
+        const drawH = drawable.height * baseScale
         const nearHop = near ? -Math.abs(Math.sin(t * 5)) * 1.6 : 0
         shadow(ctx, fx, fy, 6.5 - breath * 0.3)
         if (near && !game.panel) {
@@ -517,7 +504,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         ctx.save()
         ctx.translate(fx, fy + nearHop)
         ctx.scale(scaleX, scaleY)
-        ctx.drawImage(img, Math.round(-drawW / 2), Math.round(-drawH + 2), drawW, drawH)
+        drawResolvedDrawable(ctx, drawable, Math.round(-drawW / 2), Math.round(-drawH + 2), drawW, drawH)
         ctx.restore()
       },
     })
@@ -526,6 +513,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   for (const m of game.monsters) {
     const dying = m.dead && (m.dyingT ?? 0) > 0
     if (m.dead && !dying) continue
+    if (m.x < cullX0 || m.x > cullX1 || m.y < cullY0 || m.y > cullY1) continue
     const def = MONSTERS[m.defId]
     if (!def) continue
     ents.push({
@@ -539,16 +527,16 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         const speedMul = m.provoked ? 1.3 : 1
         const attackProgress = attacking ? Math.max(0, Math.min(1, 1 - m.lunge / 0.3)) : 0
         const attackFrame = Math.min(3, Math.floor(attackProgress * 4))
-        const walkFrame = Math.floor(m.animT * 8.5 * speedMul) % 4
+        const walkFrame = Math.floor(m.animT * 8.5 * speedMul) % 6
         const idleFrame = Math.floor(m.animT * 2.8) % 4
         const frame = attacking ? attackFrame : walking ? walkFrame : idleFrame
 
-        const img = monsterSprite(def.sprite, def.color, frame, attacking, action, dir, attackFrame, def.id)
-        const hdFactor = img.dataset?.hdScale ? Number(img.dataset.hdScale) : 1
+        const drawable = resolveMonsterDrawable(def.sprite, def.color, frame, attacking, action, dir, attackFrame, def.id)
+        const hdFactor = drawable.hdScale
         const isHumanRigMob = mSpec.archetype === 'goblin' || mSpec.archetype === 'skeleton'
-        const scale = isHumanRigMob ? 31 / Math.max(1, img.height) : (def.boss ? 1.65 : 1.05) / hdFactor
-        const w = img.width * scale
-        const h = img.height * scale
+        const scale = isHumanRigMob ? 31 / Math.max(1, drawable.height) : (def.boss ? 1.65 : 1.05) / hdFactor
+        const w = drawable.width * scale
+        const h = drawable.height * scale
 
         if (dying) {
           const dieRatio = Math.max(0, Math.min(1, (m.dyingT ?? 0) / 0.55))
@@ -558,7 +546,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           ctx.translate(m.x, m.y)
           ctx.rotate((m.flip ? -1 : 1) * collapse * 1.15)
           ctx.scale(1 + collapse * 0.12, Math.max(0.25, dieRatio))
-          ctx.drawImage(img, -w / 2, -h + 2 * scale * hdFactor, w, h)
+          drawResolvedDrawable(ctx, drawable, -w / 2, -h + 2 * scale * hdFactor, w, h)
           ctx.restore()
           return
         }
@@ -586,7 +574,15 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           ctx.restore()
         }
 
-        const isBouncyMob = def.sprite === 'slime' || def.id === 'mushroom' || def.id === 'rabbit'
+        const isBouncyMob =
+          def.sprite === 'slime' ||
+          def.id === 'mushroom' ||
+          def.id === 'rabbit' ||
+          def.id.startsWith('meadow_blob') ||
+          def.id === 'meadow_capling' ||
+          def.id === 'meadow_hopper' ||
+          def.id === 'meadow_big_hopper' ||
+          def.id === 'meadow_dewmother'
         const walkCycle = m.animT * (isBouncyMob ? 8.5 : 9.2) * speedMul
         const walkBounce = walking
           ? -Math.abs(Math.sin(walkCycle)) * (isBouncyMob ? 2.8 : flying ? 1.4 : def.boss ? 2.0 : 1.7)
@@ -615,7 +611,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         )
         if (walkTilt !== 0) ctx.rotate(walkTilt)
         ctx.scale(walkSx, walkSy)
-        ctx.drawImage(img, -w / 2, -h + 2 * scale * hdFactor, w, h)
+        drawResolvedDrawable(ctx, drawable, -w / 2, -h + 2 * scale * hdFactor, w, h)
 
         if (m.hitFlash > 0) {
           ctx.globalAlpha = Math.min(0.55, m.hitFlash * 4)
@@ -642,6 +638,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     const networkBlend = other.receivedAt ? Math.min(1, (Date.now() - other.receivedAt) / 100) : 1
     const remoteX = (other.previousX ?? other.x) + (other.x - (other.previousX ?? other.x)) * networkBlend
     const remoteY = (other.previousY ?? other.y) + (other.y - (other.previousY ?? other.y)) * networkBlend
+    if (remoteX < cullX0 || remoteX > cullX1 || remoteY < cullY0 || remoteY > cullY1) continue
     const remoteJob = JOBS[normalizeJobId(other.jobId)]
     const remoteAttacking = other.attackAnim > 0
     const remoteAction: SpriteAction = remoteAttacking ? 'attack' : other.moving ? 'walk' : 'idle'
@@ -677,7 +674,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       ...(costumeFashion?.paletteOverride?.hat ? { hat: costumeFashion.paletteOverride.hat } : {}),
       ...(hairFashion?.paletteOverride?.hair ? { hair: hairFashion.paletteOverride.hair } : {}),
     }
-    const remoteImg = humanSprite(
+    const remoteDrawable = resolveHumanDrawable(
       styledColors,
       other.facing,
       remoteFrame,
@@ -687,10 +684,10 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       remoteAction,
       remoteAtkFrame,
     )
-    const isRemoteGmEpic = remoteImg.dataset?.gmReady === '1'
-    const remoteScale = (isRemoteGmEpic ? 50 : 33) / Math.max(1, remoteImg.height)
-    const remoteW = remoteImg.width * remoteScale
-    const remoteH = remoteImg.height * remoteScale
+    const isRemoteGmEpic = Boolean(remoteDrawable.gmReady)
+    const remoteScale = (isRemoteGmEpic ? 50 : 33) / Math.max(1, remoteDrawable.height)
+    const remoteW = remoteDrawable.width * remoteScale
+    const remoteH = remoteDrawable.height * remoteScale
     const remoteFootOffset = isRemoteGmEpic ? 10 : 2
 
     const isMounted = Boolean(activeMountDef)
@@ -755,16 +752,18 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
                 ? remoteAtkFrame
                 : Math.floor(t * 2.5) % 4
           const mImg = mountSprite(activeMountDef.id, other.facing, mAction, mFrame, remoteAtkFrame)
-          const mHd = mImg.dataset?.hdScale ? Number(mImg.dataset.hdScale) : 1
-          const mDrawW = (mImg.width * 0.78) / mHd
-          const mDrawH = (mImg.height * 0.78) / mHd
-          ctx.drawImage(
-            mImg,
-            remoteX + ox * 0.4 - mDrawW / 2,
-            remoteY + oy * 0.4 + mountHover - mDrawH + 3,
-            mDrawW,
-            mDrawH,
-          )
+          if (mImg.width > 0 && mImg.height > 0) {
+            const mHd = mImg.dataset?.hdScale ? Number(mImg.dataset.hdScale) : 1
+            const mDrawW = (mImg.width * 0.78) / mHd
+            const mDrawH = (mImg.height * 0.78) / mHd
+            ctx.drawImage(
+              mImg,
+              remoteX + ox * 0.4 - mDrawW / 2,
+              remoteY + oy * 0.4 + mountHover - mDrawH + 3,
+              mDrawW,
+              mDrawH,
+            )
+          }
         }
 
         const activeWingColors = equippedWing
@@ -812,8 +811,15 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
 
         ctx.save()
         ctx.translate(Math.round(remoteX + ox), Math.round(remoteY + oy + riderSeatY))
-        ctx.drawImage(remoteImg, Math.round(-remoteW / 2), Math.round(-remoteH + remoteFootOffset), remoteW, remoteH)
-        if (remoteAttacking && !isRemoteGmEpic && !remoteImg.dataset?.sheetId) {
+        drawResolvedDrawable(
+          ctx,
+          remoteDrawable,
+          Math.round(-remoteW / 2),
+          Math.round(-remoteH + remoteFootOffset),
+          remoteW,
+          remoteH,
+        )
+        if (remoteAttacking && !isRemoteGmEpic && !remoteDrawable.sheetId) {
           drawWeaponAttackOverlay(ctx, other.facing, remoteWeapon, atkProgress, remoteWeaponColor)
         }
         ctx.restore()
@@ -904,7 +910,9 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
             ctx.stroke()
             ctx.restore()
           }
-          ctx.drawImage(pImg, petX - pDrawW / 2, petY - pDrawH + 2, pDrawW, pDrawH)
+          if (pImg.width > 0 && pImg.height > 0) {
+            ctx.drawImage(pImg, petX - pDrawW / 2, petY - pDrawH + 2, pDrawW, pDrawH)
+          }
           ctx.restore()
         },
       })
@@ -967,7 +975,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       const weaponDrawColor = castingSkill
         ? game.skillVfxColor
         : (equippedWeaponSkin?.primaryColor ?? weapon?.color ?? job.colors.accent)
-      const img = humanSprite(
+      const drawable = resolveHumanDrawable(
         styledColors,
         game.facing,
         frame,
@@ -977,10 +985,10 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         action,
         attacking ? atkFrame : castingSkill ? skillFrame : undefined,
       )
-      const isGmEpic = img.dataset?.gmReady === '1'
-      const drawScale = (isGmEpic ? 50 : 33) / Math.max(1, img.height)
-      const drawW = img.width * drawScale
-      const drawH = img.height * drawScale
+      const isGmEpic = Boolean(drawable.gmReady)
+      const drawScale = (isGmEpic ? 50 : 33) / Math.max(1, drawable.height)
+      const drawW = drawable.width * drawScale
+      const drawH = drawable.height * drawScale
       const footOffset = isGmEpic ? 10 : 2
       const stride = game.moving ? Math.sin(game.walkT * 11 * Math.PI / 3) : 0
       const lungeDist = attacking ? Math.sin(atkProgress * Math.PI) * 3.5 : 0
@@ -1056,16 +1064,18 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
               ? atkFrame
               : Math.floor(t * 2.5) % 4
         const mImg = mountSprite(activeMount.mountId, game.facing, mAction, mFrame, atkFrame)
-        const mHd = mImg.dataset?.hdScale ? Number(mImg.dataset.hdScale) : 1
-        const mDrawW = (mImg.width * 0.78) / mHd
-        const mDrawH = (mImg.height * 0.78) / mHd
-        ctx.drawImage(
-          mImg,
-          p.x + ox * 0.4 - mDrawW / 2,
-          p.y + oy * 0.4 + mountHover - mDrawH + 3,
-          mDrawW,
-          mDrawH,
-        )
+        if (mImg.width > 0 && mImg.height > 0) {
+          const mHd = mImg.dataset?.hdScale ? Number(mImg.dataset.hdScale) : 1
+          const mDrawW = (mImg.width * 0.78) / mHd
+          const mDrawH = (mImg.height * 0.78) / mHd
+          ctx.drawImage(
+            mImg,
+            p.x + ox * 0.4 - mDrawW / 2,
+            p.y + oy * 0.4 + mountHover - mDrawH + 3,
+            mDrawW,
+            mDrawH,
+          )
+        }
       }
       const activeWingColors = equippedWing
         ? { primary: equippedWing.primaryColor, secondary: equippedWing.secondaryColor }
@@ -1107,8 +1117,8 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       }
       ctx.save()
       ctx.translate(Math.round(p.x + ox), Math.round(p.y + oy + riderSeatY))
-      ctx.drawImage(img, Math.round(-drawW / 2), Math.round(-drawH + footOffset), drawW, drawH)
-      if ((attacking || (castingSkill && !isGmEpic)) && !isGmEpic && !img.dataset?.sheetId) {
+      drawResolvedDrawable(ctx, drawable, Math.round(-drawW / 2), Math.round(-drawH + footOffset), drawW, drawH)
+      if ((attacking || (castingSkill && !isGmEpic)) && !isGmEpic && !drawable.sheetId) {
         drawWeaponAttackOverlay(
           ctx,
           game.facing,
@@ -1200,7 +1210,9 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           ctx.stroke()
           ctx.restore()
         }
-        ctx.drawImage(pImg, petX - pDrawW / 2, petY - pDrawH + 2, pDrawW, pDrawH)
+        if (pImg.width > 0 && pImg.height > 0) {
+          ctx.drawImage(pImg, petX - pDrawW / 2, petY - pDrawH + 2, pDrawW, pDrawH)
+        }
         ctx.restore()
       },
     })
@@ -1517,6 +1529,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
 
   for (const m of game.monsters) {
     if (m.dead) continue
+    if (m.x < cullX0 || m.x > cullX1 || m.y < cullY0 || m.y > cullY1) continue
     const def = MONSTERS[m.defId]
     if (!def) continue
     const mSpec = getMonsterModelSpec(def.id, def.sprite, def.color)

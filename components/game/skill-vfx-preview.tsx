@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { JOBS, normalizeJobId, type WeaponType } from '@/lib/game/data'
-import { humanSprite, jobHumanColors, monsterSprite } from '@/lib/game/sprites'
+import { drawResolvedDrawable, jobHumanColors, resolveHumanDrawable, resolveMonsterDrawable } from '@/lib/game/sprites'
 import { drawRebirthAura, drawStageSkillEffect } from '@/lib/game/vfx-canvas'
 import { getSkillVfxSpec, resolveRebirthAuraSpec } from '@/lib/game/vfx-specs'
 
@@ -91,7 +91,7 @@ export function SkillVfxPreview({
 
       ctx.clearRect(0, 0, w, h)
       ctx.imageSmoothingEnabled = true
-      ctx.imageSmoothingQuality = 'high'
+      ctx.imageSmoothingQuality = 'medium'
 
       // Dark astral dojo background
       const bgGrad = ctx.createLinearGradient(0, 0, 0, h)
@@ -143,7 +143,7 @@ export function SkillVfxPreview({
       const heroSkillFrame = isHeroCasting ? Math.min(3, Math.floor((vfxProgress / 0.78) * 4)) : 0
       const heroIdleFrame = Math.floor(timeSec * 3) % 4
       const lungeX = isHeroCasting ? Math.round(Math.sin((vfxProgress / 0.78) * Math.PI) * 8) : 0
-      const heroCanvas = humanSprite(
+      const heroDrawable = resolveHumanDrawable(
         jobHumanColors(job.id, job.colors, false),
         'right',
         isHeroCasting ? heroSkillFrame : heroIdleFrame,
@@ -152,13 +152,13 @@ export function SkillVfxPreview({
         false,
         isHeroCasting ? 'skill' : 'idle',
       )
-      const isGmEpic = heroCanvas.dataset?.gmReady === '1'
-      const heroHd = heroCanvas.dataset?.hdScale ? Number(heroCanvas.dataset.hdScale) : 1
+      const isGmEpic = Boolean(heroDrawable.gmReady)
+      const heroHd = heroDrawable.hdScale
       const heroScale = isGmEpic ? 2.35 : 1.95 / Math.max(1, heroHd)
-      const hw = Math.round(heroCanvas.width * heroScale)
-      const hh = Math.round(heroCanvas.height * heroScale)
+      const hw = Math.round(heroDrawable.width * heroScale)
+      const hh = Math.round(heroDrawable.height * heroScale)
       const footOffset = isGmEpic ? 18 : 4
-      ctx.drawImage(heroCanvas, Math.round(heroX + lungeX - hw / 2), Math.round(floorY - hh + footOffset), hw, hh)
+      drawResolvedDrawable(ctx, heroDrawable, Math.round(heroX + lungeX - hw / 2), Math.round(floorY - hh + footOffset), hw, hh)
 
       // Front layer of rebirth aura (floating crown halo / orbiting star shards / rising motes)
       if (activeRebirth > 0) {
@@ -176,7 +176,7 @@ export function SkillVfxPreview({
       // Target training slime on right
       const isHitFlash = vfxActive && vfxSpec?.style !== 'holy_heal' && vfxProgress > 0.2 && vfxProgress < 0.72
       const enemyKnockX = isHitFlash ? Math.round(Math.sin((vfxProgress - 0.2) * Math.PI * 2) * 4) : 0
-      const enemyCanvas = monsterSprite(
+      const enemyDrawable = resolveMonsterDrawable(
         'slime',
         isHitFlash ? '#f472b6' : '#8b5cf6',
         Math.floor(timeSec * 3.5) % 4,
@@ -186,10 +186,10 @@ export function SkillVfxPreview({
         0,
         'slime',
       )
-      const enemyHd = enemyCanvas.dataset?.hdScale ? Number(enemyCanvas.dataset.hdScale) : 1
-      const ew = Math.round((enemyCanvas.width * 2) / Math.max(1, enemyHd))
-      const eh = Math.round((enemyCanvas.height * 2) / Math.max(1, enemyHd))
-      ctx.drawImage(enemyCanvas, Math.round(enemyX + enemyKnockX - ew / 2), Math.round(floorY - eh + 3), ew, eh)
+      const enemyHd = enemyDrawable.hdScale
+      const ew = Math.round((enemyDrawable.width * 2) / Math.max(1, enemyHd))
+      const eh = Math.round((enemyDrawable.height * 2) / Math.max(1, enemyHd))
+      drawResolvedDrawable(ctx, enemyDrawable, Math.round(enemyX + enemyKnockX - ew / 2), Math.round(floorY - eh + 3), ew, eh)
 
       // Skill VFX burst
       if (vfxActive) {

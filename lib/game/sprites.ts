@@ -24,7 +24,15 @@ import {
   renderHdPetSprite,
 } from './hd-characters'
 import { buildHdMapCanvas } from './hd-tiles'
-import { getHeroSheetFrame, getMonsterSheetFrame } from './sprite-sheets'
+import {
+  drawSheetFrameSpec,
+  getHeroSheetFrame,
+  getHeroSheetFrameSpec,
+  getMonsterSheetFrame,
+  getMonsterSheetFrameSpec,
+  getNpcSheetFrameSpec,
+  type SheetFrameDrawSpec,
+} from './sprite-sheets'
 
 const OUTLINE = '#1a1423'
 
@@ -176,6 +184,8 @@ class PixelSurface {
   }
 }
 
+const MAX_SPRITE_CACHE = 160
+const MAX_GM_CACHE = 48
 const cache = new Map<string, HTMLCanvasElement>()
 const gmOutfitCache = new Map<string, HTMLImageElement>()
 const gmEpicImageCache = new Map<string, HTMLImageElement>()
@@ -183,6 +193,30 @@ const gmEpicFrameCache = new Map<string, HTMLCanvasElement>()
 const npcSpriteCache = new Map<string, HTMLImageElement>()
 const rebirthAuraCache = new Map<string, HTMLImageElement>()
 let gmEpicPreloaded = false
+
+function setBoundedCanvasCache(
+  target: Map<string, HTMLCanvasElement>,
+  key: string,
+  canvas: HTMLCanvasElement,
+  limit: number,
+) {
+  target.delete(key)
+  target.set(key, canvas)
+  while (target.size > limit) {
+    const oldestKey = target.keys().next().value
+    if (oldestKey === undefined) break
+    const oldest = target.get(oldestKey)
+    target.delete(oldestKey)
+    if (oldest) {
+      try {
+        oldest.width = 0
+        oldest.height = 0
+      } catch {
+        // ignore cleanup errors
+      }
+    }
+  }
+}
 
 function loadGmEpicImage(path: string): HTMLImageElement | null {
   if (typeof Image === 'undefined') return null
@@ -224,7 +258,14 @@ export function gmEpicSprite(
   const accentColor = skillColor ?? pose.secondaryAuraColor
   const key = `gm-epic|${pose.dir}|${pose.action}|${pose.frame}|${accentColor}`
   const cachedCanvas = gmEpicFrameCache.get(key)
-  if (cachedCanvas) return cachedCanvas
+  if (cachedCanvas) {
+    if (cachedCanvas.width > 0 && cachedCanvas.height > 0) {
+      gmEpicFrameCache.delete(key)
+      gmEpicFrameCache.set(key, cachedCanvas)
+      return cachedCanvas
+    }
+    gmEpicFrameCache.delete(key)
+  }
 
   const { c, ctx } = makeCanvas(GM_CANVAS_SIZE, GM_CANVAS_SIZE)
   const cx = Math.round(GM_CANVAS_SIZE / 2)
@@ -405,7 +446,7 @@ export function gmEpicSprite(
   }
 
   c.dataset.gmReady = '1'
-  gmEpicFrameCache.set(key, c)
+  setBoundedCanvasCache(gmEpicFrameCache, key, c, MAX_GM_CACHE)
   return c
 }
 
@@ -451,11 +492,154 @@ export function gmOutfitSprite(dir: Dir, animation: GmAnimation = 'idle'): HTMLI
 
 function cached(key: string, make: () => HTMLCanvasElement) {
   let c = cache.get(key)
-  if (!c) {
-    c = make()
+  if (c && c.width > 0 && c.height > 0) {
+    cache.delete(key)
     cache.set(key, c)
+    return c
   }
+  if (c) cache.delete(key)
+  c = make()
+  setBoundedCanvasCache(cache, key, c, MAX_SPRITE_CACHE)
   return c
+}
+
+export interface ResolvedDrawable {
+  width: number
+  height: number
+  hdScale: number
+  sheetId?: string
+  gmReady?: boolean
+  canvas?: HTMLCanvasElement
+  sheetSpec?: SheetFrameDrawSpec
+}
+
+export function canvasToResolvedDrawable(canvas: HTMLCanvasElement): ResolvedDrawable {
+  return {
+    width: canvas.width,
+    height: canvas.height,
+    hdScale: canvas.dataset?.hdScale ? Number(canvas.dataset.hdScale) : 1,
+    sheetId: canvas.dataset?.sheetId,
+    gmReady: canvas.dataset?.gmReady === '1',
+    canvas,
+  }
+}
+
+export function sheetSpecToResolvedDrawable(spec: SheetFrameDrawSpec): ResolvedDrawable {
+  return {
+    width: spec.sw,
+    height: spec.sh,
+    hdScale: spec.hdScale,
+    sheetId: spec.sheetId,
+    sheetSpec: spec,
+  }
+}
+
+export function drawResolvedDrawable(
+  ctx: CanvasRenderingContext2D,
+  drawable: ResolvedDrawable,
+  dx: number,
+  dy: number,
+  dw: number,
+  dh: number,
+): void {
+  if (drawable.sheetSpec) {
+    drawSheetFrameSpec(ctx, drawable.sheetSpec, dx, dy, dw, dh)
+    return
+  }
+  if (drawable.canvas && drawable.canvas.width > 0 && drawable.canvas.height > 0) {
+    ctx.drawImage(drawable.canvas, dx, dy, dw, dh)
+  }
+}
+
+export function drawResolvedPortrait(
+  ctx: CanvasRenderingContext2D,
+  drawable: ResolvedDrawable,
+  sxCrop: number,
+  syCrop: number,
+  swCrop: number,
+  shCrop: number,
+  dx: number,
+  dy: number,
+  dw: number,
+  dh: number,
+): void {
+  if (drawable.sheetSpec) {
+    const spec = drawable.sheetSpec
+    if (!spec.image.complete || spec.image.naturalWidth <= 0) return
+    if (!spec.flipX) {
+      ctx.drawImage(spec.image, spec.sx + sxCrop, spec.sy + syCrop, swCrop, shCrop, dx, dy, dw, dh)
+      return
+    }
+    ctx.save()
+    ctx.translate(dx + dw, dy)
+    ctx.scale(-1, 1)
+    ctx.drawImage(spec.image, spec.sx + (spec.sw - sxCrop - swCrop), spec.sy + syCrop, swCrop, shCrop, 0, 0, dw, dh)
+    ctx.restore()
+    return
+  }
+  if (drawable.canvas && drawable.canvas.width > 0 && drawable.canvas.height > 0) {
+    ctx.drawImage(drawable.canvas, sxCrop, syCrop, swCrop, shCrop, dx, dy, dw, dh)
+  }
+}
+
+export function resolveHumanDrawable(
+  colors: HumanColors,
+  dir: Dir,
+  frame: number,
+  weapon: WeaponType | null = null,
+  weaponColor = '#ced4da',
+  attacking = false,
+  actionOverride?: SpriteAction,
+  attackFrameOverride?: number,
+): ResolvedDrawable {
+  const requestedAction: SpriteAction = attacking ? 'attack' : actionOverride ?? (frame > 0 ? 'walk' : 'idle')
+  if (typeof document !== 'undefined' && colors.jobId && !colors.skeleton && !colors.goblinEars) {
+    const sheetFrameIdx = requestedAction === 'attack' ? (attackFrameOverride ?? frame) : frame
+    const spec = getHeroSheetFrameSpec(colors.jobId, dir, requestedAction, sheetFrameIdx)
+    if (spec) return sheetSpecToResolvedDrawable(spec)
+  }
+  return canvasToResolvedDrawable(
+    humanSprite(colors, dir, frame, weapon, weaponColor, attacking, actionOverride, attackFrameOverride),
+  )
+}
+
+export function resolveMonsterDrawable(
+  sprite: MonsterSprite,
+  color: string,
+  frame: number,
+  attacking = false,
+  actionOverride?: SpriteAction,
+  dir: Dir = 'down',
+  attackFrameOverride?: number,
+  defId?: string,
+): ResolvedDrawable {
+  const action: SpriteAction = attacking ? 'attack' : actionOverride ?? (frame > 0 ? 'walk' : 'idle')
+  const f = action === 'attack'
+    ? Math.abs(attackFrameOverride ?? frame) % 4
+    : action === 'walk'
+      ? Math.abs(frame) % 6
+      : Math.abs(frame) % 4
+  if (typeof document !== 'undefined') {
+    const sheetFrameIdx = action === 'attack' ? (attackFrameOverride ?? f) : f
+    const spec = getMonsterSheetFrameSpec(defId, sprite, dir, action, sheetFrameIdx)
+    if (spec) return sheetSpecToResolvedDrawable(spec)
+  }
+  return canvasToResolvedDrawable(
+    monsterSprite(sprite, color, frame, attacking, actionOverride, dir, attackFrameOverride, defId),
+  )
+}
+
+export function resolveNpcDrawable(
+  npcId: string,
+  colors: HumanColors,
+  idleFrame: number,
+  sheetFrame: number,
+): ResolvedDrawable {
+  if (typeof document !== 'undefined') {
+    const spec = getNpcSheetFrameSpec(npcId, sheetFrame)
+    if (spec) return sheetSpecToResolvedDrawable(spec)
+  }
+  return canvasToResolvedDrawable(humanSprite(colors, 'down', idleFrame, null, '#ced4da', false, 'idle'))
 }
 
 /* ---------------- Articulated Humanoids (All 12 Jobs) ---------------- */

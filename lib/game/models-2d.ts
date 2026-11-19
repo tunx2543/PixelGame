@@ -73,6 +73,19 @@ export interface JobModelSpec {
 }
 
 export type MonsterModelArchetype =
+  | 'meadow_larva'
+  | 'meadow_fuzzfly'
+  | 'meadow_beetle'
+  | 'meadow_blob'
+  | 'meadow_blob_drop'
+  | 'meadow_cocoon'
+  | 'meadow_beetle_egg'
+  | 'meadow_bloomlet'
+  | 'meadow_capling'
+  | 'meadow_hopper'
+  | 'meadow_fiddlehop'
+  | 'meadow_big_hopper'
+  | 'meadow_dewmother'
   | 'slime'
   | 'slime_blue'
   | 'pink_slime'
@@ -381,6 +394,19 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
 }
 
 const ARCHETYPE_BY_ID: Record<string, MonsterModelArchetype> = {
+  meadow_larva: 'meadow_larva',
+  meadow_fuzzfly: 'meadow_fuzzfly',
+  meadow_beetle: 'meadow_beetle',
+  meadow_blob: 'meadow_blob',
+  meadow_blob_drop: 'meadow_blob_drop',
+  meadow_cocoon: 'meadow_cocoon',
+  meadow_beetle_egg: 'meadow_beetle_egg',
+  meadow_bloomlet: 'meadow_bloomlet',
+  meadow_capling: 'meadow_capling',
+  meadow_hopper: 'meadow_hopper',
+  meadow_fiddlehop: 'meadow_fiddlehop',
+  meadow_big_hopper: 'meadow_big_hopper',
+  meadow_dewmother: 'meadow_dewmother',
   slime: 'slime',
   slime_blue: 'slime_blue',
   pink_slime: 'pink_slime',
@@ -427,15 +453,33 @@ const ARCHETYPE_BY_SPRITE: Record<MonsterSprite, MonsterModelArchetype> = {
   abyss_knight: 'abyss_knight',
 }
 
+const MEADOW_ARCHETYPES = new Set<MonsterModelArchetype>([
+  'meadow_larva',
+  'meadow_fuzzfly',
+  'meadow_beetle',
+  'meadow_blob',
+  'meadow_blob_drop',
+  'meadow_cocoon',
+  'meadow_beetle_egg',
+  'meadow_bloomlet',
+  'meadow_capling',
+  'meadow_hopper',
+  'meadow_fiddlehop',
+  'meadow_big_hopper',
+  'meadow_dewmother',
+])
+
 function buildMonsterSpec(def: MonsterDef): MonsterModelSpec {
   const archetype = ARCHETYPE_BY_ID[def.id] ?? ARCHETYPE_BY_SPRITE[def.sprite] ?? 'slime'
   const flying =
+    archetype === 'meadow_fuzzfly' ||
     archetype === 'bat' ||
     archetype === 'ghost' ||
     archetype === 'boss_fire_dragon' ||
     archetype === 'abyss_dragon' ||
     archetype === 'gale_sentinel'
   const supports4Way =
+    MEADOW_ARCHETYPES.has(archetype) ||
     archetype === 'goblin' ||
     archetype === 'goblin_chief' ||
     archetype === 'orc' ||
@@ -450,27 +494,72 @@ function buildMonsterSpec(def: MonsterDef): MonsterModelSpec {
   const canvasSize =
     archetype === 'abyss_dragon' || archetype === 'boss_fire_dragon'
       ? { width: 42, height: 34 }
-      : def.boss ||
-          archetype === 'demon_lord' ||
-          archetype === 'boss_demon_king' ||
-          archetype === 'boss_wolf' ||
-          archetype === 'boss_spider_queen' ||
-          archetype === 'boss_lich' ||
-          archetype === 'earth_golem' ||
-          archetype === 'goblin_chief'
-        ? { width: 34, height: 32 }
-        : archetype === 'abyss_knight' ||
-            archetype === 'gale_sentinel' ||
-            archetype === 'fire_golem' ||
-            archetype === 'orc' ||
-            archetype === 'golem'
-          ? { width: 32, height: 30 }
-          : archetype === 'wolf'
-            ? { width: 30, height: 24 }
-            : { width: 28, height: 26 }
+      : archetype === 'meadow_dewmother'
+        ? { width: 38, height: 38 }
+        : archetype === 'meadow_big_hopper'
+          ? { width: 36, height: 36 }
+          : archetype === 'meadow_fiddlehop'
+            ? { width: 30, height: 32 }
+            : archetype === 'meadow_beetle_egg' ||
+                archetype === 'meadow_bloomlet' ||
+                archetype === 'meadow_capling' ||
+                archetype === 'meadow_hopper'
+              ? { width: 30, height: 30 }
+              : archetype === 'meadow_fuzzfly'
+                ? { width: 30, height: 26 }
+                : archetype === 'meadow_cocoon'
+                  ? { width: 24, height: 28 }
+                  : archetype === 'meadow_larva' || archetype === 'meadow_beetle'
+                    ? { width: 28, height: 24 }
+                    : archetype === 'meadow_blob' || archetype === 'meadow_blob_drop'
+                      ? { width: 26, height: 24 }
+                      : def.boss ||
+                          archetype === 'demon_lord' ||
+                          archetype === 'boss_demon_king' ||
+                          archetype === 'boss_wolf' ||
+                          archetype === 'boss_spider_queen' ||
+                          archetype === 'boss_lich' ||
+                          archetype === 'earth_golem' ||
+                          archetype === 'goblin_chief'
+                        ? { width: 34, height: 32 }
+                        : archetype === 'abyss_knight' ||
+                            archetype === 'gale_sentinel' ||
+                            archetype === 'fire_golem' ||
+                            archetype === 'orc' ||
+                            archetype === 'golem'
+                          ? { width: 32, height: 30 }
+                          : archetype === 'wolf'
+                            ? { width: 30, height: 24 }
+                            : { width: 28, height: 26 }
 
   const accentColor =
-    archetype === 'slime_blue'
+    archetype === 'meadow_larva'
+      ? '#f5efc4'
+      : archetype === 'meadow_fuzzfly'
+        ? '#f0a783'
+        : archetype === 'meadow_beetle'
+          ? '#fbbf24'
+          : archetype === 'meadow_blob'
+            ? '#fde047'
+            : archetype === 'meadow_blob_drop'
+              ? '#fb923c'
+              : archetype === 'meadow_cocoon'
+                ? '#f4c7d0'
+                : archetype === 'meadow_beetle_egg'
+                  ? '#f5c27b'
+                  : archetype === 'meadow_bloomlet'
+                    ? '#facc15'
+                    : archetype === 'meadow_capling'
+                      ? '#fde047'
+                      : archetype === 'meadow_hopper'
+                        ? '#a855f7'
+                        : archetype === 'meadow_fiddlehop'
+                          ? '#f59e0b'
+                          : archetype === 'meadow_big_hopper'
+                            ? '#fbbf24'
+                            : archetype === 'meadow_dewmother'
+                              ? '#67e8f9'
+                              : archetype === 'slime_blue'
       ? '#bae6fd'
       : archetype === 'pink_slime'
         ? '#ffd6e0'
@@ -518,7 +607,15 @@ function buildMonsterSpec(def: MonsterDef): MonsterModelSpec {
     canvasSize,
     supports4Way,
     flying,
-    auraColor: def.boss ? accentColor : archetype === 'abyss_knight' ? '#9d4edd' : undefined,
+    auraColor: def.boss
+      ? accentColor
+      : archetype === 'meadow_dewmother'
+        ? '#67e8f9'
+        : archetype === 'meadow_big_hopper'
+          ? '#fbbf24'
+          : archetype === 'abyss_knight'
+            ? '#9d4edd'
+            : undefined,
     animationFrames: { idle: 4, walk: 6, attack: 4 },
   }
 }

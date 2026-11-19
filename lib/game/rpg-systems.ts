@@ -6,7 +6,7 @@ import type { InvItem, SaveData } from './engine'
 /* 1. TYPES & PERSISTED EXTENSION STATE                                       */
 /* ========================================================================== */
 
-export type ElementType = 'neutral' | 'fire' | 'ice' | 'earth' | 'light' | 'dark'
+export type ElementType = 'neutral' | 'fire' | 'water' | 'ice' | 'earth' | 'wind' | 'poison' | 'light' | 'dark'
 export type StatusEffectType = 'burn' | 'freeze' | 'stun' | 'poison' | 'shield'
 export type DailyDungeonId = 'gold_vault' | 'stone_mine' | 'boss_rush'
 
@@ -163,8 +163,11 @@ export function sanitizeRpgExt(raw: unknown, now = new Date()): RpgExtensionStat
 export const ELEMENT_META: Record<ElementType, { label: string; short: string; color: string; bg: string }> = {
   neutral: { label: 'ไร้ธาตุ', short: 'NTR', color: '#cbd5e1', bg: 'rgba(148,163,184,0.16)' },
   fire: { label: 'ธาตุไฟ', short: 'FIRE', color: '#fb923c', bg: 'rgba(249,115,22,0.18)' },
+  water: { label: 'ธาตุน้ำ', short: 'WATER', color: '#38bdf8', bg: 'rgba(56,189,248,0.18)' },
   ice: { label: 'ธาตุน้ำแข็ง', short: 'ICE', color: '#67e8f9', bg: 'rgba(6,182,212,0.18)' },
   earth: { label: 'ธาตุดิน', short: 'EARTH', color: '#d4a373', bg: 'rgba(180,130,80,0.2)' },
+  wind: { label: 'ธาตุลม', short: 'WIND', color: '#4ade80', bg: 'rgba(74,222,128,0.18)' },
+  poison: { label: 'ธาตุพิษ', short: 'POISON', color: '#a855f7', bg: 'rgba(168,85,247,0.2)' },
   light: { label: 'ธาตุแสง', short: 'LIGHT', color: '#fde047', bg: 'rgba(250,204,21,0.18)' },
   dark: { label: 'ธาตุมืด', short: 'DARK', color: '#c084fc', bg: 'rgba(168,85,247,0.2)' },
 }
@@ -179,10 +182,13 @@ export const STATUS_META: Record<StatusEffectType, { label: string; color: strin
 
 const ELEMENT_ADVANTAGE: Record<ElementType, Partial<Record<ElementType, number>>> = {
   neutral: {},
-  fire: { ice: 1.35, earth: 0.85, fire: 0.85 },
-  ice: { earth: 1.35, fire: 0.85, ice: 0.85 },
-  earth: { dark: 1.35, ice: 0.85, earth: 0.85 },
-  light: { dark: 1.4, neutral: 1.1 },
+  fire: { ice: 1.35, wind: 1.25, earth: 0.85, water: 0.8, fire: 0.85 },
+  water: { fire: 1.35, earth: 1.2, water: 0.85 },
+  ice: { earth: 1.35, wind: 1.15, fire: 0.85, ice: 0.85 },
+  earth: { dark: 1.35, poison: 1.2, ice: 0.85, wind: 0.85, earth: 0.85 },
+  wind: { earth: 1.3, poison: 1.15, wind: 0.85 },
+  poison: { water: 1.2, earth: 0.9, poison: 0.85 },
+  light: { dark: 1.4, poison: 1.2, neutral: 1.1 },
   dark: { light: 1.25, earth: 0.85 },
 }
 
@@ -197,6 +203,21 @@ export function getElementMultiplier(
 }
 
 const MONSTER_ELEMENT_MAP: Record<string, ElementType> = {
+  // Meadow 13 monsters
+  meadow_larva: 'earth',
+  meadow_fuzzfly: 'wind',
+  meadow_beetle: 'earth',
+  meadow_blob: 'water',
+  meadow_blob_drop: 'fire',
+  meadow_cocoon: 'earth',
+  meadow_beetle_egg: 'earth',
+  meadow_bloomlet: 'earth',
+  meadow_capling: 'poison',
+  meadow_hopper: 'neutral',
+  meadow_fiddlehop: 'earth',
+  meadow_big_hopper: 'neutral',
+  meadow_dewmother: 'water',
+
   slime: 'ice',
   slime_blue: 'ice',
   pink_slime: 'ice',

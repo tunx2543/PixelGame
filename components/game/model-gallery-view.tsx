@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { Crown, Eye, Flame, Footprints, Pause, PawPrint, Play, RotateCw, Shield, Sparkles, Swords, Wind } from 'lucide-react'
+import { BIOME_CATALOG_SPECS, MONSTER_BIOME_MAP } from '@/lib/game/biome-monsters'
 import { ITEMS } from '@/lib/game/data'
 import {
   getAllJobModels,
@@ -62,6 +63,19 @@ function getJobTraitTags(jobId: string): string[] {
 
 function getMonsterTraitLabel(archetype: string): string {
   const map: Record<string, string> = {
+    meadow_larva: 'หนอนลายครีม-เขียวมินต์ + ปีกใบไม้น้อย • ท่าคลานกระดึ๊บ (Walk 6F) / พุ่งโหม่งฝุ่นดิน (Atk 4F)',
+    meadow_fuzzfly: 'ผีเสื้อปุยครีม-พีช + ปีกขนนก • กระพือปีกบินลอย (Idle 4F/Walk 6F) / โฉบพายุลม (Atk 4F)',
+    meadow_beetle: 'ด้วงเปลือกม่วงเข้ม + เขาทองโค้ง • เดินสลับ 6 ขา (Walk 6F) / เสยเขาทอง (Atk 4F)',
+    meadow_blob: 'เมือกสีคอรัล-ชมพู + ดาวประกายทอง • เด้งยืดหยุ่น (Walk 6F) / สาดฟองน้ำ (Atk 4F)',
+    meadow_blob_drop: 'หยดน้ำผึ้ง-อำพันทรงหยดน้ำ • ยอดหยดสั่นไหว (Idle 4F) / พุ่งปะทุประกายไฟ (Atk 4F)',
+    meadow_cocoon: 'ดักแด้พันริบบิ้นชมพู + ตาแอบมอง • แกว่งไกว + กะพริบตา (Idle 4F) / ดีดไหมป้องกัน (Atk 4F) [เฉื่อย]',
+    meadow_beetle_egg: 'ไข่ด้วงลายจุดในรังหญ้า + เข็มขัดดาวทอง • โยกตัวในรัง (Idle 4F) / กระแทกเปลือก (Atk 4F) [เฉื่อย]',
+    meadow_bloomlet: 'ดอกไม้กลีบแดง 5 แฉก + กระโปรงใบไม้ • ก้าวรากเตาะแตะ (Walk 6F) / สะบัดกลีบแดง (Atk 4F)',
+    meadow_capling: 'หมวกเห็ดแม่มดม่วงประดับขนนก • วิ่ง 4 รากดุ๊กดิ๊ก (Walk 6F) / พ่นวงละอองพิษ (Atk 4F)',
+    meadow_hopper: 'กระต่ายขาวหูปลายม่วง + จันทร์เสี้ยว • กระดิกหู (Idle 4F) / กระโดดโค้ง (Walk 6F) / พุ่งตวัด (Atk 4F)',
+    meadow_fiddlehop: 'จิ้งหรีดฟ้าถือกลองบองโก้คู่ • ตีกลองสลับซ้าย-ขวา+โน้ตเพลง (Idle 4F) / ทุบกลองคลื่นเสียง (Atk 4F)',
+    meadow_big_hopper: 'กระต่ายป่าสีทอง + สร้อยดาว + กรงเล็บคม • พุ่งกระโจน (Walk 6F) / กางเล็บฟันไขว้ (Atk 4F) [ตีก่อน]',
+    meadow_dewmother: 'มารดาสไลม์ใบบัว + หยดน้ำโคจรรอบ • กระเพื่อมคลื่นน้ำ (Walk 6F) / สาดคลื่นวารี (Atk 4F) [แทงก์]',
     slime: 'หยดเจลสีเขียวใส + ไฮไลต์กระดอน',
     slime_blue: 'สไลม์สีฟ้าสดใส + ออร่าหยดน้ำ',
     pink_slime: 'สไลม์ชมพู + ฟองอากาศ',
@@ -155,7 +169,8 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
 
   const [tab, setTab] = useState<'jobs' | 'monsters' | 'mounts' | 'pets'>('jobs')
   const [selectedJobId, setSelectedJobId] = useState<string>('novice')
-  const [selectedMonsterId, setSelectedMonsterId] = useState<string>('abyss_dragon')
+  const [monsterBiomeFilter, setMonsterBiomeFilter] = useState<string>('all')
+  const [selectedMonsterId, setSelectedMonsterId] = useState<string>('meadow_dewmother')
   const [selectedMountId, setSelectedMountId] = useState<string>('starlight_kirin')
   const [selectedPetId, setSelectedPetId] = useState<string>('phao_gold_naga')
   const [action, setAction] = useState<PreviewAction>('auto')
@@ -165,10 +180,18 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null)
   const [vfxNonce, setVfxNonce] = useState<number>(0)
 
+  const filteredMonsterModels = useMemo(() => {
+    if (monsterBiomeFilter === 'all') return monsterModels
+    if (monsterBiomeFilter === 'legacy') {
+      return monsterModels.filter(({ monster }) => !MONSTER_BIOME_MAP[monster.id])
+    }
+    return monsterModels.filter(({ monster }) => MONSTER_BIOME_MAP[monster.id] === monsterBiomeFilter)
+  }, [monsterBiomeFilter, monsterModels])
+
   const selectedJobEntry =
     jobModels.find((entry) => entry.job.id === selectedJobId) ?? jobModels[0]
   const selectedMonsterEntry =
-    monsterModels.find((entry) => entry.monster.id === selectedMonsterId) ?? monsterModels[0]
+    monsterModels.find((entry) => entry.monster.id === selectedMonsterId) ?? filteredMonsterModels[0] ?? monsterModels[0]
   const selectedMountEntry =
     mountModels.find((entry) => entry.mount.id === selectedMountId) ?? mountModels[0]
   const selectedPetEntry =
@@ -816,46 +839,76 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
           })}
         </div>
       ) : tab === 'monsters' ? (
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
-          {monsterModels.map(({ monster, model }) => {
-            const selected = monster.id === selectedMonsterEntry.monster.id
-            return (
-              <button
-                key={monster.id}
-                type="button"
-                onClick={() => setSelectedMonsterId(monster.id)}
-                aria-pressed={selected}
-                className={`flex flex-col items-center gap-1.5 p-2 text-center transition-all hover:brightness-110 ${
-                  selected
-                    ? 'mmorpg-showcase-card-active border-destructive'
-                    : 'mmorpg-showcase-card'
-                }`}
-              >
-                <div className="flex w-full items-center justify-between text-[10px]">
-                  <span className={`font-semibold ${monster.boss ? 'text-[#ff8b8e]' : 'text-accent'}`}>
-                    {monster.boss ? '★ BOSS' : 'MOB'}
-                  </span>
-                  <span className="font-mono text-muted-foreground tabular-nums">Lv.{monster.level}</span>
-                </div>
-                <div className="grid size-24 place-items-center border border-[#c9993f]/35 bg-[#0b1024]/90 shadow-[inset_0_0_16px_rgba(65,105,225,0.14)]">
-                  <SpriteModelCanvas
-                    mode="monster"
-                    id={monster.id}
-                    action={compact && !selected && action === 'auto' ? 'idle' : action}
-                    dir={dir}
-                    size={88}
-                    label={`พรีวิวมอนสเตอร์ ${monster.name}`}
-                  />
-                </div>
-                <div className="mmorpg-ribbon w-full px-2 py-1">
-                  <p className="truncate text-xs font-bold text-foreground">{monster.name}</p>
-                  <p className="truncate text-[10px] text-muted-foreground">
-                    HP {formatNum(monster.hp)} • {model.flying ? 'บิน' : 'พื้นดิน'}
-                  </p>
-                </div>
-              </button>
-            )
-          })}
+        <div className="space-y-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 border border-border/70 bg-muted/50 px-2.5 py-2 text-xs">
+            <label htmlFor="model-monster-biome-filter" className="font-semibold text-foreground">
+              เลือกแผนที่ / ไบโอม:
+            </label>
+            <select
+              id="model-monster-biome-filter"
+              value={monsterBiomeFilter}
+              onChange={(e) => {
+                const next = e.target.value
+                setMonsterBiomeFilter(next)
+                if (next !== 'all') {
+                  const first = monsterModels.find(({ monster }) =>
+                    next === 'legacy' ? !MONSTER_BIOME_MAP[monster.id] : MONSTER_BIOME_MAP[monster.id] === next,
+                  )
+                  if (first) setSelectedMonsterId(first.monster.id)
+                }
+              }}
+              className="border border-border bg-background px-2.5 py-1 text-xs text-foreground focus:border-primary focus:outline-none"
+            >
+              <option value="all">ทุกแผนที่ ({monsterModels.length} ตัว)</option>
+              {BIOME_CATALOG_SPECS.map((b) => (
+                <option key={b.mapId} value={b.mapId}>
+                  {b.biomeName} ({b.entries.length} ตัว{b.entries.some((e) => e.boss) ? '' : ' • ไม่มีบอส'})
+                </option>
+              ))}
+              <option value="legacy">มอนสเตอร์พิเศษ/ดั้งเดิม</option>
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
+            {filteredMonsterModels.map(({ monster, model }) => {
+              const selected = monster.id === selectedMonsterEntry.monster.id
+              return (
+                <button
+                  key={monster.id}
+                  type="button"
+                  onClick={() => setSelectedMonsterId(monster.id)}
+                  aria-pressed={selected}
+                  className={`flex flex-col items-center gap-1.5 p-2 text-center transition-all hover:brightness-110 ${
+                    selected
+                      ? 'mmorpg-showcase-card-active border-destructive'
+                      : 'mmorpg-showcase-card'
+                  }`}
+                >
+                  <div className="flex w-full items-center justify-between text-[10px]">
+                    <span className={`font-semibold ${monster.boss ? 'text-[#ff8b8e]' : 'text-accent'}`}>
+                      {monster.boss ? '★ BOSS' : 'MOB'}
+                    </span>
+                    <span className="font-mono text-muted-foreground tabular-nums">Lv.{monster.level}</span>
+                  </div>
+                  <div className="grid size-24 place-items-center border border-[#c9993f]/35 bg-[#0b1024]/90 shadow-[inset_0_0_16px_rgba(65,105,225,0.14)]">
+                    <SpriteModelCanvas
+                      mode="monster"
+                      id={monster.id}
+                      action={compact && !selected && action === 'auto' ? 'idle' : action}
+                      dir={dir}
+                      size={88}
+                      label={`พรีวิวมอนสเตอร์ ${monster.name}`}
+                    />
+                  </div>
+                  <div className="mmorpg-ribbon w-full px-2 py-1">
+                    <p className="truncate text-xs font-bold text-foreground">{monster.name}</p>
+                    <p className="truncate text-[10px] text-muted-foreground">
+                      HP {formatNum(monster.hp)} • {model.flying ? 'บิน' : 'พื้นดิน'}
+                    </p>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
         </div>
       ) : tab === 'mounts' ? (
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
