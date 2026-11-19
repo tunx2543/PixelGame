@@ -1,6 +1,14 @@
 import { ITEMS, JOBS, MONSTERS, normalizeJobId, type EquipmentSlot } from './data'
-import { CATALOG_ELEMENT_MAP, MONSTER_BIOME_MAP } from './biome-monsters'
+import {
+  CATALOG_ELEMENT_MAP,
+  LEGACY_MONSTER_ID_MAP,
+  MONSTER_BIOME_MAP,
+  MONSTER_CATALOG_META,
+  normalizeMonsterId,
+} from './biome-monsters'
 import type { InvItem, SaveData } from './engine'
+
+export { LEGACY_MONSTER_ID_MAP, normalizeMonsterId }
 
 /* ========================================================================== */
 /* 1. TYPES & PERSISTED EXTENSION STATE                                       */
@@ -79,8 +87,9 @@ export function sanitizeRpgExt(raw: unknown, now = new Date()): RpgExtensionStat
   const bestiary: Record<string, number> = {}
   if (obj.bestiary && typeof obj.bestiary === 'object') {
     for (const [k, v] of Object.entries(obj.bestiary)) {
-      if (MONSTERS[k] && typeof v === 'number' && Number.isFinite(v) && v > 0) {
-        bestiary[k] = Math.min(999999, Math.floor(v))
+      const normalizedKey = normalizeMonsterId(k)
+      if (MONSTERS[normalizedKey] && typeof v === 'number' && Number.isFinite(v) && v > 0) {
+        bestiary[normalizedKey] = Math.min(999999, (bestiary[normalizedKey] ?? 0) + Math.floor(v))
       }
     }
   }
@@ -88,8 +97,12 @@ export function sanitizeRpgExt(raw: unknown, now = new Date()): RpgExtensionStat
   const claimedBestiaryTiers: Record<string, number> = {}
   if (obj.claimedBestiaryTiers && typeof obj.claimedBestiaryTiers === 'object') {
     for (const [k, v] of Object.entries(obj.claimedBestiaryTiers)) {
-      if (MONSTERS[k] && typeof v === 'number' && Number.isFinite(v) && v > 0) {
-        claimedBestiaryTiers[k] = Math.max(0, Math.min(3, Math.floor(v)))
+      const normalizedKey = normalizeMonsterId(k)
+      if (MONSTERS[normalizedKey] && typeof v === 'number' && Number.isFinite(v) && v > 0) {
+        claimedBestiaryTiers[normalizedKey] = Math.max(
+          claimedBestiaryTiers[normalizedKey] ?? 0,
+          Math.max(0, Math.min(3, Math.floor(v))),
+        )
       }
     }
   }
@@ -217,33 +230,6 @@ const MONSTER_ELEMENT_MAP: Record<string, ElementType> = {
   meadow_fiddlehop: 'earth',
   meadow_big_hopper: 'neutral',
   meadow_dewmother: 'water',
-
-  slime: 'ice',
-  slime_blue: 'ice',
-  pink_slime: 'ice',
-  mushroom: 'earth',
-  rabbit: 'neutral',
-  boss_wolf: 'earth',
-  wolf: 'earth',
-  goblin: 'neutral',
-  boss_spider_queen: 'dark',
-  goblin_chief: 'earth',
-  boss_lich: 'dark',
-  bat: 'dark',
-  spider: 'dark',
-  boss_fire_dragon: 'fire',
-  skeleton: 'dark',
-  orc: 'earth',
-  golem: 'earth',
-  boss_demon_king: 'dark',
-  ghost: 'dark',
-  fire_golem: 'fire',
-  earth_golem: 'earth',
-  demon: 'dark',
-  demon_lord: 'fire',
-  abyss_knight: 'dark',
-  gale_sentinel: 'ice',
-  abyss_dragon: 'dark',
 }
 
 const BIOME_DEFAULT_ELEMENT: Record<string, ElementType> = {
@@ -265,9 +251,10 @@ const BIOME_DEFAULT_ELEMENT: Record<string, ElementType> = {
 }
 
 export function getMonsterElement(monsterId: string): ElementType {
-  if (MONSTER_ELEMENT_MAP[monsterId]) return MONSTER_ELEMENT_MAP[monsterId]
-  if (CATALOG_ELEMENT_MAP[monsterId]) return CATALOG_ELEMENT_MAP[monsterId]
-  const biome = MONSTER_BIOME_MAP[monsterId]
+  const normalizedId = normalizeMonsterId(monsterId)
+  if (MONSTER_ELEMENT_MAP[normalizedId]) return MONSTER_ELEMENT_MAP[normalizedId]
+  if (CATALOG_ELEMENT_MAP[normalizedId]) return CATALOG_ELEMENT_MAP[normalizedId]
+  const biome = MONSTER_BIOME_MAP[normalizedId]
   return biome ? (BIOME_DEFAULT_ELEMENT[biome] ?? 'neutral') : 'neutral'
 }
 
@@ -368,14 +355,14 @@ export interface TitleDef {
 
 export const TITLE_DEFS: TitleDef[] = [
   { id: 'novice_traveler', name: 'นักผจญภัยหน้าใหม่', color: '#94a3b8', requirement: 'เริ่มต้นการผจญภัย', hpBonus: 10, atkBonus: 2, defBonus: 1, critBonus: 0 },
-  { id: 'slime_hunter', name: 'นักล่าสไลม์', color: '#4ade80', requirement: 'กำจัดสไลม์/สไลม์ชมพู รวม 10 ตัว', hpBonus: 20, atkBonus: 5, defBonus: 3, critBonus: 0.01 },
-  { id: 'goblin_slayer', name: 'ผู้พิชิตก๊อบลิน', color: '#86efac', requirement: 'ปราบก๊อบลิน 15 ตัว หรือหัวหน้าก๊อบลิน', hpBonus: 35, atkBonus: 12, defBonus: 5, critBonus: 0.01 },
+  { id: 'slime_hunter', name: 'นักล่าสไลม์', color: '#4ade80', requirement: 'กำจัดมอนสเตอร์เผ่าสไลม์รวม 10 ตัว', hpBonus: 20, atkBonus: 5, defBonus: 3, critBonus: 0.01 },
+  { id: 'goblin_slayer', name: 'ผู้พิชิตก๊อบลิน', color: '#86efac', requirement: 'ปราบมอนสเตอร์สายก๊อบลิน 15 ตัว หรือบอสขุนศึกเขี้ยวป่า', hpBonus: 35, atkBonus: 12, defBonus: 5, critBonus: 0.01 },
   { id: 'artisan_smith', name: 'ช่างตีเหล็กปรมาจารย์', color: '#fbbf24', requirement: 'ตีบวกอุปกรณ์สะสม 5 ครั้ง', hpBonus: 30, atkBonus: 14, defBonus: 10, critBonus: 0.02 },
   { id: 'boss_breaker', name: 'ผู้โค่นจอมบอส', color: '#f87171', requirement: 'ปราบบอสสะสมครบ 5 ตัว', hpBonus: 60, atkBonus: 22, defBonus: 14, critBonus: 0.02 },
   { id: 'tower_conqueror', name: 'ราชันย์หอคอย', color: '#c084fc', requirement: 'ผ่านหอคอยชั้นที่ 10 ขึ้นไป', hpBonus: 85, atkBonus: 28, defBonus: 18, critBonus: 0.03 },
   { id: 'arena_gladiator', name: 'แชมป์สังเวียน', color: '#fb923c', requirement: 'ชนะในอารีน่า PvP อย่างน้อย 3 ครั้ง', hpBonus: 65, atkBonus: 24, defBonus: 12, critBonus: 0.03 },
   { id: 'guild_pillar', name: 'เสาหลักแห่งกิลด์', color: '#38bdf8', requirement: 'บริจาคกิลด์สะสม 1,000 G ขึ้นไป', hpBonus: 55, atkBonus: 16, defBonus: 16, critBonus: 0.02 },
-  { id: 'dragon_bane', name: 'ผู้สยบมังกรอเวจี', color: '#a78bfa', requirement: 'ปราบมังกรอเวจีอย่างน้อย 1 ตัว', hpBonus: 120, atkBonus: 42, defBonus: 22, critBonus: 0.04 },
+  { id: 'dragon_bane', name: 'ผู้สยบมังกรอเวจี', color: '#a78bfa', requirement: 'ปราบบอสราชามังกรรอยแยก (หรือบอสเผ่ามังกร) อย่างน้อย 1 ตัว', hpBonus: 120, atkBonus: 42, defBonus: 22, critBonus: 0.04 },
   { id: 'reborn_ascendant', name: 'ผู้จุติเทวะ', color: '#f472b6', requirement: 'จุติครบ 5 ครั้งขึ้นไป', hpBonus: 160, atkBonus: 55, defBonus: 30, critBonus: 0.04 },
   { id: 'celestial_legend', name: 'ราชันย์ดารานิรันดร์', color: '#fde047', requirement: 'จุติครบสูงสุด 6 ครั้ง', hpBonus: 260, atkBonus: 85, defBonus: 45, critBonus: 0.06 },
 ]
@@ -383,28 +370,44 @@ export const TITLE_DEFS: TitleDef[] = [
 export function evaluateUnlockedTitleIds(save: Pick<SaveData, 'kills' | 'rebirthCount' | 'questState' | 'towerState' | 'rpgExt'>): string[] {
   const ext = sanitizeRpgExt(save.rpgExt)
   const unlocked = new Set<string>(['novice_traveler', ...ext.titles])
-  const slimeKills = (ext.bestiary.slime ?? 0) + (ext.bestiary.slime_blue ?? 0) + (ext.bestiary.pink_slime ?? 0)
-  const goblinKills = ext.bestiary.goblin ?? 0
-  const goblinBoss = ext.bestiary.goblin_chief ?? 0
-  const totalBossKills = (save.questState?.totalBossKills ?? 0) +
-    (ext.bestiary.boss_wolf ?? 0) +
-    (ext.bestiary.boss_spider_queen ?? 0) +
-    (ext.bestiary.goblin_chief ?? 0) +
-    (ext.bestiary.boss_lich ?? 0) +
-    (ext.bestiary.boss_fire_dragon ?? 0) +
-    (ext.bestiary.boss_demon_king ?? 0) +
-    (ext.bestiary.earth_golem ?? 0) +
-    (ext.bestiary.demon_lord ?? 0) +
-    (ext.bestiary.abyss_dragon ?? 0)
+
+  let slimeKills = 0
+  let goblinKills = 0
+  let goblinBossKills = 0
+  let catalogBossKills = 0
+  let dragonBossKills = 0
+
+  for (const [rawId, count] of Object.entries(ext.bestiary)) {
+    const id = normalizeMonsterId(rawId)
+    const def = MONSTERS[id]
+    const meta = MONSTER_CATALOG_META[id]
+    if (!def || count <= 0) continue
+
+    if (meta?.tribe === 'สไลม์' || id.includes('blob')) {
+      slimeKills += count
+    }
+    if (def.sprite === 'goblin' || id.includes('goblin') || id.includes('tusk_')) {
+      goblinKills += count
+      if (def.boss) goblinBossKills += count
+    }
+    if (def.boss) {
+      catalogBossKills += count
+      if (id === 'abyss_rift_dragon_king' || meta?.tribe === 'มังกร') {
+        dragonBossKills += count
+      }
+    }
+  }
+
+  const totalBossKills = (save.questState?.totalBossKills ?? 0) + catalogBossKills
 
   if (slimeKills >= 10) unlocked.add('slime_hunter')
-  if (goblinKills >= 15 || goblinBoss >= 1) unlocked.add('goblin_slayer')
+  if (goblinKills >= 15 || goblinBossKills >= 1) unlocked.add('goblin_slayer')
   if ((save.questState?.totalEnhances ?? 0) >= 5) unlocked.add('artisan_smith')
   if (totalBossKills >= 5) unlocked.add('boss_breaker')
   if ((save.towerState?.highestFloor ?? 0) >= 10) unlocked.add('tower_conqueror')
   if (ext.arenaWins >= 3) unlocked.add('arena_gladiator')
   if (ext.guildContribution >= 1000) unlocked.add('guild_pillar')
-  if ((ext.bestiary.abyss_dragon ?? 0) >= 1) unlocked.add('dragon_bane')
+  if (dragonBossKills >= 1) unlocked.add('dragon_bane')
   if ((save.rebirthCount ?? 0) >= 5) unlocked.add('reborn_ascendant')
   if ((save.rebirthCount ?? 0) >= 6) unlocked.add('celestial_legend')
 
@@ -417,8 +420,9 @@ export function recordBestiaryKillInState(
   saveContext?: Pick<SaveData, 'kills' | 'rebirthCount' | 'questState' | 'towerState'>,
 ): RpgExtensionState {
   const next = sanitizeRpgExt(rpgExt)
-  if (MONSTERS[monsterId]) {
-    next.bestiary[monsterId] = (next.bestiary[monsterId] ?? 0) + 1
+  const resolvedId = normalizeMonsterId(monsterId)
+  if (MONSTERS[resolvedId]) {
+    next.bestiary[resolvedId] = (next.bestiary[resolvedId] ?? 0) + 1
   }
   next.titles = evaluateUnlockedTitleIds({
     kills: saveContext?.kills ?? 0,
@@ -935,8 +939,8 @@ export interface WorldBossScheduleSpec {
 const WORLD_BOSS_ROTATION = [
   {
     bossId: 'wb_earth_titan',
-    name: 'ไททันปฐพีผู้พิโรธ',
-    monsterId: 'earth_golem',
+    name: 'ยักษ์สว่านเหล็กปฐพี',
+    monsterId: 'cave_drill_colossus',
     element: 'earth' as ElementType,
     maxHp: 350_000,
     atk: 190,
@@ -944,8 +948,8 @@ const WORLD_BOSS_ROTATION = [
   },
   {
     bossId: 'wb_inferno_lord',
-    name: 'จักรพรรดิเพลิงอเวจี',
-    monsterId: 'demon_lord',
+    name: 'จอมราชันเพลิงโลกันตร์',
+    monsterId: 'volcano_inferno_sovereign',
     element: 'fire' as ElementType,
     maxHp: 450_000,
     atk: 230,
@@ -953,8 +957,8 @@ const WORLD_BOSS_ROTATION = [
   },
   {
     bossId: 'wb_abyss_wyrm',
-    name: 'มังกรกลืนดาราอเวจี',
-    monsterId: 'abyss_dragon',
+    name: 'ราชามังกรรอยแยกอเวจี',
+    monsterId: 'abyss_rift_dragon_king',
     element: 'dark' as ElementType,
     maxHp: 600_000,
     atk: 275,

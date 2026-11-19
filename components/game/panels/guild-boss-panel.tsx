@@ -65,10 +65,10 @@ const FIELD_MAP_OPTIONS: Array<{ id: FieldBossSpec['mapId']; label: string }> = 
 ]
 
 const FIELD_BOSS_MONSTER_IDS: Record<FieldBossSpec['mapId'], string> = {
-  meadow: 'goblin_chief',
-  forest: 'abyss_knight',
-  cave: 'earth_golem',
-  volcano: 'demon_lord',
+  meadow: 'meadow_dewmother',
+  forest: 'forest_tusk_overlord',
+  cave: 'cave_drill_colossus',
+  volcano: 'volcano_inferno_sovereign',
 }
 
 export function GuildBossPanel() {

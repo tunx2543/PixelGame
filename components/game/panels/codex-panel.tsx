@@ -40,7 +40,7 @@ export function CodexPanel() {
   const allMonsters = Object.values(MONSTERS).sort((a, b) => a.level - b.level)
   const q = searchQuery.trim().toLowerCase()
   const filteredMonsters = allMonsters.filter((m) => {
-    const biome = MONSTER_BIOME_MAP[m.id] ?? 'legacy'
+    const biome = MONSTER_BIOME_MAP[m.id] ?? ''
     if (biomeFilter !== 'all' && biome !== biomeFilter) return false
     if (!q) return true
     return m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)
@@ -101,7 +101,6 @@ export function CodexPanel() {
                   {b.biomeName} ({b.entries.length})
                 </option>
               ))}
-              <option value="legacy">มอนสเตอร์พิเศษ/ดั้งเดิม</option>
             </select>
           </div>
 

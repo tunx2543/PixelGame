@@ -16,6 +16,7 @@ import {
   type EquipmentSlot,
 } from './data'
 import { LEGACY_MAP_ALIASES, MAPS, MAP_ORDER, TILE, boxBlocked, isSolidPx, normalizeMapId, type MapDef, type NpcDef, type NpcRole } from './maps'
+import { normalizeMonsterId } from './biome-monsters'
 import { GEM_SHOP_ITEMS } from './gem-shop'
 import { preloadMapCatalogSprites } from './catalog-sprites'
 import type { Dir } from './sprites'
@@ -1468,7 +1469,12 @@ function randomSpawnPoint(map: MapDef) {
 }
 
 function makeMonster(defId: string, x: number, y: number): Monster {
-  const resolvedDefId = MONSTERS[defId] ? defId : 'slime'
+  const normalizedDefId = normalizeMonsterId(defId)
+  const resolvedDefId = MONSTERS[normalizedDefId]
+    ? normalizedDefId
+    : MONSTERS.meadow_blob
+      ? 'meadow_blob'
+      : Object.keys(MONSTERS)[0]
   const def = MONSTERS[resolvedDefId]
   return {
     uid: uid(),
@@ -1513,7 +1519,7 @@ function populateMap() {
   game.monsters = []
   for (const s of map.spawns)
     for (let i = 0; i < s.count; i++) {
-      const pt = map.id === 'cave' && s.monsterId === 'earth_golem'
+      const pt = map.id === 'cave' && s.monsterId === 'cave_drill_colossus'
         ? earthBossSpawnPoint(map)
         : randomSpawnPoint(map)
       game.monsters.push(makeMonster(s.monsterId, pt.x, pt.y))
@@ -2858,7 +2864,8 @@ export function devTeleport(rawMapId: string) {
 
 export function devSpawnMonster(monsterId: string, count = 1) {
   const p = player()
-  if (!p.gm || !isCurrentAccountGm() || !MONSTERS[monsterId]) return
+  const resolvedId = normalizeMonsterId(monsterId)
+  if (!p.gm || !isCurrentAccountGm() || !MONSTERS[resolvedId]) return
   const n = Math.max(1, Math.min(20, Math.floor(count)))
   const map = currentMap()
   for (let i = 0; i < n; i++) {
@@ -2869,11 +2876,11 @@ export function devSpawnMonster(monsterId: string, count = 1) {
       x = p.x
       y = p.y
     }
-    const m = makeMonster(monsterId, x, y)
+    const m = makeMonster(resolvedId, x, y)
     m.respawnAt = Infinity
     game.monsters.push(m)
   }
-  say('gm', `[DEV] เรียก ${MONSTERS[monsterId].name} x${n}`)
+  say('gm', `[DEV] เรียก ${MONSTERS[resolvedId].name} x${n}`)
   notify()
 }
 
@@ -4428,7 +4435,12 @@ export function claimOfflineAfkAction(): { ok: boolean; message: string } {
 
 function spawnTownInvasionWave(wave: number) {
   const map = MAPS.town
-  const pool = wave === 1 ? ['slime', 'pink_slime', 'goblin'] : wave === 2 ? ['wolf', 'goblin', 'skeleton'] : ['goblin_chief', 'ghost', 'goblin']
+  const pool =
+    wave === 1
+      ? ['meadow_blob', 'meadow_blob_drop', 'forest_mask_goblin']
+      : wave === 2
+        ? ['forest_greymane_wolf', 'forest_mask_goblin', 'cave_mine_skeleton']
+        : ['forest_tusk_overlord', 'grave_sheet_ghost', 'forest_mask_goblin']
   const count = wave === 3 ? 5 : 4
   for (let i = 0; i < count; i++) {
     const defId = pool[i % pool.length]
@@ -6343,8 +6355,8 @@ function runCommand(text: string) {
       say('gm', `กำจัดมอนสเตอร์ ${n} ตัว`)
     },
     '/spawn': () => {
-      const id = args[0]
-      if (!id || !MONSTERS[id]) return say('error', 'ไม่พบไอดีมอนสเตอร์ พิมพ์ /mobs เพื่อดูรายการ')
+      const id = normalizeMonsterId(args[0])
+      if (!args[0] || !MONSTERS[id]) return say('error', 'ไม่พบไอดีมอนสเตอร์ พิมพ์ /mobs เพื่อดูรายการ')
       const n = Math.max(1, Math.min(20, Math.floor(num(1, 1))))
       const map = currentMap()
       for (let i = 0; i < n; i++) {
@@ -7168,7 +7180,7 @@ function updateMonsters(dt: number, map: MapDef) {
         m.dyingT = Math.max(0, (m.dyingT ?? 0) - dt)
       }
       if (game.time >= m.respawnAt) {
-        const pt = map.id === 'cave' && m.defId === 'earth_golem'
+        const pt = map.id === 'cave' && m.defId === 'cave_drill_colossus'
           ? earthBossSpawnPoint(map)
           : randomSpawnPoint(map)
         Object.assign(m, { x: pt.x, y: pt.y, homeX: pt.x, homeY: pt.y, hp: m.maxHp, dead: false, dyingT: 0, provoked: false, moving: false })

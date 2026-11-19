@@ -893,3 +893,40 @@ for (const spec of BIOME_CATALOG_SPECS) {
 
   BIOME_SPAWNS[spec.mapId] = spawns
 }
+
+/** Deterministic mapping from removed legacy monster IDs to the 288-monster catalog IDs. */
+export const LEGACY_MONSTER_ID_MAP: Record<string, string> = {
+  slime: 'meadow_blob',
+  slime_blue: 'meadow_dewmother',
+  pink_slime: 'meadow_blob_drop',
+  mushroom: 'meadow_capling',
+  rabbit: 'meadow_hopper',
+  boss_wolf: 'forest_lone_packlord',
+  wolf: 'forest_greymane_wolf',
+  goblin: 'forest_mask_goblin',
+  boss_spider_queen: 'cave_violet_broodqueen',
+  goblin_chief: 'forest_tusk_overlord',
+  boss_lich: 'grave_fallen_prelate',
+  bat: 'cave_duskwing_bat',
+  spider: 'cave_cavern_spider',
+  boss_fire_dragon: 'volcano_inferno_sovereign',
+  skeleton: 'cave_mine_skeleton',
+  orc: 'forest_tusk_warrior',
+  golem: 'cave_dripstone_hulk',
+  boss_demon_king: 'desert_sandfiend_sovereign',
+  ghost: 'grave_sheet_ghost',
+  fire_golem: 'volcano_magma_hulk',
+  earth_golem: 'cave_drill_colossus',
+  demon: 'volcano_pyre_fiend',
+  demon_lord: 'volcano_inferno_sovereign',
+  abyss_knight: 'abyss_rift_knight',
+  gale_sentinel: 'sky_gale_knight',
+  abyss_dragon: 'abyss_rift_dragon_king',
+}
+
+export function normalizeMonsterId(monsterId?: string | null): string {
+  if (!monsterId) return 'meadow_blob'
+  if (GENERATED_BIOME_MONSTERS[monsterId]) return monsterId
+  return LEGACY_MONSTER_ID_MAP[monsterId] ?? monsterId
+}
+

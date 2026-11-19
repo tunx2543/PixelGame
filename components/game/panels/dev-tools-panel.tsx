@@ -102,7 +102,7 @@ export function DevToolsPanel() {
   const [goldInput, setGoldInput] = useState('100000')
   const [gemInput, setGemInput] = useState('10000')
   const [towerInput, setTowerInput] = useState(String(p?.towerState?.highestFloor ?? 0))
-  const [selectedMonster, setSelectedMonster] = useState(() => Object.keys(MONSTERS)[0] ?? 'slime')
+  const [selectedMonster, setSelectedMonster] = useState(() => Object.keys(MONSTERS)[0] ?? 'meadow_blob')
   const [spawnCount, setSpawnCount] = useState(3)
   const [itemQuery, setItemQuery] = useState('')
   const [itemQty, setItemQty] = useState(1)

@@ -19,33 +19,6 @@ export type HeroSheetId =
   | 'nekobaku'
   | 'mamushi'
 
-export type MonsterSheetId =
-  | 'slime_blue'
-  | 'slime_green'
-  | 'slime_pink'
-  | 'mushroom'
-  | 'boss_wolf'
-  | 'wolf'
-  | 'goblin'
-  | 'boss_spider_queen'
-  | 'goblin_chief'
-  | 'boss_lich'
-  | 'bat'
-  | 'spider'
-  | 'boss_fire_dragon'
-  | 'skeleton'
-  | 'orc'
-  | 'golem'
-  | 'boss_demon_king'
-  | 'ghost'
-  | 'fire_golem'
-  | 'earth_golem'
-  | 'demon'
-  | 'demon_lord'
-  | 'abyss_knight'
-  | 'gale_sentinel'
-  | 'abyss_dragon'
-
 export type NpcSheetId =
   | 'merchant'
   | 'blacksmith'
@@ -131,61 +104,6 @@ export const HERO_SPRITE_SHEETS: Record<HeroSheetId, SpriteSheetSpec> = {
   mamushi: makeHeroSheetSpec('mamushi'),
 }
 
-function makeMonsterSheetSpec(
-  id: MonsterSheetId,
-  frameWidth: number,
-  frameHeight: number,
-  anchorYPx: number,
-  baseCanvasHeight: number,
-): SpriteSheetSpec {
-  const base = `/assets/hd/monsters/${id}`
-  return {
-    id,
-    sheetPath: `${base}/sheet.png`,
-    portraitPath: `${base}/portrait.png`,
-    frameWidth,
-    frameHeight,
-    cols: 4,
-    rows: 3,
-    anchorX: 0.5,
-    anchorY: anchorYPx / frameHeight,
-    hdScale: Number((frameHeight / Math.max(1, baseCanvasHeight)).toFixed(3)),
-    actions: {
-      walk_left: { row: 0, frames: 4, baseFacing: 'left' },
-      walk_right: { row: 1, frames: 4, baseFacing: 'right' },
-      attack: { row: 2, frames: 4, baseFacing: 'left' },
-    },
-  }
-}
-
-export const MONSTER_SPRITE_SHEETS: Record<MonsterSheetId, SpriteSheetSpec> = {
-  slime_blue: makeMonsterSheetSpec('slime_blue', 112, 104, 94, 26),
-  slime_green: makeMonsterSheetSpec('slime_green', 112, 104, 94, 26),
-  slime_pink: makeMonsterSheetSpec('slime_pink', 112, 104, 94, 26),
-  mushroom: makeMonsterSheetSpec('mushroom', 128, 104, 94, 26),
-  boss_wolf: makeMonsterSheetSpec('boss_wolf', 136, 128, 118, 32),
-  wolf: makeMonsterSheetSpec('wolf', 120, 96, 88, 24),
-  goblin: makeMonsterSheetSpec('goblin', 112, 104, 96, 26),
-  boss_spider_queen: makeMonsterSheetSpec('boss_spider_queen', 136, 128, 118, 32),
-  goblin_chief: makeMonsterSheetSpec('goblin_chief', 152, 136, 128, 34),
-  boss_lich: makeMonsterSheetSpec('boss_lich', 136, 128, 118, 32),
-  bat: makeMonsterSheetSpec('bat', 120, 104, 90, 26),
-  spider: makeMonsterSheetSpec('spider', 112, 104, 94, 26),
-  boss_fire_dragon: makeMonsterSheetSpec('boss_fire_dragon', 168, 136, 126, 34),
-  skeleton: makeMonsterSheetSpec('skeleton', 112, 104, 96, 26),
-  orc: makeMonsterSheetSpec('orc', 128, 120, 110, 30),
-  golem: makeMonsterSheetSpec('golem', 128, 120, 110, 30),
-  boss_demon_king: makeMonsterSheetSpec('boss_demon_king', 144, 132, 122, 32),
-  ghost: makeMonsterSheetSpec('ghost', 112, 104, 94, 26),
-  fire_golem: makeMonsterSheetSpec('fire_golem', 128, 120, 110, 30),
-  earth_golem: makeMonsterSheetSpec('earth_golem', 136, 128, 118, 32),
-  demon: makeMonsterSheetSpec('demon', 128, 120, 110, 30),
-  demon_lord: makeMonsterSheetSpec('demon_lord', 144, 132, 122, 32),
-  abyss_knight: makeMonsterSheetSpec('abyss_knight', 128, 120, 110, 30),
-  gale_sentinel: makeMonsterSheetSpec('gale_sentinel', 128, 120, 110, 30),
-  abyss_dragon: makeMonsterSheetSpec('abyss_dragon', 168, 136, 126, 34),
-}
-
 function makeNpcSheetSpec(id: NpcSheetId): SpriteSheetSpec {
   const base = `/assets/hd/npcs/${id}`
   return {
@@ -242,112 +160,10 @@ export const JOB_TO_HERO_SHEET: Record<string, HeroSheetId> = {
   gm: 'the_king',
 }
 
-/**
- * Maps monster defId (or sprite fallback) to an HD sheet in MONSTER_SPRITE_SHEETS.
- * To add a new dedicated monster spritesheet later:
- * 1. Place /public/assets/hd/monsters/<id>/sheet.png (4 cols x 3 rows: walk_left, walk_right, attack)
- * 2. Add <id> to MonsterSheetId and MONSTER_SPRITE_SHEETS above
- * 3. Point MONSTER_ID_TO_SHEET[<id>] = <id>
- */
-export const MONSTER_ID_TO_SHEET: Record<string, MonsterSheetId | null> = {
-  // Meadow 13 bespoke procedural HD animated models
-  meadow_larva: null,
-  meadow_fuzzfly: null,
-  meadow_beetle: null,
-  meadow_blob: null,
-  meadow_blob_drop: null,
-  meadow_cocoon: null,
-  meadow_beetle_egg: null,
-  meadow_bloomlet: null,
-  meadow_capling: null,
-  meadow_hopper: null,
-  meadow_fiddlehop: null,
-  meadow_big_hopper: null,
-  meadow_dewmother: null,
-
-  slime: 'slime_green',
-  slime_blue: 'slime_blue',
-  pink_slime: 'slime_pink',
-  mushroom: 'mushroom',
-  rabbit: null,
-  boss_wolf: 'boss_wolf',
-  wolf: 'wolf',
-  goblin: 'goblin',
-  boss_spider_queen: 'boss_spider_queen',
-  goblin_chief: 'goblin_chief',
-  boss_lich: 'boss_lich',
-  bat: 'bat',
-  spider: 'spider',
-  boss_fire_dragon: 'boss_fire_dragon',
-  skeleton: 'skeleton',
-  orc: 'orc',
-  golem: 'golem',
-  boss_demon_king: 'boss_demon_king',
-  ghost: 'ghost',
-  fire_golem: 'fire_golem',
-  earth_golem: 'earth_golem',
-  demon: 'demon',
-  demon_lord: 'demon_lord',
-  abyss_knight: 'abyss_knight',
-  gale_sentinel: 'gale_sentinel',
-  abyss_dragon: 'abyss_dragon',
-
-  // Biome boss placeholder sheets until dedicated spritesheets are added
-  vale_tiger_king: 'boss_wolf',
-  forest_crimson_warden: 'abyss_knight',
-  forest_flame_spirit: 'boss_fire_dragon',
-  forest_amber_queen: 'boss_spider_queen',
-  forest_thorn_beast: 'boss_wolf',
-  coast_sea_warlord: 'abyss_knight',
-  coast_king_lobster: 'boss_spider_queen',
-  cave_ant_king: 'boss_spider_queen',
-  cave_crystal_mantis: 'boss_spider_queen',
-  desert_pharaoh: 'boss_lich',
-  desert_sand_shark: 'boss_wolf',
-  desert_sphinx_golem: 'earth_golem',
-  desert_anubis_mage: 'boss_lich',
-  desert_scarab_lord: 'boss_demon_king',
-  grave_necrolord: 'boss_lich',
-  isles_pine_spirit: 'earth_golem',
-  isles_sakura_lady: 'boss_lich',
-  isles_kitsune_miko: 'boss_lich',
-  isles_jade_oni: 'earth_golem',
-  isles_shogun: 'boss_demon_king',
-  isles_samurai_lord: 'abyss_knight',
-  snow_frost_tiger: 'boss_wolf',
-  snow_glacier_wyrm: 'abyss_dragon',
-  ruins_cauldron_golem: 'earth_golem',
-  ruins_crimson_seraph: 'gale_sentinel',
-  ruins_red_blademaster: 'abyss_knight',
-  ruins_iron_colossus: 'earth_golem',
-  ruins_shadow_paladin: 'boss_demon_king',
-  sky_celestial_warden: 'gale_sentinel',
-  sky_archangel: 'gale_sentinel',
-  world_overlord: 'boss_demon_king',
-}
-
 export function resolveHeroSheetSpec(jobId?: string | null): SpriteSheetSpec | null {
   if (!jobId) return null
   const sheetId = JOB_TO_HERO_SHEET[jobId]
   return sheetId ? HERO_SPRITE_SHEETS[sheetId] : null
-}
-
-export function resolveMonsterSheetSpec(
-  defId?: string | null,
-  spriteFallback?: string | null,
-): SpriteSheetSpec | null {
-  if (defId && defId in MONSTER_ID_TO_SHEET) {
-    const mapped = MONSTER_ID_TO_SHEET[defId]
-    return mapped ? MONSTER_SPRITE_SHEETS[mapped] : null
-  }
-  if (spriteFallback && spriteFallback in MONSTER_ID_TO_SHEET) {
-    const mapped = MONSTER_ID_TO_SHEET[spriteFallback]
-    return mapped ? MONSTER_SPRITE_SHEETS[mapped] : null
-  }
-  if (spriteFallback && spriteFallback in MONSTER_SPRITE_SHEETS) {
-    return MONSTER_SPRITE_SHEETS[spriteFallback as MonsterSheetId]
-  }
-  return null
 }
 
 export interface SheetFrameDrawSpec {
@@ -495,37 +311,13 @@ export function getHeroSheetFrameSpec(
 
 export function getMonsterSheetFrameSpec(
   defId: string | undefined,
-  spriteFallback: string | undefined,
+  _spriteFallback: string | undefined,
   dir: Dir,
   action: SpriteAction,
   frame: number,
 ): SheetFrameDrawSpec | null {
   const isBoss = Boolean(defId && MONSTER_CATALOG_META[defId]?.boss)
-  const catalogSpec = getCatalogMonsterFrameSpec(defId, dir, action, frame, isBoss)
-  if (catalogSpec) return catalogSpec
-
-  const spec = resolveMonsterSheetSpec(defId, spriteFallback)
-  if (!spec) return null
-
-  let rowKey: string
-  let flipX = false
-
-  if (action === 'attack' || action === 'skill') {
-    rowKey = 'attack'
-    flipX = dir === 'right'
-  } else if (dir === 'right') {
-    rowKey = 'walk_right'
-  } else {
-    rowKey = 'walk_left'
-  }
-
-  const rowSpec = spec.actions[rowKey] ?? spec.actions.walk_left
-  const col =
-    action === 'idle'
-      ? Math.abs(frame) % 2
-      : Math.abs(frame) % rowSpec.frames
-
-  return buildFrameDrawSpec(spec, rowSpec.row, col, flipX)
+  return getCatalogMonsterFrameSpec(defId, dir, action, frame, isBoss)
 }
 
 export function getNpcSheetFrame(npcId: string, frame: number): HTMLCanvasElement | null {
@@ -617,25 +409,6 @@ export function getHeroSheetFrame(
   const frameSpec = getHeroSheetFrameSpec(jobId, dir, action, frame)
   if (!frameSpec) return null
   const spec = resolveHeroSheetSpec(jobId)
-  if (!spec) return null
-  return sliceSheetFrame(
-    spec,
-    Math.round(frameSpec.sy / spec.frameHeight),
-    Math.round(frameSpec.sx / spec.frameWidth),
-    frameSpec.flipX,
-  )
-}
-
-export function getMonsterSheetFrame(
-  defId: string | undefined,
-  spriteFallback: string | undefined,
-  dir: Dir,
-  action: SpriteAction,
-  frame: number,
-): HTMLCanvasElement | null {
-  const frameSpec = getMonsterSheetFrameSpec(defId, spriteFallback, dir, action, frame)
-  if (!frameSpec) return null
-  const spec = resolveMonsterSheetSpec(defId, spriteFallback)
   if (!spec) return null
   return sliceSheetFrame(
     spec,

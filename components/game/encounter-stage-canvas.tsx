@@ -8,7 +8,7 @@ import type { EncounterBiome, EncounterEnemy } from '@/lib/game/encounter'
 import type { FloatingDamagePopup } from '@/lib/game/floating-damage'
 import { registerCombatAudioHandler } from '@/lib/game/combat-audio'
 import { computeShakeFrame, type ScreenShakeEvent } from '@/lib/game/screen-shake'
-import { getCatalogMonsterFrameCount, hasCatalogMonsterAtlas } from '@/lib/game/catalog-sprites'
+import { getCatalogMonsterFrameCount } from '@/lib/game/catalog-sprites'
 import { getMonsterModelSpec } from '@/lib/game/models-2d'
 import {
   drawResolvedDrawable,
@@ -420,24 +420,23 @@ export function EncounterStageCanvas({
 
             const mSpec = getMonsterModelSpec(mon.def.id, mon.def.sprite, mon.def.color)
             const flying = mSpec.flying
-            const mHover = flying ? Math.sin(t * 4.2) * 5.5 - (mSpec.archetype === 'abyss_dragon' ? 8 : 10) : 0
+            const mHover = flying ? Math.sin(t * 4.2) * 5.5 - (mon.def.boss ? 8 : 10) : 0
             const mLunge = isEnemyAttacking ? -Math.sin(eAtkAge * Math.PI) * 36 : 0
             const mShake = isEnemyHurt ? Math.sin(eHitAge * 28) * 6 : 0
             const mStepIn = isEnemyAttacking && eAtkAge < 0.25
             const mStrike = isEnemyAttacking && eAtkAge >= 0.25
             const mAction: SpriteAction = mStrike ? 'attack' : mStepIn ? 'walk' : ph === 'FIGHTING' && flying ? 'walk' : 'idle'
-            const isCatalogMob = hasCatalogMonsterAtlas(mon.def.id)
-            const atkCount = isCatalogMob ? getCatalogMonsterFrameCount(mon.def.id, 'attack') : 4
-            const walkCount = isCatalogMob ? getCatalogMonsterFrameCount(mon.def.id, 'walk') : 6
-            const idleCount = isCatalogMob ? getCatalogMonsterFrameCount(mon.def.id, 'idle') : 4
+            const atkCount = getCatalogMonsterFrameCount(mon.def.id, 'attack')
+            const walkCount = getCatalogMonsterFrameCount(mon.def.id, 'walk')
+            const idleCount = getCatalogMonsterFrameCount(mon.def.id, 'idle')
             const mAtkFrame = mStrike ? Math.min(atkCount - 1, Math.floor(((eAtkAge - 0.25) / 0.75) * atkCount)) : 0
             const mFrame = mStrike
               ? mAtkFrame
               : mStepIn
                 ? Math.floor(eAtkAge * 24) % walkCount
                 : flying
-                  ? Math.floor(t * (isCatalogMob ? 7.5 : 8)) % walkCount
-                  : Math.floor(t * (isCatalogMob ? 5.0 : 2.8)) % idleCount
+                  ? Math.floor(t * 7.5) % walkCount
+                  : Math.floor(t * 5.0) % idleCount
             const mDrawable = resolveMonsterDrawable(
               mon.def.sprite,
               mon.def.color,
@@ -514,19 +513,12 @@ export function EncounterStageCanvas({
             }
             if (isEnemyAttacking) {
               const enemyFxType: WeaponType =
-                mSpec.archetype === 'abyss_dragon' || mSpec.archetype === 'demon_lord' || mSpec.archetype === 'demon'
+                mon.def.sprite === 'demon' || mon.def.sprite === 'ghost'
                   ? 'staff'
-                  : mSpec.archetype === 'abyss_knight'
+                  : mon.def.sprite === 'abyss_knight' || mon.def.sprite === 'gale_sentinel'
                     ? 'sword'
                     : 'dagger'
-              const enemyFxColor =
-                mSpec.archetype === 'abyss_dragon'
-                  ? '#e0aaff'
-                  : mSpec.archetype === 'abyss_knight'
-                    ? '#c77dff'
-                    : mSpec.archetype === 'gale_sentinel'
-                      ? '#ffd60a'
-                      : '#ff6b6b'
+              const enemyFxColor = mSpec.accentColor || '#ff6b6b'
               drawSlashEffect(ctx, heroX + 12, floorY - hh * 0.45, enemyFxType, eAtkAge, enemyFxColor)
             }
           }

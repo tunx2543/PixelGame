@@ -76,32 +76,6 @@ function getMonsterTraitLabel(archetype: string): string {
     meadow_fiddlehop: 'จิ้งหรีดฟ้าถือกลองบองโก้คู่ • ตีกลองสลับซ้าย-ขวา+โน้ตเพลง (Idle 4F) / ทุบกลองคลื่นเสียง (Atk 4F)',
     meadow_big_hopper: 'กระต่ายป่าสีทอง + สร้อยดาว + กรงเล็บคม • พุ่งกระโจน (Walk 6F) / กางเล็บฟันไขว้ (Atk 4F) [ตีก่อน]',
     meadow_dewmother: 'มารดาสไลม์ใบบัว + หยดน้ำโคจรรอบ • กระเพื่อมคลื่นน้ำ (Walk 6F) / สาดคลื่นวารี (Atk 4F) [แทงก์]',
-    slime: 'หยดเจลสีเขียวใส + ไฮไลต์กระดอน',
-    slime_blue: 'สไลม์สีฟ้าสดใส + ออร่าหยดน้ำ',
-    pink_slime: 'สไลม์ชมพู + ฟองอากาศ',
-    mushroom: 'หมวกเห็ดลายจุด + ท่าพุ่งโหม่ง',
-    rabbit: 'หูยาวขยับตามจังหวะ + กระโดดพุ่ง',
-    boss_wolf: 'บอสหมาป่าใหญ่สวมเกราะทอง + กรงเล็บพายุ',
-    wolf: 'หมาป่าสี่ขา + เขี้ยวตวัด',
-    goblin: 'ก๊อบลินหูแหลม + กระบองไม้ (4 ทิศ)',
-    boss_spider_queen: 'บอสราชินีแมงมุมสวมมงกุฎทอง + ใยพิษ',
-    goblin_chief: 'บอสหัวหน้าก๊อบลินมงกุฎเขา + กระบองหนาม',
-    boss_lich: 'บอสจอมเวทโครงกระดูกมงกุฎกษัตริย์ + คทามรณะ',
-    bat: 'ค้างคาวปีกกระพือ + บินลอยกลางอากาศ',
-    spider: 'แมงมุมพิษ 8 ขา + ดวงตาสีชาด',
-    boss_fire_dragon: 'บอสมังกรไฟปีกเพลิง + พ่นลูกไฟ',
-    skeleton: 'โครงกระดูกเกราะอก + ดาบกระดูก (4 ทิศ)',
-    orc: 'ออร์คนักรบกล้ามโต + ขวานศึก',
-    golem: 'โกเลมศิลาโบราณ + หมัดหินกระแทก',
-    boss_demon_king: 'บอสราชาปีศาจเขาคู่ + ปีกอเวจี + ดาบมาร',
-    ghost: 'วิญญาณโปร่งแสง + ผ้าคลุมพลิ้ว',
-    fire_golem: 'โกเลมหินปล่องภูเขาไฟ + รอยแยกแมกมา',
-    earth_golem: 'บอสยักษ์ศิลามอส + แก่นคริสตัลมรกต',
-    demon: 'ปีศาจมีปีก + หางแหลม + คทาไฟ (4 ทิศ)',
-    demon_lord: 'บอสราชาปีศาจสวมมงกุฎเพลิง + ดาบมาร',
-    abyss_knight: 'อัศวินเกราะทมิฬมีเขา + ดาบอเวจี (4 ทิศ)',
-    gale_sentinel: 'ผู้พิทักษ์สายลมมีปีกแสง + หอกวายุ (4 ทิศ)',
-    abyss_dragon: 'บอสมังกรอเวจีมีปีก + พ่นไฟ/ลมหายใจมืด',
   }
   const meta = MONSTER_CATALOG_META[archetype]
   if (meta) {
@@ -186,9 +160,6 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
 
   const filteredMonsterModels = useMemo(() => {
     if (monsterBiomeFilter === 'all') return monsterModels
-    if (monsterBiomeFilter === 'legacy') {
-      return monsterModels.filter(({ monster }) => !MONSTER_BIOME_MAP[monster.id])
-    }
     return monsterModels.filter(({ monster }) => MONSTER_BIOME_MAP[monster.id] === monsterBiomeFilter)
   }, [monsterBiomeFilter, monsterModels])
 
@@ -863,9 +834,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                 const next = e.target.value
                 setMonsterBiomeFilter(next)
                 if (next !== 'all') {
-                  const first = monsterModels.find(({ monster }) =>
-                    next === 'legacy' ? !MONSTER_BIOME_MAP[monster.id] : MONSTER_BIOME_MAP[monster.id] === next,
-                  )
+                  const first = monsterModels.find(({ monster }) => MONSTER_BIOME_MAP[monster.id] === next)
                   if (first) setSelectedMonsterId(first.monster.id)
                 }
               }}
@@ -877,7 +846,6 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                   {b.biomeName} ({b.entries.length} ตัว{b.entries.some((e) => e.boss) ? '' : ' • ไม่มีบอส'})
                 </option>
               ))}
-              <option value="legacy">มอนสเตอร์พิเศษ/ดั้งเดิม</option>
             </select>
           </div>
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">

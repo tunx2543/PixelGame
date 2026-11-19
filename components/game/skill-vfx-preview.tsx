@@ -173,23 +173,38 @@ export function SkillVfxPreview({
         })
       }
 
-      // Target training slime on right
+      // Target training monster on right
       const isHitFlash = vfxActive && vfxSpec?.style !== 'holy_heal' && vfxProgress > 0.2 && vfxProgress < 0.72
       const enemyKnockX = isHitFlash ? Math.round(Math.sin((vfxProgress - 0.2) * Math.PI * 2) * 4) : 0
       const enemyDrawable = resolveMonsterDrawable(
         'slime',
-        isHitFlash ? '#f472b6' : '#8b5cf6',
-        Math.floor(timeSec * 3.5) % 4,
+        '#f78087',
+        Math.floor(timeSec * 4) % 4,
         false,
         'idle',
         'left',
         0,
-        'slime',
+        'meadow_blob',
       )
       const enemyHd = enemyDrawable.hdScale
-      const ew = Math.round((enemyDrawable.width * 2) / Math.max(1, enemyHd))
-      const eh = Math.round((enemyDrawable.height * 2) / Math.max(1, enemyHd))
-      drawResolvedDrawable(ctx, enemyDrawable, Math.round(enemyX + enemyKnockX - ew / 2), Math.round(floorY - eh + 3), ew, eh)
+      const enemyScale = 1.45 / Math.max(1, enemyHd)
+      const ew = Math.round(enemyDrawable.width * enemyScale)
+      const eh = Math.round(enemyDrawable.height * enemyScale)
+      const enemyFootPad =
+        enemyDrawable.sheetSpec?.footPadFrac !== undefined
+          ? Math.round(enemyDrawable.sheetSpec.footPadFrac * eh)
+          : 2
+      ctx.save()
+      if (isHitFlash) ctx.globalAlpha = 0.75
+      drawResolvedDrawable(
+        ctx,
+        enemyDrawable,
+        Math.round(enemyX + enemyKnockX - ew / 2),
+        Math.round(floorY - eh + enemyFootPad),
+        ew,
+        eh,
+      )
+      ctx.restore()
 
       // Skill VFX burst
       if (vfxActive) {

@@ -1,4 +1,4 @@
-import { MONSTER_CATALOG_META } from './biome-monsters'
+import { MONSTER_CATALOG_META, normalizeMonsterId } from './biome-monsters'
 import { getCatalogMonsterAtlas } from './catalog-sprites'
 import { JOBS, MONSTERS, type JobDef, type MonsterDef, type MonsterSprite, type WeaponType } from './data'
 import { MOUNT_DEFS, type MountArchetype, type MountDef } from './mounts'
@@ -74,47 +74,7 @@ export interface JobModelSpec {
   }
 }
 
-export type MonsterModelArchetype =
-  | 'meadow_larva'
-  | 'meadow_fuzzfly'
-  | 'meadow_beetle'
-  | 'meadow_blob'
-  | 'meadow_blob_drop'
-  | 'meadow_cocoon'
-  | 'meadow_beetle_egg'
-  | 'meadow_bloomlet'
-  | 'meadow_capling'
-  | 'meadow_hopper'
-  | 'meadow_fiddlehop'
-  | 'meadow_big_hopper'
-  | 'meadow_dewmother'
-  | 'slime'
-  | 'slime_blue'
-  | 'pink_slime'
-  | 'mushroom'
-  | 'rabbit'
-  | 'boss_wolf'
-  | 'wolf'
-  | 'goblin'
-  | 'boss_spider_queen'
-  | 'goblin_chief'
-  | 'boss_lich'
-  | 'bat'
-  | 'spider'
-  | 'boss_fire_dragon'
-  | 'skeleton'
-  | 'orc'
-  | 'golem'
-  | 'boss_demon_king'
-  | 'ghost'
-  | 'fire_golem'
-  | 'earth_golem'
-  | 'demon'
-  | 'demon_lord'
-  | 'abyss_knight'
-  | 'gale_sentinel'
-  | 'abyss_dragon'
-  | (string & {})
+export type MonsterModelArchetype = string & {}
 
 export interface MonsterModelSpec {
   monsterId: string
@@ -396,160 +356,24 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
   },
 }
 
-const ARCHETYPE_BY_ID: Record<string, MonsterModelArchetype> = {
-  meadow_larva: 'meadow_larva',
-  meadow_fuzzfly: 'meadow_fuzzfly',
-  meadow_beetle: 'meadow_beetle',
-  meadow_blob: 'meadow_blob',
-  meadow_blob_drop: 'meadow_blob_drop',
-  meadow_cocoon: 'meadow_cocoon',
-  meadow_beetle_egg: 'meadow_beetle_egg',
-  meadow_bloomlet: 'meadow_bloomlet',
-  meadow_capling: 'meadow_capling',
-  meadow_hopper: 'meadow_hopper',
-  meadow_fiddlehop: 'meadow_fiddlehop',
-  meadow_big_hopper: 'meadow_big_hopper',
-  meadow_dewmother: 'meadow_dewmother',
-  slime: 'slime',
-  slime_blue: 'slime_blue',
-  pink_slime: 'pink_slime',
-  mushroom: 'mushroom',
-  rabbit: 'rabbit',
-  boss_wolf: 'boss_wolf',
-  wolf: 'wolf',
-  goblin: 'goblin',
-  boss_spider_queen: 'boss_spider_queen',
-  goblin_chief: 'goblin_chief',
-  boss_lich: 'boss_lich',
-  bat: 'bat',
-  spider: 'spider',
-  boss_fire_dragon: 'boss_fire_dragon',
-  skeleton: 'skeleton',
-  orc: 'orc',
-  golem: 'golem',
-  boss_demon_king: 'boss_demon_king',
-  ghost: 'ghost',
-  fire_golem: 'fire_golem',
-  earth_golem: 'earth_golem',
-  demon: 'demon',
-  demon_lord: 'demon_lord',
-  abyss_knight: 'abyss_knight',
-  gale_sentinel: 'gale_sentinel',
-  abyss_dragon: 'abyss_dragon',
-}
-
-const ARCHETYPE_BY_SPRITE: Record<MonsterSprite, MonsterModelArchetype> = {
-  slime: 'slime',
-  mushroom: 'mushroom',
-  rabbit: 'rabbit',
-  wolf: 'wolf',
-  goblin: 'goblin',
-  bat: 'bat',
-  spider: 'spider',
-  skeleton: 'skeleton',
-  ghost: 'ghost',
-  orc: 'orc',
-  golem: 'fire_golem',
-  earth_golem: 'earth_golem',
-  demon: 'demon',
-  gale_sentinel: 'gale_sentinel',
-  abyss_knight: 'abyss_knight',
-}
-
-const MEADOW_ARCHETYPES = new Set<MonsterModelArchetype>([
-  'meadow_larva',
-  'meadow_fuzzfly',
-  'meadow_beetle',
-  'meadow_blob',
-  'meadow_blob_drop',
-  'meadow_cocoon',
-  'meadow_beetle_egg',
-  'meadow_bloomlet',
-  'meadow_capling',
-  'meadow_hopper',
-  'meadow_fiddlehop',
-  'meadow_big_hopper',
-  'meadow_dewmother',
-])
-
 function buildMonsterSpec(def: MonsterDef): MonsterModelSpec {
   const catalogMeta = MONSTER_CATALOG_META[def.id]
   const catalogAtlas = getCatalogMonsterAtlas(def.id)
-  const archetype: MonsterModelArchetype =
-    ARCHETYPE_BY_ID[def.id] ?? (catalogMeta ? (def.id as MonsterModelArchetype) : undefined) ?? ARCHETYPE_BY_SPRITE[def.sprite] ?? 'slime'
-  const flying =
-    Boolean(catalogAtlas?.flying || catalogMeta?.flying) ||
-    archetype === 'meadow_fuzzfly' ||
-    archetype === 'bat' ||
-    archetype === 'ghost' ||
-    archetype === 'boss_fire_dragon' ||
-    archetype === 'abyss_dragon' ||
-    archetype === 'gale_sentinel'
-  const supports4Way = catalogAtlas
-    ? false
-    : Boolean(catalogMeta) ||
-      MEADOW_ARCHETYPES.has(archetype) ||
-      archetype === 'goblin' ||
-      archetype === 'goblin_chief' ||
-      archetype === 'orc' ||
-      archetype === 'skeleton' ||
-      archetype === 'boss_lich' ||
-      archetype === 'abyss_knight' ||
-      archetype === 'gale_sentinel' ||
-      archetype === 'demon' ||
-      archetype === 'boss_demon_king' ||
-      archetype === 'demon_lord'
+  const archetype: MonsterModelArchetype = def.id
+  const flying = Boolean(catalogAtlas?.flying || catalogMeta?.flying)
+  const supports4Way = false
 
-  const canvasSize =
-    archetype === 'abyss_dragon' || archetype === 'boss_fire_dragon'
-      ? { width: 42, height: 34 }
-      : archetype === 'meadow_dewmother'
-        ? { width: 38, height: 38 }
-        : archetype === 'meadow_big_hopper'
-          ? { width: 36, height: 36 }
-          : archetype === 'meadow_fiddlehop'
-            ? { width: 30, height: 32 }
-            : archetype === 'meadow_beetle_egg' ||
-                archetype === 'meadow_bloomlet' ||
-                archetype === 'meadow_capling' ||
-                archetype === 'meadow_hopper'
-              ? { width: 30, height: 30 }
-              : archetype === 'meadow_fuzzfly'
-                ? { width: 30, height: 26 }
-                : archetype === 'meadow_cocoon'
-                  ? { width: 24, height: 28 }
-                  : archetype === 'meadow_larva' || archetype === 'meadow_beetle'
-                    ? { width: 28, height: 24 }
-                    : archetype === 'meadow_blob' || archetype === 'meadow_blob_drop'
-                      ? { width: 26, height: 24 }
-                      : catalogMeta
-                        ? catalogMeta.boss
-                          ? catalogMeta.tribe === 'มังกร' || catalogMeta.id === 'world_goat' || catalogMeta.id === 'coast_drowned_captain'
-                            ? { width: 42, height: 38 }
-                            : { width: 38, height: 36 }
-                          : catalogMeta.size === 'ใหญ่'
-                            ? { width: 36, height: 34 }
-                            : catalogMeta.size === 'กลาง'
-                              ? { width: 32, height: 30 }
-                              : { width: 28, height: 26 }
-                      : def.boss ||
-                          archetype === 'demon_lord' ||
-                          archetype === 'boss_demon_king' ||
-                          archetype === 'boss_wolf' ||
-                          archetype === 'boss_spider_queen' ||
-                          archetype === 'boss_lich' ||
-                          archetype === 'earth_golem' ||
-                          archetype === 'goblin_chief'
-                        ? { width: 34, height: 32 }
-                        : archetype === 'abyss_knight' ||
-                            archetype === 'gale_sentinel' ||
-                            archetype === 'fire_golem' ||
-                            archetype === 'orc' ||
-                            archetype === 'golem'
-                          ? { width: 32, height: 30 }
-                          : archetype === 'wolf'
-                            ? { width: 30, height: 24 }
-                            : { width: 28, height: 26 }
+  const canvasSize = catalogMeta
+    ? catalogMeta.boss
+      ? catalogMeta.tribe === 'มังกร' || catalogMeta.id === 'world_goat' || catalogMeta.id === 'coast_drowned_captain'
+        ? { width: 42, height: 38 }
+        : { width: 38, height: 36 }
+      : catalogMeta.size === 'ใหญ่'
+        ? { width: 36, height: 34 }
+        : catalogMeta.size === 'กลาง'
+          ? { width: 32, height: 30 }
+          : { width: 28, height: 26 }
+    : { width: 32, height: 30 }
 
   const catalogElementAccent: Record<string, string> = {
     fire: '#fb923c',
@@ -563,70 +387,9 @@ function buildMonsterSpec(def: MonsterDef): MonsterModelSpec {
     neutral: '#fbbf24',
   }
 
-  const accentColor =
-    archetype === 'meadow_larva'
-      ? '#f5efc4'
-      : archetype === 'meadow_fuzzfly'
-        ? '#f0a783'
-        : archetype === 'meadow_beetle'
-          ? '#fbbf24'
-          : archetype === 'meadow_blob'
-            ? '#fde047'
-            : archetype === 'meadow_blob_drop'
-              ? '#fb923c'
-              : archetype === 'meadow_cocoon'
-                ? '#f4c7d0'
-                : archetype === 'meadow_beetle_egg'
-                  ? '#f5c27b'
-                  : archetype === 'meadow_bloomlet'
-                    ? '#facc15'
-                    : archetype === 'meadow_capling'
-                      ? '#fde047'
-                      : archetype === 'meadow_hopper'
-                        ? '#a855f7'
-                        : archetype === 'meadow_fiddlehop'
-                          ? '#f59e0b'
-                          : archetype === 'meadow_big_hopper'
-                            ? '#fbbf24'
-                            : archetype === 'meadow_dewmother'
-                              ? '#67e8f9'
-                              : catalogMeta
-                                ? (def.boss ? '#f5c441' : catalogElementAccent[catalogMeta.elementType] ?? def.color)
-                              : archetype === 'slime_blue'
-      ? '#bae6fd'
-      : archetype === 'pink_slime'
-        ? '#ffd6e0'
-        : archetype === 'boss_wolf'
-          ? '#fb923c'
-          : archetype === 'spider'
-            ? '#f43f5e'
-            : archetype === 'boss_spider_queen'
-              ? '#fde047'
-              : archetype === 'goblin_chief'
-                ? '#ffd60a'
-                : archetype === 'boss_lich'
-                  ? '#c084fc'
-                  : archetype === 'boss_fire_dragon'
-                    ? '#ffb703'
-                    : archetype === 'orc'
-                      ? '#fde047'
-                      : archetype === 'golem'
-                        ? '#a8a29e'
-                        : archetype === 'boss_demon_king'
-                          ? '#f43f5e'
-                          : archetype === 'fire_golem'
-                            ? '#ffb703'
-                            : archetype === 'earth_golem'
-                              ? '#a3e635'
-                              : archetype === 'abyss_knight'
-                                ? '#c77dff'
-                                : archetype === 'gale_sentinel'
-                                  ? '#ffd60a'
-                                  : archetype === 'demon_lord'
-                                    ? '#ff9e00'
-                                    : archetype === 'abyss_dragon'
-                                      ? '#e0aaff'
-                                      : def.color
+  const accentColor = catalogMeta
+    ? (def.boss ? '#f5c441' : catalogElementAccent[catalogMeta.elementType] ?? def.color)
+    : def.color
 
   return {
     monsterId: def.id,
@@ -640,15 +403,7 @@ function buildMonsterSpec(def: MonsterDef): MonsterModelSpec {
     canvasSize,
     supports4Way,
     flying,
-    auraColor: def.boss
-      ? '#f5c441'
-      : archetype === 'meadow_dewmother'
-        ? '#67e8f9'
-        : archetype === 'meadow_big_hopper'
-          ? '#fbbf24'
-          : archetype === 'abyss_knight'
-            ? '#9d4edd'
-            : undefined,
+    auraColor: def.boss ? '#f5c441' : undefined,
     animationFrames: catalogAtlas
       ? {
           idle:
@@ -670,15 +425,17 @@ export function getJobModelSpec(jobId: string): JobModelSpec {
 }
 
 export function getMonsterModelSpec(defId?: string, sprite?: MonsterSprite, color?: string): MonsterModelSpec {
-  if (defId && MONSTER_MODEL_SPECS[defId]) {
-    return MONSTER_MODEL_SPECS[defId]
+  const normalizedId = defId ? normalizeMonsterId(defId) : undefined
+  if (normalizedId && MONSTER_MODEL_SPECS[normalizedId]) {
+    return MONSTER_MODEL_SPECS[normalizedId]
   }
-  const archetype = sprite ? ARCHETYPE_BY_SPRITE[sprite] ?? 'slime' : 'slime'
-  const fallbackDef = Object.values(MONSTERS).find((m) => m.sprite === sprite) ?? MONSTERS.slime
+  const fallbackDef =
+    (sprite ? Object.values(MONSTERS).find((m) => m.sprite === sprite) : undefined) ??
+    MONSTERS.meadow_blob ??
+    Object.values(MONSTERS)[0]
   const spec = MONSTER_MODEL_SPECS[fallbackDef.id]
   return {
     ...spec,
-    archetype,
     color: color ?? spec.color,
   }
 }

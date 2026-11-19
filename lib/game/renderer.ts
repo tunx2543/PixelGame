@@ -12,7 +12,6 @@ import { T, TILE, type PortalDirection, type PortalGateStyle } from './maps'
 import {
   getCatalogMonsterAtlas,
   getCatalogMonsterFrameCount,
-  hasCatalogMonsterAtlas,
   preloadMapCatalogSprites,
 } from './catalog-sprites'
 import { getHdImage } from './hd-assets'
@@ -174,38 +173,21 @@ function drawWeaponAttackOverlay(
 }
 
 function monsterFacing(
-  defId: string,
-  sprite: MonsterSprite,
+  _defId: string,
+  _sprite: MonsterSprite,
   x: number,
-  y: number,
+  _y: number,
   vx: number,
-  vy: number,
+  _vy: number,
   flip: boolean,
   provoked: boolean,
 ): Dir {
-  const spec = getMonsterModelSpec(defId, sprite)
-  if (hasCatalogMonsterAtlas(defId)) {
-    if (provoked) {
-      const dx = (game.p?.x ?? x) - x
-      if (Math.abs(dx) > 1) return dx < 0 ? 'left' : 'right'
-    }
-    if (Math.abs(vx) > 0.05) return vx < 0 ? 'left' : 'right'
-    return flip ? 'left' : 'right'
-  }
-  if (!spec.supports4Way) {
-    return flip ? 'left' : 'right'
-  }
   if (provoked) {
     const dx = (game.p?.x ?? x) - x
-    const dy = (game.p?.y ?? y) - y
-    if (Math.abs(dx) >= Math.abs(dy)) return dx < 0 ? 'left' : 'right'
-    return dy < 0 ? 'up' : 'down'
+    if (Math.abs(dx) > 1) return dx < 0 ? 'left' : 'right'
   }
-  if (Math.abs(vx) > 0.05 || Math.abs(vy) > 0.05) {
-    if (Math.abs(vx) >= Math.abs(vy)) return vx < 0 ? 'left' : 'right'
-    return vy < 0 ? 'up' : 'down'
-  }
-  return flip ? 'left' : 'down'
+  if (Math.abs(vx) > 0.05) return vx < 0 ? 'left' : 'right'
+  return flip ? 'left' : 'right'
 }
 
 export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dpr: number, font: string) {
@@ -540,20 +522,18 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         const action: SpriteAction = attacking ? 'attack' : walking ? 'walk' : 'idle'
         const dir = monsterFacing(def.id, def.sprite, m.x, m.y, m.vx, m.vy, m.flip, m.provoked)
         const speedMul = m.provoked ? 1.3 : 1
-        const isCatalogMob = hasCatalogMonsterAtlas(def.id)
-        const atkCount = isCatalogMob ? getCatalogMonsterFrameCount(def.id, 'attack') : 4
-        const walkCount = isCatalogMob ? getCatalogMonsterFrameCount(def.id, 'walk') : 6
-        const idleCount = isCatalogMob ? getCatalogMonsterFrameCount(def.id, 'idle') : 4
+        const atkCount = getCatalogMonsterFrameCount(def.id, 'attack')
+        const walkCount = getCatalogMonsterFrameCount(def.id, 'walk')
+        const idleCount = getCatalogMonsterFrameCount(def.id, 'idle')
         const attackProgress = attacking ? Math.max(0, Math.min(1, 1 - m.lunge / 0.3)) : 0
         const attackFrame = Math.min(atkCount - 1, Math.floor(attackProgress * atkCount))
-        const walkFrame = Math.floor(m.animT * (isCatalogMob ? 7.5 : 8.5) * speedMul) % walkCount
-        const idleFrame = Math.floor(m.animT * (isCatalogMob ? 5.0 : 2.8)) % idleCount
+        const walkFrame = Math.floor(m.animT * 7.5 * speedMul) % walkCount
+        const idleFrame = Math.floor(m.animT * 5.0) % idleCount
         const frame = attacking ? attackFrame : walking ? walkFrame : idleFrame
 
         const drawable = resolveMonsterDrawable(def.sprite, def.color, frame, attacking, action, dir, attackFrame, def.id)
         const hdFactor = drawable.hdScale
-        const isHumanRigMob = !isCatalogMob && (mSpec.archetype === 'goblin' || mSpec.archetype === 'skeleton')
-        const scale = isHumanRigMob ? 31 / Math.max(1, drawable.height) : (def.boss ? 1.65 : 1.05) / hdFactor
+        const scale = (def.boss ? 1.65 : 1.05) / hdFactor
         const w = drawable.width * scale
         const h = drawable.height * scale
         const footPad =
@@ -575,7 +555,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         }
 
         const flying = mSpec.flying
-        const hover = flying ? Math.round(Math.sin(m.animT * 4.2) * 2.4) - (mSpec.archetype === 'abyss_dragon' ? 3 : 4) : 0
+        const hover = flying ? Math.round(Math.sin(m.animT * 4.2) * 2.4) - 4 : 0
         const hoverX = flying ? Math.cos(m.animT * 2.4) * 1.4 : 0
         const faceDx = (game.p?.x ?? m.x) - m.x
         const faceDy = (game.p?.y ?? m.y) - m.y
@@ -597,51 +577,17 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           ctx.restore()
         }
 
-        const isBouncyMob =
-          def.sprite === 'slime' ||
-          def.id === 'mushroom' ||
-          def.id === 'rabbit' ||
-          def.id.startsWith('meadow_blob') ||
-          def.id === 'meadow_capling' ||
-          def.id === 'meadow_hopper' ||
-          def.id === 'meadow_big_hopper' ||
-          def.id === 'meadow_dewmother' ||
-          def.id.endsWith('_blob') ||
-          def.id.endsWith('_puff') ||
-          def.id.endsWith('_hopper')
-        const walkCycle = m.animT * (isBouncyMob ? 8.5 : 9.2) * speedMul
-        const walkBounce =
-          walking && !isCatalogMob
-            ? -Math.abs(Math.sin(walkCycle)) * (isBouncyMob ? 2.8 : flying ? 1.4 : def.boss ? 2.0 : 1.7)
-            : 0
-        const walkTilt =
-          walking && !isBouncyMob && !isCatalogMob
-            ? Math.sin(walkCycle) * (flying ? 0.035 : 0.045)
-            : 0
         const breathPhase = Math.sin(t * 2.8 + m.x * 0.1)
-        const walkSx = isCatalogMob
-          ? (walking ? 1 : 1 - breathPhase * 0.012)
-          : walking
-            ? isBouncyMob
-              ? 1 - Math.sin(walkCycle * 2) * 0.055
-              : 1 + Math.cos(walkCycle) * 0.025
-            : 1 - breathPhase * 0.018
-        const walkSy = isCatalogMob
-          ? (walking ? 1 : 1 + breathPhase * 0.014)
-          : walking
-            ? isBouncyMob
-              ? 1 + Math.sin(walkCycle * 2) * 0.055
-              : 1 - Math.cos(walkCycle) * 0.025
-            : 1 + breathPhase * 0.022
+        const walkSx = walking ? 1 : 1 - breathPhase * 0.012
+        const walkSy = walking ? 1 : 1 + breathPhase * 0.014
 
         ctx.save()
         if (m.hitFlash > 0) ctx.globalAlpha = 0.65
         if (def.sprite === 'ghost') ctx.globalAlpha *= 0.8 + Math.sin(m.animT * 4) * 0.08
         ctx.translate(
           m.x + hoverX + hitShake + faceX * attackReach,
-          m.y + faceY * attackReach + hover + walkBounce,
+          m.y + faceY * attackReach + hover,
         )
-        if (walkTilt !== 0) ctx.rotate(walkTilt)
         ctx.scale(walkSx, walkSy)
         drawResolvedDrawable(ctx, drawable, -w / 2, -h + footPad, w, h)
 
@@ -1566,16 +1512,13 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     if (!def) continue
     const catalogAtlas = getCatalogMonsterAtlas(def.id)
     const mSpec = getMonsterModelSpec(def.id, def.sprite, def.color)
-    const isHumanRigMob = !catalogAtlas && (mSpec.archetype === 'goblin' || mSpec.archetype === 'skeleton')
     const mScale = def.boss ? 1.65 : 1.05
     const h = catalogAtlas
       ? Math.round(
           Math.max(18, Math.min(72, 16 + catalogAtlas.heightWorld * 0.28)) *
             (1 - catalogAtlas.footPadFrac),
         ) + (mSpec.flying ? 5 : 2)
-      : isHumanRigMob
-        ? 31
-        : Math.round(mSpec.canvasSize.height * mScale * 0.78) + (mSpec.flying ? 5 : 0)
+      : Math.round(mSpec.canvasSize.height * mScale * 0.78) + (mSpec.flying ? 5 : 0)
     const [x, y] = toS(m.x, m.y - h)
     const isAnyBoss = Boolean(def.boss || m.isWorldBoss)
     const color = m.isWorldBoss ? '#fde047' : def.boss ? '#ff6b6b' : def.level > p.level + 5 ? '#ff8fa3' : def.level < p.level - 5 ? '#a0a0a0' : '#ffffff'

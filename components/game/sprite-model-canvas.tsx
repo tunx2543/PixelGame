@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { getCatalogMonsterFrameCount, hasCatalogMonsterAtlas } from '@/lib/game/catalog-sprites'
+import { normalizeMonsterId } from '@/lib/game/biome-monsters'
+import { getCatalogMonsterFrameCount } from '@/lib/game/catalog-sprites'
 import { JOBS, MONSTERS, normalizeJobId, type WeaponType } from '@/lib/game/data'
 import { getJobModelSpec, getMonsterModelSpec, getMountModelSpec, getPetModelSpec } from '@/lib/game/models-2d'
 import {
@@ -143,13 +144,14 @@ export function SpriteModelCanvas({
       }
       lastDrawAt = now
 
-      const isCatalogMonster = mode === 'monster' && hasCatalogMonsterAtlas(id)
+      const resolvedMonsterId = mode === 'monster' ? normalizeMonsterId(id) : id
+      const isCatalogMonster = mode === 'monster'
       const isAttack = effectiveAction === 'attack'
       const isSkill = effectiveAction === 'skill'
-      const atkCount = isCatalogMonster ? getCatalogMonsterFrameCount(id, 'attack') : 4
-      const skillCount = isCatalogMonster ? getCatalogMonsterFrameCount(id, 'skill') : 4
-      const walkMod = mode === 'job' ? 4 : isCatalogMonster ? getCatalogMonsterFrameCount(id, 'walk') : 6
-      const idleCount = isCatalogMonster ? getCatalogMonsterFrameCount(id, 'idle') : 4
+      const atkCount = isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'attack') : 4
+      const skillCount = isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'skill') : 4
+      const walkMod = mode === 'job' ? 4 : isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'walk') : 6
+      const idleCount = isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'idle') : 4
       const attackFrame = isAttack ? Math.min(atkCount - 1, Math.floor(attackProgress * atkCount)) : 0
       const skillFrame = isSkill ? Math.min(skillCount - 1, Math.floor(attackProgress * skillCount)) : 0
       const frame = isSkill
@@ -198,7 +200,7 @@ export function SpriteModelCanvas({
         auraColor = spec.auraColor
         isFlying = spec.flying
       } else {
-        const monDef = MONSTERS[id] ?? MONSTERS.slime
+        const monDef = MONSTERS[resolvedMonsterId] ?? MONSTERS.meadow_blob ?? Object.values(MONSTERS)[0]
         const spec = getMonsterModelSpec(monDef.id, monDef.sprite, monDef.color)
         drawable = resolveMonsterDrawable(
           monDef.sprite,
@@ -311,40 +313,10 @@ export function SpriteModelCanvas({
           if (isGhost) {
             ctx.globalAlpha = 0.84 + (reducedMotion ? 0 : Math.sin(elapsed * 4) * 0.08)
           }
-          const isMonsterWalk = mode === 'monster' && effectiveAction === 'walk' && !reducedMotion && !isCatalogMonster
-          const isMonsterIdle = mode === 'monster' && effectiveAction === 'idle' && !reducedMotion && !isCatalogMonster
-          const isBouncyMonster =
-            mode === 'monster' &&
-            !isCatalogMonster &&
-            (id.includes('slime') ||
-              id === 'mushroom' ||
-              id === 'rabbit' ||
-              id.startsWith('meadow_blob') ||
-              id === 'meadow_capling' ||
-              id === 'meadow_hopper' ||
-              id === 'meadow_big_hopper' ||
-              id === 'meadow_dewmother')
-          const mBounce = isMonsterWalk
-            ? -Math.abs(Math.sin(elapsed * 9.0)) * (isBouncyMonster ? 6 : isFlying ? 3 : 4)
-            : 0
-          const mSx = isMonsterWalk
-            ? (isBouncyMonster ? 1 - Math.sin(elapsed * 18) * 0.055 : 1 + Math.cos(elapsed * 9) * 0.025)
-            : isMonsterIdle
-              ? 1 - Math.sin(elapsed * 2.8) * 0.018
-              : 1
-          const mSy = isMonsterWalk
-            ? (isBouncyMonster ? 1 + Math.sin(elapsed * 18) * 0.055 : 1 - Math.cos(elapsed * 9) * 0.025)
-            : isMonsterIdle
-              ? 1 + Math.sin(elapsed * 2.8) * 0.022
-              : 1
-          const mTilt = isMonsterWalk && !isBouncyMonster ? Math.sin(elapsed * 9.0) * 0.04 : 0
-
           const drawX = Math.round(centerX + lungeOffset)
-          const drawAnchorY = Math.round(baseFloorY + hoverY + mBounce)
+          const drawAnchorY = Math.round(baseFloorY + hoverY)
           ctx.save()
           ctx.translate(drawX, drawAnchorY)
-          if (mTilt !== 0) ctx.rotate(mTilt)
-          ctx.scale(mSx, mSy)
           drawResolvedDrawable(
             ctx,
             drawable,
