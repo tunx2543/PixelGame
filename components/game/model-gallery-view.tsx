@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { Crown, Eye, Flame, Footprints, Pause, PawPrint, Play, RotateCw, Shield, Sparkles, Swords, Wind } from 'lucide-react'
-import { BIOME_CATALOG_SPECS, MONSTER_BIOME_MAP } from '@/lib/game/biome-monsters'
+import { BIOME_CATALOG_SPECS, MONSTER_BIOME_MAP, MONSTER_CATALOG_META } from '@/lib/game/biome-monsters'
 import { ITEMS } from '@/lib/game/data'
 import {
   getAllJobModels,
@@ -102,6 +102,10 @@ function getMonsterTraitLabel(archetype: string): string {
     abyss_knight: 'อัศวินเกราะทมิฬมีเขา + ดาบอเวจี (4 ทิศ)',
     gale_sentinel: 'ผู้พิทักษ์สายลมมีปีกแสง + หอกวายุ (4 ทิศ)',
     abyss_dragon: 'บอสมังกรอเวจีมีปีก + พ่นไฟ/ลมหายใจมืด',
+  }
+  const meta = MONSTER_CATALOG_META[archetype]
+  if (meta) {
+    return `${meta.biomeName} · ธาตุ${meta.elementLabel} · ${meta.tribe} · ${meta.role} · ขนาด${meta.size}${meta.aggressive ? ' · ตีก่อน' : ''} · ${'★'.repeat(meta.stars)}`
   }
   return map[archetype] ?? archetype
 }
@@ -513,14 +517,22 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
       ) : tab === 'monsters' ? (
         <section
           aria-label={`ตัวอย่างโมเดล ${selectedMonsterEntry.monster.name}`}
-          className="grid gap-3 border-2 border-destructive/50 bg-muted p-3 md:grid-cols-[11.5rem_1fr]"
+          className={`grid gap-3 p-3 md:grid-cols-[11.5rem_1fr] ${
+            selectedMonsterEntry.monster.boss
+              ? 'border-2 border-[#e2b33b] bg-amber-950/20 shadow-[0_0_18px_rgba(245,196,65,0.24)]'
+              : 'border-2 border-destructive/50 bg-muted'
+          }`}
         >
-          <div className="flex flex-col items-center justify-between border-2 border-[#0e0f1a] bg-[#131726] p-2.5">
+          <div
+            className={`flex flex-col items-center justify-between bg-[#131726] p-2.5 ${
+              selectedMonsterEntry.monster.boss ? 'border-2 border-[#e2b33b]' : 'border-2 border-[#0e0f1a]'
+            }`}
+          >
             <div className="flex w-full items-center justify-between text-[10px]">
               <span
                 className={`border px-1.5 py-0.5 font-semibold ${
                   selectedMonsterEntry.monster.boss
-                    ? 'border-destructive/60 bg-destructive/20 text-[#ff8b8e]'
+                    ? 'border-[#e2b33b] bg-[#e2b33b]/20 text-[#fde047]'
                     : 'border-border bg-secondary text-muted-foreground'
                 }`}
               >
@@ -557,7 +569,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
             <div>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <h3 className="flex items-center gap-1.5 text-lg font-bold text-[#ff8b8e]">
+                  <h3 className={`flex items-center gap-1.5 text-lg font-bold ${selectedMonsterEntry.monster.boss ? 'text-[#fde047]' : 'text-[#ff8b8e]'}`}>
                     {selectedMonsterEntry.monster.boss && <Crown className="size-4 text-gold" aria-hidden />}
                     {selectedMonsterEntry.monster.name}
                     <span className="ml-1 font-mono text-xs font-normal text-muted-foreground">
@@ -606,7 +618,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                   </span>
                 ))}
                 <span className="ml-auto font-mono text-[10px] text-muted-foreground tabular-nums">
-                  {selectedMonsterEntry.model.canvasSize.width}x{selectedMonsterEntry.model.canvasSize.height}px • Idle 4F / Walk 6F / Atk 4F
+                  {selectedMonsterEntry.model.canvasSize.width}x{selectedMonsterEntry.model.canvasSize.height}px • Idle {selectedMonsterEntry.model.animationFrames.idle}F / Walk {selectedMonsterEntry.model.animationFrames.walk}F / Atk {selectedMonsterEntry.model.animationFrames.attack}F
                 </span>
               </div>
             </div>
@@ -871,6 +883,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
             {filteredMonsterModels.map(({ monster, model }) => {
               const selected = monster.id === selectedMonsterEntry.monster.id
+              const catMeta = MONSTER_CATALOG_META[monster.id]
               return (
                 <button
                   key={monster.id}
@@ -878,18 +891,24 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                   onClick={() => setSelectedMonsterId(monster.id)}
                   aria-pressed={selected}
                   className={`flex flex-col items-center gap-1.5 p-2 text-center transition-all hover:brightness-110 ${
-                    selected
-                      ? 'mmorpg-showcase-card-active border-destructive'
-                      : 'mmorpg-showcase-card'
+                    monster.boss
+                      ? `border-2 border-[#e2b33b] bg-amber-950/25 shadow-[0_0_12px_rgba(245,196,65,0.22)] ${selected ? 'ring-2 ring-[#fde047]' : ''}`
+                      : selected
+                        ? 'mmorpg-showcase-card-active border-destructive'
+                        : 'mmorpg-showcase-card'
                   }`}
                 >
                   <div className="flex w-full items-center justify-between text-[10px]">
-                    <span className={`font-semibold ${monster.boss ? 'text-[#ff8b8e]' : 'text-accent'}`}>
-                      {monster.boss ? '★ BOSS' : 'MOB'}
+                    <span className={`font-semibold ${monster.boss ? 'text-[#fde047]' : 'text-accent'}`}>
+                      {monster.boss ? '★ บอส' : 'MOB'}
                     </span>
                     <span className="font-mono text-muted-foreground tabular-nums">Lv.{monster.level}</span>
                   </div>
-                  <div className="grid size-24 place-items-center border border-[#c9993f]/35 bg-[#0b1024]/90 shadow-[inset_0_0_16px_rgba(65,105,225,0.14)]">
+                  <div
+                    className={`grid size-24 place-items-center bg-[#0b1024]/90 shadow-[inset_0_0_16px_rgba(65,105,225,0.14)] ${
+                      monster.boss ? 'border-2 border-[#e2b33b]' : 'border border-[#c9993f]/35'
+                    }`}
+                  >
                     <SpriteModelCanvas
                       mode="monster"
                       id={monster.id}
@@ -900,9 +919,11 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                     />
                   </div>
                   <div className="mmorpg-ribbon w-full px-2 py-1">
-                    <p className="truncate text-xs font-bold text-foreground">{monster.name}</p>
+                    <p className={`truncate text-xs font-bold ${monster.boss ? 'text-[#fde047]' : 'text-foreground'}`}>
+                      {monster.name}
+                    </p>
                     <p className="truncate text-[10px] text-muted-foreground">
-                      HP {formatNum(monster.hp)} • {model.flying ? 'บิน' : 'พื้นดิน'}
+                      {catMeta ? `${catMeta.elementLabel} · ${catMeta.tribe}` : `HP ${formatNum(monster.hp)}`} • {model.flying ? 'บิน' : 'พื้นดิน'}
                     </p>
                   </div>
                 </button>

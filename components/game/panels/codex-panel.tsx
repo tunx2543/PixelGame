@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Award, BookOpen, Check, Gem, Search } from 'lucide-react'
-import { BIOME_CATALOG_SPECS, MONSTER_BIOME_MAP } from '@/lib/game/biome-monsters'
+import { Award, BookOpen, Check, Crown, Gem, Search } from 'lucide-react'
+import { BIOME_CATALOG_SPECS, MONSTER_BIOME_MAP, MONSTER_CATALOG_META } from '@/lib/game/biome-monsters'
 import { MONSTERS } from '@/lib/game/data'
 import { claimBestiaryRewardAction, equipTitleAction } from '@/lib/game/engine'
 import {
@@ -16,6 +16,7 @@ import {
 } from '@/lib/game/rpg-systems'
 import { useGame } from '@/lib/game/use-game'
 import { formatNum } from '../format'
+import { SpriteModelCanvas } from '../sprite-model-canvas'
 import { PanelFrame, PxButton } from './panels'
 
 export function CodexPanel() {
@@ -112,48 +113,85 @@ export function CodexPanel() {
               const canClaim = Boolean(nextTier && kills >= nextTier.target)
               const elem = ELEMENT_META[getMonsterElement(m.id)]
               const bossFactor = m.boss ? 1.5 : 1
+              const meta = MONSTER_CATALOG_META[m.id]
 
               return (
                 <div
                   key={m.id}
-                  className="flex flex-col justify-between gap-2 border border-border/80 bg-background/60 p-3 text-xs"
+                  className={`flex flex-col justify-between gap-2 p-3 text-xs ${
+                    m.boss
+                      ? 'border-2 border-[#e2b33b] bg-amber-950/20 shadow-[0_0_12px_rgba(245,196,65,0.25)]'
+                      : 'border border-border/80 bg-background/60'
+                  }`}
                 >
-                  <div>
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <span
-                          className="size-3 shrink-0 border border-black"
-                          style={{ backgroundColor: m.color }}
-                        />
-                        <span className="truncate font-bold text-foreground">
-                          {m.boss ? '★ ' : ''}{m.name}
-                        </span>
-                        <span
-                          className="shrink-0 border border-border/60 px-1.5 py-0.5 text-[10px] font-semibold"
-                          style={{ color: elem.color, background: elem.bg }}
-                        >
-                          {elem.label}
+                  <div className="flex items-start gap-2.5">
+                    <div
+                      className={`grid size-14 shrink-0 place-items-center bg-[#0b1024]/90 ${
+                        m.boss ? 'border-2 border-[#e2b33b]' : 'border border-border/70'
+                      }`}
+                    >
+                      <SpriteModelCanvas
+                        mode="monster"
+                        id={m.id}
+                        action="idle"
+                        dir="down"
+                        size={52}
+                        label={m.name}
+                      />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          {m.boss && (
+                            <span className="inline-flex shrink-0 items-center gap-0.5 border border-[#e2b33b] bg-[#e2b33b]/20 px-1 py-0.5 text-[10px] font-bold text-[#fde047]">
+                              <Crown className="size-2.5" aria-hidden /> บอส
+                            </span>
+                          )}
+                          <span className="truncate font-bold text-foreground">
+                            {m.name}
+                          </span>
+                        </div>
+                        <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+                          Lv.{m.level}
                         </span>
                       </div>
-                      <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
-                        Lv.{m.level}
-                      </span>
-                    </div>
 
-                    <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground tabular-nums">
-                      <span>กำจัดแล้ว: {formatNum(kills)} ตัว</span>
-                      <span>
-                        {nextTier ? `ขั้นถัดไป ${kills}/${nextTier.target}` : 'ครบ 3 ขั้นสมบูรณ์'}
-                      </span>
-                    </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
+                        <span
+                          className="shrink-0 border border-border/60 px-1.5 py-0.5 font-semibold"
+                          style={{ color: elem.color, background: elem.bg }}
+                        >
+                          {meta?.elementLabel ?? elem.label}
+                        </span>
+                        {meta && (
+                          <>
+                            <span className="text-muted-foreground">
+                              {meta.tribe} · {meta.role} · {meta.size}
+                              {meta.aggressive ? ' · ตีก่อน' : ''}
+                            </span>
+                            <span className="ml-auto font-mono text-[#f5c441]">
+                              {'★'.repeat(meta.stars)}
+                            </span>
+                          </>
+                        )}
+                      </div>
 
-                    <div className="mt-1 h-1.5 w-full overflow-hidden border border-border bg-muted">
-                      <div
-                        className="h-full bg-emerald-400 transition-[width]"
-                        style={{
-                          width: `${Math.min(100, Math.round((kills / (nextTier?.target ?? 50)) * 100))}%`,
-                        }}
-                      />
+                      <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground tabular-nums">
+                        <span>กำจัดแล้ว: {formatNum(kills)} ตัว</span>
+                        <span>
+                          {nextTier ? `ขั้นถัดไป ${kills}/${nextTier.target}` : 'ครบ 3 ขั้นสมบูรณ์'}
+                        </span>
+                      </div>
+
+                      <div className="mt-1 h-1.5 w-full overflow-hidden border border-border bg-muted">
+                        <div
+                          className="h-full bg-emerald-400 transition-[width]"
+                          style={{
+                            width: `${Math.min(100, Math.round((kills / (nextTier?.target ?? 50)) * 100))}%`,
+                          }}
+                        />
+                      </div>
                     </div>
                   </div>
 

@@ -8,6 +8,7 @@ import type { EncounterBiome, EncounterEnemy } from '@/lib/game/encounter'
 import type { FloatingDamagePopup } from '@/lib/game/floating-damage'
 import { registerCombatAudioHandler } from '@/lib/game/combat-audio'
 import { computeShakeFrame, type ScreenShakeEvent } from '@/lib/game/screen-shake'
+import { getCatalogMonsterFrameCount, hasCatalogMonsterAtlas } from '@/lib/game/catalog-sprites'
 import { getMonsterModelSpec } from '@/lib/game/models-2d'
 import {
   drawResolvedDrawable,
@@ -425,14 +426,18 @@ export function EncounterStageCanvas({
             const mStepIn = isEnemyAttacking && eAtkAge < 0.25
             const mStrike = isEnemyAttacking && eAtkAge >= 0.25
             const mAction: SpriteAction = mStrike ? 'attack' : mStepIn ? 'walk' : ph === 'FIGHTING' && flying ? 'walk' : 'idle'
-            const mAtkFrame = mStrike ? Math.min(3, Math.floor(((eAtkAge - 0.25) / 0.75) * 4)) : 0
+            const isCatalogMob = hasCatalogMonsterAtlas(mon.def.id)
+            const atkCount = isCatalogMob ? getCatalogMonsterFrameCount(mon.def.id, 'attack') : 4
+            const walkCount = isCatalogMob ? getCatalogMonsterFrameCount(mon.def.id, 'walk') : 6
+            const idleCount = isCatalogMob ? getCatalogMonsterFrameCount(mon.def.id, 'idle') : 4
+            const mAtkFrame = mStrike ? Math.min(atkCount - 1, Math.floor(((eAtkAge - 0.25) / 0.75) * atkCount)) : 0
             const mFrame = mStrike
               ? mAtkFrame
               : mStepIn
-                ? Math.floor(eAtkAge * 24) % 6
+                ? Math.floor(eAtkAge * 24) % walkCount
                 : flying
-                  ? Math.floor(t * 8) % 6
-                  : Math.floor(t * 2.8) % 4
+                  ? Math.floor(t * (isCatalogMob ? 7.5 : 8)) % walkCount
+                  : Math.floor(t * (isCatalogMob ? 5.0 : 2.8)) % idleCount
             const mDrawable = resolveMonsterDrawable(
               mon.def.sprite,
               mon.def.color,
@@ -444,7 +449,7 @@ export function EncounterStageCanvas({
               mon.def.id,
             )
 
-            const targetHeight = mon.rarity === 'boss' ? 94 : mon.rarity === 'elite' ? 82 : 74
+            const targetHeight = mon.rarity === 'boss' || mon.def.boss ? 94 : mon.rarity === 'elite' ? 82 : 74
             const baseMonsterScale = targetHeight / Math.max(1, mDrawable.height)
             const mw = mDrawable.width * baseMonsterScale
             const mh = mDrawable.height * baseMonsterScale
@@ -456,11 +461,11 @@ export function EncounterStageCanvas({
             ctx.fill()
 
             // Rarity aura
-            if (!isDead && mon.rarity !== 'normal') {
+            if (!isDead && (mon.rarity !== 'normal' || mon.def.boss)) {
               ctx.save()
-              ctx.strokeStyle = mon.rarity === 'boss' ? (mSpec.auraColor || '#e5484d') : '#c77dff'
-              ctx.lineWidth = 2
-              ctx.globalAlpha = 0.4 + Math.sin(t * 5) * 0.2
+              ctx.strokeStyle = mon.rarity === 'boss' || mon.def.boss ? (mSpec.auraColor || '#f5c441') : '#c77dff'
+              ctx.lineWidth = mon.rarity === 'boss' || mon.def.boss ? 2.4 : 2
+              ctx.globalAlpha = 0.45 + Math.sin(t * 5) * 0.2
               ctx.beginPath()
               ctx.ellipse(enemyX + mLunge, floorY + 1, mw * 0.46, 11, 0, 0, Math.PI * 2)
               ctx.stroke()
@@ -479,7 +484,11 @@ export function EncounterStageCanvas({
               ctx.scale(1.15, 0.45)
             }
             const mHd = mDrawable.hdScale
-            drawResolvedDrawable(ctx, mDrawable, Math.round(-mw / 2), Math.round(-mh + 2 * baseMonsterScale * mHd), mw, mh)
+            const mFootOffset =
+              mDrawable.sheetSpec?.footPadFrac !== undefined
+                ? mDrawable.sheetSpec.footPadFrac * mh
+                : 2 * baseMonsterScale * mHd
+            drawResolvedDrawable(ctx, mDrawable, Math.round(-mw / 2), Math.round(-mh + mFootOffset), mw, mh)
 
             if (isEnemyHurt && !isDead) {
               ctx.globalAlpha = 0.55

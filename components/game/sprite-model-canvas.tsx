@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { getCatalogMonsterFrameCount, hasCatalogMonsterAtlas } from '@/lib/game/catalog-sprites'
 import { JOBS, MONSTERS, normalizeJobId, type WeaponType } from '@/lib/game/data'
 import { getJobModelSpec, getMonsterModelSpec, getMountModelSpec, getPetModelSpec } from '@/lib/game/models-2d'
 import {
@@ -142,20 +143,24 @@ export function SpriteModelCanvas({
       }
       lastDrawAt = now
 
+      const isCatalogMonster = mode === 'monster' && hasCatalogMonsterAtlas(id)
       const isAttack = effectiveAction === 'attack'
       const isSkill = effectiveAction === 'skill'
-      const attackFrame = isAttack ? Math.min(3, Math.floor(attackProgress * 4)) : 0
-      const skillFrame = isSkill ? Math.min(3, Math.floor(attackProgress * 4)) : 0
-      const walkMod = mode === 'job' ? 4 : 6
+      const atkCount = isCatalogMonster ? getCatalogMonsterFrameCount(id, 'attack') : 4
+      const skillCount = isCatalogMonster ? getCatalogMonsterFrameCount(id, 'skill') : 4
+      const walkMod = mode === 'job' ? 4 : isCatalogMonster ? getCatalogMonsterFrameCount(id, 'walk') : 6
+      const idleCount = isCatalogMonster ? getCatalogMonsterFrameCount(id, 'idle') : 4
+      const attackFrame = isAttack ? Math.min(atkCount - 1, Math.floor(attackProgress * atkCount)) : 0
+      const skillFrame = isSkill ? Math.min(skillCount - 1, Math.floor(attackProgress * skillCount)) : 0
       const frame = isSkill
         ? skillFrame
         : isAttack
           ? attackFrame
           : effectiveAction === 'walk'
-            ? Math.floor(elapsed * (mode === 'job' ? 8.5 : 8.0)) % walkMod
+            ? Math.floor(elapsed * (mode === 'job' ? 8.5 : isCatalogMonster ? 7.5 : 8.0)) % walkMod
             : mode === 'job' && !reducedMotion && Math.sin(elapsed * 1.4) > 0.96
               ? -1
-              : Math.floor(elapsed * 2.6) % 4
+              : Math.floor(elapsed * (isCatalogMonster ? 5.0 : 2.6)) % idleCount
 
       let drawable: ResolvedDrawable
       let auraColor: string | undefined
@@ -260,7 +265,12 @@ export function SpriteModelCanvas({
 
           const centerX = Math.round(canvas.width / 2)
           const baseFloorY = Math.round(canvas.height * (hasRebirth && showAura ? (rebirthCount >= 5 ? 0.81 : 0.84) : 0.89))
-          const footPad = gmReady ? Math.round(9 * computedScale) : Math.round(2 * computedScale)
+          const footPad =
+            drawable.sheetSpec?.footPadFrac !== undefined
+              ? Math.round(drawable.sheetSpec.footPadFrac * drawH)
+              : gmReady
+                ? Math.round(9 * computedScale)
+                : Math.round(2 * computedScale)
           const auraRadiusX = Math.max(11, Math.round(drawW * (rebirthCount >= 5 ? 0.48 : 0.45)))
 
           if (showShadow) {
@@ -301,10 +311,11 @@ export function SpriteModelCanvas({
           if (isGhost) {
             ctx.globalAlpha = 0.84 + (reducedMotion ? 0 : Math.sin(elapsed * 4) * 0.08)
           }
-          const isMonsterWalk = mode === 'monster' && effectiveAction === 'walk' && !reducedMotion
-          const isMonsterIdle = mode === 'monster' && effectiveAction === 'idle' && !reducedMotion
+          const isMonsterWalk = mode === 'monster' && effectiveAction === 'walk' && !reducedMotion && !isCatalogMonster
+          const isMonsterIdle = mode === 'monster' && effectiveAction === 'idle' && !reducedMotion && !isCatalogMonster
           const isBouncyMonster =
             mode === 'monster' &&
+            !isCatalogMonster &&
             (id.includes('slime') ||
               id === 'mushroom' ||
               id === 'rabbit' ||

@@ -1,3 +1,5 @@
+import { MONSTER_CATALOG_META } from './biome-monsters'
+import { getCatalogMonsterFrameSpec } from './catalog-sprites'
 import type { Dir, SpriteAction } from './sprites'
 
 export type HeroSheetId =
@@ -359,6 +361,14 @@ export interface SheetFrameDrawSpec {
   sheetId: string
   anchorX: number
   anchorY: number
+  /** Logical union frame box dimensions & normalized sub-rect placement for trimmed packed atlases */
+  boxW?: number
+  boxH?: number
+  subX?: number
+  subY?: number
+  subW?: number
+  subH?: number
+  footPadFrac?: number
 }
 
 const MAX_SLICED_FRAMES = 48
@@ -418,14 +428,20 @@ export function drawSheetFrameSpec(
   dh: number,
 ): void {
   if (!spec.image.complete || spec.image.naturalWidth <= 0) return
+  const rx = spec.subX ?? 0
+  const ry = spec.subY ?? 0
+  const rw = spec.subW ?? 1
+  const rh = spec.subH ?? 1
+  const subDw = rw * dw
+  const subDh = rh * dh
   if (!spec.flipX) {
-    ctx.drawImage(spec.image, spec.sx, spec.sy, spec.sw, spec.sh, dx, dy, dw, dh)
+    ctx.drawImage(spec.image, spec.sx, spec.sy, spec.sw, spec.sh, dx + rx * dw, dy + ry * dh, subDw, subDh)
     return
   }
   ctx.save()
   ctx.translate(dx + dw, dy)
   ctx.scale(-1, 1)
-  ctx.drawImage(spec.image, spec.sx, spec.sy, spec.sw, spec.sh, 0, 0, dw, dh)
+  ctx.drawImage(spec.image, spec.sx, spec.sy, spec.sw, spec.sh, rx * dw, ry * dh, subDw, subDh)
   ctx.restore()
 }
 
@@ -484,6 +500,10 @@ export function getMonsterSheetFrameSpec(
   action: SpriteAction,
   frame: number,
 ): SheetFrameDrawSpec | null {
+  const isBoss = Boolean(defId && MONSTER_CATALOG_META[defId]?.boss)
+  const catalogSpec = getCatalogMonsterFrameSpec(defId, dir, action, frame, isBoss)
+  if (catalogSpec) return catalogSpec
+
   const spec = resolveMonsterSheetSpec(defId, spriteFallback)
   if (!spec) return null
 

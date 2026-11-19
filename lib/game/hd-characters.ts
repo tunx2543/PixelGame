@@ -1,5 +1,6 @@
 import type { MonsterSprite, WeaponType } from './data'
 import { isMeadowMonsterArchetype, renderMeadowMonster } from './hd-meadow-monsters'
+import { renderCatalogMonster } from './monsters'
 import type { MountModelSpec, PetModelSpec, MonsterModelArchetype } from './models-2d'
 import type { Dir, HumanColors, SpriteAction } from './sprites'
 
@@ -1276,6 +1277,11 @@ export function renderHdMonsterSprite(
   ctx.lineWidth = 3.2
 
   if (isMeadowMonsterArchetype(archetype) && renderMeadowMonster(ctx, archetype, W, H, dir, action, f)) {
+    ctx.restore()
+    return c
+  }
+
+  if (renderCatalogMonster(ctx, archetype, W, H, dir, action, f)) {
     ctx.restore()
     return c
   }

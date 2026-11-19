@@ -17,6 +17,7 @@ import {
 } from './data'
 import { LEGACY_MAP_ALIASES, MAPS, MAP_ORDER, TILE, boxBlocked, isSolidPx, normalizeMapId, type MapDef, type NpcDef, type NpcRole } from './maps'
 import { GEM_SHOP_ITEMS } from './gem-shop'
+import { preloadMapCatalogSprites } from './catalog-sprites'
 import type { Dir } from './sprites'
 import { GM_ACTIVE_SKILLS } from './gm-sprite'
 import { createClient } from '@/lib/supabase/client'
@@ -1508,6 +1509,7 @@ function earthBossSpawnPoint(map: MapDef) {
 
 function populateMap() {
   const map = currentMap()
+  preloadMapCatalogSprites(map.id)
   game.monsters = []
   for (const s of map.spawns)
     for (let i = 0; i < s.count; i++) {

@@ -1,11 +1,50 @@
 import type { MonsterDef, MonsterSprite } from './data'
 
+export type CatalogElementType =
+  | 'neutral'
+  | 'fire'
+  | 'water'
+  | 'ice'
+  | 'earth'
+  | 'wind'
+  | 'poison'
+  | 'light'
+  | 'dark'
+
+export type MonsterSizeLabel = 'เล็ก' | 'กลาง' | 'ใหญ่'
+
+export interface MonsterCatalogMeta {
+  id: string
+  mapId: string
+  biomeName: string
+  thaiName: string
+  englishName: string
+  elementType: CatalogElementType
+  elementLabel: string
+  tribe: string
+  role: string
+  size: MonsterSizeLabel
+  stars: 1 | 2 | 3 | 4 | 5
+  aggressive: boolean
+  boss: boolean
+  flying: boolean
+}
+
 export interface BiomeMonsterSeed {
   id: string
-  name: string
+  thaiName: string
+  englishName: string
   sprite: MonsterSprite
   color: string
+  elementType: CatalogElementType
+  elementLabel: string
+  tribe: string
+  role: string
+  size: MonsterSizeLabel
+  stars: 1 | 2 | 3 | 4 | 5
+  aggressive?: boolean
   boss?: boolean
+  flying?: boolean
   levelOffset?: number
   speed?: number
   aggro?: number
@@ -62,9 +101,9 @@ function defaultDropsForBiome(mapId: string, isBoss: boolean): { itemId: string;
 
   if (isBoss) {
     return [
-      { itemId: mat, chance: 0.9 },
-      { itemId: 'enhance_stone', chance: 0.75 },
-      { itemId: potion, chance: 0.6 },
+      { itemId: mat, chance: 0.92 },
+      { itemId: 'enhance_stone', chance: 0.8 },
+      { itemId: potion, chance: 0.65 },
     ]
   }
   return [
@@ -78,24 +117,60 @@ function defaultDropsForBiome(mapId: string, isBoss: boolean): { itemId: string;
 function buildBiomeMonsterDef(mapId: string, baseLevel: number, index: number, seed: BiomeMonsterSeed): MonsterDef {
   const isBoss = Boolean(seed.boss)
   const level = Math.max(1, baseLevel + (seed.levelOffset ?? Math.floor(index * 0.25)) + (isBoss ? 4 : 0))
-  const hpBase = Math.round((24 + Math.pow(level, 1.88) * 2.8) * (isBoss ? 5.2 : 1) * (seed.hpMult ?? 1))
-  const atk = Math.round((5 + level * 4.4) * (isBoss ? 1.45 : 1) * (seed.atkMult ?? 1))
-  const def = Math.round((1 + level * 1.45) * (isBoss ? 1.5 : 1) * (seed.defMult ?? 1))
-  const exp = Math.round((7 + Math.pow(level, 1.55) * 2.2) * (isBoss ? 4.8 : 1) * Math.max(1, ((seed.hpMult ?? 1) + (seed.atkMult ?? 1)) * 0.5))
+
+  const roleHpMult =
+    seed.role === 'แทงก์' ? 1.35 : seed.role === 'เฉื่อย' ? 1.15 : seed.role === 'ว่องไว' ? 0.92 : 1
+  const roleAtkMult =
+    seed.role === 'เวท' || seed.role === 'ระยะไกล' ? 1.14 : seed.role === 'ว่องไว' ? 1.08 : seed.role === 'แทงก์' ? 0.92 : 1
+  const roleDefMult = seed.role === 'แทงก์' ? 1.4 : seed.role === 'เฉื่อย' ? 1.2 : 1
+  const sizeMult = seed.size === 'ใหญ่' ? 1.22 : seed.size === 'เล็ก' ? 0.88 : 1
+
+  const hpMult = (seed.hpMult ?? 1) * roleHpMult * sizeMult
+  const atkMult = (seed.atkMult ?? 1) * roleAtkMult * (seed.size === 'ใหญ่' ? 1.1 : 1)
+  const defMult = (seed.defMult ?? 1) * roleDefMult
+
+  const hpBase = Math.round((24 + Math.pow(level, 1.88) * 2.8) * (isBoss ? 5.2 : 1) * hpMult)
+  const atk = Math.round((5 + level * 4.4) * (isBoss ? 1.45 : 1) * atkMult)
+  const def = Math.round((1 + level * 1.45) * (isBoss ? 1.5 : 1) * defMult)
+  const exp = Math.round(
+    (7 + Math.pow(level, 1.55) * 2.2) * (isBoss ? 4.8 : 1) * Math.max(1, (hpMult + atkMult) * 0.5),
+  )
   const goldMin = Math.max(2, Math.round(level * (isBoss ? 22 : 2.6)))
   const goldMax = Math.max(goldMin + 2, Math.round(goldMin * 2.0))
 
+  const baseSpeed =
+    seed.role === 'เฉื่อย'
+      ? 10
+      : seed.role === 'ว่องไว'
+        ? 52
+        : seed.role === 'แทงก์'
+          ? 28
+          : seed.flying
+            ? 46
+            : 38
+
+  const baseAggro =
+    seed.role === 'เฉื่อย'
+      ? 0
+      : isBoss
+        ? 165
+        : seed.aggressive
+          ? 120
+          : level <= 6
+            ? 45
+            : 65
+
   return {
     id: seed.id,
-    name: seed.name,
+    name: `${seed.thaiName} (${seed.englishName})`,
     level,
     hp: hpBase,
     atk,
     def,
     exp,
     gold: [goldMin, goldMax],
-    speed: seed.speed ?? (seed.sprite === 'golem' || seed.sprite === 'earth_golem' ? 30 : seed.sprite === 'bat' ? 50 : 38),
-    aggro: seed.aggro ?? (isBoss ? 150 : level <= 6 ? 45 : 105),
+    speed: seed.speed ?? baseSpeed,
+    aggro: seed.aggro ?? baseAggro,
     sprite: seed.sprite,
     color: seed.color,
     boss: isBoss || undefined,
@@ -104,23 +179,28 @@ function buildBiomeMonsterDef(mapId: string, baseLevel: number, index: number, s
 }
 
 /**
- * 15 Biome Roster Tables matching 00-overview_b403ad0d.png & detail sheets (Total = 288 monsters).
- * Existing monster IDs keep their legacy definitions from data.ts; all new IDs are generated cleanly
- * and automatically pick up custom spritesheets once placed under /public/assets/hd/monsters/<id>/sheet.png.
+ * Complete 15-Biome Monster Catalog (Total = 288 monsters: 37 gold bosses + 251 monsters)
+ * Matched 1:1 to 01-meadow .. 15-world catalog sheets.
  */
 export const BIOME_CATALOG_SPECS: BiomeMonsterCatalogSpec[] = [
-  // 1. ทุ่งหญ้า (meadow · 13 ตัว — มอน 13 · บอส 0 ตาม 01-meadow_0b089b02.png)
+  // 1. ทุ่งหญ้า (MEADOW · 13 ตัว — มอน 13 · บอส 0)
   {
     mapId: 'meadow',
     biomeName: 'ทุ่งหญ้า',
     baseLevel: 1,
     entries: [
-      // เล็ก · ★1
       {
         id: 'meadow_larva',
-        name: 'หนอนน้อย (Larva)',
+        thaiName: 'หนอนน้อย',
+        englishName: 'Larva',
         sprite: 'slime',
         color: '#57a79a',
+        elementType: 'earth',
+        elementLabel: 'ดิน',
+        tribe: 'แมลง',
+        role: 'ประชิด',
+        size: 'เล็ก',
+        stars: 1,
         levelOffset: 0,
         speed: 26,
         aggro: 30,
@@ -128,9 +208,17 @@ export const BIOME_CATALOG_SPECS: BiomeMonsterCatalogSpec[] = [
       },
       {
         id: 'meadow_fuzzfly',
-        name: 'ผีเสื้อขนปุย (Fuzzfly)',
+        thaiName: 'ผีเสื้อขนปุย',
+        englishName: 'Fuzzfly',
         sprite: 'bat',
         color: '#f5cbb3',
+        elementType: 'wind',
+        elementLabel: 'ลม',
+        tribe: 'แมลง',
+        role: 'ว่องไว',
+        size: 'เล็ก',
+        stars: 1,
+        flying: true,
         levelOffset: 1,
         speed: 50,
         aggro: 35,
@@ -139,9 +227,16 @@ export const BIOME_CATALOG_SPECS: BiomeMonsterCatalogSpec[] = [
       },
       {
         id: 'meadow_beetle',
-        name: 'ด้วงเขา (Beetle)',
+        thaiName: 'ด้วงเขา',
+        englishName: 'Beetle',
         sprite: 'spider',
         color: '#6b2748',
+        elementType: 'earth',
+        elementLabel: 'ดิน',
+        tribe: 'แมลง',
+        role: 'ประชิด',
+        size: 'เล็ก',
+        stars: 1,
         levelOffset: 1,
         speed: 32,
         aggro: 40,
@@ -150,9 +245,16 @@ export const BIOME_CATALOG_SPECS: BiomeMonsterCatalogSpec[] = [
       },
       {
         id: 'meadow_blob',
-        name: 'ก้อนเมือก (Blob)',
+        thaiName: 'ก้อนเมือก',
+        englishName: 'Blob',
         sprite: 'slime',
         color: '#f28489',
+        elementType: 'water',
+        elementLabel: 'น้ำ',
+        tribe: 'สไลม์',
+        role: 'ประชิด',
+        size: 'เล็ก',
+        stars: 1,
         levelOffset: 2,
         speed: 28,
         aggro: 35,
@@ -160,9 +262,16 @@ export const BIOME_CATALOG_SPECS: BiomeMonsterCatalogSpec[] = [
       },
       {
         id: 'meadow_blob_drop',
-        name: 'หยดเมือก (Blob Drop)',
+        thaiName: 'หยดเมือก',
+        englishName: 'Blob Drop',
         sprite: 'slime',
         color: '#f5a957',
+        elementType: 'fire',
+        elementLabel: 'ไฟ',
+        tribe: 'สไลม์',
+        role: 'ประชิด',
+        size: 'เล็ก',
+        stars: 1,
         levelOffset: 2,
         speed: 30,
         aggro: 40,
@@ -171,33 +280,53 @@ export const BIOME_CATALOG_SPECS: BiomeMonsterCatalogSpec[] = [
       },
       {
         id: 'meadow_cocoon',
-        name: 'ดักแด้ (Cocoon)',
+        thaiName: 'ดักแด้',
+        englishName: 'Cocoon',
         sprite: 'slime',
         color: '#6d4c5c',
+        elementType: 'earth',
+        elementLabel: 'ดิน',
+        tribe: 'แมลง',
+        role: 'เฉื่อย',
+        size: 'เล็ก',
+        stars: 1,
         levelOffset: 3,
         speed: 10,
-        aggro: 0, // เฉื่อย — ไม่โจมตีก่อน
+        aggro: 0,
         defMult: 1.25,
         drops: [{ itemId: 'torn_cloth', chance: 0.55 }, { itemId: 'herb_green', chance: 0.35 }, { itemId: 'enhance_stone', chance: 0.04 }],
       },
-      // กลาง · ★1
       {
         id: 'meadow_beetle_egg',
-        name: 'ไข่ด้วง (Beetle Egg)',
+        thaiName: 'ไข่ด้วง',
+        englishName: 'Beetle Egg',
         sprite: 'slime',
         color: '#a0486a',
+        elementType: 'earth',
+        elementLabel: 'ดิน',
+        tribe: 'แมลง',
+        role: 'เฉื่อย',
+        size: 'กลาง',
+        stars: 1,
         levelOffset: 3,
         speed: 8,
-        aggro: 0, // เฉื่อย — ไม่โจมตีก่อน
+        aggro: 0,
         hpMult: 1.2,
         defMult: 1.3,
         drops: [{ itemId: 'monster_scrap', chance: 0.45 }, { itemId: 'enhance_stone', chance: 0.05 }, { itemId: 'red_potion', chance: 0.12 }],
       },
       {
         id: 'meadow_bloomlet',
-        name: 'ดอกไม้จิ๋ว (Bloomlet)',
+        thaiName: 'ดอกไม้จิ๋ว',
+        englishName: 'Bloomlet',
         sprite: 'mushroom',
         color: '#b92b3a',
+        elementType: 'earth',
+        elementLabel: 'ดิน',
+        tribe: 'พืช',
+        role: 'ประชิด',
+        size: 'กลาง',
+        stars: 1,
         levelOffset: 4,
         speed: 28,
         aggro: 45,
@@ -205,9 +334,16 @@ export const BIOME_CATALOG_SPECS: BiomeMonsterCatalogSpec[] = [
       },
       {
         id: 'meadow_capling',
-        name: 'เห็ดน้อย (Capling)',
+        thaiName: 'เห็ดน้อย',
+        englishName: 'Capling',
         sprite: 'mushroom',
         color: '#9c7bb8',
+        elementType: 'poison',
+        elementLabel: 'พิษ',
+        tribe: 'พืช',
+        role: 'ประชิด',
+        size: 'กลาง',
+        stars: 1,
         levelOffset: 4,
         speed: 32,
         aggro: 50,
@@ -215,9 +351,16 @@ export const BIOME_CATALOG_SPECS: BiomeMonsterCatalogSpec[] = [
       },
       {
         id: 'meadow_hopper',
-        name: 'กระต่ายน้อย (Hopper)',
+        thaiName: 'กระต่ายน้อย',
+        englishName: 'Hopper',
         sprite: 'rabbit',
         color: '#f8f6fb',
+        elementType: 'neutral',
+        elementLabel: 'ไร้ธาตุ',
+        tribe: 'สัตว์',
+        role: 'ว่องไว',
+        size: 'กลาง',
+        stars: 1,
         levelOffset: 5,
         speed: 52,
         aggro: 45,
@@ -225,36 +368,58 @@ export const BIOME_CATALOG_SPECS: BiomeMonsterCatalogSpec[] = [
       },
       {
         id: 'meadow_fiddlehop',
-        name: 'จิ้งหรีดนักดนตรี (Fiddlehop)',
+        thaiName: 'จิ้งหรีดนักดนตรี',
+        englishName: 'Fiddlehop',
         sprite: 'goblin',
         color: '#536b8e',
+        elementType: 'earth',
+        elementLabel: 'ดิน',
+        tribe: 'แมลง',
+        role: 'ประชิด',
+        size: 'กลาง',
+        stars: 1,
         levelOffset: 6,
         speed: 36,
         aggro: 55,
         atkMult: 1.12,
         drops: [{ itemId: 'monster_scrap', chance: 0.5 }, { itemId: 'blue_potion', chance: 0.14 }, { itemId: 'enhance_stone', chance: 0.05 }],
       },
-      // ใหญ่ · ★2 (ไม่ใช่บอส)
       {
         id: 'meadow_big_hopper',
-        name: 'กระต่ายยักษ์ (Big Hopper)',
+        thaiName: 'กระต่ายยักษ์',
+        englishName: 'Big Hopper',
         sprite: 'rabbit',
         color: '#d89238',
+        elementType: 'neutral',
+        elementLabel: 'ไร้ธาตุ',
+        tribe: 'สัตว์',
+        role: 'ว่องไว',
+        size: 'ใหญ่',
+        stars: 2,
+        aggressive: true,
         levelOffset: 7,
         speed: 48,
-        aggro: 115, // ตีก่อน
+        aggro: 115,
         hpMult: 1.45,
         atkMult: 1.35,
         drops: [{ itemId: 'cracked_claw', chance: 0.5 }, { itemId: 'orange_potion', chance: 0.15 }, { itemId: 'enhance_stone', chance: 0.08 }],
       },
       {
         id: 'meadow_dewmother',
-        name: 'มารดาหยดน้ำค้าง (Dewmother)',
+        thaiName: 'มารดาหยดน้ำค้าง',
+        englishName: 'Dewmother',
         sprite: 'slime',
         color: '#82d6be',
+        elementType: 'water',
+        elementLabel: 'น้ำ',
+        tribe: 'สไลม์',
+        role: 'แทงก์',
+        size: 'ใหญ่',
+        stars: 2,
+        aggressive: true,
         levelOffset: 8,
         speed: 24,
-        aggro: 110, // แทงก์ + ตีก่อน
+        aggro: 110,
         hpMult: 1.85,
         defMult: 1.65,
         atkMult: 1.15,
@@ -263,408 +428,416 @@ export const BIOME_CATALOG_SPECS: BiomeMonsterCatalogSpec[] = [
     ],
   },
 
-  // 2. หุบเขาเขียว (vale · 7, 1 gold boss)
+  // 2. หุบเขาเขียว (VALE · 7 ตัว — มอน 6 · บอส 1)
   {
     mapId: 'vale',
     biomeName: 'หุบเขาเขียว',
     baseLevel: 7,
     entries: [
-      { id: 'vale_tiger_king', name: 'พยัคฆ์หุบเขา', sprite: 'wolf', color: '#ea580c', boss: true, levelOffset: 4 },
-      { id: 'slime_blue', name: 'สไลม์ฟ้า', sprite: 'slime', color: '#38bdf8', levelOffset: 0 },
-      { id: 'vale_hornet', name: 'ต่อยักษ์หุบเขา', sprite: 'bat', color: '#f59e0b', levelOffset: 1 },
-      { id: 'vale_leaf_frog', name: 'กบใบไม้', sprite: 'rabbit', color: '#65a30d', levelOffset: 2 },
-      { id: 'vale_glow_shroom', name: 'เห็ดเรืองแสง', sprite: 'mushroom', color: '#38bdf8', levelOffset: 3 },
-      { id: 'vale_treant_pot', name: 'หน่อไม้ดึกดำบรรพ์', sprite: 'mushroom', color: '#a16207', levelOffset: 4 },
-      { id: 'vale_toad_knight', name: 'คางคกเกราะศิลา', sprite: 'orc', color: '#4d7c0f', levelOffset: 5 },
+      { id: 'vale_tiger', thaiName: 'พยัคฆ์หุบเขา', englishName: 'Vale Tiger', sprite: 'wolf', color: '#ea6c2c', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'สัตว์', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, levelOffset: 3 },
+      { id: 'vale_blob', thaiName: 'วุ้นเขียวหุบเขา', englishName: 'Vale Blob', sprite: 'slime', color: '#8dbb6c', elementType: 'water', elementLabel: 'น้ำ', tribe: 'สไลม์', role: 'ประชิด', size: 'เล็ก', stars: 1, levelOffset: 0 },
+      { id: 'vale_bee', thaiName: 'ผึ้งหุบเขา', englishName: 'Vale Bee', sprite: 'bat', color: '#a84432', elementType: 'wind', elementLabel: 'ลม', tribe: 'แมลง', role: 'ประชิด', size: 'เล็ก', stars: 1, flying: true, levelOffset: 1 },
+      { id: 'vale_frog', thaiName: 'กบหุบเขา', englishName: 'Vale Frog', sprite: 'rabbit', color: '#7ea66b', elementType: 'water', elementLabel: 'น้ำ', tribe: 'สัตว์', role: 'ประชิด', size: 'กลาง', stars: 1, levelOffset: 2 },
+      { id: 'vale_cap', thaiName: 'เห็ดหุบเขา', englishName: 'Vale Cap', sprite: 'mushroom', color: '#3b7c8a', elementType: 'earth', elementLabel: 'ดิน', tribe: 'พืช', role: 'ประชิด', size: 'กลาง', stars: 1, levelOffset: 3 },
+      { id: 'vale_stump', thaiName: 'ตอไม้หุบเขา', englishName: 'Vale Stump', sprite: 'golem', color: '#8f6b56', elementType: 'earth', elementLabel: 'ดิน', tribe: 'พืช', role: 'แทงก์', size: 'กลาง', stars: 1, levelOffset: 4 },
+      { id: 'vale_big_frog', thaiName: 'กบยักษ์หุบเขา', englishName: 'Big Vale Frog', sprite: 'orc', color: '#5d915c', elementType: 'water', elementLabel: 'น้ำ', tribe: 'สัตว์', role: 'แทงก์', size: 'ใหญ่', stars: 2, levelOffset: 5 },
     ],
   },
 
-  // 3. ป่าละเมาะ (woods · 1)
+  // 3. ป่าละเมาะ (WOODS · 1 ตัว — มอน 1 · บอส 0)
   {
     mapId: 'woods',
     biomeName: 'ป่าละเมาะ',
-    baseLevel: 9,
+    baseLevel: 10,
     entries: [
-      { id: 'woods_boar', name: 'หมูป่าเขี้ยวตัน', sprite: 'wolf', color: '#9a3412', levelOffset: 0 },
+      { id: 'woods_boar', thaiName: 'หมูป่าพงไพร', englishName: 'Woods Boar', sprite: 'wolf', color: '#a65e3a', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สัตว์', role: 'ประชิด', size: 'เล็ก', stars: 1, levelOffset: 0 },
     ],
   },
 
-  // 4. ป่าลึก (forest · 35, 5 gold bosses)
+  // 4. ป่าลึก (FOREST · 35 ตัว — มอน 30 · บอส 5)
   {
     mapId: 'forest',
     biomeName: 'ป่าลึก',
-    baseLevel: 14,
+    baseLevel: 13,
     entries: [
-      { id: 'forest_crimson_warden', name: 'อัศวินเพลิงพงไพร', sprite: 'abyss_knight', color: '#dc2626', boss: true, levelOffset: 4 },
-      { id: 'forest_flame_spirit', name: 'เทวีเพลิงพฤกษา', sprite: 'demon', color: '#f97316', boss: true, levelOffset: 5 },
-      { id: 'forest_amber_queen', name: 'ราชินีผึ้งอำพัน', sprite: 'spider', color: '#d97706', boss: true, levelOffset: 5 },
-      { id: 'forest_thorn_beast', name: 'อสูรขนหนาม', sprite: 'wolf', color: '#9333ea', boss: true, levelOffset: 6 },
-      { id: 'goblin_chief', name: 'หัวหน้าก๊อบลิน', sprite: 'goblin', color: '#386641', boss: true, levelOffset: 4 },
-      { id: 'forest_hedgehog', name: 'เม่นหนามป่า', sprite: 'rabbit', color: '#92400e' },
-      { id: 'forest_squirrel', name: 'กระรอกหางพวง', sprite: 'rabbit', color: '#b45309' },
-      { id: 'forest_viper', name: 'อสรพิษมรกต', sprite: 'wolf', color: '#16a34a' },
-      { id: 'forest_tusk_boar', name: 'หมูป่าคลั่ง', sprite: 'wolf', color: '#7f1d1d' },
-      { id: 'forest_raccoon', name: 'แรคคูนป่าลึก', sprite: 'wolf', color: '#64748b' },
-      { id: 'forest_sunflower', name: 'ทานตะวันคลั่ง', sprite: 'mushroom', color: '#eab308' },
-      { id: 'forest_slug', name: 'ทากเรืองแสง', sprite: 'slime', color: '#fbbf24' },
-      { id: 'forest_pumpkin', name: 'ฟักทองต้องสาป', sprite: 'mushroom', color: '#f97316' },
-      { id: 'forest_lotus_imp', name: 'ภูตบัวแดง', sprite: 'mushroom', color: '#fb7185' },
-      { id: 'forest_moss_turtle', name: 'เต่ากระดองมอส', sprite: 'golem', color: '#15803d' },
-      { id: 'forest_stag_beetle', name: 'ด้วงกว่างแดง', sprite: 'spider', color: '#991b1b' },
-      { id: 'goblin', name: 'ก๊อบลิน', sprite: 'goblin', color: '#6a994e' },
-      { id: 'forest_scout_elf', name: 'พรานเอลฟ์เงา', sprite: 'goblin', color: '#b45309' },
-      { id: 'wolf', name: 'หมาป่า', sprite: 'wolf', color: '#8d99ae' },
-      { id: 'forest_monkey', name: 'วานรป่าลึก', sprite: 'goblin', color: '#dc2626' },
-      { id: 'forest_lynx', name: 'พยัคฆ์เพลิงน้อย', sprite: 'wolf', color: '#e11d48' },
-      { id: 'forest_spore_bat', name: 'ค้างคาวละอองพิษ', sprite: 'bat', color: '#f472b6' },
-      { id: 'forest_blue_fox', name: 'จิ้งจอกคราม', sprite: 'wolf', color: '#38bdf8' },
-      { id: 'forest_leopard', name: 'เสือดาวป่าลึก', sprite: 'wolf', color: '#d97706' },
-      { id: 'forest_mantis', name: 'ตั๊กแตนคมดาบ', sprite: 'spider', color: '#65a30d' },
-      { id: 'forest_orc_hunter', name: 'ออร์คนักรบป่า', sprite: 'orc', color: '#4d7c0f' },
-      { id: 'forest_grizzly', name: 'หมีกริซลี่', sprite: 'orc', color: '#78716c' },
-      { id: 'forest_dryad', name: 'ดรายแอดพฤกษา', sprite: 'ghost', color: '#4ade80' },
-      { id: 'forest_stone_troll', name: 'โทรลล์ศิลาป่า', sprite: 'golem', color: '#78716c' },
-      { id: 'forest_dire_wolf', name: 'หมาป่าโลหิต', sprite: 'wolf', color: '#b91c1c' },
-      { id: 'forest_heron', name: 'นกกระสาป่าลึก', sprite: 'bat', color: '#94a3b8' },
-      { id: 'forest_moth', name: 'ผีเสื้อราตรี', sprite: 'bat', color: '#f59e0b' },
-      { id: 'forest_treant', name: 'เทรนท์โบราณ', sprite: 'earth_golem', color: '#166534' },
-      { id: 'forest_wood_elf', name: 'เอลฟ์พิทักษ์ไพร', sprite: 'goblin', color: '#15803d' },
-      { id: 'forest_elder_druid', name: 'มหาปราชญ์ดรูอิด', sprite: 'skeleton', color: '#e2e8f0' },
+      { id: 'forest_tusk_champion', thaiName: 'ยอดนักรบงา', englishName: 'Tusk Champion', sprite: 'orc', color: '#b53a32', elementType: 'earth', elementLabel: 'ดิน', tribe: 'มนุษย์', role: 'ว่องไว', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, levelOffset: 4 },
+      { id: 'forest_blazing_serpent', thaiName: 'อสรพิษเพลิง', englishName: 'Blazing Serpent', sprite: 'demon', color: '#ef5b25', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'สัตว์เลื้อยคลาน', role: 'เวท', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, levelOffset: 5 },
+      { id: 'forest_hive_queen', thaiName: 'ราชินีรังผึ้ง', englishName: 'Hive Queen', sprite: 'spider', color: '#d9912b', elementType: 'wind', elementLabel: 'ลม', tribe: 'แมลง', role: 'อัญเชิญ', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, flying: true, levelOffset: 5 },
+      { id: 'forest_rampage_beast', thaiName: 'อสูรคลั่ง', englishName: 'Rampage Beast', sprite: 'orc', color: '#9c7eb8', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สัตว์', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, levelOffset: 6 },
+      { id: 'forest_tusk_overlord', thaiName: 'จอมราชันงา', englishName: 'Tusk Overlord', sprite: 'orc', color: '#616670', elementType: 'earth', elementLabel: 'ดิน', tribe: 'มนุษย์', role: 'แทงก์', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, levelOffset: 6 },
+      { id: 'forest_hedgehog', thaiName: 'เม่นหลังหนาม', englishName: 'Bristleback Hedgehog', sprite: 'rabbit', color: '#9c5f3b', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สัตว์', role: 'ประชิด', size: 'เล็ก', stars: 1 },
+      { id: 'forest_acorn_squirrel', thaiName: 'กระรอกลูกโอ๊ก', englishName: 'Acorn Squirrel', sprite: 'rabbit', color: '#ad6d3e', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สัตว์', role: 'ประชิด', size: 'เล็ก', stars: 1 },
+      { id: 'forest_coilfang', thaiName: 'งูเขียวขด', englishName: 'Coilfang', sprite: 'wolf', color: '#6b9c64', elementType: 'poison', elementLabel: 'พิษ', tribe: 'สัตว์เลื้อยคลาน', role: 'ประชิด', size: 'เล็ก', stars: 1, aggressive: true },
+      { id: 'forest_tusker_boar', thaiName: 'หมูป่างายาว', englishName: 'Tusker Boar', sprite: 'wolf', color: '#784130', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สัตว์', role: 'ประชิด', size: 'เล็ก', stars: 1, aggressive: true },
+      { id: 'forest_ringtail', thaiName: 'แรคคูนหางลาย', englishName: 'Ringtail', sprite: 'wolf', color: '#8f7d72', elementType: 'neutral', elementLabel: 'ไร้ธาตุ', tribe: 'สัตว์', role: 'ประชิด', size: 'เล็ก', stars: 1 },
+      { id: 'forest_sunface', thaiName: 'ทานตะวันหน้าใส', englishName: 'Sunface Bloom', sprite: 'mushroom', color: '#e5a93b', elementType: 'earth', elementLabel: 'ดิน', tribe: 'พืช', role: 'ประชิด', size: 'เล็ก', stars: 1 },
+      { id: 'forest_pollenwing', thaiName: 'ผีเสื้อละอองเกสร', englishName: 'Pollenwing', sprite: 'bat', color: '#f2d9b8', elementType: 'wind', elementLabel: 'ลม', tribe: 'แมลง', role: 'เฉื่อย', size: 'กลาง', stars: 1, flying: true },
+      { id: 'forest_pitcher_maw', thaiName: 'หม้อแกงลิงจอมงับ', englishName: 'Pitcher Maw', sprite: 'mushroom', color: '#d9934c', elementType: 'poison', elementLabel: 'พิษ', tribe: 'พืช', role: 'ประชิด', size: 'กลาง', stars: 1 },
+      { id: 'forest_sticky_flytrap', thaiName: 'ดอกไม้กับดักเหนียว', englishName: 'Sticky Flytrap', sprite: 'mushroom', color: '#e07a7a', elementType: 'earth', elementLabel: 'ดิน', tribe: 'พืช', role: 'ประชิด', size: 'กลาง', stars: 1 },
+      { id: 'forest_gapebloom', thaiName: 'ดอกไม้อ้าปาก', englishName: 'Gapebloom', sprite: 'mushroom', color: '#3b6b54', elementType: 'poison', elementLabel: 'พิษ', tribe: 'พืช', role: 'ประชิด', size: 'เล็ก', stars: 1, aggressive: true },
+      { id: 'forest_hornshell_beetle', thaiName: 'ด้วงเขากระดอง', englishName: 'Hornshell Beetle', sprite: 'spider', color: '#8f3439', elementType: 'earth', elementLabel: 'ดิน', tribe: 'แมลง', role: 'แทงก์', size: 'กลาง', stars: 2 },
+      { id: 'forest_tusklet', thaiName: 'เจ้าง่าน้อย', englishName: 'Tusklet', sprite: 'goblin', color: '#6b9150', elementType: 'earth', elementLabel: 'ดิน', tribe: 'มนุษย์', role: 'ระยะไกล', size: 'กลาง', stars: 2, aggressive: true },
+      { id: 'forest_mask_goblin', thaiName: 'ก็อบลินหน้ากาก', englishName: 'Mask Goblin', sprite: 'goblin', color: '#9c4347', elementType: 'neutral', elementLabel: 'ไร้ธาตุ', tribe: 'มนุษย์', role: 'ประชิด', size: 'กลาง', stars: 2, aggressive: true },
+      { id: 'forest_greymane_wolf', thaiName: 'หมาป่าแผงคอเทา', englishName: 'Greymane Wolf', sprite: 'wolf', color: '#6f7996', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สัตว์', role: 'ว่องไว', size: 'กลาง', stars: 2, aggressive: true },
+      { id: 'forest_tumbler_monkey', thaiName: 'ลิงตีลังกา', englishName: 'Tumbler Monkey', sprite: 'goblin', color: '#b3463d', elementType: 'neutral', elementLabel: 'ไร้ธาตุ', tribe: 'สัตว์', role: 'ว่องไว', size: 'กลาง', stars: 2 },
+      { id: 'forest_thornpaw_cat', thaiName: 'แมวอุ้งเท้าหนาม', englishName: 'Thornpaw Cat', sprite: 'wolf', color: '#bf5260', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สัตว์', role: 'ว่องไว', size: 'กลาง', stars: 2 },
+      { id: 'forest_rootwail', thaiName: 'รากกรีดร้อง', englishName: 'Rootwail', sprite: 'mushroom', color: '#b894b3', elementType: 'earth', elementLabel: 'ดิน', tribe: 'พืช', role: 'ระยะไกล', size: 'กลาง', stars: 2, aggressive: true },
+      { id: 'forest_misttail_fox', thaiName: 'จิ้งจอกหางหมอก', englishName: 'Misttail Fox', sprite: 'wolf', color: '#67b0bd', elementType: 'wind', elementLabel: 'ลม', tribe: 'สัตว์', role: 'ว่องไว', size: 'กลาง', stars: 2, aggressive: true },
+      { id: 'forest_spotted_stalker', thaiName: 'เสือดาวล่าเหยื่อ', englishName: 'Spotted Stalker', sprite: 'wolf', color: '#d48c46', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สัตว์', role: 'ว่องไว', size: 'กลาง', stars: 2, aggressive: true },
+      { id: 'forest_bladearm_mantis', thaiName: 'ตั๊กแตนแขนดาบ', englishName: 'Bladearm Mantis', sprite: 'spider', color: '#7ea65b', elementType: 'wind', elementLabel: 'ลม', tribe: 'แมลง', role: 'ประชิด', size: 'กลาง', stars: 2, aggressive: true },
+      { id: 'forest_tusk_warrior', thaiName: 'นักรบงา', englishName: 'Tusk Warrior', sprite: 'orc', color: '#7c8c5e', elementType: 'earth', elementLabel: 'ดิน', tribe: 'มนุษย์', role: 'แทงก์', size: 'กลาง', stars: 2, aggressive: true },
+      { id: 'forest_bramble_bear', thaiName: 'หมีพุ่มหนาม', englishName: 'Bramble Bear', sprite: 'orc', color: '#7d6e6d', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สัตว์', role: 'ประชิด', size: 'กลาง', stars: 2, aggressive: true },
+      { id: 'forest_petal_wraith', thaiName: 'วิญญาณกลีบดอก', englishName: 'Petal Wraith', sprite: 'ghost', color: '#9dc47e', elementType: 'earth', elementLabel: 'ดิน', tribe: 'ภูต', role: 'เวท', size: 'ใหญ่', stars: 2, aggressive: true, flying: true },
+      { id: 'forest_logbound_giant', thaiName: 'ยักษ์แบกซุง', englishName: 'Logbound Giant', sprite: 'earth_golem', color: '#8f8479', elementType: 'earth', elementLabel: 'ดิน', tribe: 'จักรกล', role: 'แทงก์', size: 'ใหญ่', stars: 2, aggressive: true },
+      { id: 'forest_lone_packlord', thaiName: 'จ่าฝูงเดียวดาย', englishName: 'Lone Packlord', sprite: 'wolf', color: '#c45a3d', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สัตว์', role: 'อัญเชิญ', size: 'ใหญ่', stars: 3, aggressive: true },
+      { id: 'forest_moonfeather_baron', thaiName: 'บารอนขนจันทร์', englishName: 'Moonfeather Baron', sprite: 'gale_sentinel', color: '#8f72a8', elementType: 'wind', elementLabel: 'ลม', tribe: 'นก', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true },
+      { id: 'forest_skimmer_king', thaiName: 'ราชาแมลงร่อน', englishName: 'Skimmer King', sprite: 'bat', color: '#394f85', elementType: 'wind', elementLabel: 'ลม', tribe: 'แมลง', role: 'เวท', size: 'ใหญ่', stars: 3, aggressive: true, flying: true },
+      { id: 'forest_vinemane_beast', thaiName: 'อสูรแผงคอเถาวัลย์', englishName: 'Vinemane Beast', sprite: 'wolf', color: '#6b9463', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สัตว์', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true },
+      { id: 'forest_barkmaiden', thaiName: 'นางไม้', englishName: 'Barkmaiden', sprite: 'earth_golem', color: '#7d5044', elementType: 'earth', elementLabel: 'ดิน', tribe: 'พืช', role: 'เวท', size: 'ใหญ่', stars: 3, aggressive: true },
+      { id: 'forest_moonfeather_duke', thaiName: 'ดยุกขนจันทร์', englishName: 'Moonfeather Duke', sprite: 'gale_sentinel', color: '#377a8c', elementType: 'wind', elementLabel: 'ลม', tribe: 'นก', role: 'เวท', size: 'ใหญ่', stars: 3, aggressive: true },
     ],
   },
 
-  // 5. ชายฝั่ง (coast · 28, 2 gold bosses)
+  // 5. ชายฝั่ง (COAST · 28 ตัว — มอน 26 · บอส 2)
   {
     mapId: 'coast',
     biomeName: 'ชายฝั่ง',
     baseLevel: 20,
     entries: [
-      { id: 'coast_sea_warlord', name: 'ขุนพลแห่งท้องทะเล', sprite: 'abyss_knight', color: '#92400e', boss: true, levelOffset: 5 },
-      { id: 'coast_king_lobster', name: 'ราชากุ้งมังกร', sprite: 'spider', color: '#dc2626', boss: true, levelOffset: 6 },
-      { id: 'coast_puffer', name: 'ปลาปักเป้าพองลม', sprite: 'slime', color: '#22d3ee' },
-      { id: 'coast_starfish', name: 'ปลาดาวชายหาด', sprite: 'slime', color: '#f97316' },
-      { id: 'coast_clam', name: 'หอยมุกยักษ์', sprite: 'golem', color: '#a855f7' },
-      { id: 'coast_crab', name: 'ปูก้ามดาบ', sprite: 'spider', color: '#ef4444' },
-      { id: 'coast_snail', name: 'หอยสังข์ทะเล', sprite: 'slime', color: '#f59e0b' },
-      { id: 'coast_hermit', name: 'ปูเสฉวนยักษ์', sprite: 'spider', color: '#d97706' },
-      { id: 'coast_octopus', name: 'หมึกยักษ์แดง', sprite: 'spider', color: '#fb923c' },
-      { id: 'coast_seal', name: 'แมวน้ำชายฝั่ง', sprite: 'wolf', color: '#cbd5e1' },
-      { id: 'coast_coral_slime', name: 'สไลม์ปะการัง', sprite: 'slime', color: '#fda4af' },
-      { id: 'coast_angler', name: 'ปลาแองเกลอร์', sprite: 'bat', color: '#14b8a6' },
-      { id: 'coast_seagull', name: 'นกนางนวล', sprite: 'bat', color: '#e2e8f0' },
-      { id: 'coast_reef_toad', name: 'กบปะการัง', sprite: 'rabbit', color: '#3b82f6' },
-      { id: 'coast_reef_fish', name: 'ปลาน้ำตื้น', sprite: 'bat', color: '#fb7185' },
-      { id: 'coast_bone_fish', name: 'ปลากระดูกผี', sprite: 'skeleton', color: '#cbd5e1' },
-      { id: 'coast_squid', name: 'หมึกกระดองเวท', sprite: 'ghost', color: '#818cf8' },
-      { id: 'coast_sea_turtle', name: 'เต่าสมุทรเกราะศิลา', sprite: 'golem', color: '#b45309' },
-      { id: 'coast_kraken_spawn', name: 'อสูรเขาสมุทร', sprite: 'orc', color: '#2dd4bf' },
-      { id: 'coast_jellyfish', name: 'แมงกะพรุนเรืองแสง', sprite: 'ghost', color: '#c084fc' },
-      { id: 'coast_mermaid', name: 'นางเงือก', sprite: 'ghost', color: '#38bdf8' },
-      { id: 'coast_kelp_beast', name: 'อสูรสาหร่าย', sprite: 'orc', color: '#84cc16' },
-      { id: 'coast_sawfish', name: 'ปลาใบเลื่อย', sprite: 'wolf', color: '#fbbf24' },
-      { id: 'coast_lizardman', name: 'นักรบกิ้งก่าทะเล', sprite: 'orc', color: '#16a34a' },
-      { id: 'coast_siren', name: 'ไซเรนทะเลใต้', sprite: 'ghost', color: '#f472b6' },
-      { id: 'coast_harpy', name: 'ฮาร์ปีชายฝั่ง', sprite: 'gale_sentinel', color: '#a855f7' },
-      { id: 'coast_merfolk', name: 'ทหารเงือก', sprite: 'goblin', color: '#10b981' },
-      { id: 'coast_cloud_spirit', name: 'ภูตฟองคลื่น', sprite: 'ghost', color: '#e0f2fe' },
+      { id: 'coast_drowned_captain', thaiName: 'กัปตันจมน้ำ', englishName: 'Drowned Captain', sprite: 'abyss_knight', color: '#b54c3b', elementType: 'water', elementLabel: 'น้ำ', tribe: 'สัตว์น้ำ', role: 'ระยะไกล', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, levelOffset: 5 },
+      { id: 'coast_shellguard_warlord', thaiName: 'จอมทัพเกราะเปลือก', englishName: 'Shellguard Warlord', sprite: 'orc', color: '#d4493b', elementType: 'water', elementLabel: 'น้ำ', tribe: 'มนุษย์', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, levelOffset: 6 },
+      { id: 'coast_driftmote', thaiName: 'ละอองล่องลอย', englishName: 'Driftmote', sprite: 'slime', color: '#7bc9ba', elementType: 'wind', elementLabel: 'ลม', tribe: 'พืช', role: 'เฉื่อย', size: 'เล็ก', stars: 1 },
+      { id: 'coast_tidestar', thaiName: 'ดาวทะเลชายฝั่ง', englishName: 'Tidestar', sprite: 'slime', color: '#eb7554', elementType: 'water', elementLabel: 'น้ำ', tribe: 'สัตว์น้ำ', role: 'ประชิด', size: 'เล็ก', stars: 1 },
+      { id: 'coast_snapclam', thaiName: 'หอยงับ', englishName: 'Snapclam', sprite: 'golem', color: '#9c686d', elementType: 'water', elementLabel: 'น้ำ', tribe: 'สัตว์น้ำ', role: 'แทงก์', size: 'เล็ก', stars: 1 },
+      { id: 'coast_crab', thaiName: 'ปูชายหาด', englishName: 'Crab', sprite: 'spider', color: '#d95345', elementType: 'water', elementLabel: 'น้ำ', tribe: 'สัตว์น้ำ', role: 'ประชิด', size: 'เล็ก', stars: 1 },
+      { id: 'coast_shellback_snail', thaiName: 'หอยทากเปลือกพัด', englishName: 'Shellback Snail', sprite: 'slime', color: '#d9a4a8', elementType: 'water', elementLabel: 'น้ำ', tribe: 'สัตว์น้ำ', role: 'แทงก์', size: 'เล็ก', stars: 1 },
+      { id: 'coast_spire_crab', thaiName: 'ปูเสฉวนยอดแหลม', englishName: 'Spire Crab', sprite: 'spider', color: '#c48f6c', elementType: 'water', elementLabel: 'น้ำ', tribe: 'สัตว์น้ำ', role: 'แทงก์', size: 'เล็ก', stars: 1 },
+      { id: 'coast_inkspurt_squid', thaiName: 'หมึกพ่นหมึก', englishName: 'Inkspurt Squid', sprite: 'bat', color: '#e6955a', elementType: 'water', elementLabel: 'น้ำ', tribe: 'สัตว์น้ำ', role: 'ระยะไกล', size: 'เล็ก', stars: 1 },
+      { id: 'coast_shell_otter', thaiName: 'นากเปลือกหอย', englishName: 'Shell Otter', sprite: 'wolf', color: '#e8d7c5', elementType: 'water', elementLabel: 'น้ำ', tribe: 'สัตว์', role: 'ประชิด', size: 'กลาง', stars: 2 },
+      { id: 'coast_popsphere', thaiName: 'ลูกหนามระเบิด', englishName: 'Popsphere', sprite: 'slime', color: '#eb947a', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'วัตถุ', role: 'ประชิด', size: 'เล็ก', stars: 2, flying: true },
+      { id: 'coast_deepmaw', thaiName: 'ปลาตะเกียงปากกว้าง', englishName: 'Deepmaw', sprite: 'bat', color: '#589c79', elementType: 'water', elementLabel: 'น้ำ', tribe: 'สัตว์น้ำ', role: 'ประชิด', size: 'กลาง', stars: 2, aggressive: true, flying: true },
+      { id: 'coast_gullwhip', thaiName: 'นางนวลหางแส้', englishName: 'Gullwhip', sprite: 'bat', color: '#f0eceb', elementType: 'wind', elementLabel: 'ลม', tribe: 'นก', role: 'ว่องไว', size: 'กลาง', stars: 2, aggressive: true, flying: true },
+      { id: 'coast_mirefrog', thaiName: 'กบบึงโคลน', englishName: 'Mirefrog', sprite: 'rabbit', color: '#6b7fa6', elementType: 'water', elementLabel: 'น้ำ', tribe: 'สัตว์เลื้อยคลาน', role: 'ประชิด', size: 'กลาง', stars: 2 },
+      { id: 'coast_shredfin', thaiName: 'ปลาครีบฉีก', englishName: 'Shredfin', sprite: 'bat', color: '#9c788b', elementType: 'water', elementLabel: 'น้ำ', tribe: 'สัตว์น้ำ', role: 'ว่องไว', size: 'กลาง', stars: 2, aggressive: true, flying: true },
+      { id: 'coast_bonefin', thaiName: 'ปลากระดูก', englishName: 'Bonefin', sprite: 'skeleton', color: '#d4c3cf', elementType: 'dark', elementLabel: 'อันเดด', tribe: 'อันเดด', role: 'ประชิด', size: 'กลาง', stars: 2, aggressive: true, flying: true },
+      { id: 'coast_sea_jelly', thaiName: 'แมงกะพรุน', englishName: 'Sea Jelly', sprite: 'ghost', color: '#699cd9', elementType: 'water', elementLabel: 'น้ำ', tribe: 'สัตว์น้ำ', role: 'ประชิด', size: 'กลาง', stars: 2, flying: true },
+      { id: 'coast_rock_turtle', thaiName: 'เต่าหิน', englishName: 'Rock Turtle', sprite: 'golem', color: '#8f5246', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สัตว์เลื้อยคลาน', role: 'แทงก์', size: 'กลาง', stars: 2 },
+      { id: 'coast_reefgrasp', thaiName: 'หนวดคว้าแนวปะการัง', englishName: 'Reefgrasp', sprite: 'mushroom', color: '#589c8d', elementType: 'water', elementLabel: 'น้ำ', tribe: 'พืช', role: 'ประชิด', size: 'กลาง', stars: 2, aggressive: true },
+      { id: 'coast_tentacle_bloom', thaiName: 'ดอกไม้หนวด', englishName: 'Tentacle Bloom', sprite: 'spider', color: '#a8789e', elementType: 'poison', elementLabel: 'พิษ', tribe: 'พืช', role: 'ประชิด', size: 'กลาง', stars: 2, aggressive: true },
+      { id: 'coast_lagoon_siren', thaiName: 'นางเงือกลากูน', englishName: 'Lagoon Siren', sprite: 'ghost', color: '#5fbab0', elementType: 'water', elementLabel: 'น้ำ', tribe: 'มนุษย์', role: 'เวท', size: 'กลาง', stars: 2, flying: true },
+      { id: 'coast_swamp_gator', thaiName: 'จระเข้หนองน้ำ', englishName: 'Swamp Gator', sprite: 'wolf', color: '#7ea859', elementType: 'water', elementLabel: 'น้ำ', tribe: 'สัตว์เลื้อยคลาน', role: 'ประชิด', size: 'กลาง', stars: 2, aggressive: true },
+      { id: 'coast_bladefin', thaiName: 'ปลาครีบดาบ', englishName: 'Bladefin', sprite: 'bat', color: '#d4746a', elementType: 'water', elementLabel: 'น้ำ', tribe: 'สัตว์น้ำ', role: 'ว่องไว', size: 'กลาง', stars: 2, aggressive: true, flying: true },
+      { id: 'coast_reef_lizardman', thaiName: 'มนุษย์กิ้งก่าแนวปะการัง', englishName: 'Reef Lizardman', sprite: 'orc', color: '#6b9459', elementType: 'water', elementLabel: 'น้ำ', tribe: 'มนุษย์', role: 'ประชิด', size: 'กลาง', stars: 2, aggressive: true },
+      { id: 'coast_deepsong_siren', thaiName: 'นางเงือกเพลงทะเลลึก', englishName: 'Deepsong Siren', sprite: 'ghost', color: '#b594bf', elementType: 'water', elementLabel: 'น้ำ', tribe: 'มนุษย์', role: 'เวท', size: 'กลาง', stars: 3, aggressive: true, flying: true },
+      { id: 'coast_trident_fishman', thaiName: 'มนุษย์ปลาตรีศูล', englishName: 'Trident Fishman', sprite: 'goblin', color: '#846aa6', elementType: 'water', elementLabel: 'น้ำ', tribe: 'มนุษย์', role: 'ประชิด', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'coast_drowned_deckhand', thaiName: 'ลูกเรือจมน้ำ', englishName: 'Drowned Deckhand', sprite: 'skeleton', color: '#8f6b99', elementType: 'dark', elementLabel: 'อันเดด', tribe: 'อันเดด', role: 'ประชิด', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'coast_tide_elemental', thaiName: 'ภูตคลื่นทะเล', englishName: 'Tide Elemental', sprite: 'ghost', color: '#c4c9eb', elementType: 'water', elementLabel: 'น้ำ', tribe: 'ธาตุ', role: 'ประชิด', size: 'กลาง', stars: 3, aggressive: true, flying: true },
     ],
   },
 
-  // 6. ถ้ำ (cave · 23, 3 gold bosses)
+  // 6. ถ้ำ (CAVE · 23 ตัว — มอน 20 · บอส 3)
   {
     mapId: 'cave',
     biomeName: 'ถ้ำ',
-    baseLevel: 24,
+    baseLevel: 25,
     entries: [
-      { id: 'cave_ant_king', name: 'ราชามดเกราะทอง', sprite: 'spider', color: '#b45309', boss: true, levelOffset: 5 },
-      { id: 'cave_crystal_mantis', name: 'ตั๊กแตนผลึกม่วง', sprite: 'spider', color: '#c084fc', boss: true, levelOffset: 6 },
-      { id: 'earth_golem', name: 'ผู้พิทักษ์ปฐพี', sprite: 'earth_golem', color: '#8c6b3f', boss: true, levelOffset: 7 },
-      { id: 'cave_rat', name: 'หนูถ้ำ', sprite: 'rabbit', color: '#a8a29e' },
-      { id: 'cave_fire_ant', name: 'มดเพลิงใต้พิภพ', sprite: 'spider', color: '#ea580c' },
-      { id: 'cave_mole', name: 'ตุ่นยักษ์', sprite: 'orc', color: '#78350f' },
-      { id: 'cave_kobold_miner', name: 'โคโบลด์นักขุดแร่', sprite: 'goblin', color: '#9a3412' },
-      { id: 'cave_armadillo', name: 'ตัวนิ่มเกราะหิน', sprite: 'golem', color: '#78716c' },
-      { id: 'bat', name: 'ค้างคาว', sprite: 'bat', color: '#5a189a' },
-      { id: 'cave_slime', name: 'สไลม์ถ้ำชมพู', sprite: 'slime', color: '#e879f9' },
-      { id: 'cave_crystal_slime', name: 'สไลม์ผลึก', sprite: 'slime', color: '#fbbf24' },
-      { id: 'spider', name: 'แมงมุมพิษ', sprite: 'spider', color: '#581c87' },
-      { id: 'cave_pangolin', name: 'ลิ่นเกราะขาว', sprite: 'golem', color: '#d6d3d1' },
-      { id: 'cave_badger', name: 'แบดเจอร์เหมือง', sprite: 'orc', color: '#78350f' },
-      { id: 'cave_brass_golem', name: 'โกเลมทองเหลือง', sprite: 'golem', color: '#ca8a04' },
-      { id: 'cave_red_spider', name: 'แมงมุมแดงใต้ดิน', sprite: 'spider', color: '#b91c1c' },
-      { id: 'cave_centipede', name: 'ตะขาบยักษ์', sprite: 'spider', color: '#dc2626' },
-      { id: 'cave_blue_spider', name: 'แมงมุมคราม', sprite: 'spider', color: '#2563eb' },
-      { id: 'cave_worm', name: 'หนอนยักษ์อเวจี', sprite: 'slime', color: '#7e22ce' },
-      { id: 'cave_clay_bot', name: 'หุ่นดินเหนียว', sprite: 'golem', color: '#a16207' },
-      { id: 'golem', name: 'โกเลมหิน', sprite: 'golem', color: '#78716c' },
-      { id: 'orc', name: 'ออร์ค', sprite: 'orc', color: '#65a30d' },
-      { id: 'cave_cockroach', name: 'แมลงสาบถ้ำยักษ์', sprite: 'spider', color: '#451a03' },
+      { id: 'cave_beetle', thaiName: 'ด้วงเขาแห่งถ้ำ', englishName: 'Cave Beetle', sprite: 'spider', color: '#395585', elementType: 'earth', elementLabel: 'ดิน', tribe: 'แมลง', role: 'แทงก์', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, levelOffset: 5 },
+      { id: 'cave_brood_empress', thaiName: 'จักรพรรดินีฝูงแมลง', englishName: 'Brood Empress', sprite: 'spider', color: '#ba8cc7', elementType: 'earth', elementLabel: 'ดิน', tribe: 'แมลง', role: 'อัญเชิญ', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, levelOffset: 6 },
+      { id: 'cave_drill_colossus', thaiName: 'ยักษ์สว่านเหล็ก', englishName: 'Drill Colossus', sprite: 'earth_golem', color: '#78464d', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'จักรกล', role: 'แทงก์', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, levelOffset: 7 },
+      { id: 'cave_burrow_rat', thaiName: 'หนูขุดโพรง', englishName: 'Burrow Rat', sprite: 'rabbit', color: '#9c8c96', elementType: 'neutral', elementLabel: 'ไร้ธาตุ', tribe: 'สัตว์', role: 'ประชิด', size: 'เล็ก', stars: 1 },
+      { id: 'cave_honey_ant', thaiName: 'มดน้ำผึ้ง', englishName: 'Honey Ant', sprite: 'spider', color: '#593d4c', elementType: 'earth', elementLabel: 'ดิน', tribe: 'แมลง', role: 'ประชิด', size: 'เล็ก', stars: 1 },
+      { id: 'cave_mole', thaiName: 'ตุ่นถ้ำ', englishName: 'Cave Mole', sprite: 'orc', color: '#8f5d52', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สัตว์', role: 'ประชิด', size: 'เล็ก', stars: 1 },
+      { id: 'cave_pebble_gnome', thaiName: 'คนแคระกรวด', englishName: 'Pebble Gnome', sprite: 'goblin', color: '#9e6858', elementType: 'earth', elementLabel: 'ดิน', tribe: 'มนุษย์', role: 'ประชิด', size: 'เล็ก', stars: 1 },
+      { id: 'cave_tunnel_ant', thaiName: 'มดอุโมงค์', englishName: 'Tunnel Ant', sprite: 'spider', color: '#8c6b64', elementType: 'earth', elementLabel: 'ดิน', tribe: 'แมลง', role: 'แทงก์', size: 'เล็ก', stars: 1 },
+      { id: 'cave_duskwing_bat', thaiName: 'ค้างคาวปีกสนธยา', englishName: 'Duskwing Bat', sprite: 'bat', color: '#7657a6', elementType: 'dark', elementLabel: 'มืด', tribe: 'แมลง', role: 'ว่องไว', size: 'เล็ก', stars: 1, flying: true },
+      { id: 'cave_iron_blob', thaiName: 'สไลม์เหล็ก', englishName: 'Iron Blob', sprite: 'slime', color: '#d48a72', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สไลม์', role: 'แทงก์', size: 'เล็ก', stars: 1 },
+      { id: 'cave_crystalback', thaiName: 'สไลม์หลังผลึก', englishName: 'Crystalback', sprite: 'slime', color: '#f0b878', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สไลม์', role: 'แทงก์', size: 'เล็ก', stars: 1 },
+      { id: 'cave_cavern_spider', thaiName: 'แมงมุมถ้ำ', englishName: 'Cavern Spider', sprite: 'spider', color: '#d4cbb8', elementType: 'earth', elementLabel: 'ดิน', tribe: 'แมลง', role: 'ประชิด', size: 'เล็ก', stars: 2, aggressive: true },
+      { id: 'cave_drillshell', thaiName: 'ตัวนิ่มจมูกสว่าน', englishName: 'Drillshell', sprite: 'golem', color: '#9c7863', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สัตว์', role: 'แทงก์', size: 'กลาง', stars: 2 },
+      { id: 'cave_snarlhound_raider', thaiName: 'โจรสุนัขคำราม', englishName: 'Snarlhound Raider', sprite: 'orc', color: '#6b4d52', elementType: 'neutral', elementLabel: 'ไร้ธาตุ', tribe: 'สัตว์', role: 'ประชิด', size: 'กลาง', stars: 2, aggressive: true },
+      { id: 'cave_boilerhead', thaiName: 'หัวกาต้มน้ำ', englishName: 'Boilerhead', sprite: 'golem', color: '#3b8c80', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'จักรกล', role: 'ระยะไกล', size: 'กลาง', stars: 2, aggressive: true },
+      { id: 'cave_webweaver', thaiName: 'แมงมุมทอใย', englishName: 'Webweaver', sprite: 'spider', color: '#a84f3d', elementType: 'earth', elementLabel: 'ดิน', tribe: 'แมลง', role: 'ระยะไกล', size: 'เล็ก', stars: 2, aggressive: true },
+      { id: 'cave_hundredleg', thaiName: 'ตะขาบร้อยขา', englishName: 'Hundredleg', sprite: 'spider', color: '#944263', elementType: 'poison', elementLabel: 'พิษ', tribe: 'แมลง', role: 'ประชิด', size: 'กลาง', stars: 2, aggressive: true },
+      { id: 'cave_venom_spinner', thaiName: 'แมงมุมชักใยพิษ', englishName: 'Venom Spinner', sprite: 'spider', color: '#3f62b5', elementType: 'poison', elementLabel: 'พิษ', tribe: 'แมลง', role: 'ระยะไกล', size: 'กลาง', stars: 2, aggressive: true },
+      { id: 'cave_elder_burrower', thaiName: 'หนอนเจาะดินผู้เฒ่า', englishName: 'Elder Burrower', sprite: 'slime', color: '#8f5fa6', elementType: 'earth', elementLabel: 'ดิน', tribe: 'แมลง', role: 'ประชิด', size: 'กลาง', stars: 2, aggressive: true },
+      { id: 'cave_mine_skeleton', thaiName: 'โครงกระดูกเหมือง', englishName: 'Mine Skeleton', sprite: 'golem', color: '#ab7659', elementType: 'earth', elementLabel: 'ดิน', tribe: 'จักรกล', role: 'ประชิด', size: 'กลาง', stars: 2, aggressive: true },
+      { id: 'cave_dripstone_hulk', thaiName: 'ยักษ์หินย้อย', englishName: 'Dripstone Hulk', sprite: 'golem', color: '#94838a', elementType: 'earth', elementLabel: 'ดิน', tribe: 'ธาตุ', role: 'แทงก์', size: 'ใหญ่', stars: 2, aggressive: true },
+      { id: 'cave_labyrinth_bull', thaiName: 'กระทิงเขาวงกต', englishName: 'Labyrinth Bull', sprite: 'orc', color: '#b58d70', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สัตว์', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true },
+      { id: 'cave_violet_broodqueen', thaiName: 'ราชินีแมลงสีม่วง', englishName: 'Violet Broodqueen', sprite: 'spider', color: '#8a5ca8', elementType: 'poison', elementLabel: 'พิษ', tribe: 'แมลง', role: 'อัญเชิญ', size: 'ใหญ่', stars: 3, aggressive: true, flying: true },
     ],
   },
 
-  // 7. ทะเลทราย (desert · 23, 5 gold bosses)
+  // 7. ทะเลทราย (DESERT · 23 ตัว — มอน 18 · บอส 5)
   {
     mapId: 'desert',
     biomeName: 'ทะเลทราย',
     baseLevel: 30,
     entries: [
-      { id: 'desert_pharaoh', name: 'ฟาโรห์ต้องคำสาป', sprite: 'skeleton', color: '#eab308', boss: true, levelOffset: 6 },
-      { id: 'desert_sand_shark', name: 'ฉลามทรายยักษ์', sprite: 'wolf', color: '#fb923c', boss: true, levelOffset: 5 },
-      { id: 'desert_sphinx_golem', name: 'โกเลมสฟิงซ์', sprite: 'earth_golem', color: '#ca8a04', boss: true, levelOffset: 6 },
-      { id: 'desert_anubis_mage', name: 'มหาปุโรหิตอนูบิส', sprite: 'skeleton', color: '#38bdf8', boss: true, levelOffset: 7 },
-      { id: 'desert_scarab_lord', name: 'จอมอสูรสคารับ', sprite: 'demon', color: '#d97706', boss: true, levelOffset: 8 },
-      { id: 'desert_sandworm', name: 'หนอนทราย', sprite: 'slime', color: '#f97316' },
-      { id: 'desert_cobra', name: 'งูเห่าทะเลทราย', sprite: 'wolf', color: '#d97706' },
-      { id: 'desert_vulture', name: 'แร้งทะเลทราย', sprite: 'bat', color: '#92400e' },
-      { id: 'desert_lizard', name: 'กิ้งก่าทราย', sprite: 'wolf', color: '#eab308' },
-      { id: 'desert_dune_tortoise', name: 'เต่าโอเอซิส', sprite: 'golem', color: '#a16207' },
-      { id: 'desert_scorpion', name: 'แมงป่องเพลิงทราย', sprite: 'spider', color: '#dc2626' },
-      { id: 'desert_jackal', name: 'หมาป่าแจ็กคัล', sprite: 'wolf', color: '#b45309' },
-      { id: 'desert_mirage_egg', name: 'ไข่มายาทะเลทราย', sprite: 'slime', color: '#f472b6' },
-      { id: 'desert_oasis_owl', name: 'นกฮูกโอเอซิส', sprite: 'rabbit', color: '#38bdf8' },
-      { id: 'desert_cactus', name: 'กระบองเพชรมีชีวิต', sprite: 'mushroom', color: '#22c55e' },
-      { id: 'desert_mummy', name: 'มัมมี่โบราณ', sprite: 'skeleton', color: '#d6d3d1' },
-      { id: 'desert_ostrich', name: 'นกกระจอกเทศ', sprite: 'rabbit', color: '#3b82f6' },
-      { id: 'desert_magma_tortoise', name: 'เต่าศิลาทราย', sprite: 'golem', color: '#b91c1c' },
-      { id: 'desert_sand_monk', name: 'นักสู้พายุทราย', sprite: 'orc', color: '#e2e8f0' },
-      { id: 'desert_oasis_dancer', name: 'ภูตระบำโอเอซิส', sprite: 'ghost', color: '#2dd4bf' },
-      { id: 'desert_lamp_djinn', name: 'ภูตพรมวิเศษ', sprite: 'ghost', color: '#78716c' },
-      { id: 'desert_sand_golem', name: 'โกเลมทราย', sprite: 'golem', color: '#a8a29e' },
-      { id: 'desert_anubis_guard', name: 'องครักษ์อนูบิส', sprite: 'skeleton', color: '#b45309' },
+      { id: 'desert_dune_emperor', thaiName: 'จักรพรรดิเนินทราย', englishName: 'Dune Emperor', sprite: 'skeleton', color: '#5c4d69', elementType: 'dark', elementLabel: 'มืด', tribe: 'มนุษย์', role: 'เวท', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, levelOffset: 6 },
+      { id: 'desert_sandmaw_glutton', thaiName: 'วาฬทรายจอมตะกละ', englishName: 'Sandmaw Glutton', sprite: 'wolf', color: '#e39686', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สัตว์', role: 'แทงก์', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, levelOffset: 5 },
+      { id: 'desert_solar_tomb_lord', thaiName: 'เจ้าสุสานสุริยะ', englishName: 'Solar Tomb Lord', sprite: 'earth_golem', color: '#c48f60', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'จักรกล', role: 'แทงก์', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, levelOffset: 6 },
+      { id: 'desert_tomb_king', thaiName: 'ราชาสุสาน', englishName: 'Tomb King', sprite: 'skeleton', color: '#78b0ab', elementType: 'dark', elementLabel: 'อันเดด', tribe: 'อันเดด', role: 'เวท', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, levelOffset: 7 },
+      { id: 'desert_sandfiend_sovereign', thaiName: 'จอมราชันปีศาจทราย', englishName: 'Sandfiend Sovereign', sprite: 'demon', color: '#6c527a', elementType: 'earth', elementLabel: 'ดิน', tribe: 'ปีศาจ', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, flying: true, levelOffset: 8 },
+      { id: 'desert_sandburrower', thaiName: 'หนอนมุดทราย', englishName: 'Sandburrower', sprite: 'slime', color: '#e6a57e', elementType: 'earth', elementLabel: 'ดิน', tribe: 'แมลง', role: 'ประชิด', size: 'เล็ก', stars: 2, aggressive: true },
+      { id: 'desert_dune_viper', thaiName: 'งูพิษเนินทราย', englishName: 'Dune Viper', sprite: 'wolf', color: '#d47c6a', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สัตว์เลื้อยคลาน', role: 'ประชิด', size: 'เล็ก', stars: 2, aggressive: true },
+      { id: 'desert_vulture', thaiName: 'แร้งทะเลทราย', englishName: 'Desert Vulture', sprite: 'bat', color: '#9e6b52', elementType: 'wind', elementLabel: 'ลม', tribe: 'นก', role: 'ว่องไว', size: 'กลาง', stars: 2, aggressive: true, flying: true },
+      { id: 'desert_frillneck', thaiName: 'กิ้งก่าคอระบาย', englishName: 'Frillneck', sprite: 'wolf', color: '#78a87e', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สัตว์เลื้อยคลาน', role: 'ประชิด', size: 'กลาง', stars: 2, aggressive: true },
+      { id: 'desert_sandsleeper', thaiName: 'เต่าขี้เซา', englishName: 'Sandsleeper', sprite: 'golem', color: '#d4ab88', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สัตว์เลื้อยคลาน', role: 'แทงก์', size: 'กลาง', stars: 2 },
+      { id: 'desert_stingclaw_scorpion', thaiName: 'แมงป่องก้ามพิษ', englishName: 'Stingclaw Scorpion', sprite: 'spider', color: '#cf683e', elementType: 'poison', elementLabel: 'พิษ', tribe: 'แมลง', role: 'ประชิด', size: 'กลาง', stars: 2, aggressive: true },
+      { id: 'desert_dune_wolf', thaiName: 'หมาป่าเนินทราย', englishName: 'Dune Wolf', sprite: 'wolf', color: '#c49d76', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สัตว์', role: 'ว่องไว', size: 'กลาง', stars: 2, aggressive: true },
+      { id: 'desert_dune_egg', thaiName: 'ไข่เนินทราย', englishName: 'Dune Egg', sprite: 'slime', color: '#cf7d73', elementType: 'neutral', elementLabel: 'ไร้ธาตุ', tribe: 'วัตถุ', role: 'เฉื่อย', size: 'กลาง', stars: 2 },
+      { id: 'desert_sandchick', thaiName: 'ลูกเจี๊ยบทราย', englishName: 'Sandchick', sprite: 'rabbit', color: '#5fa4ba', elementType: 'neutral', elementLabel: 'ไร้ธาตุ', tribe: 'นก', role: 'ประชิด', size: 'กลาง', stars: 2 },
+      { id: 'desert_spinewalker', thaiName: 'กระบองเพชรเดินได้', englishName: 'Spinewalker', sprite: 'mushroom', color: '#70a858', elementType: 'earth', elementLabel: 'ดิน', tribe: 'พืช', role: 'ประชิด', size: 'กลาง', stars: 2 },
+      { id: 'desert_linenwalker', thaiName: 'มัมมี่เร่ร่อน', englishName: 'Linenwalker', sprite: 'skeleton', color: '#ccb59b', elementType: 'dark', elementLabel: 'อันเดด', tribe: 'อันเดด', role: 'ประชิด', size: 'กลาง', stars: 2, aggressive: true },
+      { id: 'desert_strider_bird', thaiName: 'นกเท้าไว', englishName: 'Strider Bird', sprite: 'rabbit', color: '#4c639c', elementType: 'neutral', elementLabel: 'ไร้ธาตุ', tribe: 'นก', role: 'ว่องไว', size: 'กลาง', stars: 2 },
+      { id: 'desert_fortress_tortoise', thaiName: 'เต่าป้อมปราการ', englishName: 'Fortress Tortoise', sprite: 'golem', color: '#9c685e', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สัตว์เลื้อยคลาน', role: 'แทงก์', size: 'กลาง', stars: 2 },
+      { id: 'desert_gilded_linenwalker', thaiName: 'มัมมี่ประดับทอง', englishName: 'Gilded Linenwalker', sprite: 'skeleton', color: '#d48766', elementType: 'dark', elementLabel: 'อันเดด', tribe: 'อันเดด', role: 'ประชิด', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'desert_serpent_dancer', thaiName: 'นางระบำอสรพิษ', englishName: 'Serpent Dancer', sprite: 'ghost', color: '#4aa3a1', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สัตว์เลื้อยคลาน', role: 'เวท', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'desert_gust_phantom', thaiName: 'ภูตลมกรรโชก', englishName: 'Gust Phantom', sprite: 'ghost', color: '#6b655c', elementType: 'wind', elementLabel: 'ลม', tribe: 'วิญญาณ', role: 'เวท', size: 'กลาง', stars: 3, aggressive: true, flying: true },
+      { id: 'desert_sandstone_colossus', thaiName: 'ยักษ์หินทราย', englishName: 'Sandstone Colossus', sprite: 'golem', color: '#ad8b73', elementType: 'earth', elementLabel: 'ดิน', tribe: 'จักรกล', role: 'แทงก์', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'desert_jackal_priest', thaiName: 'นักบวชหมาใน', englishName: 'Jackal Priest', sprite: 'skeleton', color: '#8f393e', elementType: 'dark', elementLabel: 'มืด', tribe: 'มนุษย์', role: 'เวท', size: 'ใหญ่', stars: 3, aggressive: true },
     ],
   },
 
-  // 8. สุสาน (graveyard · 23, 2 gold bosses)
+  // 8. สุสาน (GRAVEYARD · 23 ตัว — มอน 21 · บอส 2)
   {
     mapId: 'graveyard',
     biomeName: 'สุสาน',
-    baseLevel: 34,
+    baseLevel: 35,
     entries: [
-      { id: 'boss_lich', name: 'จอมเวทโครงกระดูก', sprite: 'skeleton', color: '#9333ea', boss: true, levelOffset: 5 },
-      { id: 'grave_necrolord', name: 'ราชันย์อันเดด', sprite: 'skeleton', color: '#3b82f6', boss: true, levelOffset: 7 },
-      { id: 'grave_hellhound', name: 'หมาป่านรกสุสาน', sprite: 'wolf', color: '#1e1b4b' },
-      { id: 'ghost', name: 'วิญญาณหลอน', sprite: 'ghost', color: '#caf0f8' },
-      { id: 'grave_zombie', name: 'ซอมบี้', sprite: 'orc', color: '#4d7c0f' },
-      { id: 'grave_ghoul', name: 'กูลสุสาน', sprite: 'orc', color: '#3f6212' },
-      { id: 'grave_bone_archer', name: 'นักสู้กระดูกสาว', sprite: 'skeleton', color: '#c084fc' },
-      { id: 'skeleton', name: 'โครงกระดูก', sprite: 'skeleton', color: '#e9e3d5' },
-      { id: 'grave_skele_archer', name: 'พลธนูโครงกระดูก', sprite: 'skeleton', color: '#d6d3d1' },
-      { id: 'grave_cultist', name: 'สาวกผ้าคลุมแดง', sprite: 'skeleton', color: '#991b1b' },
-      { id: 'grave_lantern_keeper', name: 'สัปเหร่อวิญญาณ', sprite: 'goblin', color: '#7f1d1d' },
-      { id: 'grave_bandit_undead', name: 'ทหารผีดิบ', sprite: 'goblin', color: '#92400e' },
-      { id: 'grave_wraith', name: 'เรธยมทูต', sprite: 'ghost', color: '#475569' },
-      { id: 'grave_lantern_spirit', name: 'วิญญาณตะเกียง', sprite: 'ghost', color: '#60a5fa' },
-      { id: 'grave_vampire_knight', name: 'อัศวินแวมไพร์', sprite: 'skeleton', color: '#be123c' },
-      { id: 'grave_duelist_ghost', name: 'นักดาบต้องสาป', sprite: 'skeleton', color: '#cbd5e1' },
-      { id: 'grave_cursed_tree', name: 'ต้นไม้ต้องสาป', sprite: 'earth_golem', color: '#581c87' },
-      { id: 'grave_bone_guard', name: 'อัศวินโครงกระดูก', sprite: 'skeleton', color: '#65a30d' },
-      { id: 'grave_banshee', name: 'แบนชี', sprite: 'ghost', color: '#334155' },
-      { id: 'grave_bride_spirit', name: 'วิญญาณเจ้าสาว', sprite: 'ghost', color: '#c084fc' },
-      { id: 'grave_deer_shaman', name: 'หมอผีเขากวาง', sprite: 'skeleton', color: '#7f1d1d' },
-      { id: 'grave_crimson_warlock', name: 'จอมเวทโลหิต', sprite: 'skeleton', color: '#dc2626' },
-      { id: 'grave_shadow_lich', name: 'นักบวชเงามรณะ', sprite: 'skeleton', color: '#1e293b' },
+      { id: 'grave_fallen_prelate', thaiName: 'สังฆราชผู้ร่วงหล่น', englishName: 'Fallen Prelate', sprite: 'skeleton', color: '#785070', elementType: 'dark', elementLabel: 'อันเดด', tribe: 'อันเดด', role: 'เวท', size: 'ใหญ่', stars: 4, aggressive: true, boss: true, levelOffset: 5 },
+      { id: 'grave_night_sovereign', thaiName: 'จักรพรรดิราตรี', englishName: 'Night Sovereign', sprite: 'skeleton', color: '#454378', elementType: 'dark', elementLabel: 'อันเดด', tribe: 'อันเดด', role: 'เวท', size: 'ใหญ่', stars: 4, aggressive: true, boss: true, levelOffset: 7 },
+      { id: 'grave_shadehound', thaiName: 'สุนัขเงา', englishName: 'Shadehound', sprite: 'wolf', color: '#4a3548', elementType: 'dark', elementLabel: 'มืด', tribe: 'สัตว์', role: 'ว่องไว', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'grave_sheet_ghost', thaiName: 'ผีผ้าคลุม', englishName: 'Sheet Ghost', sprite: 'ghost', color: '#e8d5e8', elementType: 'dark', elementLabel: 'โกสต์', tribe: 'วิญญาณ', role: 'ประชิด', size: 'กลาง', stars: 3, flying: true },
+      { id: 'grave_gravegnaw', thaiName: 'ผีแทะหลุมศพ', englishName: 'Gravegnaw', sprite: 'orc', color: '#7d8a6f', elementType: 'dark', elementLabel: 'อันเดด', tribe: 'อันเดด', role: 'ว่องไว', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'grave_shambler', thaiName: 'ศพเดินโซเซ', englishName: 'Shambler', sprite: 'orc', color: '#789c68', elementType: 'dark', elementLabel: 'อันเดด', tribe: 'อันเดด', role: 'ประชิด', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'grave_bone_guard', thaiName: 'ทหารยามกระดูก', englishName: 'Bone Guard', sprite: 'skeleton', color: '#9c78ab', elementType: 'dark', elementLabel: 'อันเดด', tribe: 'อันเดด', role: 'ประชิด', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'grave_rattlebones', thaiName: 'โครงกระดูกกุกกัก', englishName: 'Rattlebones', sprite: 'skeleton', color: '#e3cbb8', elementType: 'dark', elementLabel: 'อันเดด', tribe: 'อันเดด', role: 'ประชิด', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'grave_bone_archer', thaiName: 'นักธนูกระดูก', englishName: 'Bone Archer', sprite: 'skeleton', color: '#d4bfb0', elementType: 'dark', elementLabel: 'อันเดด', tribe: 'อันเดด', role: 'ระยะไกล', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'grave_chainbound', thaiName: 'ผู้ถูกพันธนาการ', englishName: 'Chainbound', sprite: 'goblin', color: '#a84c52', elementType: 'dark', elementLabel: 'อันเดด', tribe: 'อันเดด', role: 'ประชิด', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'grave_grave_warden', thaiName: 'ผู้เฝ้าสุสาน', englishName: 'Grave Warden', sprite: 'skeleton', color: '#593347', elementType: 'dark', elementLabel: 'อันเดด', tribe: 'อันเดด', role: 'ประชิด', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'grave_broken_oath', thaiName: 'อัศวินผู้ผิดคำสาบาน', englishName: 'Broken Oath', sprite: 'abyss_knight', color: '#a3726c', elementType: 'dark', elementLabel: 'มืด', tribe: 'อันเดด', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true },
+      { id: 'grave_pale_shroud', thaiName: 'วิญญาณผ้าห่อศพ', englishName: 'Pale Shroud', sprite: 'ghost', color: '#9c92a6', elementType: 'dark', elementLabel: 'โกสต์', tribe: 'วิญญาณ', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true, flying: true },
+      { id: 'grave_phantom_drop', thaiName: 'หยดภูต', englishName: 'Phantom Drop', sprite: 'ghost', color: '#a6a4d4', elementType: 'dark', elementLabel: 'โกสต์', tribe: 'วิญญาณ', role: 'ว่องไว', size: 'ใหญ่', stars: 3, flying: true },
+      { id: 'grave_bone_marshal', thaiName: 'แม่ทัพกระดูก', englishName: 'Bone Marshal', sprite: 'skeleton', color: '#9c4c63', elementType: 'dark', elementLabel: 'อันเดด', tribe: 'อันเดด', role: 'ประชิด', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'grave_severed_knight', thaiName: 'อัศวินไร้หัว', englishName: 'Severed Knight', sprite: 'abyss_knight', color: '#94838a', elementType: 'dark', elementLabel: 'อันเดด', tribe: 'อันเดด', role: 'ประชิด', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'grave_gallows_tree', thaiName: 'ต้นไม้ตะแลงแกง', englishName: 'Gallows Tree', sprite: 'earth_golem', color: '#6b4744', elementType: 'dark', elementLabel: 'มืด', tribe: 'พืช', role: 'แทงก์', size: 'ใหญ่', stars: 3, aggressive: true },
+      { id: 'grave_bone_paladin', thaiName: 'อัศวินกระดูก', englishName: 'Bone Paladin', sprite: 'skeleton', color: '#787e85', elementType: 'dark', elementLabel: 'อันเดด', tribe: 'อันเดด', role: 'แทงก์', size: 'ใหญ่', stars: 3, aggressive: true },
+      { id: 'grave_dirge_matron', thaiName: 'แม่ชีเพลงไว้อาลัย', englishName: 'Dirge Matron', sprite: 'ghost', color: '#4d3a4b', elementType: 'dark', elementLabel: 'โกสต์', tribe: 'วิญญาณ', role: 'เวท', size: 'ใหญ่', stars: 3, aggressive: true, flying: true },
+      { id: 'grave_wailing_lady', thaiName: 'นางผีคร่ำครวญ', englishName: 'Wailing Lady', sprite: 'ghost', color: '#c4a6e3', elementType: 'dark', elementLabel: 'โกสต์', tribe: 'วิญญาณ', role: 'เวท', size: 'ใหญ่', stars: 3, aggressive: true, flying: true },
+      { id: 'grave_grim_druid', thaiName: 'ดรูอิดมรณะ', englishName: 'Grim Druid', sprite: 'skeleton', color: '#8f3943', elementType: 'dark', elementLabel: 'มืด', tribe: 'วิญญาณ', role: 'เวท', size: 'ใหญ่', stars: 3, aggressive: true },
+      { id: 'grave_bone_caller', thaiName: 'ผู้เรียกกระดูก', englishName: 'Bone Caller', sprite: 'skeleton', color: '#6b3648', elementType: 'dark', elementLabel: 'มืด', tribe: 'อันเดด', role: 'อัญเชิญ', size: 'ใหญ่', stars: 3, aggressive: true },
+      { id: 'grave_veilshade', thaiName: 'ภูตม่านมืด', englishName: 'Veilshade', sprite: 'ghost', color: '#4f3b52', elementType: 'dark', elementLabel: 'มืด', tribe: 'วิญญาณ', role: 'เวท', size: 'ใหญ่', stars: 3, aggressive: true, flying: true },
     ],
   },
 
-  // 9. หมู่เกาะตะวันออก (isles · 20, 6 gold bosses)
+  // 9. หมู่เกาะตะวันออก (ISLES · 20 ตัว — มอน 14 · บอส 6)
   {
     mapId: 'isles',
     biomeName: 'หมู่เกาะตะวันออก',
     baseLevel: 40,
     entries: [
-      { id: 'isles_pine_spirit', name: 'เทพพฤกษาพันปี', sprite: 'earth_golem', color: '#15803d', boss: true, levelOffset: 5 },
-      { id: 'isles_sakura_lady', name: 'ท่านหญิงซากุระ', sprite: 'ghost', color: '#f472b6', boss: true, levelOffset: 6 },
-      { id: 'isles_kitsune_miko', name: 'มิโกะเก้าหาง', sprite: 'ghost', color: '#fb7185', boss: true, levelOffset: 6 },
-      { id: 'isles_jade_oni', name: 'โอนิเกราะศิลา', sprite: 'earth_golem', color: '#65a30d', boss: true, levelOffset: 7 },
-      { id: 'isles_shogun', name: 'โชกุนมังกรทอง', sprite: 'demon', color: '#d97706', boss: true, levelOffset: 7 },
-      { id: 'isles_samurai_lord', name: 'แม่ทัพซามูไร', sprite: 'abyss_knight', color: '#92400e', boss: true, levelOffset: 8 },
-      { id: 'isles_shiba_guard', name: 'ชิบะอารักษ์', sprite: 'wolf', color: '#ea580c' },
-      { id: 'isles_umbrella_yokai', name: 'ปีศาจร่มคาราคาสะ', sprite: 'ghost', color: '#a855f7' },
-      { id: 'isles_daruma', name: 'ดารุมะคลั่ง', sprite: 'mushroom', color: '#dc2626' },
-      { id: 'isles_tengu_imp', name: 'เท็งงูน้อย', sprite: 'goblin', color: '#ef4444' },
-      { id: 'isles_lantern_monk', name: 'นักพรตโคมไฟ', sprite: 'skeleton', color: '#78350f' },
-      { id: 'isles_mochi_spirit', name: 'ภูตโมจิ', sprite: 'slime', color: '#fecdd3' },
-      { id: 'isles_wooden_doll', name: 'หุ่นเชิดไม้', sprite: 'goblin', color: '#b45309' },
-      { id: 'isles_mikan_treant', name: 'ต้นส้มเทพารักษ์', sprite: 'mushroom', color: '#f97316' },
-      { id: 'isles_crow_tengu', name: 'คาราสุเท็งงู', sprite: 'gale_sentinel', color: '#1e293b' },
-      { id: 'isles_yuki_onna', name: 'ยูกิอนนะ', sprite: 'ghost', color: '#38bdf8' },
-      { id: 'isles_kunoichi', name: 'คุโนอิจิเงา', sprite: 'goblin', color: '#9333ea' },
-      { id: 'isles_ronin', name: 'โรนินพเนจร', sprite: 'goblin', color: '#be123c' },
-      { id: 'isles_totem_spirit', name: 'เสาโทเท็มโบราณ', sprite: 'golem', color: '#a16207' },
-      { id: 'isles_tanuki', name: 'ทานูกิโคมแดง', sprite: 'wolf', color: '#d97706' },
+      { id: 'isles_grove_matriarch', thaiName: 'มารดาแห่งพงไพร', englishName: 'Grove Matriarch', sprite: 'earth_golem', color: '#5e8c61', elementType: 'earth', elementLabel: 'ดิน', tribe: 'พืช', role: 'อัญเชิญ', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, levelOffset: 5 },
+      { id: 'isles_jade_empress', thaiName: 'จักรพรรดินีหยก', englishName: 'Jade Empress', sprite: 'ghost', color: '#b578a8', elementType: 'wind', elementLabel: 'ลม', tribe: 'มนุษย์', role: 'เวท', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, levelOffset: 6 },
+      { id: 'isles_lunar_lantern_fox', thaiName: 'จิ้งจอกโคมจันทรา', englishName: 'Lunar Lantern Fox', sprite: 'gale_sentinel', color: '#e6a89c', elementType: 'light', elementLabel: 'ศักดิ์สิทธิ์', tribe: 'นก', role: 'เวท', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, levelOffset: 6 },
+      { id: 'isles_mountain_ogre', thaiName: 'ยักษ์ภูผา', englishName: 'Mountain Ogre', sprite: 'orc', color: '#9c928c', elementType: 'earth', elementLabel: 'ดิน', tribe: 'ปีศาจ', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, levelOffset: 7 },
+      { id: 'isles_coil_emperor', thaiName: 'จักรพรรดิงูขด', englishName: 'Coil Emperor', sprite: 'demon', color: '#94433a', elementType: 'water', elementLabel: 'น้ำ', tribe: 'สัตว์เลื้อยคลาน', role: 'แทงก์', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, levelOffset: 7 },
+      { id: 'isles_spirit_warlord', thaiName: 'ขุนศึกวิญญาณ', englishName: 'Spirit Warlord', sprite: 'abyss_knight', color: '#6b5378', elementType: 'dark', elementLabel: 'อันเดด', tribe: 'อันเดด', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, levelOffset: 8 },
+      { id: 'isles_festival_dragon', thaiName: 'มังกรเทศกาล', englishName: 'Festival Dragon', sprite: 'wolf', color: '#d45f50', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'มังกร', role: 'ประชิด', size: 'กลาง', stars: 3 },
+      { id: 'isles_parasol_hopper', thaiName: 'ร่มกระโดด', englishName: 'Parasol Hopper', sprite: 'ghost', color: '#a36b8c', elementType: 'water', elementLabel: 'น้ำ', tribe: 'วัตถุ', role: 'ว่องไว', size: 'กลาง', stars: 3 },
+      { id: 'isles_talisman_hopper', thaiName: 'โคมยันต์กระโดด', englishName: 'Talisman Hopper', sprite: 'slime', color: '#cf5e55', elementType: 'light', elementLabel: 'ศักดิ์สิทธิ์', tribe: 'วัตถุ', role: 'ประชิด', size: 'กลาง', stars: 3 },
+      { id: 'isles_club_imp', thaiName: 'ภูตน้อยถือกระบอง', englishName: 'Club Imp', sprite: 'goblin', color: '#d46b68', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'ปีศาจ', role: 'ประชิด', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'isles_lantern_ghoul', thaiName: 'ผีถือโคม', englishName: 'Lantern Ghoul', sprite: 'skeleton', color: '#6b4768', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'อันเดด', role: 'ประชิด', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'isles_mochi_sprite', thaiName: 'ภูตโมจิ', englishName: 'Mochi Sprite', sprite: 'slime', color: '#f5ded8', elementType: 'earth', elementLabel: 'ดิน', tribe: 'ภูต', role: 'ประชิด', size: 'กลาง', stars: 3 },
+      { id: 'isles_porcelain_doll', thaiName: 'ตุ๊กตากระเบื้อง', englishName: 'Porcelain Doll', sprite: 'goblin', color: '#d9c5ba', elementType: 'neutral', elementLabel: 'ไร้ธาตุ', tribe: 'จักรกล', role: 'ประชิด', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'isles_peach_treant', thaiName: 'พฤกษาลูกท้อ', englishName: 'Peach Treant', sprite: 'mushroom', color: '#9c6659', elementType: 'earth', elementLabel: 'ดิน', tribe: 'พืช', role: 'แทงก์', size: 'กลาง', stars: 3 },
+      { id: 'isles_crow_mask', thaiName: 'หน้ากากอีกา', englishName: 'Crow Mask', sprite: 'gale_sentinel', color: '#59556e', elementType: 'wind', elementLabel: 'ลม', tribe: 'นก', role: 'เวท', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'isles_mourning_maiden', thaiName: 'สาวไว้ทุกข์', englishName: 'Mourning Maiden', sprite: 'ghost', color: '#84b0a8', elementType: 'dark', elementLabel: 'โกสต์', tribe: 'วิญญาณ', role: 'เวท', size: 'กลาง', stars: 3, aggressive: true, flying: true },
+      { id: 'isles_veil_assassin', thaiName: 'นักฆ่าผ้าคลุม', englishName: 'Veil Assassin', sprite: 'goblin', color: '#5d475e', elementType: 'dark', elementLabel: 'มืด', tribe: 'มนุษย์', role: 'ว่องไว', size: 'ใหญ่', stars: 3, aggressive: true },
+      { id: 'isles_drifting_blade', thaiName: 'ดาบพเนจร', englishName: 'Drifting Blade', sprite: 'goblin', color: '#9c5959', elementType: 'neutral', elementLabel: 'ไร้ธาตุ', tribe: 'มนุษย์', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true },
+      { id: 'isles_totem_sentinel', thaiName: 'เสาโทเท็มพิทักษ์', englishName: 'Totem Sentinel', sprite: 'golem', color: '#946858', elementType: 'earth', elementLabel: 'ดิน', tribe: 'จักรกล', role: 'แทงก์', size: 'ใหญ่', stars: 3, aggressive: true, flying: true },
+      { id: 'isles_ninefire_vixen', thaiName: 'จิ้งจอกเก้าเพลิง', englishName: 'Ninefire Vixen', sprite: 'wolf', color: '#c44d45', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'สัตว์', role: 'ว่องไว', size: 'ใหญ่', stars: 3, aggressive: true },
     ],
   },
 
-  // 10. แดนหิมะ (snow · 15, 2 gold bosses)
+  // 10. แดนหิมะ (SNOW · 15 ตัว — มอน 13 · บอส 2)
   {
     mapId: 'snow',
     biomeName: 'แดนหิมะ',
     baseLevel: 50,
     entries: [
-      { id: 'snow_frost_tiger', name: 'พยัคฆ์เหมันต์', sprite: 'wolf', color: '#38bdf8', boss: true, levelOffset: 5 },
-      { id: 'snow_glacier_wyrm', name: 'มังกรน้ำแข็ง', sprite: 'demon', color: '#22d3ee', boss: true, levelOffset: 7 },
-      { id: 'snow_frost_boar', name: 'หมูป่าหิมะ', sprite: 'wolf', color: '#b45309' },
-      { id: 'snow_ice_pixie', name: 'ภูตผลึกน้ำแข็ง', sprite: 'ghost', color: '#60a5fa' },
-      { id: 'snow_cloud_puff', name: 'ปุยหิมะ', sprite: 'slime', color: '#e0f2fe' },
-      { id: 'snow_arctic_fox', name: 'จิ้งจอกอาร์กติก', sprite: 'wolf', color: '#cbd5e1' },
-      { id: 'snow_scarf_seal', name: 'แมวน้ำหิมะ', sprite: 'wolf', color: '#f8fafc' },
-      { id: 'snow_frost_wolf', name: 'หมาป่าเหมันต์', sprite: 'wolf', color: '#818cf8' },
-      { id: 'snow_igloo_crab', name: 'อิกลูมีชีวิต', sprite: 'golem', color: '#93c5fd' },
-      { id: 'snow_blizzard_wisp', name: 'วิญญาณพายุหิมะ', sprite: 'ghost', color: '#38bdf8' },
-      { id: 'snow_yeti', name: 'เยติยักษ์', sprite: 'orc', color: '#e2e8f0' },
-      { id: 'snow_polar_bear', name: 'หมีขั้วโลก', sprite: 'orc', color: '#f1f5f9' },
-      { id: 'snow_winter_gnome', name: 'โนมฤดูหนาว', sprite: 'goblin', color: '#fb7185' },
-      { id: 'snow_mammoth', name: 'แมมมอธดึกดำบรรพ์', sprite: 'golem', color: '#78350f' },
-      { id: 'snow_ice_golem', name: 'โกเลมน้ำแข็ง', sprite: 'golem', color: '#0284c7' },
+      { id: 'snow_frostfang_alpha', thaiName: 'จ่าฝูงเขี้ยวน้ำแข็ง', englishName: 'Frostfang Alpha', sprite: 'wolf', color: '#7ea2db', elementType: 'water', elementLabel: 'น้ำ', tribe: 'สัตว์', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, levelOffset: 5 },
+      { id: 'snow_tri_crown_wyrm', thaiName: 'มังกรสามมงกุฎ', englishName: 'Tri-Crown Wyrm', sprite: 'demon', color: '#708552', elementType: 'earth', elementLabel: 'ดิน', tribe: 'มังกร', role: 'แทงก์', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, levelOffset: 7 },
+      { id: 'snow_goldbristle_boar', thaiName: 'หมูป่าขนทอง', englishName: 'Goldbristle Boar', sprite: 'wolf', color: '#a86545', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สัตว์', role: 'ประชิด', size: 'เล็ก', stars: 2, aggressive: true },
+      { id: 'snow_icicle_imp', thaiName: 'ปีศาจน้อยน้ำแข็ง', englishName: 'Icicle Imp', sprite: 'ghost', color: '#8ac2f5', elementType: 'water', elementLabel: 'น้ำ', tribe: 'ธาตุ', role: 'ประชิด', size: 'เล็ก', stars: 2, aggressive: true, flying: true },
+      { id: 'snow_snow_puff', thaiName: 'ปุยหิมะ', englishName: 'Snow Puff', sprite: 'slime', color: '#dbe4fa', elementType: 'water', elementLabel: 'น้ำ', tribe: 'สไลม์', role: 'เฉื่อย', size: 'กลาง', stars: 3 },
+      { id: 'snow_frost_pup', thaiName: 'ลูกหมาป่าหิมะ', englishName: 'Frost Pup', sprite: 'wolf', color: '#dfdaf0', elementType: 'water', elementLabel: 'น้ำ', tribe: 'สัตว์', role: 'ประชิด', size: 'กลาง', stars: 3 },
+      { id: 'snow_snow_seal', thaiName: 'แมวน้ำหิมะ', englishName: 'Snow Seal', sprite: 'wolf', color: '#f2edf7', elementType: 'water', elementLabel: 'น้ำ', tribe: 'สัตว์', role: 'เฉื่อย', size: 'กลาง', stars: 3 },
+      { id: 'snow_rime_stalker', thaiName: 'หมาป่าย่องน้ำแข็ง', englishName: 'Rime Stalker', sprite: 'wolf', color: '#b5a2cf', elementType: 'water', elementLabel: 'น้ำ', tribe: 'สัตว์', role: 'ว่องไว', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'snow_snowhulk', thaiName: 'อิกลูยักษ์', englishName: 'Snowhulk', sprite: 'golem', color: '#d4cfe3', elementType: 'water', elementLabel: 'น้ำ', tribe: 'วัตถุ', role: 'แทงก์', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'snow_snowveil_sprite', thaiName: 'ภูตม่านหิมะ', englishName: 'Snowveil Sprite', sprite: 'ghost', color: '#7ea2db', elementType: 'water', elementLabel: 'น้ำ', tribe: 'วิญญาณ', role: 'เวท', size: 'กลาง', stars: 3, aggressive: true, flying: true },
+      { id: 'snow_frost_ape', thaiName: 'วานรน้ำแข็ง', englishName: 'Frost Ape', sprite: 'orc', color: '#dcd5cf', elementType: 'water', elementLabel: 'น้ำ', tribe: 'สัตว์', role: 'ประชิด', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'snow_frost_bear', thaiName: 'หมีน้ำแข็ง', englishName: 'Frost Bear', sprite: 'orc', color: '#e6deeb', elementType: 'water', elementLabel: 'น้ำ', tribe: 'สัตว์', role: 'ประชิด', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'snow_mortar_witch', thaiName: 'แม่มดครกไม้', englishName: 'Mortar Witch', sprite: 'goblin', color: '#8f594d', elementType: 'neutral', elementLabel: 'ไร้ธาตุ', tribe: 'มนุษย์', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true, flying: true },
+      { id: 'snow_stonehide_mammoth', thaiName: 'แมมมอธหนังหิน', englishName: 'Stonehide Mammoth', sprite: 'golem', color: '#7d6b6d', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สัตว์', role: 'แทงก์', size: 'ใหญ่', stars: 3 },
+      { id: 'snow_glacier_titan', thaiName: 'ยักษ์ธารน้ำแข็ง', englishName: 'Glacier Titan', sprite: 'golem', color: '#75a8e3', elementType: 'water', elementLabel: 'น้ำ', tribe: 'ธาตุ', role: 'แทงก์', size: 'ใหญ่', stars: 3, aggressive: true },
     ],
   },
 
-  // 11. ซากปราสาท (ruins · 47, 5 gold bosses)
+  // 11. ซากปราสาท (RUINS · 47 ตัว — มอน 41 · บอส 6)
   {
     mapId: 'ruins',
     biomeName: 'ซากปราสาท',
-    baseLevel: 56,
+    baseLevel: 55,
     entries: [
-      { id: 'ruins_cauldron_golem', name: 'โกเลมหม้ออาคม', sprite: 'earth_golem', color: '#ca8a04', boss: true, levelOffset: 4 },
-      { id: 'ruins_crimson_seraph', name: 'เซราฟิมโลหิต', sprite: 'gale_sentinel', color: '#e11d48', boss: true, levelOffset: 5 },
-      { id: 'ruins_red_blademaster', name: 'อัศวินดาบชาด', sprite: 'abyss_knight', color: '#dc2626', boss: true, levelOffset: 6 },
-      { id: 'ruins_iron_colossus', name: 'จักรกลยักษ์ปราสาท', sprite: 'earth_golem', color: '#b45309', boss: true, levelOffset: 6 },
-      { id: 'ruins_shadow_paladin', name: 'พาราดินทมิฬ', sprite: 'abyss_knight', color: '#6d28d9', boss: true, levelOffset: 7 },
-      { id: 'ruins_arcane_titan', name: 'ไททันเวทมนตร์', sprite: 'golem', color: '#a855f7' },
-      { id: 'ruins_mimic_chest', name: 'หีบสมบัติมีชีวิต', sprite: 'golem', color: '#d97706' },
-      { id: 'ruins_floating_eye', name: 'ดวงตาอสูร', sprite: 'bat', color: '#be123c' },
-      { id: 'ruins_slime_turret', name: 'อสูรกลไกอาคม', sprite: 'golem', color: '#4d7c0f' },
-      { id: 'ruins_jester_mage', name: 'จอมเวทคทารัตติกาล', sprite: 'skeleton', color: '#f472b6' },
-      { id: 'ruins_gargoyle_imp', name: 'อิมป์ปราสาท', sprite: 'demon', color: '#0d9488' },
-      { id: 'ruins_plush_hare', name: 'ตุ๊กตากระต่ายต้องสาป', sprite: 'rabbit', color: '#fb7185' },
-      { id: 'ruins_lantern_bot', name: 'หุ่นตะเกียงโบราณ', sprite: 'golem', color: '#a16207' },
-      { id: 'ruins_stone_gargoyle', name: 'การ์กอยล์ศิลา', sprite: 'bat', color: '#94a3b8' },
-      { id: 'ruins_scare_puppet', name: 'หุ่นไล่กาเหล็ก', sprite: 'skeleton', color: '#b45309' },
-      { id: 'ruins_witch_apprentice', name: 'แม่มดแดงแห่งซาก', sprite: 'ghost', color: '#991b1b' },
-      { id: 'ruins_clockwork_doll', name: 'ตุ๊กตาไขลาน', sprite: 'ghost', color: '#fb7185' },
-      { id: 'ruins_candle_spirit', name: 'ภูตเชิงเทียน', sprite: 'ghost', color: '#be123c' },
-      { id: 'ruins_astro_orb', name: 'ลูกแก้วดาราศาสตร์', sprite: 'bat', color: '#3b82f6' },
-      { id: 'ruins_clock_fiend', name: 'ปีศาจนาฬิกา', sprite: 'golem', color: '#65a30d' },
-      { id: 'ruins_ooze_knight', name: 'สไลม์อัศวิน', sprite: 'slime', color: '#7e22ce' },
-      { id: 'ruins_royal_guard', name: 'องครักษ์ปราสาท', sprite: 'abyss_knight', color: '#38bdf8' },
-      { id: 'ruins_cursed_maid', name: 'สาวใช้ต้องสาป', sprite: 'ghost', color: '#cbd5e1' },
-      { id: 'ruins_dark_witch', name: 'แม่มดทมิฬ', sprite: 'ghost', color: '#4c1d95' },
-      { id: 'ruins_obsidian_guard', name: 'อัศวินออบซิเดียน', sprite: 'abyss_knight', color: '#312e81' },
-      { id: 'ruins_necro_scholar', name: 'ปราชญ์เวทมนตร์ดำ', sprite: 'skeleton', color: '#581c87' },
-      { id: 'ruins_noble_ghost', name: 'วิญญาณขุนนาง', sprite: 'ghost', color: '#e2e8f0' },
-      { id: 'ruins_straw_puppet', name: 'หุ่นเชิดปราสาท', sprite: 'skeleton', color: '#d97706' },
-      { id: 'ruins_royal_squire', name: 'อัศวินฝึกหัดผีสิง', sprite: 'goblin', color: '#e11d48' },
-      { id: 'ruins_pink_automaton', name: 'อัศวินกุหลาบเหล็ก', sprite: 'abyss_knight', color: '#f472b6' },
-      { id: 'ruins_clay_sentinel', name: 'โกเลมผู้เฝ้าประตู', sprite: 'golem', color: '#a8a29e' },
-      { id: 'ruins_blood_witch', name: 'จอมเวทกุหลาบแดง', sprite: 'ghost', color: '#be123c' },
-      { id: 'ruins_phantom_steed', name: 'อาชาปีศาจ', sprite: 'wolf', color: '#9333ea' },
-      { id: 'ruins_relic_knight', name: 'อัศวินศิลาโบราณ', sprite: 'golem', color: '#d6d3d1' },
-      { id: 'ruins_floating_sword', name: 'ดาบต้องสาปลอยฟ้า', sprite: 'bat', color: '#cbd5e1' },
-      { id: 'ruins_halberd_spirit', name: 'ง้าวอาคม', sprite: 'bat', color: '#ef4444' },
-      { id: 'ruins_royal_executioner', name: 'เพชฌฆาตปราสาท', sprite: 'orc', color: '#92400e' },
-      { id: 'ruins_crimson_valkyrie', name: 'วัลคิรีสีชาด', sprite: 'gale_sentinel', color: '#fb7185' },
-      { id: 'ruins_ice_banshee', name: 'วิญญาณราชินีน้ำแข็ง', sprite: 'ghost', color: '#60a5fa' },
-      { id: 'ruins_thorn_fairy', name: 'ภูตหนามกุหลาบ', sprite: 'bat', color: '#65a30d' },
-      { id: 'ruins_bone_pillar', name: 'เสาโลหิตต้องสาป', sprite: 'golem', color: '#9f1239' },
-      { id: 'ruins_crystal_wisp', name: 'ภูตผลึกม่วง', sprite: 'ghost', color: '#c084fc' },
-      { id: 'ruins_crimson_knight', name: 'อัศวินเกราะชาด', sprite: 'abyss_knight', color: '#dc2626' },
-      { id: 'ruins_bone_duelist', name: 'นักดาบกระดูกเงิน', sprite: 'skeleton', color: '#e2e8f0' },
-      { id: 'ruins_scarlet_reaper', name: 'ยมทูตผ้าคลุมแดง', sprite: 'skeleton', color: '#b91c1c' },
-      { id: 'ruins_bow_warden', name: 'พลธนูซากปราสาท', sprite: 'goblin', color: '#b45309' },
-      { id: 'ruins_fallen_monk', name: 'นักบวชล่มสลาย', sprite: 'ghost', color: '#94a3b8' },
+      { id: 'ruins_clockwork_heir', thaiName: 'ทายาทไขลาน', englishName: 'Clockwork Heir', sprite: 'earth_golem', color: '#b5874c', elementType: 'neutral', elementLabel: 'ไร้ธาตุ', tribe: 'จักรกล', role: 'แทงก์', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, levelOffset: 4 },
+      { id: 'ruins_crimson_count', thaiName: 'เคานต์สีชาด', englishName: 'Crimson Count', sprite: 'bat', color: '#ab4e61', elementType: 'wind', elementLabel: 'ลม', tribe: 'แมลง', role: 'เวท', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, flying: true, levelOffset: 5 },
+      { id: 'ruins_crimson_swordlady', thaiName: 'นางดาบสีชาด', englishName: 'Crimson Swordlady', sprite: 'abyss_knight', color: '#a83645', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'มนุษย์', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, levelOffset: 6 },
+      { id: 'ruins_doom_colossus', thaiName: 'ยักษ์เหล็กวิบัติ', englishName: 'Doom Colossus', sprite: 'earth_golem', color: '#7d5066', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'จักรกล', role: 'ระยะไกล', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, levelOffset: 6 },
+      { id: 'ruins_mirror_knight', thaiName: 'อัศวินกระจก', englishName: 'Mirror Knight', sprite: 'abyss_knight', color: '#c4b5cf', elementType: 'dark', elementLabel: 'มืด', tribe: 'มนุษย์', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, levelOffset: 7 },
+      { id: 'ruins_umbral_colossus', thaiName: 'ยักษ์หินเงามืด', englishName: 'Umbral Colossus', sprite: 'earth_golem', color: '#8f6b99', elementType: 'earth', elementLabel: 'ดิน', tribe: 'จักรกล', role: 'แทงก์', size: 'ใหญ่', stars: 3, aggressive: true, boss: true, levelOffset: 7 },
+      { id: 'ruins_chestwaw', thaiName: 'หีบปากกว้าง', englishName: 'Chestmaw', sprite: 'golem', color: '#6b7054', elementType: 'neutral', elementLabel: 'ไร้ธาตุ', tribe: 'วัตถุ', role: 'ประชิด', size: 'เล็ก', stars: 3, aggressive: true },
+      { id: 'ruins_gazer_orb', thaiName: 'ลูกตาจ้องมอง', englishName: 'Gazer Orb', sprite: 'bat', color: '#82576b', elementType: 'dark', elementLabel: 'มืด', tribe: 'ปีศาจ', role: 'ระยะไกล', size: 'เล็ก', stars: 3, aggressive: true, flying: true },
+      { id: 'ruins_smogwraith', thaiName: 'วิญญาณควันพิษ', englishName: 'Smogwraith', sprite: 'ghost', color: '#8a68a6', elementType: 'poison', elementLabel: 'พิษ', tribe: 'ธาตุ', role: 'เวท', size: 'เล็ก', stars: 3, aggressive: true, flying: true },
+      { id: 'ruins_gingerling', thaiName: 'ตุ๊กตาลูกกวาด', englishName: 'Gingerling', sprite: 'goblin', color: '#cf9e88', elementType: 'neutral', elementLabel: 'ไร้ธาตุ', tribe: 'จักรกล', role: 'ประชิด', size: 'กลาง', stars: 3 },
+      { id: 'ruins_horned_imp', thaiName: 'ปีศาจน้อยเขาแกะ', englishName: 'Horned Imp', sprite: 'demon', color: '#3b827a', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'ปีศาจ', role: 'ประชิด', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'ruins_patchwork_bunny', thaiName: 'กระต่ายผ้าปะ', englishName: 'Patchwork Bunny', sprite: 'rabbit', color: '#e6a8a3', elementType: 'neutral', elementLabel: 'ไร้ธาตุ', tribe: 'จักรกล', role: 'ประชิด', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'ruins_sentry_drone', thaiName: 'โดรนยามกลไก', englishName: 'Sentry Drone', sprite: 'bat', color: '#8c6b5e', elementType: 'neutral', elementLabel: 'ไร้ธาตุ', tribe: 'จักรกล', role: 'ระยะไกล', size: 'กลาง', stars: 3, aggressive: true, flying: true },
+      { id: 'ruins_rooftop_watcher', thaiName: 'ผู้เฝ้าหลังคา', englishName: 'Rooftop Watcher', sprite: 'bat', color: '#a896a3', elementType: 'earth', elementLabel: 'ดิน', tribe: 'จักรกล', role: 'ว่องไว', size: 'กลาง', stars: 3, aggressive: true, flying: true },
+      { id: 'ruins_lanternhead', thaiName: 'หุ่นไล่กาหัวตะเกียง', englishName: 'Lanternhead', sprite: 'ghost', color: '#8f7268', elementType: 'dark', elementLabel: 'โกสต์', tribe: 'วิญญาณ', role: 'ประชิด', size: 'กลาง', stars: 3, aggressive: true, flying: true },
+      { id: 'ruins_hexwitch', thaiName: 'แม่มดคำสาป', englishName: 'Hexwitch', sprite: 'ghost', color: '#783c59', elementType: 'dark', elementLabel: 'มืด', tribe: 'มนุษย์', role: 'เวท', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'ruins_clockwork_maid', thaiName: 'สาวใช้ไขลาน', englishName: 'Clockwork Maid', sprite: 'goblin', color: '#e6a3a6', elementType: 'neutral', elementLabel: 'ไร้ธาตุ', tribe: 'จักรกล', role: 'ว่องไว', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'ruins_dreamveil_fiend', thaiName: 'ปีศาจม่านฝัน', englishName: 'Dreamveil Fiend', sprite: 'demon', color: '#593654', elementType: 'dark', elementLabel: 'มืด', tribe: 'ปีศาจ', role: 'ว่องไว', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'ruins_haunted_frame', thaiName: 'กรอบรูปผีสิง', englishName: 'Haunted Frame', sprite: 'ghost', color: '#45598c', elementType: 'dark', elementLabel: 'โกสต์', tribe: 'วัตถุ', role: 'เวท', size: 'กลาง', stars: 3, aggressive: true, flying: true },
+      { id: 'ruins_bellclock', thaiName: 'นาฬิกาปลุกเดินได้', englishName: 'Bellclock', sprite: 'golem', color: '#b5874c', elementType: 'neutral', elementLabel: 'ไร้ธาตุ', tribe: 'จักรกล', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true },
+      { id: 'ruins_hornblob', thaiName: 'สไลม์เขา', englishName: 'Hornblob', sprite: 'slime', color: '#9c78b8', elementType: 'water', elementLabel: 'น้ำ', tribe: 'สไลม์', role: 'แทงก์', size: 'ใหญ่', stars: 3 },
+      { id: 'ruins_iron_sentinel', thaiName: 'ผู้พิทักษ์เหล็ก', englishName: 'Iron Sentinel', sprite: 'abyss_knight', color: '#5c6b85', elementType: 'neutral', elementLabel: 'ไร้ธาตุ', tribe: 'จักรกล', role: 'ระยะไกล', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'ruins_stonegaze', thaiName: 'นางงูจ้องศิลา', englishName: 'Stonegaze', sprite: 'demon', color: '#8f9e7a', elementType: 'earth', elementLabel: 'ดิน', tribe: 'ปีศาจ', role: 'เวท', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'ruins_echo_assassin', thaiName: 'นักฆ่าเงาสะท้อน', englishName: 'Echo Assassin', sprite: 'ghost', color: '#6b5385', elementType: 'dark', elementLabel: 'โกสต์', tribe: 'วิญญาณ', role: 'ว่องไว', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'ruins_echo_knight', thaiName: 'อัศวินเงาสะท้อน', englishName: 'Echo Knight', sprite: 'abyss_knight', color: '#696280', elementType: 'dark', elementLabel: 'โกสต์', tribe: 'วิญญาณ', role: 'ประชิด', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'ruins_echo_mage', thaiName: 'จอมเวทเงาสะท้อน', englishName: 'Echo Mage', sprite: 'ghost', color: '#543f69', elementType: 'dark', elementLabel: 'โกสต์', tribe: 'วิญญาณ', role: 'เวท', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'ruins_echo_priestess', thaiName: 'นักบวชหญิงเงาสะท้อน', englishName: 'Echo Priestess', sprite: 'ghost', color: '#a887a3', elementType: 'dark', elementLabel: 'โกสต์', tribe: 'วิญญาณ', role: 'เวท', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'ruins_siege_walker', thaiName: 'หอรบเดินได้', englishName: 'Siege Walker', sprite: 'golem', color: '#a8968a', elementType: 'earth', elementLabel: 'ดิน', tribe: 'จักรกล', role: 'แทงก์', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'ruins_musket_revenant', thaiName: 'โครงกระดูกปืนคาบศิลา', englishName: 'Musket Revenant', sprite: 'skeleton', color: '#a34c4e', elementType: 'dark', elementLabel: 'อันเดด', tribe: 'อันเดด', role: 'ระยะไกล', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'ruins_hollow_armour', thaiName: 'เกราะกลวง', englishName: 'Hollow Armour', sprite: 'abyss_knight', color: '#b55c78', elementType: 'dark', elementLabel: 'มืด', tribe: 'อันเดด', role: 'ประชิด', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'ruins_doom_engine', thaiName: 'จักรกลวิบัติ', englishName: 'Doom Engine', sprite: 'golem', color: '#b56e68', elementType: 'neutral', elementLabel: 'ไร้ธาตุ', tribe: 'จักรกล', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true },
+      { id: 'ruins_velvet_vampire', thaiName: 'แวมไพร์กำมะหยี่', englishName: 'Velvet Vampire', sprite: 'ghost', color: '#8f3952', elementType: 'dark', elementLabel: 'มืด', tribe: 'อันเดด', role: 'ว่องไว', size: 'ใหญ่', stars: 3, aggressive: true, flying: true },
+      { id: 'ruins_night_steed', thaiName: 'อาชาราตรี', englishName: 'Night Steed', sprite: 'wolf', color: '#785a73', elementType: 'dark', elementLabel: 'มืด', tribe: 'สัตว์', role: 'ว่องไว', size: 'ใหญ่', stars: 3, aggressive: true },
+      { id: 'ruins_blade_sentinel', thaiName: 'ผู้พิทักษ์ดาบศิลา', englishName: 'Blade Sentinel', sprite: 'golem', color: '#8a8275', elementType: 'earth', elementLabel: 'ดิน', tribe: 'จักรกล', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true },
+      { id: 'ruins_cursed_edge', thaiName: 'ดาบต้องสาป', englishName: 'Cursed Edge', sprite: 'bat', color: '#8f475e', elementType: 'dark', elementLabel: 'มืด', tribe: 'วัตถุ', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true, flying: true },
+      { id: 'ruins_headsmans_blade', thaiName: 'ขวานเพชฌฆาต', englishName: "Headsman's Blade", sprite: 'bat', color: '#9c4c47', elementType: 'dark', elementLabel: 'มืด', tribe: 'วัตถุ', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true, flying: true },
+      { id: 'ruins_iron_marauder', thaiName: 'โจรกรงเล็บเหล็ก', englishName: 'Iron Marauder', sprite: 'goblin', color: '#6e5266', elementType: 'neutral', elementLabel: 'ไร้ธาตุ', tribe: 'มนุษย์', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true },
+      { id: 'ruins_mirror_twin', thaiName: 'แฝดกระจก', englishName: 'Mirror Twin', sprite: 'ghost', color: '#c45259', elementType: 'neutral', elementLabel: 'ไร้ธาตุ', tribe: 'จักรกล', role: 'อัญเชิญ', size: 'ใหญ่', stars: 3, aggressive: true, flying: true },
+      { id: 'ruins_sorrow_shade', thaiName: 'เงาโศกา', englishName: 'Sorrow Shade', sprite: 'ghost', color: '#6b94cc', elementType: 'water', elementLabel: 'น้ำ', tribe: 'วิญญาณ', role: 'เวท', size: 'ใหญ่', stars: 3, aggressive: true, flying: true },
+      { id: 'ruins_swarm_tyrant', thaiName: 'ราชันฝูงแมลง', englishName: 'Swarm Tyrant', sprite: 'spider', color: '#5c7847', elementType: 'poison', elementLabel: 'พิษ', tribe: 'แมลง', role: 'อัญเชิญ', size: 'ใหญ่', stars: 3, aggressive: true, flying: true },
+      { id: 'ruins_thornblade', thaiName: 'ดาบหนามกุหลาบ', englishName: 'Thornblade', sprite: 'bat', color: '#a84763', elementType: 'earth', elementLabel: 'ดิน', tribe: 'วัตถุ', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true, flying: true },
+      { id: 'ruins_dread_shade', thaiName: 'เงาหวาดผวา', englishName: 'Dread Shade', sprite: 'ghost', color: '#593e5e', elementType: 'dark', elementLabel: 'โกสต์', tribe: 'วิญญาณ', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true, flying: true },
+      { id: 'ruins_crimson_knight', thaiName: 'อัศวินสีชาด', englishName: 'Crimson Knight', sprite: 'abyss_knight', color: '#a82f3c', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'มนุษย์', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true },
+      { id: 'ruins_grinning_jester', thaiName: 'ตัวตลกยิ้มแสยะ', englishName: 'Grinning Jester', sprite: 'goblin', color: '#c9a68a', elementType: 'neutral', elementLabel: 'ไร้ธาตุ', tribe: 'จักรกล', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true },
+      { id: 'ruins_hatred_shade', thaiName: 'เงาเคียดแค้น', englishName: 'Hatred Shade', sprite: 'ghost', color: '#a82a2e', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'วิญญาณ', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true, flying: true },
+      { id: 'ruins_bow_sentinel', thaiName: 'ผู้พิทักษ์ธนูศิลา', englishName: 'Bow Sentinel', sprite: 'golem', color: '#ad9480', elementType: 'earth', elementLabel: 'ดิน', tribe: 'จักรกล', role: 'ระยะไกล', size: 'ใหญ่', stars: 3, aggressive: true },
+      { id: 'ruins_despair_shade', thaiName: 'เงาสิ้นหวัง', englishName: 'Despair Shade', sprite: 'ghost', color: '#6e6873', elementType: 'dark', elementLabel: 'โกสต์', tribe: 'วิญญาณ', role: 'เวท', size: 'ใหญ่', stars: 3, aggressive: true, flying: true },
     ],
   },
 
-  // 12. ภูเขาไฟ (volcano · 18, 1 gold boss)
+  // 12. ภูเขาไฟ (VOLCANO · 18 ตัว — มอน 17 · บอส 1)
   {
     mapId: 'volcano',
     biomeName: 'ภูเขาไฟ',
-    baseLevel: 62,
+    baseLevel: 63,
     entries: [
-      { id: 'demon_lord', name: 'ราชาปีศาจเพลิง', sprite: 'demon', color: '#ef4444', boss: true, levelOffset: 6 },
-      { id: 'volcano_lava_crab', name: 'ปูหินลาวา', sprite: 'spider', color: '#7f1d1d' },
-      { id: 'volcano_magma_bat', name: 'ค้างคาวแมกมา', sprite: 'bat', color: '#dc2626' },
-      { id: 'volcano_lava_slime', name: 'สไลม์ลาวา', sprite: 'slime', color: '#f97316' },
-      { id: 'volcano_ash_hound', name: 'สุนัขเถ้าถ่าน', sprite: 'wolf', color: '#7c2d12' },
-      { id: 'volcano_fire_scorpion', name: 'แมงป่องเพลิง', sprite: 'spider', color: '#ea580c' },
-      { id: 'volcano_wisp', name: 'วิญญาณไฟม่วง', sprite: 'ghost', color: '#a855f7' },
-      { id: 'volcano_hell_wolf', name: 'หมาป่าเพลิงนรก', sprite: 'wolf', color: '#dc2626' },
-      { id: 'demon', name: 'ปีศาจ', sprite: 'demon', color: '#9d0208' },
-      { id: 'volcano_skull_flame', name: 'กะโหลกเพลิง', sprite: 'skeleton', color: '#f97316' },
-      { id: 'volcano_pyromancer', name: 'จอมเวทอัคคี', sprite: 'skeleton', color: '#ec4899' },
-      { id: 'fire_golem', name: 'โกเลมเพลิง', sprite: 'golem', color: '#e85d04' },
-      { id: 'volcano_furnace_crab', name: 'เตาหลอมมีชีวิต', sprite: 'golem', color: '#92400e' },
-      { id: 'volcano_nightmare_steed', name: 'อาชาเพลิงนรก', sprite: 'wolf', color: '#f97316' },
-      { id: 'volcano_blaze_beast', name: 'อสูรเปลวสุริยัน', sprite: 'wolf', color: '#dc2626' },
-      { id: 'volcano_flame_dancer', name: 'ภูตระบำเพลิง', sprite: 'ghost', color: '#f43f5e' },
-      { id: 'volcano_solar_lion', name: 'ราชสีห์เพลิงทอง', sprite: 'wolf', color: '#fbbf24' },
-      { id: 'volcano_cerberus', name: 'เซอร์เบอรัส', sprite: 'wolf', color: '#991b1b' },
+      { id: 'volcano_inferno_sovereign', thaiName: 'จักรพรรดิเพลิงนรก', englishName: 'Inferno Sovereign', sprite: 'demon', color: '#cf422b', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'มนุษย์', role: 'ประชิด', size: 'ใหญ่', stars: 4, aggressive: true, boss: true, levelOffset: 6 },
+      { id: 'volcano_glasscrag', thaiName: 'หินแก้วภูเขาไฟ', englishName: 'Glasscrag', sprite: 'golem', color: '#5c3c4f', elementType: 'earth', elementLabel: 'ดิน', tribe: 'ธาตุ', role: 'แทงก์', size: 'เล็ก', stars: 3, aggressive: true },
+      { id: 'volcano_flamefist', thaiName: 'ภูตกำปั้นไฟ', englishName: 'Flamefist', sprite: 'demon', color: '#a8475c', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'ปีศาจ', role: 'ประชิด', size: 'เล็ก', stars: 3, aggressive: true, flying: true },
+      { id: 'volcano_magma_blob', thaiName: 'เมือกแมกมา', englishName: 'Magma Blob', sprite: 'slime', color: '#eb7a34', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'สไลม์', role: 'เฉื่อย', size: 'เล็ก', stars: 3 },
+      { id: 'volcano_cinderpup', thaiName: 'ลูกหมาถ่านไฟ', englishName: 'Cinderpup', sprite: 'wolf', color: '#6b403b', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'สัตว์', role: 'ประชิด', size: 'กลาง', stars: 3 },
+      { id: 'volcano_lava_scorpion', thaiName: 'แมงป่องลาวา', englishName: 'Lava Scorpion', sprite: 'spider', color: '#cf6e34', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'แมลง', role: 'ประชิด', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'volcano_emberwisp', thaiName: 'ภูตดวงไฟ', englishName: 'Emberwisp', sprite: 'ghost', color: '#78507d', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'วิญญาณ', role: 'เวท', size: 'กลาง', stars: 3, aggressive: true, flying: true },
+      { id: 'volcano_ember_hound', thaiName: 'สุนัขถ่านเพลิง', englishName: 'Ember Hound', sprite: 'wolf', color: '#c44d47', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'สัตว์', role: 'ประชิด', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'volcano_kindle_imp', thaiName: 'ปีศาจน้อยจุดไฟ', englishName: 'Kindle Imp', sprite: 'demon', color: '#d44c32', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'ปีศาจ', role: 'ประชิด', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'volcano_cinder_skull', thaiName: 'กะโหลกถ่านเพลิง', englishName: 'Cinder Skull', sprite: 'skeleton', color: '#de4c47', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'อันเดด', role: 'ว่องไว', size: 'กลาง', stars: 3, aggressive: true, flying: true },
+      { id: 'volcano_pyre_fiend', thaiName: 'ปีศาจกองไฟ', englishName: 'Pyre Fiend', sprite: 'demon', color: '#8f4f73', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'ปีศาจ', role: 'เวท', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'volcano_magma_hulk', thaiName: 'ยักษ์หินหลอมเหลว', englishName: 'Magma Hulk', sprite: 'golem', color: '#593d47', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'จักรกล', role: 'แทงก์', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'volcano_inferno_engine', thaiName: 'จักรกลเตาหลอม', englishName: 'Inferno Engine', sprite: 'golem', color: '#8f4742', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'จักรกล', role: 'แทงก์', size: 'ใหญ่', stars: 3, aggressive: true },
+      { id: 'volcano_hellfire_steed', thaiName: 'อาชาเพลิงนรก', englishName: 'Hellfire Steed', sprite: 'wolf', color: '#473e47', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'สัตว์', role: 'ว่องไว', size: 'ใหญ่', stars: 3, aggressive: true },
+      { id: 'volcano_flamecrest_lizard', thaiName: 'กิ้งก่าหงอนเพลิง', englishName: 'Flamecrest Lizard', sprite: 'orc', color: '#9c2c2b', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'สัตว์เลื้อยคลาน', role: 'แทงก์', size: 'ใหญ่', stars: 3, aggressive: true },
+      { id: 'volcano_pyre_dancer', thaiName: 'นางระบำเพลิง', englishName: 'Pyre Dancer', sprite: 'ghost', color: '#e65b25', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'วิญญาณ', role: 'เวท', size: 'ใหญ่', stars: 3, aggressive: true, flying: true },
+      { id: 'volcano_ashen_mule', thaiName: 'ล่อหัวเพลิง', englishName: 'Ashen Mule', sprite: 'wolf', color: '#8f7078', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'ปีศาจ', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true },
+      { id: 'volcano_threefold_beast', thaiName: 'อสูรสามเศียร', englishName: 'Threefold Beast', sprite: 'wolf', color: '#8c5a54', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'สัตว์', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true },
     ],
   },
 
-  // 13. แดนลอยฟ้า (sky · 23, 2 gold bosses)
+  // 13. แดนลอยฟ้า (SKY · 23 ตัว — มอน 21 · บอส 2)
   {
     mapId: 'sky',
     biomeName: 'แดนลอยฟ้า',
     baseLevel: 68,
     entries: [
-      { id: 'sky_celestial_warden', name: 'ผู้พิทักษ์สวรรค์', sprite: 'gale_sentinel', color: '#a855f7', boss: true, levelOffset: 5 },
-      { id: 'sky_archangel', name: 'อัครทูตสวรรค์', sprite: 'gale_sentinel', color: '#fde047', boss: true, levelOffset: 7 },
-      { id: 'sky_cloud_lamb', name: 'แกะปุยเมฆ', sprite: 'rabbit', color: '#fef3c7' },
-      { id: 'sky_sunbird', name: 'นกสุริยัน', sprite: 'bat', color: '#f97316' },
-      { id: 'sky_dragonfly', name: 'แมลงปอเวหา', sprite: 'bat', color: '#fbbf24' },
-      { id: 'sky_silk_moth', name: 'ผีเสื้อเมฆา', sprite: 'bat', color: '#f5d0fe' },
-      { id: 'sky_winged_boar', name: 'หมูติดปีกสวรรค์', sprite: 'rabbit', color: '#f472b6' },
-      { id: 'sky_celestial_ram', name: 'แกะเขาเมฆา', sprite: 'wolf', color: '#eab308' },
-      { id: 'sky_fox_glider', name: 'จิ้งจอกสายลม', sprite: 'wolf', color: '#f97316' },
-      { id: 'sky_propeller_slime', name: 'ภูตใบพัด', sprite: 'bat', color: '#65a30d' },
-      { id: 'sky_baby_wyvern', name: 'ลูกมังกรเวหา', sprite: 'bat', color: '#fb7185' },
-      { id: 'sky_cloud_whale', name: 'วาฬเมฆา', sprite: 'slime', color: '#38bdf8' },
-      { id: 'sky_crimson_phoenix', name: 'ฟีนิกซ์สุริยัน', sprite: 'bat', color: '#ef4444' },
-      { id: 'sky_storm_wizard', name: 'จอมเวทเมฆา', sprite: 'ghost', color: '#a855f7' },
-      { id: 'sky_pegasus', name: 'เพกาซัส', sprite: 'wolf', color: '#e0e7ff' },
-      { id: 'sky_paladin_golem', name: 'โกเลมสวรรค์', sprite: 'golem', color: '#facc15' },
-      { id: 'sky_valkyrie', name: 'วัลคิรีแสง', sprite: 'gale_sentinel', color: '#fb7185' },
-      { id: 'sky_cloud_shark', name: 'ฉลามนภา', sprite: 'wolf', color: '#fde047' },
-      { id: 'gale_sentinel', name: 'ผู้พิทักษ์สายลม', sprite: 'gale_sentinel', color: '#8ee7ff' },
-      { id: 'sky_seraph_blade', name: 'ทูตสวรรค์ดาบแสง', sprite: 'gale_sentinel', color: '#fca5a5' },
-      { id: 'sky_solar_titan', name: 'อัศวินสุริยะ', sprite: 'abyss_knight', color: '#d97706' },
-      { id: 'sky_griffin', name: 'กริฟฟิน', sprite: 'gale_sentinel', color: '#92400e' },
-      { id: 'sky_wind_wyvern', name: 'ไวเวิร์นวายุ', sprite: 'bat', color: '#22c55e' },
+      { id: 'sky_gale_knight', thaiName: 'อัศวินวายุ', englishName: 'Gale Knight', sprite: 'gale_sentinel', color: '#9c8ac7', elementType: 'wind', elementLabel: 'ลม', tribe: 'มนุษย์', role: 'ประชิด', size: 'ใหญ่', stars: 4, aggressive: true, boss: true, flying: true, levelOffset: 5 },
+      { id: 'sky_winged_arbiter', thaiName: 'ผู้ตัดสินแห่งนภา', englishName: 'Winged Arbiter', sprite: 'gale_sentinel', color: '#e0c5b5', elementType: 'light', elementLabel: 'ศักดิ์สิทธิ์', tribe: 'มนุษย์', role: 'ประชิด', size: 'ใหญ่', stars: 4, aggressive: true, boss: true, flying: true, levelOffset: 7 },
+      { id: 'sky_pebble_puff', thaiName: 'ก้อนปุยกรวด', englishName: 'Pebble Puff', sprite: 'slime', color: '#ebdcb9', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สไลม์', role: 'เฉื่อย', size: 'เล็ก', stars: 3 },
+      { id: 'sky_bigbeak', thaiName: 'นกปากใหญ่', englishName: 'Bigbeak', sprite: 'bat', color: '#de5b4c', elementType: 'wind', elementLabel: 'ลม', tribe: 'นก', role: 'ประชิด', size: 'เล็ก', stars: 3, flying: true },
+      { id: 'sky_needlewing_lancer', thaiName: 'แมลงปอหอกเข็ม', englishName: 'Needlewing Lancer', sprite: 'bat', color: '#e69c5c', elementType: 'wind', elementLabel: 'ลม', tribe: 'แมลง', role: 'ว่องไว', size: 'กลาง', stars: 3, aggressive: true, flying: true },
+      { id: 'sky_puffseed', thaiName: 'เมล็ดปุยลม', englishName: 'Puffseed', sprite: 'ghost', color: '#cfc4e3', elementType: 'wind', elementLabel: 'ลม', tribe: 'พืช', role: 'ประชิด', size: 'กลาง', stars: 3, flying: true },
+      { id: 'sky_false_seraph', thaiName: 'เทวทูตจอมปลอม', englishName: 'False Seraph', sprite: 'bat', color: '#8f6e78', elementType: 'dark', elementLabel: 'มืด', tribe: 'วิญญาณ', role: 'ว่องไว', size: 'กลาง', stars: 3, aggressive: true, flying: true },
+      { id: 'sky_crag_goat', thaiName: 'แพะผา', englishName: 'Crag Goat', sprite: 'wolf', color: '#e8d5c0', elementType: 'earth', elementLabel: 'ดิน', tribe: 'สัตว์', role: 'ประชิด', size: 'กลาง', stars: 3 },
+      { id: 'sky_galehound', thaiName: 'หมาป่าวายุ', englishName: 'Galehound', sprite: 'wolf', color: '#d97852', elementType: 'wind', elementLabel: 'ลม', tribe: 'สัตว์', role: 'ว่องไว', size: 'กลาง', stars: 3, aggressive: true },
+      { id: 'sky_spinrotor', thaiName: 'หุ่นใบพัด', englishName: 'Spinrotor', sprite: 'bat', color: '#6b7d59', elementType: 'wind', elementLabel: 'ลม', tribe: 'จักรกล', role: 'ประชิด', size: 'กลาง', stars: 3, aggressive: true, flying: true },
+      { id: 'sky_wyrmkit', thaiName: 'ลูกมังกรน้อย', englishName: 'Wyrmkit', sprite: 'bat', color: '#db6e6e', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'มังกร', role: 'ประชิด', size: 'กลาง', stars: 3 },
+      { id: 'sky_haloblob', thaiName: 'วาฬรัศมี', englishName: 'Haloblob', sprite: 'slime', color: '#6eb5e8', elementType: 'wind', elementLabel: 'ลม', tribe: 'สัตว์น้ำ', role: 'แทงก์', size: 'ใหญ่', stars: 3, flying: true },
+      { id: 'sky_gale_hawk', thaiName: 'เหยี่ยววายุ', englishName: 'Gale Hawk', sprite: 'bat', color: '#c4524c', elementType: 'wind', elementLabel: 'ลม', tribe: 'นก', role: 'ว่องไว', size: 'กลาง', stars: 3, aggressive: true, flying: true },
+      { id: 'sky_cloud_sage', thaiName: 'ฤๅษีเมฆา', englishName: 'Cloud Sage', sprite: 'ghost', color: '#8c707a', elementType: 'wind', elementLabel: 'ลม', tribe: 'มนุษย์', role: 'เวท', size: 'ใหญ่', stars: 3, flying: true },
+      { id: 'sky_gustfang', thaiName: 'เขี้ยวพายุ', englishName: 'Gustfang', sprite: 'wolf', color: '#ede5f5', elementType: 'wind', elementLabel: 'ลม', tribe: 'สัตว์', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true },
+      { id: 'sky_haven_warden', thaiName: 'ผู้พิทักษ์ปราการ', englishName: 'Haven Warden', sprite: 'golem', color: '#d4beab', elementType: 'light', elementLabel: 'ศักดิ์สิทธิ์', tribe: 'จักรกล', role: 'แทงก์', size: 'ใหญ่', stars: 3, aggressive: true },
+      { id: 'sky_mercy_warden', thaiName: 'ผู้พิทักษ์เมตตา', englishName: 'Mercy Warden', sprite: 'gale_sentinel', color: '#b56e75', elementType: 'light', elementLabel: 'ศักดิ์สิทธิ์', tribe: 'จักรกล', role: 'เวท', size: 'ใหญ่', stars: 3, aggressive: true },
+      { id: 'sky_seraph_blob', thaiName: 'วาฬเทพทอง', englishName: 'Seraph Blob', sprite: 'slime', color: '#ebd07d', elementType: 'light', elementLabel: 'ศักดิ์สิทธิ์', tribe: 'สัตว์น้ำ', role: 'แทงก์', size: 'ใหญ่', stars: 3, flying: true },
+      { id: 'sky_spear_maiden', thaiName: 'นางทวนสวรรค์', englishName: 'Spear Maiden', sprite: 'gale_sentinel', color: '#9c789e', elementType: 'wind', elementLabel: 'ลม', tribe: 'มนุษย์', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true, flying: true },
+      { id: 'sky_vigil_warden', thaiName: 'ผู้พิทักษ์เฝ้ายาม', englishName: 'Vigil Warden', sprite: 'gale_sentinel', color: '#d9b5b2', elementType: 'light', elementLabel: 'ศักดิ์สิทธิ์', tribe: 'วิญญาณ', role: 'เวท', size: 'ใหญ่', stars: 3, aggressive: true, flying: true },
+      { id: 'sky_wrath_warden', thaiName: 'ผู้พิทักษ์โทสะ', englishName: 'Wrath Warden', sprite: 'abyss_knight', color: '#a8474c', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'มนุษย์', role: 'ประชิด', size: 'ใหญ่', stars: 3, aggressive: true, flying: true },
+      { id: 'sky_stormtalon', thaiName: 'กริฟฟินพายุ', englishName: 'Stormtalon', sprite: 'gale_sentinel', color: '#9e92a3', elementType: 'wind', elementLabel: 'ลม', tribe: 'สัตว์', role: 'ว่องไว', size: 'ใหญ่', stars: 3, aggressive: true, flying: true },
+      { id: 'sky_talon_siren', thaiName: 'นางนกกรงเล็บ', englishName: 'Talon Siren', sprite: 'bat', color: '#a84c47', elementType: 'wind', elementLabel: 'ลม', tribe: 'ปีศาจ', role: 'ว่องไว', size: 'ใหญ่', stars: 3, aggressive: true, flying: true },
     ],
   },
 
-  // 14. ห้วงอเวจี (abyss · 11, 1 gold boss)
+  // 14. ห้วงอเวจี (ABYSS · 11 ตัว — มอน 10 · บอส 1)
   {
     mapId: 'abyss',
     biomeName: 'ห้วงอเวจี',
     baseLevel: 76,
     entries: [
-      { id: 'abyss_dragon', name: 'มังกรอเวจี', sprite: 'demon', color: '#24104f', boss: true, levelOffset: 6 },
-      { id: 'abyss_dragon_egg', name: 'ไข่มังกรอเวจี', sprite: 'slime', color: '#7f1d1d' },
-      { id: 'abyss_hatchling', name: 'ลูกมังกรเพลิงมืด', sprite: 'orc', color: '#f43f5e' },
-      { id: 'abyss_void_wyvern', name: 'ไวเวิร์นอเวจี', sprite: 'bat', color: '#7e22ce' },
-      { id: 'abyss_amber_drake', name: 'เดรคอำพัน', sprite: 'wolf', color: '#f59e0b' },
-      { id: 'abyss_frost_drake', name: 'เดรคเหมันต์', sprite: 'wolf', color: '#3b82f6' },
-      { id: 'abyss_crimson_drake', name: 'เดรคโลหิต', sprite: 'wolf', color: '#ef4444' },
-      { id: 'abyss_draconic_mage', name: 'นักเวทมังกร', sprite: 'skeleton', color: '#dc2626' },
-      { id: 'abyss_hydra', name: 'ไฮดราสามหัว', sprite: 'demon', color: '#b91c1c' },
-      { id: 'abyss_knight', name: 'อัศวินห้วงอเวจี', sprite: 'golem', color: '#5b21b6' },
-      { id: 'abyss_elder_wyrm', name: 'มังกรโบราณอเวจี', sprite: 'demon', color: '#6b21a8' },
+      { id: 'abyss_rift_dragon_king', thaiName: 'ราชามังกรรอยแยก', englishName: 'Rift Dragon King', sprite: 'demon', color: '#453647', elementType: 'dark', elementLabel: 'มืด', tribe: 'มังกร', role: 'ประชิด', size: 'ใหญ่', stars: 5, aggressive: true, boss: true, flying: true, levelOffset: 6 },
+      { id: 'abyss_wyrm_egg', thaiName: 'ไข่มังกร', englishName: 'Wyrm Egg', sprite: 'slime', color: '#ad7d87', elementType: 'neutral', elementLabel: 'ไร้ธาตุ', tribe: 'มังกร', role: 'เฉื่อย', size: 'เล็ก', stars: 4 },
+      { id: 'abyss_rift_hatchling', thaiName: 'ลูกมังกรรอยแยก', englishName: 'Rift Hatchling', sprite: 'orc', color: '#c48399', elementType: 'neutral', elementLabel: 'ไร้ธาตุ', tribe: 'มังกร', role: 'ประชิด', size: 'กลาง', stars: 4 },
+      { id: 'abyss_rift_wyvern', thaiName: 'มังกรปีกรอยแยก', englishName: 'Rift Wyvern', sprite: 'bat', color: '#785a94', elementType: 'wind', elementLabel: 'ลม', tribe: 'มังกร', role: 'ว่องไว', size: 'กลาง', stars: 4, aggressive: true, flying: true },
+      { id: 'abyss_wyrmling_runner', thaiName: 'ลูกมังกรนักวิ่ง', englishName: 'Wyrmling Runner', sprite: 'wolf', color: '#cf8247', elementType: 'earth', elementLabel: 'ดิน', tribe: 'มังกร', role: 'ว่องไว', size: 'กลาง', stars: 4, aggressive: true },
+      { id: 'abyss_storm_wyrm', thaiName: 'มังกรพายุ', englishName: 'Storm Wyrm', sprite: 'wolf', color: '#5c82d4', elementType: 'wind', elementLabel: 'ลม', tribe: 'มังกร', role: 'ว่องไว', size: 'กลาง', stars: 4, aggressive: true, flying: true },
+      { id: 'abyss_ember_wyrm', thaiName: 'มังกรถ่านเพลิง', englishName: 'Ember Wyrm', sprite: 'demon', color: '#c94c4c', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'มังกร', role: 'ประชิด', size: 'กลาง', stars: 4, aggressive: true },
+      { id: 'abyss_wyrm_sage', thaiName: 'ปราชญ์มังกร', englishName: 'Wyrm Sage', sprite: 'skeleton', color: '#a3475c', elementType: 'fire', elementLabel: 'ไฟ', tribe: 'มังกร', role: 'เวท', size: 'กลาง', stars: 4, aggressive: true },
+      { id: 'abyss_tidemaw_serpent', thaiName: 'งูทะเลสามเศียร', englishName: 'Tidemaw Serpent', sprite: 'demon', color: '#b55c78', elementType: 'water', elementLabel: 'น้ำ', tribe: 'มังกร', role: 'ระยะไกล', size: 'ใหญ่', stars: 4, aggressive: true },
+      { id: 'abyss_rift_knight', thaiName: 'อัศวินรอยแยก', englishName: 'Rift Knight', sprite: 'abyss_knight', color: '#5c3c6b', elementType: 'dark', elementLabel: 'มืด', tribe: 'มนุษย์', role: 'ประชิด', size: 'ใหญ่', stars: 4, aggressive: true },
+      { id: 'abyss_twisted_wyrm', thaiName: 'มังกรบิดเบี้ยว', englishName: 'Twisted Wyrm', sprite: 'demon', color: '#6b536b', elementType: 'dark', elementLabel: 'มืด', tribe: 'มังกร', role: 'ประชิด', size: 'ใหญ่', stars: 4, aggressive: true, flying: true },
     ],
   },
 
-  // 15. บอสโลก (world · 1 gold boss)
+  // 15. บอสโลก (WORLD · 1 ตัว — มอน 0 · บอส 1)
   {
     mapId: 'world',
     biomeName: 'บอสโลก',
     baseLevel: 90,
     entries: [
       {
-        id: 'world_overlord',
-        name: 'จอมมารโลกันตร์ (World Boss)',
+        id: 'world_goat',
+        thaiName: 'แพะแห่งโลกา',
+        englishName: 'World Goat',
         sprite: 'demon',
-        color: '#7c2d12',
+        color: '#6b3e59',
+        elementType: 'dark',
+        elementLabel: 'มืด',
+        tribe: 'ปีศาจ',
+        role: 'เวท',
+        size: 'ใหญ่',
+        stars: 5,
+        aggressive: true,
         boss: true,
         levelOffset: 5,
         drops: [
@@ -684,6 +857,8 @@ export const BIOME_CATALOG_SPECS: BiomeMonsterCatalogSpec[] = [
 export const MONSTER_BIOME_MAP: Record<string, string> = {}
 export const BIOME_SPAWNS: Record<string, { monsterId: string; count: number }[]> = {}
 export const GENERATED_BIOME_MONSTERS: Record<string, MonsterDef> = {}
+export const MONSTER_CATALOG_META: Record<string, MonsterCatalogMeta> = {}
+export const CATALOG_ELEMENT_MAP: Record<string, CatalogElementType> = {}
 
 for (const spec of BIOME_CATALOG_SPECS) {
   const spawns: { monsterId: string; count: number }[] = []
@@ -692,6 +867,23 @@ for (const spec of BIOME_CATALOG_SPECS) {
 
   spec.entries.forEach((entry, idx) => {
     MONSTER_BIOME_MAP[entry.id] = spec.mapId
+    CATALOG_ELEMENT_MAP[entry.id] = entry.elementType
+    MONSTER_CATALOG_META[entry.id] = {
+      id: entry.id,
+      mapId: spec.mapId,
+      biomeName: spec.biomeName,
+      thaiName: entry.thaiName,
+      englishName: entry.englishName,
+      elementType: entry.elementType,
+      elementLabel: entry.elementLabel,
+      tribe: entry.tribe,
+      role: entry.role,
+      size: entry.size,
+      stars: entry.stars,
+      aggressive: Boolean(entry.aggressive || entry.boss),
+      boss: Boolean(entry.boss),
+      flying: Boolean(entry.flying),
+    }
     GENERATED_BIOME_MONSTERS[entry.id] = buildBiomeMonsterDef(spec.mapId, spec.baseLevel, idx, entry)
     spawns.push({
       monsterId: entry.id,

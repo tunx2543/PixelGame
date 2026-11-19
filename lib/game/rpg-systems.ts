@@ -1,5 +1,5 @@
 import { ITEMS, JOBS, MONSTERS, normalizeJobId, type EquipmentSlot } from './data'
-import { MONSTER_BIOME_MAP } from './biome-monsters'
+import { CATALOG_ELEMENT_MAP, MONSTER_BIOME_MAP } from './biome-monsters'
 import type { InvItem, SaveData } from './engine'
 
 /* ========================================================================== */
@@ -266,6 +266,7 @@ const BIOME_DEFAULT_ELEMENT: Record<string, ElementType> = {
 
 export function getMonsterElement(monsterId: string): ElementType {
   if (MONSTER_ELEMENT_MAP[monsterId]) return MONSTER_ELEMENT_MAP[monsterId]
+  if (CATALOG_ELEMENT_MAP[monsterId]) return CATALOG_ELEMENT_MAP[monsterId]
   const biome = MONSTER_BIOME_MAP[monsterId]
   return biome ? (BIOME_DEFAULT_ELEMENT[biome] ?? 'neutral') : 'neutral'
 }

@@ -1,3 +1,5 @@
+import { MONSTER_CATALOG_META } from './biome-monsters'
+import { getCatalogMonsterAtlas } from './catalog-sprites'
 import { JOBS, MONSTERS, type JobDef, type MonsterDef, type MonsterSprite, type WeaponType } from './data'
 import { MOUNT_DEFS, type MountArchetype, type MountDef } from './mounts'
 import { COMBAT_PETS, type CombatPetDef } from './systems'
@@ -112,6 +114,7 @@ export type MonsterModelArchetype =
   | 'abyss_knight'
   | 'gale_sentinel'
   | 'abyss_dragon'
+  | (string & {})
 
 export interface MonsterModelSpec {
   monsterId: string
@@ -470,26 +473,32 @@ const MEADOW_ARCHETYPES = new Set<MonsterModelArchetype>([
 ])
 
 function buildMonsterSpec(def: MonsterDef): MonsterModelSpec {
-  const archetype = ARCHETYPE_BY_ID[def.id] ?? ARCHETYPE_BY_SPRITE[def.sprite] ?? 'slime'
+  const catalogMeta = MONSTER_CATALOG_META[def.id]
+  const catalogAtlas = getCatalogMonsterAtlas(def.id)
+  const archetype: MonsterModelArchetype =
+    ARCHETYPE_BY_ID[def.id] ?? (catalogMeta ? (def.id as MonsterModelArchetype) : undefined) ?? ARCHETYPE_BY_SPRITE[def.sprite] ?? 'slime'
   const flying =
+    Boolean(catalogAtlas?.flying || catalogMeta?.flying) ||
     archetype === 'meadow_fuzzfly' ||
     archetype === 'bat' ||
     archetype === 'ghost' ||
     archetype === 'boss_fire_dragon' ||
     archetype === 'abyss_dragon' ||
     archetype === 'gale_sentinel'
-  const supports4Way =
-    MEADOW_ARCHETYPES.has(archetype) ||
-    archetype === 'goblin' ||
-    archetype === 'goblin_chief' ||
-    archetype === 'orc' ||
-    archetype === 'skeleton' ||
-    archetype === 'boss_lich' ||
-    archetype === 'abyss_knight' ||
-    archetype === 'gale_sentinel' ||
-    archetype === 'demon' ||
-    archetype === 'boss_demon_king' ||
-    archetype === 'demon_lord'
+  const supports4Way = catalogAtlas
+    ? false
+    : Boolean(catalogMeta) ||
+      MEADOW_ARCHETYPES.has(archetype) ||
+      archetype === 'goblin' ||
+      archetype === 'goblin_chief' ||
+      archetype === 'orc' ||
+      archetype === 'skeleton' ||
+      archetype === 'boss_lich' ||
+      archetype === 'abyss_knight' ||
+      archetype === 'gale_sentinel' ||
+      archetype === 'demon' ||
+      archetype === 'boss_demon_king' ||
+      archetype === 'demon_lord'
 
   const canvasSize =
     archetype === 'abyss_dragon' || archetype === 'boss_fire_dragon'
@@ -513,6 +522,16 @@ function buildMonsterSpec(def: MonsterDef): MonsterModelSpec {
                     ? { width: 28, height: 24 }
                     : archetype === 'meadow_blob' || archetype === 'meadow_blob_drop'
                       ? { width: 26, height: 24 }
+                      : catalogMeta
+                        ? catalogMeta.boss
+                          ? catalogMeta.tribe === 'มังกร' || catalogMeta.id === 'world_goat' || catalogMeta.id === 'coast_drowned_captain'
+                            ? { width: 42, height: 38 }
+                            : { width: 38, height: 36 }
+                          : catalogMeta.size === 'ใหญ่'
+                            ? { width: 36, height: 34 }
+                            : catalogMeta.size === 'กลาง'
+                              ? { width: 32, height: 30 }
+                              : { width: 28, height: 26 }
                       : def.boss ||
                           archetype === 'demon_lord' ||
                           archetype === 'boss_demon_king' ||
@@ -531,6 +550,18 @@ function buildMonsterSpec(def: MonsterDef): MonsterModelSpec {
                           : archetype === 'wolf'
                             ? { width: 30, height: 24 }
                             : { width: 28, height: 26 }
+
+  const catalogElementAccent: Record<string, string> = {
+    fire: '#fb923c',
+    water: '#38bdf8',
+    ice: '#67e8f9',
+    earth: '#d4a373',
+    wind: '#4ade80',
+    poison: '#c084fc',
+    light: '#fde047',
+    dark: '#a855f7',
+    neutral: '#fbbf24',
+  }
 
   const accentColor =
     archetype === 'meadow_larva'
@@ -559,6 +590,8 @@ function buildMonsterSpec(def: MonsterDef): MonsterModelSpec {
                             ? '#fbbf24'
                             : archetype === 'meadow_dewmother'
                               ? '#67e8f9'
+                              : catalogMeta
+                                ? (def.boss ? '#f5c441' : catalogElementAccent[catalogMeta.elementType] ?? def.color)
                               : archetype === 'slime_blue'
       ? '#bae6fd'
       : archetype === 'pink_slime'
@@ -608,7 +641,7 @@ function buildMonsterSpec(def: MonsterDef): MonsterModelSpec {
     supports4Way,
     flying,
     auraColor: def.boss
-      ? accentColor
+      ? '#f5c441'
       : archetype === 'meadow_dewmother'
         ? '#67e8f9'
         : archetype === 'meadow_big_hopper'
@@ -616,7 +649,15 @@ function buildMonsterSpec(def: MonsterDef): MonsterModelSpec {
           : archetype === 'abyss_knight'
             ? '#9d4edd'
             : undefined,
-    animationFrames: { idle: 4, walk: 6, attack: 4 },
+    animationFrames: catalogAtlas
+      ? {
+          idle:
+            catalogAtlas.anims.idle?.frames.length ??
+            (catalogAtlas.flying ? catalogAtlas.anims.walk?.frames.length ?? 1 : 1),
+          walk: catalogAtlas.anims.walk?.frames.length ?? catalogAtlas.anims.idle?.frames.length ?? 1,
+          attack: catalogAtlas.anims.attack?.frames.length ?? catalogAtlas.anims.skill?.frames.length ?? 4,
+        }
+      : { idle: 4, walk: 6, attack: 4 },
   }
 }
 

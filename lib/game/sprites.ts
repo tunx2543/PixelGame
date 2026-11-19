@@ -23,6 +23,7 @@ import {
   renderHdMountSprite,
   renderHdPetSprite,
 } from './hd-characters'
+import { hasCatalogMonsterAtlas } from './catalog-sprites'
 import { buildHdMapCanvas } from './hd-tiles'
 import {
   drawSheetFrameSpec,
@@ -184,7 +185,7 @@ class PixelSurface {
   }
 }
 
-const MAX_SPRITE_CACHE = 160
+const MAX_SPRITE_CACHE = 720
 const MAX_GM_CACHE = 48
 const cache = new Map<string, HTMLCanvasElement>()
 const gmOutfitCache = new Map<string, HTMLImageElement>()
@@ -526,8 +527,8 @@ export function canvasToResolvedDrawable(canvas: HTMLCanvasElement): ResolvedDra
 
 export function sheetSpecToResolvedDrawable(spec: SheetFrameDrawSpec): ResolvedDrawable {
   return {
-    width: spec.sw,
-    height: spec.sh,
+    width: spec.boxW ?? spec.sw,
+    height: spec.boxH ?? spec.sh,
     hdScale: spec.hdScale,
     sheetId: spec.sheetId,
     sheetSpec: spec,
@@ -614,13 +615,15 @@ export function resolveMonsterDrawable(
   defId?: string,
 ): ResolvedDrawable {
   const action: SpriteAction = attacking ? 'attack' : actionOverride ?? (frame > 0 ? 'walk' : 'idle')
-  const f = action === 'attack'
+  const f = action === 'attack' || action === 'skill'
     ? Math.abs(attackFrameOverride ?? frame) % 4
     : action === 'walk'
       ? Math.abs(frame) % 6
       : Math.abs(frame) % 4
   if (typeof document !== 'undefined') {
-    const sheetFrameIdx = action === 'attack' ? (attackFrameOverride ?? f) : f
+    const sheetFrameIdx = hasCatalogMonsterAtlas(defId)
+      ? (action === 'attack' || action === 'skill' ? (attackFrameOverride ?? frame) : frame)
+      : (action === 'attack' ? (attackFrameOverride ?? f) : f)
     const spec = getMonsterSheetFrameSpec(defId, sprite, dir, action, sheetFrameIdx)
     if (spec) return sheetSpecToResolvedDrawable(spec)
   }
