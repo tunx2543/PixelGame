@@ -100,7 +100,7 @@ function drawSoftShadow(ctx: CanvasRenderingContext2D, cx: number, cy: number, r
   ctx.save()
   ctx.fillStyle = `rgba(18, 12, 24, ${alpha})`
   ctx.beginPath()
-  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
+  ctx.ellipse(cx, cy, Math.max(0.5, rx), Math.max(0.5, ry), 0, 0, Math.PI * 2)
   ctx.fill()
   ctx.restore()
 }
@@ -259,11 +259,11 @@ export function buildTownStructureDrawables(t: number): HdDepthDrawable[] {
           // Animated sparkling water ripples
           ctx.save()
           for (let i = 0; i < 3; i++) {
-            const p = ((t * 0.9 + i * 0.33) % 1)
+            const p = (((t * 0.9 + i * 0.33) % 1) + 1) % 1
             ctx.strokeStyle = `rgba(224, 242, 254, ${(1 - p) * 0.65})`
             ctx.lineWidth = 1.1
             ctx.beginPath()
-            ctx.ellipse(cx, baseY - 14, 7 + p * 14, 3.5 + p * 7, 0, 0, Math.PI * 2)
+            ctx.ellipse(cx, baseY - 14, Math.max(0.5, 7 + p * 14), Math.max(0.5, 3.5 + p * 7), 0, 0, Math.PI * 2)
             ctx.stroke()
           }
           ctx.restore()
