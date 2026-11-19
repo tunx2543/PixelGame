@@ -47,9 +47,18 @@ if (typeof window !== 'undefined') {
 }
 
 export function resolveBgmTheme(mapId: string, bossActive = false): BgmTheme {
-  if (bossActive) return 'boss'
+  if (bossActive || mapId === 'world') return 'boss'
   if (mapId === 'town') return 'town'
-  if (mapId === 'cave' || mapId === 'volcano' || mapId === 'abyss' || mapId === 'crystal') return 'dungeon'
+  if (
+    mapId === 'cave' ||
+    mapId === 'volcano' ||
+    mapId === 'abyss' ||
+    mapId === 'graveyard' ||
+    mapId === 'ruins' ||
+    mapId === 'crystal'
+  ) {
+    return 'dungeon'
+  }
   return 'field'
 }
 

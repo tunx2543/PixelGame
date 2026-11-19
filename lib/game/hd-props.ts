@@ -443,7 +443,7 @@ export function buildTilePropDrawable(
     const dh = targetH
     const dx = cx - dw / 2
     const dy = baseY - dh + 3
-    const snowy = map.theme === 'frost'
+    const snowy = map.theme === 'frost' || map.theme === 'snow'
     return {
       y: baseY,
       overheadZone: { x0: cx - dw * 0.38, y0: dy, x1: cx + dw * 0.38, y1: baseY - 8, baseY },

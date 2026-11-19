@@ -124,7 +124,7 @@ export const GATHERING_NODES: GatheringNodeDef[] = [
   },
   {
     id: 'frost_ice_pond',
-    mapId: 'frost',
+    mapId: 'snow',
     tx: 16,
     ty: 16,
     skill: 'fishing',

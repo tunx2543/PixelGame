@@ -407,9 +407,9 @@ function paintProceduralHdTile(
       return
     }
     case T.RUINS_FLOOR: {
-      const fill = theme === 'abyss' ? '#574670' : theme === 'volcano' ? '#704439' : '#8a8599'
-      const hi = theme === 'abyss' ? '#725d91' : theme === 'volcano' ? '#8c5648' : '#a8a2b8'
-      const sh = theme === 'abyss' ? '#3b2e4f' : theme === 'volcano' ? '#4a2b24' : '#656073'
+      const fill = theme === 'abyss' || theme === 'graveyard' ? '#574670' : theme === 'volcano' ? '#704439' : '#8a8599'
+      const hi = theme === 'abyss' || theme === 'graveyard' ? '#725d91' : theme === 'volcano' ? '#8c5648' : '#a8a2b8'
+      const sh = theme === 'abyss' || theme === 'graveyard' ? '#3b2e4f' : theme === 'volcano' ? '#4a2b24' : '#656073'
       ctx.fillStyle = sh
       ctx.fillRect(0, 0, S, S)
       drawRoundedCobbleStone(ctx, 0, 0, 32, 32, fill, hi, sh, '#241e2e')

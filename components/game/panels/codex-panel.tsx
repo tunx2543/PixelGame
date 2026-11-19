@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Award, BookOpen, Check, Gem } from 'lucide-react'
+import { Award, BookOpen, Check, Gem, Search } from 'lucide-react'
+import { BIOME_CATALOG_SPECS, MONSTER_BIOME_MAP } from '@/lib/game/biome-monsters'
 import { MONSTERS } from '@/lib/game/data'
 import { claimBestiaryRewardAction, equipTitleAction } from '@/lib/game/engine'
 import {
@@ -21,6 +22,8 @@ export function CodexPanel() {
   const g = useGame()
   const p = g.p
   const [tab, setTab] = useState<'bestiary' | 'titles'>('bestiary')
+  const [biomeFilter, setBiomeFilter] = useState<string>('all')
+  const [searchQuery, setSearchQuery] = useState<string>('')
   const [notice, setNotice] = useState<string | null>(null)
 
   if (!p) return null
@@ -34,6 +37,13 @@ export function CodexPanel() {
   })
   const bonusSummary = computeBestiaryAndTitleBonuses({ ...ext, titles: unlockedTitles })
   const allMonsters = Object.values(MONSTERS).sort((a, b) => a.level - b.level)
+  const q = searchQuery.trim().toLowerCase()
+  const filteredMonsters = allMonsters.filter((m) => {
+    const biome = MONSTER_BIOME_MAP[m.id] ?? 'legacy'
+    if (biomeFilter !== 'all' && biome !== biomeFilter) return false
+    if (!q) return true
+    return m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)
+  })
 
   return (
     <PanelFrame
@@ -66,86 +76,115 @@ export function CodexPanel() {
       )}
 
       {tab === 'bestiary' && (
-        <div className="grid gap-2.5 sm:grid-cols-2">
-          {allMonsters.map((m) => {
-            const kills = ext.bestiary[m.id] ?? 0
-            const claimedTier = ext.claimedBestiaryTiers[m.id] ?? 0
-            const nextTier = BESTIARY_TIERS.find((t) => t.tier === claimedTier + 1)
-            const canClaim = Boolean(nextTier && kills >= nextTier.target)
-            const elem = ELEMENT_META[getMonsterElement(m.id)]
-            const bossFactor = m.boss ? 1.5 : 1
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-[180px] flex-1">
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="ค้นหาชื่อมอนสเตอร์..."
+                className="w-full border border-border bg-background/80 py-1.5 pr-2.5 pl-8 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+              />
+            </div>
+            <select
+              aria-label="กรองตามแผนที่"
+              value={biomeFilter}
+              onChange={(e) => setBiomeFilter(e.target.value)}
+              className="border border-border bg-background/80 px-2.5 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none"
+            >
+              <option value="all">ทุกแผนที่ ({allMonsters.length})</option>
+              {BIOME_CATALOG_SPECS.map((b) => (
+                <option key={b.mapId} value={b.mapId}>
+                  {b.biomeName} ({b.entries.length})
+                </option>
+              ))}
+              <option value="legacy">มอนสเตอร์พิเศษ/ดั้งเดิม</option>
+            </select>
+          </div>
 
-            return (
-              <div
-                key={m.id}
-                className="flex flex-col justify-between gap-2 border border-border/80 bg-background/60 p-3 text-xs"
-              >
-                <div>
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span
-                        className="size-3 shrink-0 border border-black"
-                        style={{ backgroundColor: m.color }}
-                      />
-                      <span className="truncate font-bold text-foreground">
-                        {m.boss ? '★ ' : ''}{m.name}
-                      </span>
-                      <span
-                        className="shrink-0 border border-border/60 px-1.5 py-0.5 text-[10px] font-semibold"
-                        style={{ color: elem.color, background: elem.bg }}
-                      >
-                        {elem.label}
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            {filteredMonsters.map((m) => {
+              const kills = ext.bestiary[m.id] ?? 0
+              const claimedTier = ext.claimedBestiaryTiers[m.id] ?? 0
+              const nextTier = BESTIARY_TIERS.find((t) => t.tier === claimedTier + 1)
+              const canClaim = Boolean(nextTier && kills >= nextTier.target)
+              const elem = ELEMENT_META[getMonsterElement(m.id)]
+              const bossFactor = m.boss ? 1.5 : 1
+
+              return (
+                <div
+                  key={m.id}
+                  className="flex flex-col justify-between gap-2 border border-border/80 bg-background/60 p-3 text-xs"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span
+                          className="size-3 shrink-0 border border-black"
+                          style={{ backgroundColor: m.color }}
+                        />
+                        <span className="truncate font-bold text-foreground">
+                          {m.boss ? '★ ' : ''}{m.name}
+                        </span>
+                        <span
+                          className="shrink-0 border border-border/60 px-1.5 py-0.5 text-[10px] font-semibold"
+                          style={{ color: elem.color, background: elem.bg }}
+                        >
+                          {elem.label}
+                        </span>
+                      </div>
+                      <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+                        Lv.{m.level}
                       </span>
                     </div>
-                    <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
-                      Lv.{m.level}
-                    </span>
-                  </div>
 
-                  <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground tabular-nums">
-                    <span>กำจัดแล้ว: {formatNum(kills)} ตัว</span>
-                    <span>
-                      {nextTier ? `ขั้นถัดไป ${kills}/${nextTier.target}` : 'ครบ 3 ขั้นสมบูรณ์'}
-                    </span>
-                  </div>
-
-                  <div className="mt-1 h-1.5 w-full overflow-hidden border border-border bg-muted">
-                    <div
-                      className="h-full bg-emerald-400 transition-[width]"
-                      style={{
-                        width: `${Math.min(100, Math.round((kills / (nextTier?.target ?? 50)) * 100))}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between gap-2 pt-1">
-                  <span className="text-[11px] text-amber-300 tabular-nums">
-                    {nextTier
-                      ? `ขั้น ${nextTier.tier}: +${Math.round(nextTier.atk * bossFactor)} ATK, +${Math.round(nextTier.hp * bossFactor)} HP`
-                      : 'รับโบนัสครบทั้งหมดแล้ว'}
-                  </span>
-                  {nextTier ? (
-                    <PxButton
-                      disabled={!canClaim}
-                      onClick={() => {
-                        const res = claimBestiaryRewardAction(m.id)
-                        setNotice(res.message)
-                      }}
-                    >
-                      <span className="flex items-center gap-1">
-                        <Gem className="size-3" aria-hidden /> รับโบนัส
+                    <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground tabular-nums">
+                      <span>กำจัดแล้ว: {formatNum(kills)} ตัว</span>
+                      <span>
+                        {nextTier ? `ขั้นถัดไป ${kills}/${nextTier.target}` : 'ครบ 3 ขั้นสมบูรณ์'}
                       </span>
-                    </PxButton>
-                  ) : (
-                    <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-300">
-                      <Check className="size-3.5" aria-hidden /> สำเร็จ
+                    </div>
+
+                    <div className="mt-1 h-1.5 w-full overflow-hidden border border-border bg-muted">
+                      <div
+                        className="h-full bg-emerald-400 transition-[width]"
+                        style={{
+                          width: `${Math.min(100, Math.round((kills / (nextTier?.target ?? 50)) * 100))}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <span className="text-[11px] text-amber-300 tabular-nums">
+                      {nextTier
+                        ? `ขั้น ${nextTier.tier}: +${Math.round(nextTier.atk * bossFactor)} ATK, +${Math.round(nextTier.hp * bossFactor)} HP`
+                        : 'รับโบนัสครบทั้งหมดแล้ว'}
                     </span>
-                  )}
+                    {nextTier ? (
+                      <PxButton
+                        disabled={!canClaim}
+                        onClick={() => {
+                          const res = claimBestiaryRewardAction(m.id)
+                          setNotice(res.message)
+                        }}
+                      >
+                        <span className="flex items-center gap-1">
+                          <Gem className="size-3" aria-hidden /> รับโบนัส
+                        </span>
+                      </PxButton>
+                    ) : (
+                      <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-300">
+                        <Check className="size-3.5" aria-hidden /> สำเร็จ
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
         </div>
       )}
 

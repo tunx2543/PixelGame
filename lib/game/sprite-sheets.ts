@@ -242,6 +242,13 @@ export const JOB_TO_HERO_SHEET: Record<string, HeroSheetId> = {
   gm: 'the_king',
 }
 
+/**
+ * Maps monster defId (or sprite fallback) to an HD sheet in MONSTER_SPRITE_SHEETS.
+ * To add a new dedicated monster spritesheet later:
+ * 1. Place /public/assets/hd/monsters/<id>/sheet.png (4 cols x 3 rows: walk_left, walk_right, attack)
+ * 2. Add <id> to MonsterSheetId and MONSTER_SPRITE_SHEETS above
+ * 3. Point MONSTER_ID_TO_SHEET[<id>] = <id>
+ */
 export const MONSTER_ID_TO_SHEET: Record<string, MonsterSheetId | null> = {
   slime: 'slime_green',
   slime_blue: 'slime_blue',
@@ -269,6 +276,39 @@ export const MONSTER_ID_TO_SHEET: Record<string, MonsterSheetId | null> = {
   abyss_knight: 'abyss_knight',
   gale_sentinel: 'gale_sentinel',
   abyss_dragon: 'abyss_dragon',
+
+  // Biome boss placeholder sheets until dedicated spritesheets are added
+  vale_tiger_king: 'boss_wolf',
+  forest_crimson_warden: 'abyss_knight',
+  forest_flame_spirit: 'boss_fire_dragon',
+  forest_amber_queen: 'boss_spider_queen',
+  forest_thorn_beast: 'boss_wolf',
+  coast_sea_warlord: 'abyss_knight',
+  coast_king_lobster: 'boss_spider_queen',
+  cave_ant_king: 'boss_spider_queen',
+  cave_crystal_mantis: 'boss_spider_queen',
+  desert_pharaoh: 'boss_lich',
+  desert_sand_shark: 'boss_wolf',
+  desert_sphinx_golem: 'earth_golem',
+  desert_anubis_mage: 'boss_lich',
+  desert_scarab_lord: 'boss_demon_king',
+  grave_necrolord: 'boss_lich',
+  isles_pine_spirit: 'earth_golem',
+  isles_sakura_lady: 'boss_lich',
+  isles_kitsune_miko: 'boss_lich',
+  isles_jade_oni: 'earth_golem',
+  isles_shogun: 'boss_demon_king',
+  isles_samurai_lord: 'abyss_knight',
+  snow_frost_tiger: 'boss_wolf',
+  snow_glacier_wyrm: 'abyss_dragon',
+  ruins_cauldron_golem: 'earth_golem',
+  ruins_crimson_seraph: 'gale_sentinel',
+  ruins_red_blademaster: 'abyss_knight',
+  ruins_iron_colossus: 'earth_golem',
+  ruins_shadow_paladin: 'boss_demon_king',
+  sky_celestial_warden: 'gale_sentinel',
+  sky_archangel: 'gale_sentinel',
+  world_overlord: 'boss_demon_king',
 }
 
 export function resolveHeroSheetSpec(jobId?: string | null): SpriteSheetSpec | null {

@@ -28,7 +28,7 @@ function tileMinimapColor(tile: number, map: MapDef): string {
     case T.GOLD_PAVING:
       return '#e0aa3e'
     case T.RUINS_FLOOR:
-      return map.theme === 'abyss' ? '#4a3d61' : map.theme === 'volcano' ? '#5e3830' : '#7b7888'
+      return map.theme === 'abyss' || map.theme === 'graveyard' ? '#4a3d61' : map.theme === 'volcano' ? '#5e3830' : '#7b7888'
     case T.CARPET:
       return '#b5173e'
     case T.WOOD_FLOOR:
@@ -52,7 +52,7 @@ function tileMinimapColor(tile: number, map: MapDef): string {
     case T.TREE:
     case T.PINE:
     case T.BUSH:
-      return map.theme === 'frost' ? '#4f7a7c' : '#244d28'
+      return map.theme === 'frost' || map.theme === 'snow' ? '#4f7a7c' : '#244d28'
     case T.FLOWER:
       return '#e57aa4'
     case T.DARKGRASS:
@@ -159,9 +159,11 @@ export function MapMinimap() {
     ctx.drawImage(base, 0, 0)
 
     // Portals (cyan)
+    const maxPx = canvas.width - 3
+    const maxPy = canvas.height - 3
     for (const pt of cur.portals) {
-      const px = Math.round((pt.x + pt.w / 2) * MINIMAP_SCALE)
-      const py = Math.round((pt.y + pt.h / 2) * MINIMAP_SCALE)
+      const px = Math.max(2, Math.min(maxPx, Math.round((pt.x + pt.w / 2) * MINIMAP_SCALE)))
+      const py = Math.max(2, Math.min(maxPy, Math.round((pt.y + pt.h / 2) * MINIMAP_SCALE)))
       ctx.fillStyle = '#0e0f1a'
       ctx.fillRect(px - 2, py - 2, 5, 5)
       ctx.fillStyle = '#4cc9f0'

@@ -15,7 +15,7 @@ import {
   type SkillDef,
   type EquipmentSlot,
 } from './data'
-import { MAPS, MAP_ORDER, TILE, boxBlocked, isSolidPx, type MapDef, type NpcDef, type NpcRole } from './maps'
+import { LEGACY_MAP_ALIASES, MAPS, MAP_ORDER, TILE, boxBlocked, isSolidPx, normalizeMapId, type MapDef, type NpcDef, type NpcRole } from './maps'
 import { GEM_SHOP_ITEMS } from './gem-shop'
 import type { Dir } from './sprites'
 import { GM_ACTIVE_SKILLS } from './gm-sprite'
@@ -857,7 +857,7 @@ export function player() {
   return game.p!
 }
 export function currentMap(): MapDef {
-  return MAPS[game.p?.mapId ?? 'town'] ?? MAPS.town
+  return MAPS[normalizeMapId(game.p?.mapId)] ?? MAPS.town
 }
 export function currentJob(): JobDef {
   return JOBS[normalizeJobId(game.p?.jobId)]
@@ -1518,8 +1518,9 @@ function populateMap() {
     }
 }
 
-export function changeMap(mapId: string, tx: number, ty: number) {
+export function changeMap(rawMapId: string, tx: number, ty: number) {
   const p = player()
+  const mapId = MAPS[rawMapId] ? rawMapId : LEGACY_MAP_ALIASES[rawMapId] ?? rawMapId
   const map = MAPS[mapId]
   if (!map) return
   p.mapId = mapId
@@ -1582,12 +1583,13 @@ function findWalkableTileNear(
 }
 
 export function warpToMapLocation(
-  mapId: string,
+  rawMapId: string,
   worldX?: number,
   worldY?: number,
 ): { ok: boolean; message: string } {
   const p = game.p
   if (!p) return { ok: false, message: 'ยังไม่ได้เลือกตัวละคร' }
+  const mapId = MAPS[rawMapId] ? rawMapId : LEGACY_MAP_ALIASES[rawMapId] ?? rawMapId
   const map = MAPS[mapId]
   if (!map) return { ok: false, message: 'ไม่พบแผนที่เป้าหมาย' }
 
@@ -1608,13 +1610,14 @@ export function warpToMapLocation(
 }
 
 export function applyGmSummonWarp(
-  mapId: string,
+  rawMapId: string,
   worldX: number,
   worldY: number,
   fromName = 'GM',
 ): { ok: boolean; message: string } {
   const p = game.p
   if (!p) return { ok: false, message: 'ยังไม่ได้เลือกตัวละคร' }
+  const mapId = MAPS[rawMapId] ? rawMapId : LEGACY_MAP_ALIASES[rawMapId] ?? rawMapId
   const map = MAPS[mapId]
   if (!map) return { ok: false, message: 'ไม่พบแผนที่เป้าหมาย' }
 
@@ -1671,7 +1674,8 @@ export async function gmWarpToPlayer(
     target = resolved.target
   }
 
-  const map = MAPS[target.mapId]
+  const targetMapId = MAPS[target.mapId] ? target.mapId : LEGACY_MAP_ALIASES[target.mapId] ?? target.mapId
+  const map = MAPS[targetMapId]
   if (!map) {
     const errMsg = `ไม่พบแผนที่ ${target.mapId} ของผู้เล่น ${target.displayName}`
     say('error', errMsg)
@@ -2839,8 +2843,9 @@ export function devChangeJob(jobId: string) {
   notify()
 }
 
-export function devTeleport(mapId: string) {
+export function devTeleport(rawMapId: string) {
   const p = player()
+  const mapId = MAPS[rawMapId] ? rawMapId : LEGACY_MAP_ALIASES[rawMapId] ?? rawMapId
   if (!p.gm || !isCurrentAccountGm() || !MAPS[mapId]) return
   const map = MAPS[mapId]
   changeMap(map.id, map.spawn.x, map.spawn.y)
@@ -6264,7 +6269,8 @@ function runCommand(text: string) {
     '/tp': () => {
       const target = args.join(' ').trim()
       if (!target) return say('error', `ใช้ /tp <ชื่อแมพ> หรือ /tp <ชื่อผู้เล่น|UID> (แมพ: ${MAP_ORDER.join(', ')})`)
-      const map = MAPS[target]
+      const resolvedTarget = MAPS[target] ? target : LEGACY_MAP_ALIASES[target] ?? target
+      const map = MAPS[resolvedTarget]
       if (map) {
         changeMap(map.id, map.spawn.x, map.spawn.y)
         return
@@ -6823,7 +6829,7 @@ export function loadGame(d: SaveData) {
     storage: sanitizeList(d.storage),
     storageGold: finiteInt(d.storageGold, 0, Number.MAX_SAFE_INTEGER, 0),
     equipment: { weapon, armor, shoes, cloak, accessory },
-    mapId: typeof d.mapId === 'string' && MAPS[d.mapId] ? d.mapId : 'town',
+    mapId: normalizeMapId(typeof d.mapId === 'string' ? d.mapId : 'town'),
     x: Number.isFinite(d.x) ? d.x : (MAPS.town.spawn.x + 0.5) * TILE,
     y: Number.isFinite(d.y) ? d.y : (MAPS.town.spawn.y + 0.5) * TILE,
     uid: resolvedNumericUid,

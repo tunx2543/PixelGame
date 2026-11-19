@@ -1,3 +1,5 @@
+import { BIOME_SPAWNS } from './biome-monsters'
+
 export const TILE = 16
 
 export const T = {
@@ -73,11 +75,20 @@ export const SOLID = new Set<number>([
 export type Theme =
   | 'town'
   | 'meadow'
+  | 'vale'
+  | 'woods'
   | 'forest'
+  | 'coast'
   | 'cave'
+  | 'desert'
+  | 'graveyard'
+  | 'isles'
+  | 'snow'
+  | 'ruins'
   | 'volcano'
-  | 'abyss'
   | 'sky'
+  | 'abyss'
+  | 'world'
   | 'crystal'
   | 'frost'
   | 'dream'
@@ -125,6 +136,9 @@ export interface MapObject {
   label?: string
 }
 
+export type PortalDirection = 'north' | 'south' | 'west' | 'east'
+export type PortalGateStyle = 'townArchway' | 'woodGate' | 'crystalShrine'
+
 export interface Portal {
   x: number
   y: number
@@ -134,6 +148,16 @@ export interface Portal {
   tx: number
   ty: number
   label: string
+  dir?: PortalDirection
+  gate?: PortalGateStyle
+}
+
+export interface PortalLink {
+  to: string
+  tx: number
+  ty: number
+  label: string
+  gate?: PortalGateStyle
 }
 
 export interface NpcDef {
@@ -221,15 +245,6 @@ class Grid {
     }
   }
 
-  blob(cx: number, cy: number, r: number, t: number, rng: () => number) {
-    for (let j = -r - 1; j <= r + 1; j++) {
-      for (let i = -r - 1; i <= r + 1; i++) {
-        const d = Math.sqrt(i * i + j * j) + rng() * 0.85
-        if (d <= r) this.set(cx + i, cy + j, t)
-      }
-    }
-  }
-
   border(t: number, thickness: number) {
     for (let k = 0; k < thickness; k++) {
       this.rect(0, k, this.w, 1, t)
@@ -241,7 +256,6 @@ class Grid {
 
   obj(kind: MapObjectKind, tx: number, ty: number, solid = true, variant = 0, label?: string) {
     if (tx < 1 || ty < 1 || tx >= this.w - 1 || ty >= this.h - 1) return
-    // Prevent stacking duplicate objects on identical tile
     if (this.objects.some((o) => o.tx === tx && o.ty === ty)) return
     this.objects.push({
       id: `obj_${++this.objIdx}_${kind}_${tx}_${ty}`,
@@ -288,14 +302,12 @@ function buildTown(): MapDef {
   const rng = mulberry32(2026)
   const g = new Grid(W, H, T.GRASS)
 
-  // Subtle meadows & flowers in outer park corners
   for (let y = 2; y < H - 2; y++) {
     for (let x = 2; x < W - 2; x++) {
       if (rng() < 0.08) g.set(x, y, T.FLOWER)
     }
   }
 
-  // Castle stone battlement border + corner watchtowers
   g.border(T.CASTLE_WALL, 2)
   watchtower(g, 1, 1, T.ROOF_BLUE)
   watchtower(g, W - 4, 1, T.ROOF_BLUE)
@@ -309,23 +321,23 @@ function buildTown(): MapDef {
   }
 
   // Main cobblestone boulevards
-  g.rect(4, 14, W - 6, 3, T.COBBLESTONE) // East-West grand boulevard
-  g.rect(20, 4, 4, H - 7, T.COBBLESTONE) // North-South central avenue
-  g.rect(8, 8, 2, 16, T.PATH) // West district lane
-  g.rect(34, 8, 2, 16, T.PATH) // East district lane
+  g.rect(2, 14, W - 4, 3, T.COBBLESTONE)
+  g.rect(20, 2, 4, H - 4, T.COBBLESTONE)
+  g.rect(8, 8, 2, 16, T.PATH)
+  g.rect(34, 8, 2, 16, T.PATH)
 
-  // Grand Central Plaza (around Fountain + Rebirth Altar)
+  // Grand Central Plaza
   g.rect(16, 10, 12, 11, T.PLAZA)
   g.rect(18, 12, 8, 7, T.COBBLESTONE)
   g.rect(21, 15, 2, 2, T.FOUNTAIN)
-  g.set(19, 13, T.MAGIC_CIRCLE) // Rebirth Shrine floor sigil
+  g.set(19, 13, T.MAGIC_CIRCLE)
 
-  // Northern Shrine Promenade
+  // Northern Shrine Promenade (keep central avenue x=20..23 open for North gate)
   g.rect(18, 4, 8, 5, T.PLAZA)
-  g.rect(21, 4, 2, 5, T.CARPET)
-  g.obj('statue', 21, 5, true, 0, 'อนุสาวรีย์ผู้กล้า')
-  g.obj('guild_banner', 19, 5, true, 0)
-  g.obj('guild_banner', 24, 5, true, 0)
+  g.rect(21, 2, 2, 7, T.CARPET)
+  g.obj('statue', 18, 5, true, 0, 'อนุสาวรีย์ผู้กล้า')
+  g.obj('guild_banner', 19, 4, true, 0)
+  g.obj('guild_banner', 24, 4, true, 0)
   g.obj('lamp_post', 18, 8, true)
   g.obj('lamp_post', 25, 8, true)
 
@@ -372,10 +384,10 @@ function buildTown(): MapDef {
   g.obj('bench', 26, 13, true)
   g.obj('well', 14, 7, true)
 
-  // South Riverside Garden Promenade (y = 27..29)
+  // South Riverside Garden Promenade
   g.rect(4, 28, W - 8, 2, T.PATH)
   g.rect(16, 27, 12, 3, T.FLOWER)
-  g.rect(20, 27, 4, 3, T.PATH)
+  g.rect(20, 27, 4, 3, T.COBBLESTONE)
   g.obj('bench', 18, 28, true)
   g.obj('bench', 25, 28, true)
   g.obj('sakura_tree', 6, 28, true)
@@ -397,11 +409,20 @@ function buildTown(): MapDef {
   g.rect(14, 20, 3, 1, T.FENCE)
   g.rect(27, 20, 3, 1, T.FENCE)
 
-  // Eastern Castle Gate leading out to Meadow
-  g.rect(W - 3, 14, 3, 4, T.COBBLESTONE)
+  // Carve all 4 Castle Gates (North, South, West, East)
+  g.rect(20, 0, 4, 4, T.COBBLESTONE) // North gate -> ป่าละเมาะ
+  g.obj('sign_arrow', 19, 2, true, 0)
+  g.rect(20, H - 4, 4, 4, T.COBBLESTONE) // South gate -> ถ้ำ
+  g.obj('sign_arrow', 24, H - 3, true, 0)
+  g.rect(0, 14, 5, 4, T.COBBLESTONE) // West gate -> ป่าลึก
+  g.obj('sign_arrow', 3, 13, true, 0)
+  g.rect(W - 5, 14, 5, 4, T.COBBLESTONE) // East gate -> ทุ่งหญ้า
   g.set(W - 4, 13, T.SIGN)
   g.obj('lamp_post', W - 4, 18, true)
   g.obj('sign_arrow', W - 5, 13, true, 0)
+
+  // Ensure bridge stays walkable at central canal for South gate path
+  g.rect(21, 25, 2, 2, T.BRIDGE_V)
 
   return {
     id: 'town',
@@ -415,7 +436,12 @@ function buildTown(): MapDef {
     tiles: g.tiles,
     objects: g.objects,
     objSolid: g.buildObjSolid(),
-    portals: [{ x: W - 1, y: 14, w: 1, h: 4, to: 'meadow', tx: 3, ty: 18, label: 'ทุ่งหญ้าสายลม Lv.1-10' }],
+    portals: [
+      { x: 20, y: 0, w: 4, h: 1, dir: 'north', gate: 'townArchway', to: 'woods', tx: 26, ty: 32, label: 'ป่าละเมาะ Lv.9-16' },
+      { x: 20, y: H - 1, w: 4, h: 1, dir: 'south', gate: 'townArchway', to: 'cave', tx: 26, ty: 3, label: 'ถ้ำ Lv.24-36' },
+      { x: 0, y: 14, w: 1, h: 4, dir: 'west', gate: 'townArchway', to: 'forest', tx: 48, ty: 18, label: 'ป่าลึก Lv.14-26' },
+      { x: W - 1, y: 14, w: 1, h: 4, dir: 'east', gate: 'townArchway', to: 'meadow', tx: 3, ty: 18, label: 'ทุ่งหญ้า Lv.1-10' },
+    ],
     spawns: [],
     spawn: { x: 22, y: 18 },
     npcs: [
@@ -485,21 +511,48 @@ function buildTown(): MapDef {
 
 const WW = 52
 const WH = 36
-const MID = 18
+const MIDX = 26
+const MIDY = 18
 
 function carveWindingRoad(g: Grid, pathTile: number, seed: number) {
   const rng = mulberry32(seed)
-  let wy = MID
+  let wy = MIDY
   for (let x = 2; x < WW - 2; x++) {
-    if (x > 6 && x < WW - 7 && rng() < 0.28) {
-      wy = Math.max(7, Math.min(WH - 8, wy + (rng() < 0.5 ? -1 : 1)))
+    if (x > 6 && x < WW - 7 && rng() < 0.25) {
+      wy = Math.max(8, Math.min(WH - 9, wy + (rng() < 0.5 ? -1 : 1)))
     }
-    if (x >= WW - 8) wy += Math.sign(MID - wy)
+    if (x >= WW - 8) wy += Math.sign(MIDY - wy)
     g.rect(x, wy - 1, 1, 3, pathTile)
   }
-  // North-South cross trail at center
-  const cx = Math.floor(WW / 2)
-  g.rect(cx - 1, 4, 3, WH - 8, pathTile)
+  // North-South cross avenue leading smoothly between North & South portals
+  g.rect(MIDX - 1, 2, 3, WH - 4, pathTile)
+}
+
+function ensureBridgesOnCrossroads(g: Grid) {
+  for (let x = 2; x < WW - 2; x++) {
+    for (let y = MIDY - 1; y <= MIDY + 1; y++) {
+      const tile = g.get(x, y)
+      if (tile === T.WATER || tile === T.LAVA || tile === T.CLOUD_VOID) {
+        g.set(x, y, T.BRIDGE_H)
+      }
+    }
+  }
+  for (let y = 2; y < WH - 2; y++) {
+    for (let x = MIDX - 1; x <= MIDX + 1; x++) {
+      const tile = g.get(x, y)
+      if (tile === T.WATER || tile === T.LAVA || tile === T.CLOUD_VOID) {
+        g.set(x, y, T.BRIDGE_V)
+      }
+    }
+  }
+}
+
+function inPortalZone(x: number, y: number): boolean {
+  const west = x <= 6 && Math.abs(y - MIDY) <= 4
+  const east = x >= WW - 7 && Math.abs(y - MIDY) <= 4
+  const north = Math.abs(x - MIDX) <= 4 && y <= 6
+  const south = Math.abs(x - MIDX) <= 4 && y >= WH - 7
+  return west || east || north || south
 }
 
 function scatterClean(
@@ -513,8 +566,7 @@ function scatterClean(
   for (let y = 3; y < WH - 3; y++) {
     for (let x = 3; x < WW - 3; x++) {
       if (g.get(x, y) !== base) continue
-      // Keep portal zones wide open
-      if ((x < 7 || x > WW - 8) && Math.abs(y - MID) <= 4) continue
+      if (inPortalZone(x, y)) continue
       const r = rng()
       let acc = 0
       let placed = false
@@ -541,6 +593,13 @@ function scatterClean(
   }
 }
 
+interface WildPortalsSpec {
+  north?: PortalLink | null
+  south?: PortalLink | null
+  west?: PortalLink | null
+  east?: PortalLink | null
+}
+
 function finalizeWild(
   g: Grid,
   id: string,
@@ -550,26 +609,78 @@ function finalizeWild(
   base: number,
   wall: number,
   pathTile: number,
-  west: { to: string; tx: number; ty: number; label: string } | null,
-  east: { to: string; tx: number; ty: number; label: string } | null,
-  spawns: { monsterId: string; count: number }[],
+  portalsSpec: WildPortalsSpec,
+  spawns?: { monsterId: string; count: number }[],
 ): MapDef {
   g.border(wall, 2)
   const portals: Portal[] = []
-  if (west) {
-    g.rect(0, MID - 2, 6, 4, pathTile)
-    portals.push({ x: 0, y: MID - 2, w: 1, h: 4, ...west })
+
+  if (portalsSpec.north) {
+    g.rect(MIDX - 2, 0, 4, 6, pathTile)
+    portals.push({
+      x: MIDX - 2,
+      y: 0,
+      w: 4,
+      h: 1,
+      dir: 'north',
+      gate: portalsSpec.north.gate ?? 'woodGate',
+      ...portalsSpec.north,
+    })
   }
-  if (east) {
-    g.rect(WW - 6, MID - 2, 6, 4, pathTile)
-    portals.push({ x: WW - 1, y: MID - 2, w: 1, h: 4, ...east })
+  if (portalsSpec.south) {
+    g.rect(MIDX - 2, WH - 6, 4, 6, pathTile)
+    portals.push({
+      x: MIDX - 2,
+      y: WH - 1,
+      w: 4,
+      h: 1,
+      dir: 'south',
+      gate: portalsSpec.south.gate ?? 'woodGate',
+      ...portalsSpec.south,
+    })
   }
-  // Remove any object blocking immediate portal lanes
+  if (portalsSpec.west) {
+    g.rect(0, MIDY - 2, 6, 4, pathTile)
+    portals.push({
+      x: 0,
+      y: MIDY - 2,
+      w: 1,
+      h: 4,
+      dir: 'west',
+      gate: portalsSpec.west.gate ?? 'woodGate',
+      ...portalsSpec.west,
+    })
+  }
+  if (portalsSpec.east) {
+    g.rect(WW - 6, MIDY - 2, 6, 4, pathTile)
+    portals.push({
+      x: WW - 1,
+      y: MIDY - 2,
+      w: 1,
+      h: 4,
+      dir: 'east',
+      gate: portalsSpec.east.gate ?? 'woodGate',
+      ...portalsSpec.east,
+    })
+  }
+
+  // Ensure center spawn & portal entry lanes are clean and unobstructed
   g.objects = g.objects.filter((o) => {
-    const inWest = west && o.tx <= 5 && Math.abs(o.ty - MID) <= 3
-    const inEast = east && o.tx >= WW - 6 && Math.abs(o.ty - MID) <= 3
-    return !inWest && !inEast
+    const blkNorth = portalsSpec.north && Math.abs(o.tx - MIDX) <= 3 && o.ty <= 5
+    const blkSouth = portalsSpec.south && Math.abs(o.tx - MIDX) <= 3 && o.ty >= WH - 6
+    const blkWest = portalsSpec.west && o.tx <= 5 && Math.abs(o.ty - MIDY) <= 3
+    const blkEast = portalsSpec.east && o.tx >= WW - 6 && Math.abs(o.ty - MIDY) <= 3
+    return !blkNorth && !blkSouth && !blkWest && !blkEast
   })
+
+  const defaultSpawn =
+    portalsSpec.west
+      ? { x: 4, y: MIDY }
+      : portalsSpec.south
+        ? { x: MIDX, y: WH - 5 }
+        : portalsSpec.north
+          ? { x: MIDX, y: 4 }
+          : { x: WW - 5, y: MIDY }
 
   return {
     id,
@@ -584,24 +695,23 @@ function finalizeWild(
     objects: g.objects,
     objSolid: g.buildObjSolid(),
     portals,
-    spawns,
+    spawns: spawns ?? BIOME_SPAWNS[id] ?? [],
     npcs: [],
-    spawn: { x: 3, y: MID },
+    spawn: defaultSpawn,
   }
 }
 
+// 1. ทุ่งหญ้า (meadow) — (2,2)
 function buildMeadow(): MapDef {
   const g = new Grid(WW, WH, T.GRASS)
-  const rng = mulberry32(101)
-  // North-South flowing river
   for (let y = 2; y < WH - 2; y++) {
-    const rx = 25 + Math.round(Math.sin(y * 0.25) * 1.5)
+    const rx = 20 + Math.round(Math.sin(y * 0.25) * 1.4)
     g.rect(rx, y, 2, 1, T.WATER)
   }
   carveWindingRoad(g, T.PATH, 101)
-  // Bridges over the river at center road & upper meadow
-  for (const by of [8, 9, 17, 18, 19, 27, 28]) {
-    for (let x = 22; x <= 29; x++) {
+  ensureBridgesOnCrossroads(g)
+  for (const by of [8, 9, 27, 28]) {
+    for (let x = 18; x <= 23; x++) {
       if (g.get(x, by) === T.WATER) g.set(x, by, T.BRIDGE_H)
     }
   }
@@ -617,13 +727,11 @@ function buildMeadow(): MapDef {
     [{ tile: T.FLOWER, chance: 0.09 }],
   )
 
-  // NW Adventurer Camp
   g.rect(8, 7, 6, 5, T.PATH)
   g.obj('tent', 9, 8, true, 0, 'ค่ายนักผจญภัย')
   g.obj('campfire', 11, 10, true)
   g.obj('barrel_cluster', 12, 8, true)
 
-  // SW Farm Plot & Scarecrow
   g.rect(7, 23, 8, 5, T.FLOWER)
   g.rect(7, 22, 8, 1, T.FENCE)
   g.rect(7, 28, 8, 1, T.FENCE)
@@ -631,46 +739,103 @@ function buildMeadow(): MapDef {
   g.obj('scarecrow', 13, 25, true)
   g.obj('wagon', 16, 25, true)
 
-  // East Woodland Shrine & Supply Chest
   g.rect(36, 8, 6, 6, T.PLAZA)
   g.obj('well', 38, 10, true)
   g.obj('bench', 40, 11, true)
-  g.obj('sign_arrow', 6, 15, true)
-  g.obj('sign_arrow', 44, 15, true)
+  g.obj('lamp_post', 22, 16, true)
   g.obj('chest_decor', 42, 27, true)
-  if (rng() > 0) g.obj('lamp_post', 22, 16, true)
 
-  return finalizeWild(
-    g,
-    'meadow',
-    'ทุ่งหญ้าสายลม',
-    'Lv.1-10',
-    'meadow',
-    T.GRASS,
-    T.TREE,
-    T.PATH,
-    { to: 'town', tx: 40, ty: 15, label: 'เมืองปราการเริ่มต้น' },
-    { to: 'forest', tx: 3, ty: 18, label: 'ป่าลึกลับ Lv.10-20' },
-    [
-      { monsterId: 'slime', count: 8 },
-      { monsterId: 'slime_blue', count: 8 },
-      { monsterId: 'pink_slime', count: 6 },
-      { monsterId: 'mushroom', count: 5 },
-      { monsterId: 'rabbit', count: 5 },
-      { monsterId: 'boss_wolf', count: 1 },
-    ],
-  )
+  return finalizeWild(g, 'meadow', 'ทุ่งหญ้า', 'Lv.1-10', 'meadow', T.GRASS, T.TREE, T.PATH, {
+    north: { to: 'ruins', tx: 26, ty: 32, label: 'ซากปราสาท Lv.56-68', gate: 'townArchway' },
+    south: { to: 'desert', tx: 26, ty: 3, label: 'ทะเลทราย Lv.30-42', gate: 'crystalShrine' },
+    west: { to: 'town', tx: 40, ty: 15, label: 'เมืองปราการเริ่มต้น', gate: 'townArchway' },
+    east: { to: 'coast', tx: 3, ty: 18, label: 'ชายฝั่ง Lv.20-32', gate: 'woodGate' },
+  })
 }
 
+// 2. หุบเขาเขียว (vale) — (0,1)
+function buildVale(): MapDef {
+  const g = new Grid(WW, WH, T.GRASS)
+  for (let y = 2; y < WH - 2; y++) {
+    const rx = 31 + Math.round(Math.sin(y * 0.25) * 1.5)
+    g.rect(rx, y, 2, 1, T.WATER)
+  }
+  carveWindingRoad(g, T.PATH, 102)
+  ensureBridgesOnCrossroads(g)
+  for (const by of [9, 10, 26, 27]) {
+    for (let x = 29; x <= 34; x++) {
+      if (g.get(x, by) === T.WATER) g.set(x, by, T.BRIDGE_H)
+    }
+  }
+  scatterClean(
+    g,
+    T.GRASS,
+    122,
+    [
+      { tile: T.PINE, chance: 0.045 },
+      { tile: T.ROCK, chance: 0.02 },
+      { tile: T.CRYSTAL, chance: 0.008 },
+    ],
+    [{ tile: T.FLOWER, chance: 0.08 }],
+  )
+
+  g.rect(10, 10, 7, 5, T.PLAZA)
+  g.obj('crystal_spire', 12, 11, true, 0, 'ศิลาหุบเขาเขียว')
+  g.obj('campfire', 14, 13, true)
+  g.obj('tent', 11, 24, true)
+  g.obj('chest_decor', 39, 9, true)
+  g.obj('lamp_post', 24, 15, true)
+
+  return finalizeWild(g, 'vale', 'หุบเขาเขียว', 'Lv.7-15', 'vale', T.GRASS, T.PINE, T.PATH, {
+    north: { to: 'snow', tx: 26, ty: 32, label: 'แดนหิมะ Lv.50-60', gate: 'crystalShrine' },
+    south: { to: 'forest', tx: 26, ty: 3, label: 'ป่าลึก Lv.14-26', gate: 'woodGate' },
+    east: { to: 'woods', tx: 3, ty: 18, label: 'ป่าละเมาะ Lv.9-16', gate: 'woodGate' },
+  })
+}
+
+// 3. ป่าละเมาะ (woods) — (1,1)
+function buildWoods(): MapDef {
+  const g = new Grid(WW, WH, T.GRASS)
+  carveWindingRoad(g, T.PATH, 103)
+  scatterClean(
+    g,
+    T.GRASS,
+    133,
+    [
+      { tile: T.TREE, chance: 0.045 },
+      { tile: T.BUSH, chance: 0.045 },
+      { tile: T.ROCK, chance: 0.01 },
+    ],
+    [
+      { tile: T.FLOWER, chance: 0.06 },
+      { tile: T.MUSHROOMS, chance: 0.02 },
+    ],
+  )
+
+  g.rect(12, 11, 6, 4, T.PATH)
+  g.obj('campfire', 14, 13, true, 0, 'จุดพักนายพราน')
+  g.obj('tent', 13, 11, true)
+  g.obj('wagon', 35, 22, true)
+  g.obj('scarecrow', 38, 10, true)
+
+  return finalizeWild(g, 'woods', 'ป่าละเมาะ', 'Lv.9-16', 'woods', T.GRASS, T.TREE, T.PATH, {
+    north: { to: 'sky', tx: 26, ty: 32, label: 'แดนลอยฟ้า Lv.68-78', gate: 'crystalShrine' },
+    south: { to: 'town', tx: 22, ty: 3, label: 'เมืองปราการเริ่มต้น', gate: 'townArchway' },
+    west: { to: 'vale', tx: 48, ty: 18, label: 'หุบเขาเขียว Lv.7-15', gate: 'woodGate' },
+    east: { to: 'ruins', tx: 3, ty: 18, label: 'ซากปราสาท Lv.56-68', gate: 'townArchway' },
+  })
+}
+
+// 4. ป่าลึก (forest) — (0,2)
 function buildForest(): MapDef {
   const g = new Grid(WW, WH, T.DARKGRASS)
-  // Woodland pond & brook
   for (let y = 2; y < WH - 2; y++) {
     const rx = 18 + Math.round(Math.cos(y * 0.22) * 1.6)
     g.rect(rx, y, 2, 1, T.WATER)
   }
   carveWindingRoad(g, T.PATH, 202)
-  for (const by of [9, 10, 17, 18, 19, 27, 28]) {
+  ensureBridgesOnCrossroads(g)
+  for (const by of [9, 10, 27, 28]) {
     for (let x = 15; x <= 22; x++) {
       if (g.get(x, by) === T.WATER) g.set(x, by, T.BRIDGE_H)
     }
@@ -686,7 +851,6 @@ function buildForest(): MapDef {
     [{ tile: T.MUSHROOMS, chance: 0.045 }],
   )
 
-  // NE Goblin Encampment
   g.rect(31, 6, 10, 7, T.PATH)
   g.obj('totem', 32, 7, true, 0, 'ค่ายกอบลิน')
   g.obj('totem', 39, 7, true, 0)
@@ -695,52 +859,77 @@ function buildForest(): MapDef {
   g.obj('barrel_cluster', 33, 11, true)
   g.obj('chest_decor', 39, 10, true)
 
-  // SE Ancient Forest Ruins
   g.rect(33, 24, 9, 7, T.RUINS_FLOOR)
   g.obj('ruin_pillar', 34, 25, true)
   g.obj('ruin_pillar', 40, 25, true)
   g.obj('statue', 37, 26, true)
-  g.obj('ruin_pillar', 34, 29, true)
-  g.obj('ruin_pillar', 40, 29, true)
   g.obj('torch', 24, 15, true)
-  g.obj('sign_arrow', 9, 15, true)
 
-  return finalizeWild(
-    g,
-    'forest',
-    'ป่าลึกลับ',
-    'Lv.10-20',
-    'forest',
-    T.DARKGRASS,
-    T.PINE,
-    T.PATH,
-    { to: 'meadow', tx: 48, ty: 18, label: 'ทุ่งหญ้าสายลม Lv.1-10' },
-    { to: 'cave', tx: 3, ty: 18, label: 'ถ้ำมืด Lv.20-35' },
-    [
-      { monsterId: 'wolf', count: 10 },
-      { monsterId: 'goblin', count: 10 },
-      { monsterId: 'boss_spider_queen', count: 1 },
-      { monsterId: 'goblin_chief', count: 1 },
-      { monsterId: 'boss_lich', count: 1 },
-    ],
-  )
+  return finalizeWild(g, 'forest', 'ป่าลึก', 'Lv.14-26', 'forest', T.DARKGRASS, T.PINE, T.PATH, {
+    north: { to: 'vale', tx: 26, ty: 32, label: 'หุบเขาเขียว Lv.7-15', gate: 'woodGate' },
+    south: { to: 'graveyard', tx: 26, ty: 3, label: 'สุสาน Lv.34-46', gate: 'crystalShrine' },
+    east: { to: 'town', tx: 3, ty: 15, label: 'เมืองปราการเริ่มต้น', gate: 'townArchway' },
+  })
 }
 
+// 5. ชายฝั่ง (coast) — (3,2)
+function buildCoast(): MapDef {
+  const g = new Grid(WW, WH, T.SAND)
+  // Turquoise sea along outer right cove + winding tidal lagoon with wooden piers
+  g.rect(37, 3, 12, WH - 6, T.WATER)
+  g.rect(33, 10, 12, 16, T.SAND) // Sandy cape peninsula
+  g.rect(35, 16, 15, 4, T.BRIDGE_H) // Pier road toward East shore
+  for (let y = 2; y < WH - 2; y++) {
+    const rx = 20 + Math.round(Math.sin(y * 0.25) * 1.4)
+    g.rect(rx, y, 2, 1, T.WATER)
+  }
+  carveWindingRoad(g, T.PATH, 250)
+  ensureBridgesOnCrossroads(g)
+  for (const by of [9, 10, 26, 27]) {
+    for (let x = 17; x <= 23; x++) {
+      if (g.get(x, by) === T.WATER) g.set(x, by, T.BRIDGE_H)
+    }
+  }
+  scatterClean(
+    g,
+    T.SAND,
+    251,
+    [
+      { tile: T.TREE, chance: 0.025 },
+      { tile: T.ROCK, chance: 0.02 },
+    ],
+    [{ tile: T.FLOWER, chance: 0.025 }],
+  )
+
+  g.rect(10, 8, 6, 4, T.WOOD_FLOOR)
+  g.obj('barrel_cluster', 11, 9, true, 0, 'ท่าเรือชายฝั่ง')
+  g.obj('campfire', 13, 10, true)
+  g.obj('tent', 11, 25, true)
+  g.obj('chest_decor', 41, 13, true)
+  g.obj('lamp_post', 34, 15, true)
+
+  return finalizeWild(g, 'coast', 'ชายฝั่ง', 'Lv.20-32', 'coast', T.SAND, T.ROCK, T.SAND, {
+    north: { to: 'volcano', tx: 26, ty: 32, label: 'ภูเขาไฟ Lv.62-74', gate: 'crystalShrine' },
+    south: { to: 'isles', tx: 26, ty: 3, label: 'หมู่เกาะตะวันออก Lv.40-52', gate: 'woodGate' },
+    west: { to: 'meadow', tx: 48, ty: 18, label: 'ทุ่งหญ้า Lv.1-10', gate: 'woodGate' },
+  })
+}
+
+// 6. ถ้ำ (cave) — (1,3)
 function buildCave(): MapDef {
   const g = new Grid(WW, WH, T.CAVEWALL)
-  // Carve multi-chamber cavern halls (West Earth Golem Hall, Central Crystal Cavern, East Mine)
   g.disc(11, 18, 9, T.CAVEFLOOR)
   g.disc(26, 18, 11, T.CAVEFLOOR)
   g.disc(40, 18, 9, T.CAVEFLOOR)
   g.disc(26, 8, 6, T.CAVEFLOOR)
   g.disc(26, 28, 6, T.CAVEFLOOR)
-  g.rect(4, 15, WW - 8, 6, T.CAVEFLOOR) // wide main cavern passage
-  g.rect(23, 6, 6, 24, T.CAVEFLOOR)
+  g.rect(4, 15, WW - 8, 6, T.CAVEFLOOR)
+  g.rect(23, 3, 6, WH - 6, T.CAVEFLOOR)
 
-  // Underground river inside central cavern + stone bridge
   g.rect(20, 6, 2, 24, T.WATER)
   g.rect(19, 16, 4, 4, T.BRIDGE_H)
   g.rect(19, 26, 4, 2, T.BRIDGE_H)
+  ensureBridgesOnCrossroads(g)
 
   scatterClean(
     g,
@@ -753,51 +942,234 @@ function buildCave(): MapDef {
     [{ tile: T.BONES, chance: 0.025 }],
   )
 
-  // Boss Sanctuary (West — keep tx=8..10 walkable for Earth Golem)
   g.rect(8, 16, 4, 4, T.CAVEFLOOR)
   g.obj('ruin_pillar', 7, 12, true)
   g.obj('ruin_pillar', 14, 12, true)
   g.obj('torch', 13, 15, true)
   g.obj('torch', 13, 21, true)
-
-  // Crystal Chamber & Mining Props
   g.obj('crystal_spire', 25, 7, true)
   g.obj('crystal_spire', 28, 8, true)
   g.obj('mine_cart', 38, 14, true, 0, 'รถรางเหมือง')
   g.obj('mine_cart', 41, 21, true)
-  g.obj('torch', 24, 15, true)
-  g.obj('torch', 24, 21, true)
   g.obj('chest_decor', 26, 29, true)
   g.obj('skull_pile', 35, 22, true)
 
-  return finalizeWild(
-    g,
-    'cave',
-    'ถ้ำมืด',
-    'Lv.20-35',
-    'cave',
-    T.CAVEFLOOR,
-    T.CAVEWALL,
-    T.CAVEFLOOR,
-    { to: 'forest', tx: 48, ty: 18, label: 'ป่าลึกลับ Lv.10-20' },
-    { to: 'volcano', tx: 3, ty: 18, label: 'แมพลาวา Lv.35-50' },
-    [
-      { monsterId: 'bat', count: 9 },
-      { monsterId: 'spider', count: 8 },
-      { monsterId: 'skeleton', count: 8 },
-      { monsterId: 'orc', count: 6 },
-      { monsterId: 'golem', count: 5 },
-      { monsterId: 'ghost', count: 6 },
-      { monsterId: 'boss_fire_dragon', count: 1 },
-      { monsterId: 'boss_demon_king', count: 1 },
-      { monsterId: 'earth_golem', count: 1 },
-    ],
-  )
+  return finalizeWild(g, 'cave', 'ถ้ำ', 'Lv.24-36', 'cave', T.CAVEFLOOR, T.CAVEWALL, T.CAVEFLOOR, {
+    north: { to: 'town', tx: 22, ty: 28, label: 'เมืองปราการเริ่มต้น', gate: 'townArchway' },
+    west: { to: 'graveyard', tx: 48, ty: 18, label: 'สุสาน Lv.34-46', gate: 'crystalShrine' },
+    east: { to: 'desert', tx: 3, ty: 18, label: 'ทะเลทราย Lv.30-42', gate: 'crystalShrine' },
+  })
 }
 
+// 7. ทะเลทราย (desert) — (2,3)
+function buildDesert(): MapDef {
+  const g = new Grid(WW, WH, T.SAND)
+  // Central Desert Oasis Pond + Ancient Sandstone Temple Courtyard
+  g.disc(34, 12, 5, T.WATER)
+  g.rect(31, 11, 6, 2, T.BRIDGE_H)
+  g.rect(10, 22, 10, 8, T.RUINS_FLOOR)
+  carveWindingRoad(g, T.PATH, 355)
+  ensureBridgesOnCrossroads(g)
+  scatterClean(
+    g,
+    T.SAND,
+    356,
+    [
+      { tile: T.ROCK, chance: 0.025 },
+      { tile: T.BUSH, chance: 0.015 },
+    ],
+    [{ tile: T.BONES, chance: 0.03 }],
+  )
+
+  g.obj('ruin_pillar', 11, 23, true, 0, 'ซากวิหารทะเลทราย')
+  g.obj('ruin_pillar', 18, 23, true)
+  g.obj('ruin_pillar', 11, 28, true)
+  g.obj('ruin_pillar', 18, 28, true)
+  g.obj('statue', 14, 25, true)
+  g.obj('tent', 31, 23, true)
+  g.obj('campfire', 33, 25, true)
+  g.obj('skull_pile', 16, 9, true)
+  g.obj('chest_decor', 14, 27, true)
+
+  return finalizeWild(g, 'desert', 'ทะเลทราย', 'Lv.30-42', 'desert', T.SAND, T.ROCK, T.PATH, {
+    north: { to: 'meadow', tx: 26, ty: 32, label: 'ทุ่งหญ้า Lv.1-10', gate: 'woodGate' },
+    west: { to: 'cave', tx: 48, ty: 18, label: 'ถ้ำ Lv.24-36', gate: 'crystalShrine' },
+    east: { to: 'isles', tx: 3, ty: 18, label: 'หมู่เกาะตะวันออก Lv.40-52', gate: 'woodGate' },
+  })
+}
+
+// 8. สุสาน (graveyard) — (0,3)
+function buildGraveyard(): MapDef {
+  const g = new Grid(WW, WH, T.DARKGRASS)
+  g.rect(10, 7, 14, 9, T.RUINS_FLOOR)
+  g.rect(28, 20, 14, 9, T.RUINS_FLOOR)
+  carveWindingRoad(g, T.COBBLESTONE, 388)
+  ensureBridgesOnCrossroads(g)
+  scatterClean(
+    g,
+    T.DARKGRASS,
+    389,
+    [
+      { tile: T.FENCE, chance: 0.03 },
+      { tile: T.ROCK, chance: 0.022 },
+      { tile: T.PINE, chance: 0.03 },
+    ],
+    [{ tile: T.BONES, chance: 0.055 }],
+  )
+
+  g.obj('skull_pile', 14, 10, true, 0, 'แท่นสุสานต้องสาป')
+  g.obj('torch', 12, 9, true)
+  g.obj('torch', 21, 9, true)
+  g.obj('ruin_pillar', 12, 13, true)
+  g.obj('ruin_pillar', 21, 13, true)
+  g.obj('torch', 30, 22, true)
+  g.obj('torch', 39, 22, true)
+  g.obj('statue', 35, 24, true)
+  g.obj('chest_decor', 35, 11, true)
+
+  return finalizeWild(g, 'graveyard', 'สุสาน', 'Lv.34-46', 'graveyard', T.DARKGRASS, T.PINE, T.COBBLESTONE, {
+    north: { to: 'forest', tx: 26, ty: 32, label: 'ป่าลึก Lv.14-26', gate: 'woodGate' },
+    east: { to: 'cave', tx: 3, ty: 18, label: 'ถ้ำ Lv.24-36', gate: 'crystalShrine' },
+  })
+}
+
+// 9. หมู่เกาะตะวันออก (isles) — (3,3)
+function buildIsles(): MapDef {
+  const g = new Grid(WW, WH, T.SAKURA_GRASS)
+  g.disc(26, 18, 7, T.WATER)
+  g.disc(26, 18, 4, T.PLAZA)
+  g.rect(18, 17, 6, 3, T.BRIDGE_H)
+  g.rect(28, 17, 6, 3, T.BRIDGE_H)
+  g.rect(25, 10, 3, 5, T.BRIDGE_V)
+  g.rect(25, 21, 3, 5, T.BRIDGE_V)
+
+  carveWindingRoad(g, T.PATH, 909)
+  ensureBridgesOnCrossroads(g)
+  scatterClean(
+    g,
+    T.SAKURA_GRASS,
+    999,
+    [
+      { tile: T.TREE, chance: 0.03 },
+      { tile: T.BUSH, chance: 0.025 },
+    ],
+    [{ tile: T.FLOWER, chance: 0.14 }],
+  )
+
+  g.obj('dream_shrine', 26, 17, true, 0, 'ศาลเจ้าซากุระ')
+  for (const [sx, sy] of [
+    [10, 9],
+    [14, 26],
+    [38, 9],
+    [40, 26],
+  ]) {
+    g.obj('sakura_tree', sx, sy, true)
+  }
+  g.obj('flower_cart', 14, 15, true)
+  g.obj('bench', 12, 21, true)
+  g.obj('bench', 38, 21, true)
+  g.obj('lamp_post', 22, 16, true)
+  g.obj('lamp_post', 29, 16, true)
+
+  return finalizeWild(g, 'isles', 'หมู่เกาะตะวันออก', 'Lv.40-52', 'isles', T.SAKURA_GRASS, T.TREE, T.PATH, {
+    north: { to: 'coast', tx: 26, ty: 32, label: 'ชายฝั่ง Lv.20-32', gate: 'woodGate' },
+    west: { to: 'desert', tx: 48, ty: 18, label: 'ทะเลทราย Lv.30-42', gate: 'crystalShrine' },
+  })
+}
+
+// 10. แดนหิมะ (snow) — (0,0)
+function buildSnow(): MapDef {
+  const g = new Grid(WW, WH, T.SNOW)
+  g.disc(26, 18, 8, T.WATER)
+  g.disc(26, 18, 6, T.ICE)
+  g.rect(16, 17, 6, 3, T.BRIDGE_H)
+  g.rect(30, 17, 6, 3, T.BRIDGE_H)
+  g.rect(25, 9, 3, 4, T.BRIDGE_V)
+  g.rect(25, 24, 3, 4, T.BRIDGE_V)
+
+  carveWindingRoad(g, T.PATH, 808)
+  ensureBridgesOnCrossroads(g)
+  scatterClean(
+    g,
+    T.SNOW,
+    888,
+    [
+      { tile: T.PINE, chance: 0.065 },
+      { tile: T.ROCK, chance: 0.025 },
+    ],
+    [{ tile: T.BONES, chance: 0.015 }],
+  )
+
+  g.obj('ice_spire', 20, 10, true)
+  g.obj('ice_spire', 32, 10, true)
+  g.obj('ice_spire', 20, 26, true)
+  g.obj('ice_spire', 32, 26, true)
+  g.obj('campfire', 10, 13, true)
+  g.obj('tent', 9, 11, true)
+  g.obj('campfire', 41, 23, true)
+  g.obj('chest_decor', 26, 18, true)
+
+  return finalizeWild(g, 'snow', 'แดนหิมะ', 'Lv.50-60', 'snow', T.SNOW, T.PINE, T.PATH, {
+    south: { to: 'vale', tx: 26, ty: 3, label: 'หุบเขาเขียว Lv.7-15', gate: 'woodGate' },
+    east: { to: 'sky', tx: 3, ty: 18, label: 'แดนลอยฟ้า Lv.68-78', gate: 'crystalShrine' },
+  })
+}
+
+// 11. ซากปราสาท (ruins) — (2,1)
+function buildRuins(): MapDef {
+  const g = new Grid(WW, WH, T.RUINS_FLOOR)
+  g.rect(8, 6, WW - 16, WH - 12, T.COBBLESTONE)
+  g.rect(12, 9, WW - 24, WH - 18, T.RUINS_FLOOR)
+  g.rect(4, MIDY - 1, WW - 8, 3, T.CARPET)
+  g.rect(MIDX - 1, 4, 3, WH - 8, T.CARPET)
+  g.set(MIDX, MIDY, T.MAGIC_CIRCLE)
+
+  // Broken inner castle walls with wide openings
+  g.rect(14, 10, 8, 1, T.CASTLE_WALL)
+  g.rect(30, 10, 8, 1, T.CASTLE_WALL)
+  g.rect(14, 25, 8, 1, T.CASTLE_WALL)
+  g.rect(30, 25, 8, 1, T.CASTLE_WALL)
+
+  scatterClean(
+    g,
+    T.RUINS_FLOOR,
+    711,
+    [
+      { tile: T.ROCK, chance: 0.02 },
+      { tile: T.CRYSTAL, chance: 0.008 },
+    ],
+    [{ tile: T.BONES, chance: 0.02 }],
+  )
+
+  for (const [px, py] of [
+    [11, 13],
+    [11, 22],
+    [40, 13],
+    [40, 22],
+    [20, 12],
+    [32, 12],
+    [20, 24],
+    [32, 24],
+  ]) {
+    g.obj('colosseum_pillar', px, py, true)
+  }
+  g.obj('statue', 22, 14, true, 0, 'อนุสาวรีย์ราชาแห่งซาก')
+  g.obj('guild_banner', 18, 14, true)
+  g.obj('guild_banner', 34, 14, true)
+  g.obj('chest_decor', 11, 8, true)
+  g.obj('chest_decor', 40, 27, true)
+
+  return finalizeWild(g, 'ruins', 'ซากปราสาท', 'Lv.56-68', 'ruins', T.RUINS_FLOOR, T.CASTLE_WALL, T.COBBLESTONE, {
+    north: { to: 'abyss', tx: 26, ty: 32, label: 'ห้วงอเวจี Lv.76-90', gate: 'crystalShrine' },
+    south: { to: 'meadow', tx: 26, ty: 3, label: 'ทุ่งหญ้า Lv.1-10', gate: 'woodGate' },
+    west: { to: 'woods', tx: 48, ty: 18, label: 'ป่าละเมาะ Lv.9-16', gate: 'woodGate' },
+    east: { to: 'volcano', tx: 3, ty: 18, label: 'ภูเขาไฟ Lv.62-74', gate: 'crystalShrine' },
+  })
+}
+
+// 12. ภูเขาไฟ (volcano) — (3,1)
 function buildVolcano(): MapDef {
   const g = new Grid(WW, WH, T.VOLCFLOOR)
-  // Twin jagged magma rivers crossed by reinforced bridges
   for (let y = 2; y < WH - 2; y++) {
     const rx1 = 17 + Math.round(Math.sin(y * 0.3) * 1.4)
     const rx2 = 34 + Math.round(Math.cos(y * 0.25) * 1.4)
@@ -805,7 +1177,8 @@ function buildVolcano(): MapDef {
     g.rect(rx2, y, 2, 1, T.LAVA)
   }
   carveWindingRoad(g, T.RUINS_FLOOR, 404)
-  for (const by of [9, 10, 17, 18, 19, 27, 28]) {
+  ensureBridgesOnCrossroads(g)
+  for (const by of [9, 10, 27, 28]) {
     for (let x = 14; x <= 38; x++) {
       if (g.get(x, by) === T.LAVA) g.set(x, by, T.BRIDGE_H)
     }
@@ -818,7 +1191,6 @@ function buildVolcano(): MapDef {
     [{ tile: T.BONES, chance: 0.02 }],
   )
 
-  // East Demon Lord Altar
   g.rect(38, 13, 8, 10, T.RUINS_FLOOR)
   g.set(42, 18, T.MAGIC_CIRCLE)
   g.obj('magma_brazier', 39, 14, true)
@@ -827,91 +1199,28 @@ function buildVolcano(): MapDef {
   g.obj('magma_brazier', 45, 22, true)
   g.obj('skull_pile', 24, 10, true)
   g.obj('skull_pile', 27, 26, true)
-  g.obj('ruin_pillar', 12, 13, true)
-  g.obj('ruin_pillar', 12, 23, true)
 
-  return finalizeWild(
-    g,
-    'volcano',
-    'แมพลาวา',
-    'Lv.35-50 • เขตลาวา',
-    'volcano',
-    T.VOLCFLOOR,
-    T.CAVEWALL,
-    T.RUINS_FLOOR,
-    { to: 'cave', tx: 48, ty: 18, label: 'ถ้ำมืด Lv.20-35' },
-    { to: 'abyss', tx: 3, ty: 18, label: 'ดันเจี้ยนห้วงอเวจี Lv.50+' },
-    [
-      { monsterId: 'fire_golem', count: 11 },
-      { monsterId: 'demon', count: 9 },
-      { monsterId: 'demon_lord', count: 1 },
-    ],
-  )
+  return finalizeWild(g, 'volcano', 'ภูเขาไฟ', 'Lv.62-74', 'volcano', T.VOLCFLOOR, T.CAVEWALL, T.RUINS_FLOOR, {
+    north: { to: 'world', tx: 26, ty: 32, label: 'บอสโลก Lv.90+', gate: 'crystalShrine' },
+    south: { to: 'coast', tx: 26, ty: 3, label: 'ชายฝั่ง Lv.20-32', gate: 'woodGate' },
+    west: { to: 'ruins', tx: 48, ty: 18, label: 'ซากปราสาท Lv.56-68', gate: 'townArchway' },
+  })
 }
 
-function buildAbyss(): MapDef {
-  const g = new Grid(WW, WH, T.CAVEFLOOR)
-  // Symmetrical Dungeon Fortress Hall with Crimson Carpet & Obsidian Pillars
-  g.rect(6, 5, WW - 12, WH - 10, T.RUINS_FLOOR)
-  g.rect(6, MID - 1, WW - 12, 3, T.CARPET)
-  g.rect(23, 5, 6, WH - 10, T.CARPET)
-
-  // Outer Abyss Lava Moat Inside Perimeter
-  g.rect(3, 3, WW - 6, 2, T.LAVA)
-  g.rect(3, WH - 5, WW - 6, 2, T.LAVA)
-  g.rect(3, 3, 2, WH - 6, T.LAVA)
-  g.rect(WW - 5, 3, 2, WH - 6, T.LAVA)
-  // Bridges over moat west & east
-  g.rect(3, MID - 2, 3, 4, T.BRIDGE_H)
-  g.rect(WW - 6, MID - 2, 3, 4, T.BRIDGE_H)
-
-  // Pillar Corridor & Magic Altar
-  for (const px of [12, 18, 33, 39]) {
-    g.obj('colosseum_pillar', px, 13, true)
-    g.obj('colosseum_pillar', px, 23, true)
-    g.obj('torch', px, 15, true)
-    g.obj('torch', px, 21, true)
-  }
-  g.set(26, 18, T.MAGIC_CIRCLE)
-  g.obj('skull_pile', 10, 8, true)
-  g.obj('skull_pile', 41, 8, true)
-  g.obj('chest_decor', 10, 27, true)
-  g.obj('chest_decor', 41, 27, true)
-
-  return finalizeWild(
-    g,
-    'abyss',
-    'ดันเจี้ยนห้วงอเวจี',
-    'Lv.50+ ดันเจี้ยนบอส',
-    'abyss',
-    T.CAVEFLOOR,
-    T.CAVEWALL,
-    T.RUINS_FLOOR,
-    { to: 'volcano', tx: 48, ty: 18, label: 'แมพลาวา Lv.35-50' },
-    { to: 'sky_ruins', tx: 3, ty: 18, label: 'ซากฟ้าลอยฟ้า Lv.60+' },
-    [
-      { monsterId: 'demon', count: 10 },
-      { monsterId: 'abyss_knight', count: 6 },
-      { monsterId: 'abyss_dragon', count: 1 },
-    ],
-  )
-}
-
-function buildSkyRuins(): MapDef {
+// 13. แดนลอยฟ้า (sky) — (1,0)
+function buildSky(): MapDef {
   const g = new Grid(WW, WH, T.CLOUD_VOID)
-  // Floating Marble & Grass Sky Islands connected by Sky Bridges
   g.rect(4, 9, 13, 18, T.SKY_TILE)
-  g.rect(19, 6, 14, 24, T.SKY_TILE)
+  g.rect(19, 4, 14, 28, T.SKY_TILE)
   g.rect(35, 9, 13, 18, T.SKY_TILE)
   g.rect(21, 9, 10, 18, T.PLAZA)
 
-  // Bridges linking the 3 floating islands
   g.rect(16, 16, 4, 4, T.BRIDGE_H)
   g.rect(32, 16, 4, 4, T.BRIDGE_H)
   g.rect(16, 10, 4, 2, T.BRIDGE_H)
   g.rect(32, 24, 4, 2, T.BRIDGE_H)
+  ensureBridgesOnCrossroads(g)
 
-  // Sacred Sky Pools & Flower Borders
   g.rect(24, 11, 4, 3, T.WATER)
   g.rect(24, 22, 4, 3, T.WATER)
   for (const [fx, fy] of [
@@ -933,197 +1242,55 @@ function buildSkyRuins(): MapDef {
   g.obj('lamp_post', 32, 15, true)
   g.obj('chest_decor', 26, 27, true)
 
-  return finalizeWild(
-    g,
-    'sky_ruins',
-    'ซากฟ้าลอยฟ้า',
-    'Lv.60-70',
-    'sky',
-    T.SKY_TILE,
-    T.CLOUD_VOID,
-    T.SKY_TILE,
-    { to: 'abyss', tx: 48, ty: 18, label: 'ดันเจี้ยนห้วงอเวจี Lv.50+' },
-    { to: 'crystal_vale', tx: 3, ty: 18, label: 'หุบเขาคริสตัล Lv.70+' },
-    [
-      { monsterId: 'gale_sentinel', count: 8 },
-      { monsterId: 'abyss_knight', count: 8 },
-      { monsterId: 'demon_lord', count: 3 },
-    ],
-  )
+  return finalizeWild(g, 'sky', 'แดนลอยฟ้า', 'Lv.68-78', 'sky', T.SKY_TILE, T.CLOUD_VOID, T.SKY_TILE, {
+    south: { to: 'woods', tx: 26, ty: 3, label: 'ป่าละเมาะ Lv.9-16', gate: 'woodGate' },
+    west: { to: 'snow', tx: 48, ty: 18, label: 'แดนหิมะ Lv.50-60', gate: 'crystalShrine' },
+    east: { to: 'abyss', tx: 3, ty: 18, label: 'ห้วงอเวจี Lv.76-90', gate: 'crystalShrine' },
+  })
 }
 
-function buildCrystalVale(): MapDef {
+// 14. ห้วงอเวจี (abyss) — (2,0)
+function buildAbyss(): MapDef {
   const g = new Grid(WW, WH, T.CAVEFLOOR)
-  // Luminous underground river & twin crystal islands
-  for (let y = 2; y < WH - 2; y++) {
-    const rx = 26 + Math.round(Math.sin(y * 0.25) * 2)
-    g.rect(rx, y, 2, 1, T.WATER)
-  }
-  carveWindingRoad(g, T.PLAZA, 707)
-  for (const by of [9, 10, 17, 18, 19, 27, 28]) {
-    for (let x = 22; x <= 30; x++) {
-      if (g.get(x, by) === T.WATER) g.set(x, by, T.BRIDGE_H)
-    }
-  }
-  scatterClean(
-    g,
-    T.CAVEFLOOR,
-    777,
-    [
-      { tile: T.CRYSTAL, chance: 0.055 },
-      { tile: T.ROCK, chance: 0.025 },
-    ],
-    [{ tile: T.MAGIC_CIRCLE, chance: 0.01 }],
-  )
+  g.rect(6, 5, WW - 12, WH - 10, T.RUINS_FLOOR)
+  g.rect(6, MIDY - 1, WW - 12, 3, T.CARPET)
+  g.rect(MIDX - 1, 5, 3, WH - 10, T.CARPET)
 
-  for (const [cx, cy] of [
-    [10, 9],
-    [14, 26],
-    [36, 9],
-    [40, 26],
-    [22, 14],
-    [31, 21],
-  ]) {
-    g.obj('crystal_spire', cx, cy, true)
-  }
-  g.obj('torch', 19, 16, true)
-  g.obj('torch', 33, 16, true)
-  g.obj('chest_decor', 11, 27, true)
-  g.obj('chest_decor', 41, 8, true)
+  g.rect(3, 3, WW - 6, 2, T.LAVA)
+  g.rect(3, WH - 5, WW - 6, 2, T.LAVA)
+  g.rect(3, 3, 2, WH - 6, T.LAVA)
+  g.rect(WW - 5, 3, 2, WH - 6, T.LAVA)
+  ensureBridgesOnCrossroads(g)
 
-  return finalizeWild(
-    g,
-    'crystal_vale',
-    'หุบเขาคริสตัล',
-    'Lv.70-80',
-    'crystal',
-    T.CAVEFLOOR,
-    T.CAVEWALL,
-    T.PLAZA,
-    { to: 'sky_ruins', tx: 48, ty: 18, label: 'ซากฟ้าลอยฟ้า Lv.60+' },
-    { to: 'frost_peak', tx: 3, ty: 18, label: 'ยอดเขาเหมันต์ Lv.80+' },
-    [
-      { monsterId: 'ghost', count: 10 },
-      { monsterId: 'abyss_dragon', count: 2 },
-    ],
-  )
+  for (const px of [12, 18, 33, 39]) {
+    g.obj('colosseum_pillar', px, 13, true)
+    g.obj('colosseum_pillar', px, 23, true)
+    g.obj('torch', px, 15, true)
+    g.obj('torch', px, 21, true)
+  }
+  g.set(MIDX, MIDY, T.MAGIC_CIRCLE)
+  g.obj('skull_pile', 10, 8, true)
+  g.obj('skull_pile', 41, 8, true)
+  g.obj('chest_decor', 10, 27, true)
+  g.obj('chest_decor', 41, 27, true)
+
+  return finalizeWild(g, 'abyss', 'ห้วงอเวจี', 'Lv.76-90', 'abyss', T.CAVEFLOOR, T.CAVEWALL, T.RUINS_FLOOR, {
+    south: { to: 'ruins', tx: 26, ty: 3, label: 'ซากปราสาท Lv.56-68', gate: 'townArchway' },
+    west: { to: 'sky', tx: 48, ty: 18, label: 'แดนลอยฟ้า Lv.68-78', gate: 'crystalShrine' },
+    east: { to: 'world', tx: 3, ty: 18, label: 'บอสโลก Lv.90+', gate: 'crystalShrine' },
+  })
 }
 
-function buildFrostPeak(): MapDef {
-  const g = new Grid(WW, WH, T.SNOW)
-  // Large walkable frozen lake in the center framed by icy water moat + bridges
-  g.disc(26, 18, 8, T.WATER)
-  g.disc(26, 18, 6, T.ICE)
-  g.rect(16, 17, 6, 3, T.BRIDGE_H)
-  g.rect(30, 17, 6, 3, T.BRIDGE_H)
-  g.rect(25, 9, 3, 4, T.BRIDGE_V)
-  g.rect(25, 24, 3, 4, T.BRIDGE_V)
-
-  carveWindingRoad(g, T.PATH, 808)
-  scatterClean(
-    g,
-    T.SNOW,
-    888,
-    [
-      { tile: T.PINE, chance: 0.065 },
-      { tile: T.ROCK, chance: 0.025 },
-    ],
-    [{ tile: T.BONES, chance: 0.015 }],
-  )
-
-  g.obj('ice_spire', 20, 10, true)
-  g.obj('ice_spire', 32, 10, true)
-  g.obj('ice_spire', 20, 26, true)
-  g.obj('ice_spire', 32, 26, true)
-  g.obj('campfire', 10, 13, true)
-  g.obj('tent', 9, 11, true)
-  g.obj('campfire', 41, 23, true)
-  g.obj('chest_decor', 26, 18, true)
-
-  return finalizeWild(
-    g,
-    'frost_peak',
-    'ยอดเขาเหมันต์',
-    'Lv.80-90',
-    'frost',
-    T.SNOW,
-    T.PINE,
-    T.PATH,
-    { to: 'crystal_vale', tx: 48, ty: 18, label: 'หุบเขาคริสตัล Lv.70+' },
-    { to: 'dream_garden', tx: 3, ty: 18, label: 'สวนฝันนิรันดร์ Lv.90+' },
-    [
-      { monsterId: 'demon', count: 10 },
-      { monsterId: 'demon_lord', count: 2 },
-    ],
-  )
-}
-
-function buildDreamGarden(): MapDef {
-  const g = new Grid(WW, WH, T.SAKURA_GRASS)
-  // Serene curved lotus lake & sakura shrines
-  g.disc(26, 18, 7, T.WATER)
-  g.disc(26, 18, 4, T.PLAZA) // Center Island Shrine!
-  g.rect(18, 17, 6, 3, T.BRIDGE_H)
-  g.rect(28, 17, 6, 3, T.BRIDGE_H)
-  g.rect(25, 10, 3, 5, T.BRIDGE_V)
-  g.rect(25, 21, 3, 5, T.BRIDGE_V)
-
-  carveWindingRoad(g, T.PATH, 909)
-  scatterClean(
-    g,
-    T.SAKURA_GRASS,
-    999,
-    [
-      { tile: T.TREE, chance: 0.03 },
-      { tile: T.BUSH, chance: 0.025 },
-    ],
-    [{ tile: T.FLOWER, chance: 0.14 }],
-  )
-
-  g.obj('dream_shrine', 26, 17, true, 0, 'ศาลเจ้าแห่งความฝัน')
-  for (const [sx, sy] of [
-    [10, 9],
-    [14, 26],
-    [38, 9],
-    [40, 26],
-  ]) {
-    g.obj('sakura_tree', sx, sy, true)
-  }
-  g.obj('flower_cart', 14, 15, true)
-  g.obj('bench', 12, 21, true)
-  g.obj('bench', 38, 21, true)
-  g.obj('lamp_post', 22, 16, true)
-  g.obj('lamp_post', 29, 16, true)
-
-  return finalizeWild(
-    g,
-    'dream_garden',
-    'สวนฝันนิรันดร์',
-    'Lv.90-100',
-    'dream',
-    T.SAKURA_GRASS,
-    T.TREE,
-    T.PATH,
-    { to: 'frost_peak', tx: 48, ty: 18, label: 'ยอดเขาเหมันต์ Lv.80+' },
-    { to: 'celestial_colosseum', tx: 3, ty: 18, label: 'โคลอสเซียมสวรรค์ Lv.100+' },
-    [
-      { monsterId: 'fire_golem', count: 8 },
-      { monsterId: 'abyss_knight', count: 4 },
-    ],
-  )
-}
-
-function buildColosseum(): MapDef {
+// 15. บอสโลก (world) — (3,0)
+function buildWorldBossSanctum(): MapDef {
   const g = new Grid(WW, WH, T.COBBLESTONE)
-  // Grand Roman/Celestial Colosseum Arena
   g.border(T.CASTLE_WALL, 2)
-  g.disc(26, 18, 13, T.GOLD_PAVING)
-  g.ring(26, 18, 14, T.COBBLESTONE)
-  g.rect(4, MID - 2, WW - 8, 4, T.GOLD_PAVING)
-  g.rect(24, 4, 4, WH - 8, T.GOLD_PAVING)
-  g.set(26, 18, T.MAGIC_CIRCLE)
+  g.disc(MIDX, MIDY, 13, T.GOLD_PAVING)
+  g.ring(MIDX, MIDY, 14, T.COBBLESTONE)
+  g.rect(4, MIDY - 2, WW - 8, 4, T.GOLD_PAVING)
+  g.rect(MIDX - 2, 4, 4, WH - 8, T.GOLD_PAVING)
+  g.set(MIDX, MIDY, T.MAGIC_CIRCLE)
 
-  // Colosseum Pillars & Burning Braziers ringing the arena
   const ringPts = [
     [16, 10],
     [26, 6],
@@ -1147,56 +1314,69 @@ function buildColosseum(): MapDef {
   ]) {
     g.obj('magma_brazier', bx, by, true)
   }
-  g.obj('statue', 26, 9, true, 0, 'เทพีแห่งชัยชนะ')
+  g.obj('statue', 26, 9, true, 0, 'แท่นบูชาบอสโลก')
   g.obj('guild_banner', 23, 9, true)
   g.obj('guild_banner', 29, 9, true)
-  g.obj('chest_decor', 26, 28, true)
 
-  return finalizeWild(
-    g,
-    'celestial_colosseum',
-    'โคลอสเซียมสวรรค์',
-    'Lv.100+ เขตบอส',
-    'colosseum',
-    T.COBBLESTONE,
-    T.CASTLE_WALL,
-    T.GOLD_PAVING,
-    { to: 'dream_garden', tx: 48, ty: 18, label: 'สวนฝันนิรันดร์ Lv.90+' },
-    null,
-    [
-      { monsterId: 'demon_lord', count: 6 },
-      { monsterId: 'abyss_dragon', count: 2 },
-    ],
-  )
+  return finalizeWild(g, 'world', 'บอสโลก', 'Lv.90+ บอสโลก', 'world', T.COBBLESTONE, T.CASTLE_WALL, T.GOLD_PAVING, {
+    south: { to: 'volcano', tx: 26, ty: 3, label: 'ภูเขาไฟ Lv.62-74', gate: 'crystalShrine' },
+    west: { to: 'abyss', tx: 48, ty: 18, label: 'ห้วงอเวจี Lv.76-90', gate: 'crystalShrine' },
+  })
 }
 
 export const MAPS: Record<string, MapDef> = {
   town: buildTown(),
   meadow: buildMeadow(),
+  vale: buildVale(),
+  woods: buildWoods(),
   forest: buildForest(),
+  coast: buildCoast(),
   cave: buildCave(),
+  desert: buildDesert(),
+  graveyard: buildGraveyard(),
+  isles: buildIsles(),
+  snow: buildSnow(),
+  ruins: buildRuins(),
   volcano: buildVolcano(),
+  sky: buildSky(),
   abyss: buildAbyss(),
-  sky_ruins: buildSkyRuins(),
-  crystal_vale: buildCrystalVale(),
-  frost_peak: buildFrostPeak(),
-  dream_garden: buildDreamGarden(),
-  celestial_colosseum: buildColosseum(),
+  world: buildWorldBossSanctum(),
 }
 
 export const MAP_ORDER = [
   'town',
   'meadow',
+  'vale',
+  'woods',
   'forest',
+  'coast',
   'cave',
+  'desert',
+  'graveyard',
+  'isles',
+  'snow',
+  'ruins',
   'volcano',
+  'sky',
   'abyss',
-  'sky_ruins',
-  'crystal_vale',
-  'frost_peak',
-  'dream_garden',
-  'celestial_colosseum',
+  'world',
 ]
+
+export const LEGACY_MAP_ALIASES: Record<string, string> = {
+  sky_ruins: 'sky',
+  crystal_vale: 'vale',
+  frost_peak: 'snow',
+  frost: 'snow',
+  dream_garden: 'isles',
+  celestial_colosseum: 'ruins',
+}
+
+export function normalizeMapId(mapId?: string | null): string {
+  if (!mapId || typeof mapId !== 'string') return 'town'
+  if (MAPS[mapId]) return mapId
+  const mapped = LEGACY_MAP_ALIASES[mapId]
+  return mapped && MAPS[mapped] ? mapped : 'town'
+}
 
 export function tileAt(map: MapDef, tx: number, ty: number) {
   if (tx < 0 || ty < 0 || tx >= map.width || ty >= map.height) return T.CAVEWALL

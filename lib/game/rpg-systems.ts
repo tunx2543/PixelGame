@@ -1,4 +1,5 @@
 import { ITEMS, JOBS, MONSTERS, normalizeJobId, type EquipmentSlot } from './data'
+import { MONSTER_BIOME_MAP } from './biome-monsters'
 import type { InvItem, SaveData } from './engine'
 
 /* ========================================================================== */
@@ -224,8 +225,28 @@ const MONSTER_ELEMENT_MAP: Record<string, ElementType> = {
   abyss_dragon: 'dark',
 }
 
+const BIOME_DEFAULT_ELEMENT: Record<string, ElementType> = {
+  meadow: 'neutral',
+  vale: 'earth',
+  woods: 'earth',
+  forest: 'earth',
+  coast: 'ice',
+  cave: 'earth',
+  desert: 'earth',
+  graveyard: 'dark',
+  isles: 'ice',
+  snow: 'ice',
+  ruins: 'dark',
+  volcano: 'fire',
+  sky: 'light',
+  abyss: 'dark',
+  world: 'dark',
+}
+
 export function getMonsterElement(monsterId: string): ElementType {
-  return MONSTER_ELEMENT_MAP[monsterId] ?? 'neutral'
+  if (MONSTER_ELEMENT_MAP[monsterId]) return MONSTER_ELEMENT_MAP[monsterId]
+  const biome = MONSTER_BIOME_MAP[monsterId]
+  return biome ? (BIOME_DEFAULT_ELEMENT[biome] ?? 'neutral') : 'neutral'
 }
 
 export function getAttackElement(

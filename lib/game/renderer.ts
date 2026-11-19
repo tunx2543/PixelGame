@@ -8,7 +8,8 @@ import {
   isEntityOccludedByOverhead,
   stepSmoothCamera,
 } from './camera'
-import { T, TILE } from './maps'
+import { T, TILE, type PortalDirection, type PortalGateStyle } from './maps'
+import { getHdImage } from './hd-assets'
 import { getMonsterModelSpec, getPetModelSpec } from './models-2d'
 import { buildTilePropDrawable, buildTownStructureDrawables, drawHdMapObject, type HdDepthDrawable } from './hd-props'
 import { LAYERED_PROP_TILES } from './hd-tiles'
@@ -53,11 +54,20 @@ export function screenToWorld(cssX: number, cssY: number, cssW: number, cssH: nu
 const THEME_BG: Record<string, string> = {
   town: '#2d5a27',
   meadow: '#2d5a27',
+  vale: '#255228',
+  woods: '#1d4423',
   forest: '#10291a',
+  coast: '#1b6ca8',
   cave: '#0b0b16',
+  desert: '#8f6b3e',
+  graveyard: '#181a28',
+  isles: '#2e6351',
+  snow: '#b8d0e8',
+  ruins: '#242230',
   volcano: '#140808',
-  abyss: '#0c0814',
   sky: '#72aee6',
+  abyss: '#0c0814',
+  world: '#2a1829',
   crystal: '#121029',
   frost: '#b8d0e8',
   dream: '#315743',
@@ -270,21 +280,47 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   }
 
   for (const pt of map.portals) {
+    const dir: PortalDirection =
+      pt.dir ?? (pt.x === 0 ? 'west' : pt.x >= map.width - 2 ? 'east' : pt.y === 0 ? 'north' : 'south')
+    const isHorizontalEdge = dir === 'north' || dir === 'south'
     const cx = (pt.x + pt.w / 2) * TILE
     const cy = (pt.y + pt.h / 2) * TILE
+    const padX = dir === 'west' ? cx + 6 : dir === 'east' ? cx - 6 : cx
+    const padY = dir === 'north' ? cy + 8 : dir === 'south' ? cy - 8 : cy
+    const rx = isHorizontalEdge ? 26 : 11
+    const ry = isHorizontalEdge ? 10 : 25
     const pulse = 0.6 + Math.sin(t * 4) * 0.2
-    ctx.fillStyle = `rgba(120, 80, 255, ${0.25 * pulse})`
+    const gate: PortalGateStyle = pt.gate ?? 'woodGate'
+    const outerCol =
+      gate === 'townArchway'
+        ? `rgba(245, 180, 60, ${0.24 * pulse})`
+        : gate === 'crystalShrine'
+          ? `rgba(120, 80, 255, ${0.26 * pulse})`
+          : `rgba(52, 211, 153, ${0.24 * pulse})`
+    const innerCol =
+      gate === 'townArchway'
+        ? `rgba(125, 211, 252, ${0.46 * pulse})`
+        : gate === 'crystalShrine'
+          ? `rgba(150, 230, 255, ${0.5 * pulse})`
+          : `rgba(167, 243, 208, ${0.46 * pulse})`
+
+    ctx.fillStyle = outerCol
     ctx.beginPath()
-    ctx.ellipse(cx, cy, 14, 34, 0, 0, Math.PI * 2)
+    ctx.ellipse(padX, padY, rx, ry, 0, 0, Math.PI * 2)
     ctx.fill()
-    ctx.fillStyle = `rgba(150, 230, 255, ${0.5 * pulse})`
+    ctx.fillStyle = innerCol
     ctx.beginPath()
-    ctx.ellipse(cx, cy, 7, 26, 0, 0, Math.PI * 2)
+    ctx.ellipse(padX, padY, rx * 0.56, ry * 0.58, 0, 0, Math.PI * 2)
     ctx.fill()
     for (let i = 0; i < 6; i++) {
-      const a = t * 2 + i
+      const a = t * 2 + i * 1.05
       ctx.fillStyle = i % 2 ? '#e0aaff' : '#caf0f8'
-      ctx.fillRect(Math.round(cx + Math.cos(a) * 9), Math.round(cy + Math.sin(a * 1.3) * 26), 1, 1)
+      ctx.fillRect(
+        Math.round(padX + Math.cos(a) * (rx * 0.72)),
+        Math.round(padY + Math.sin(a * 1.3) * (ry * 0.72)),
+        1.2,
+        1.2,
+      )
     }
   }
 
@@ -388,15 +424,60 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     }
   }
 
-  for (const obj of visibleObjects) {
-    const ox = (obj.tx + 0.5) * TILE
-    const oy = (obj.ty + 0.88) * TILE
-    const objFrame = Math.floor(t * 5 + obj.tx * 0.7 + obj.ty) % 3
-    const img = mapObjectSprite(obj.kind, objFrame, obj.variant ?? 0)
+  for (const visibleObj of visibleObjects) {
+    const ox = (visibleObj.tx + 0.5) * TILE
+    const oy = (visibleObj.ty + 0.88) * TILE
+    const objFrame = Math.floor(t * 5 + visibleObj.tx * 0.7 + visibleObj.ty) % 3
+    const img = mapObjectSprite(visibleObj.kind, objFrame, visibleObj.variant ?? 0)
     ents.push({
       y: oy,
       draw: () => {
-        drawHdMapObject(ctx, obj, ox, oy, t, img)
+        drawHdMapObject(ctx, visibleObj, ox, oy, t, img)
+      },
+    })
+  }
+
+  for (const pt of map.portals) {
+    const dir: PortalDirection =
+      pt.dir ?? (pt.x === 0 ? 'west' : pt.x >= map.width - 2 ? 'east' : pt.y === 0 ? 'north' : 'south')
+    const gate: PortalGateStyle = pt.gate ?? 'woodGate'
+    const gateImg = getHdImage(gate)
+    const gx =
+      dir === 'west'
+        ? (pt.x + 1.2) * TILE
+        : dir === 'east'
+          ? (pt.x - 0.2) * TILE
+          : (pt.x + pt.w / 2) * TILE
+    const baseY =
+      dir === 'north'
+        ? (pt.y + 2.0) * TILE
+        : dir === 'south'
+          ? (pt.y + 0.95) * TILE
+          : (pt.y + pt.h * 0.7) * TILE
+    const targetH = gate === 'townArchway' ? 36 : gate === 'crystalShrine' ? 32 : 34
+    const aspect = gateImg ? gateImg.width / Math.max(1, gateImg.height) : 1
+    const dw = Math.round(targetH * aspect)
+    const dh = targetH
+
+    ents.push({
+      y: dir === 'north' ? baseY - 12 : baseY,
+      draw: () => {
+        shadow(ctx, gx, baseY - 1, Math.min(18, dw * 0.42))
+        if (gateImg) {
+          ctx.save()
+          ctx.imageSmoothingEnabled = true
+          ctx.imageSmoothingQuality = 'high'
+          ctx.drawImage(gateImg, Math.round(gx - dw / 2), Math.round(baseY - dh + 2), dw, dh)
+          ctx.restore()
+        } else {
+          ctx.save()
+          ctx.fillStyle = gate === 'crystalShrine' ? '#67e8f9' : '#c8956b'
+          ctx.strokeStyle = '#1e1b2e'
+          ctx.lineWidth = 1.4
+          ctx.fillRect(Math.round(gx - 12), Math.round(baseY - 26), 24, 24)
+          ctx.strokeRect(Math.round(gx - 12), Math.round(baseY - 26), 24, 24)
+          ctx.restore()
+        }
       },
     })
   }
@@ -1213,7 +1294,18 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   ctx.setTransform(1, 0, 0, 1, 0, 0)
 
   // Ambient weather / biome particles in screen space
-  if (map.theme === 'frost' || map.theme === 'dream' || map.theme === 'volcano' || map.theme === 'abyss' || map.theme === 'forest' || map.theme === 'crystal' || map.theme === 'sky') {
+  if (
+    map.theme === 'frost' ||
+    map.theme === 'snow' ||
+    map.theme === 'dream' ||
+    map.theme === 'isles' ||
+    map.theme === 'volcano' ||
+    map.theme === 'abyss' ||
+    map.theme === 'forest' ||
+    map.theme === 'crystal' ||
+    map.theme === 'sky' ||
+    map.theme === 'world'
+  ) {
     ctx.save()
     const count = map.theme === 'sky' ? 14 : 24
     for (let i = 0; i < count; i++) {
@@ -1222,19 +1314,19 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         const py = ((i * 113 + Math.sin(t * 0.4 + i) * 10) % ch)
         ctx.fillStyle = 'rgba(255,255,255,0.22)'
         ctx.fillRect(Math.round(px), Math.round(py), Math.round(14 * dpr), Math.round(4 * dpr))
-      } else if (map.theme === 'volcano' || map.theme === 'abyss') {
+      } else if (map.theme === 'volcano' || map.theme === 'abyss' || map.theme === 'world') {
         const px = ((i * 173 + Math.sin(t * 1.5 + i) * 20) % cw + cw) % cw
         const py = ch - ((t * (28 + (i % 5) * 8) + i * 91) % ch)
         ctx.fillStyle = i % 2 ? '#ff7b00' : '#ffd166'
         ctx.globalAlpha = 0.55
         ctx.fillRect(Math.round(px), Math.round(py), Math.max(2, Math.round(1.5 * dpr)), Math.max(2, Math.round(1.5 * dpr)))
-      } else if (map.theme === 'frost') {
+      } else if (map.theme === 'frost' || map.theme === 'snow') {
         const px = ((i * 151 + t * 18 + Math.sin(t * 1.2 + i) * 16) % cw + cw) % cw
         const py = (t * (32 + (i % 4) * 10) + i * 83) % ch
         ctx.fillStyle = i % 2 ? '#ffffff' : '#caf0f8'
         ctx.globalAlpha = 0.72
         ctx.fillRect(Math.round(px), Math.round(py), Math.max(2, Math.round(1.6 * dpr)), Math.max(2, Math.round(1.6 * dpr)))
-      } else if (map.theme === 'dream') {
+      } else if (map.theme === 'dream' || map.theme === 'isles') {
         const px = ((i * 163 + t * 22 + Math.sin(t + i) * 24) % cw + cw) % cw
         const py = (t * (20 + (i % 3) * 8) + i * 79) % ch
         ctx.fillStyle = i % 2 ? '#ffb3c6' : '#ffe5ec'
@@ -1257,7 +1349,15 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     ctx.restore()
   }
 
-  if (map.theme === 'cave' || map.theme === 'forest' || map.theme === 'volcano' || map.theme === 'abyss' || map.theme === 'crystal') {
+  if (
+    map.theme === 'cave' ||
+    map.theme === 'forest' ||
+    map.theme === 'volcano' ||
+    map.theme === 'abyss' ||
+    map.theme === 'graveyard' ||
+    map.theme === 'ruins' ||
+    map.theme === 'crystal'
+  ) {
     const sx = (p.x - camX) * s
     const sy = (p.y - 8 - camY) * s
     const inner = (map.theme === 'cave' ? 54 : map.theme === 'abyss' ? 95 : 110) * s
@@ -1270,9 +1370,11 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           ? 'rgba(5,20,10,0.42)'
           : map.theme === 'abyss'
             ? 'rgba(14,4,26,0.58)'
-            : map.theme === 'crystal'
-              ? 'rgba(12,8,34,0.38)'
-              : 'rgba(30,0,0,0.48)'
+            : map.theme === 'graveyard' || map.theme === 'ruins'
+              ? 'rgba(10,12,24,0.42)'
+              : map.theme === 'crystal'
+                ? 'rgba(12,8,34,0.38)'
+                : 'rgba(30,0,0,0.48)'
     g.addColorStop(0, 'rgba(0,0,0,0)')
     g.addColorStop(1, dark)
     ctx.fillStyle = g
@@ -1323,8 +1425,23 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   }
 
   for (const pt of map.portals) {
-    const [x, y] = toS((pt.x + pt.w / 2) * TILE + (pt.x === 0 ? 14 : -14), (pt.y - 0.3) * TILE)
-    text(pt.label, x, y, '#caf0f8', 9)
+    const dir: PortalDirection =
+      pt.dir ?? (pt.x === 0 ? 'west' : pt.x >= map.width - 2 ? 'east' : pt.y === 0 ? 'north' : 'south')
+    const wx =
+      dir === 'west'
+        ? (pt.x + 2.5) * TILE
+        : dir === 'east'
+          ? (pt.x - 1.5) * TILE
+          : (pt.x + pt.w / 2) * TILE
+    const wy =
+      dir === 'north'
+        ? (pt.y + 2.8) * TILE
+        : dir === 'south'
+          ? (pt.y - 1.5) * TILE
+          : (pt.y - 0.25) * TILE
+    const arrow = dir === 'north' ? '▲' : dir === 'south' ? '▼' : dir === 'west' ? '◀' : '▶'
+    const [x, y] = toS(wx, wy)
+    text(`${arrow} ${pt.label}`, x, y, '#caf0f8', 9)
   }
 
   for (const n of map.npcs) {

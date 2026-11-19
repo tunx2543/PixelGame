@@ -424,6 +424,7 @@ const ARCHETYPE_BY_SPRITE: Record<MonsterSprite, MonsterModelArchetype> = {
   earth_golem: 'earth_golem',
   demon: 'demon',
   gale_sentinel: 'gale_sentinel',
+  abyss_knight: 'abyss_knight',
 }
 
 function buildMonsterSpec(def: MonsterDef): MonsterModelSpec {
@@ -449,7 +450,8 @@ function buildMonsterSpec(def: MonsterDef): MonsterModelSpec {
   const canvasSize =
     archetype === 'abyss_dragon' || archetype === 'boss_fire_dragon'
       ? { width: 42, height: 34 }
-      : archetype === 'demon_lord' ||
+      : def.boss ||
+          archetype === 'demon_lord' ||
           archetype === 'boss_demon_king' ||
           archetype === 'boss_wolf' ||
           archetype === 'boss_spider_queen' ||

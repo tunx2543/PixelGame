@@ -1,4 +1,5 @@
 import { WEAPON_CATALOG } from './weapon-catalog'
+import { GENERATED_BIOME_MONSTERS } from './biome-monsters'
 
 export type WeaponType = 'stick' | 'sword' | 'staff' | 'bow' | 'dagger'
 
@@ -719,6 +720,7 @@ export type MonsterSprite =
   | 'demon'
   | 'gale_sentinel'
   | 'earth_golem'
+  | 'abyss_knight'
 
 export interface MonsterDef {
   id: string
@@ -737,7 +739,7 @@ export interface MonsterDef {
   drops: { itemId: string; chance: number }[]
 }
 
-export const MONSTERS: Record<string, MonsterDef> = {
+const LEGACY_MONSTERS: Record<string, MonsterDef> = {
   slime: { id: 'slime', name: 'สไลม์เขียว', level: 1, hp: 30, atk: 6, def: 1, exp: 8, gold: [2, 6], speed: 22, aggro: 0, sprite: 'slime', color: '#57cc99', drops: [{ itemId: 'slime_gel', chance: 0.5 }, { itemId: 'torn_cloth', chance: 0.35 }, { itemId: 'red_potion', chance: 0.1 }] },
   slime_blue: { id: 'slime_blue', name: 'สไลม์ฟ้า', level: 2, hp: 42, atk: 8, def: 2, exp: 12, gold: [3, 8], speed: 24, aggro: 20, sprite: 'slime', color: '#38bdf8', drops: [{ itemId: 'slime_gel', chance: 0.55 }, { itemId: 'blue_potion', chance: 0.08 }, { itemId: 'torn_cloth', chance: 0.3 }] },
   pink_slime: { id: 'pink_slime', name: 'สไลม์ชมพู', level: 4, hp: 65, atk: 11, def: 3, exp: 18, gold: [5, 12], speed: 26, aggro: 50, sprite: 'slime', color: '#ff8fab', drops: [{ itemId: 'slime_gel', chance: 0.6 }, { itemId: 'torn_cloth', chance: 0.45 }, { itemId: 'red_potion', chance: 0.15 }] },
@@ -767,6 +769,11 @@ export const MONSTERS: Record<string, MonsterDef> = {
   abyss_knight: { id: 'abyss_knight', name: 'อัศวินห้วงอเวจี', level: 54, hp: 5200, atk: 280, def: 105, exp: 1400, gold: [320, 620], speed: 38, aggro: 145, sprite: 'golem', color: '#5b21b6', drops: [{ itemId: 'abyss_crystal', chance: 0.22 }, { itemId: 'enhance_stone', chance: 0.2 }] },
   gale_sentinel: { id: 'gale_sentinel', name: 'ผู้พิทักษ์สายลม', level: 68, hp: 8400, atk: 360, def: 125, exp: 2500, gold: [600, 1100], speed: 44, aggro: 165, sprite: 'gale_sentinel', color: '#8ee7ff', drops: [{ itemId: 'abyss_crystal', chance: 0.18 }, { itemId: 'enhance_stone', chance: 0.2 }] },
   abyss_dragon: { id: 'abyss_dragon', name: 'มังกรอเวจี', level: 60, hp: 32000, atk: 420, def: 150, exp: 12000, gold: [6000, 12000], speed: 46, aggro: 180, sprite: 'demon', color: '#24104f', boss: true, drops: [{ itemId: 'abyss_crystal', chance: 1 }, { itemId: 'dragon_armor', chance: 0.35 }, { itemId: 'flame_sword', chance: 0.2 }, { itemId: 'inferno_staff', chance: 0.2 }, { itemId: 'phoenix_bow', chance: 0.2 }, { itemId: 'demon_fang', chance: 0.2 }] },
+}
+
+export const MONSTERS: Record<string, MonsterDef> = {
+  ...GENERATED_BIOME_MONSTERS,
+  ...LEGACY_MONSTERS,
 }
 
 export const MAX_LEVEL = 70
