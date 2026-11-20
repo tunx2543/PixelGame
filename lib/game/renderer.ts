@@ -35,6 +35,13 @@ import { getActiveMountBonuses, getMountDef } from './mounts'
 import { TITLE_DEFS } from './rpg-systems'
 import { GATHERING_NODES, getCosmeticDef, getWorldTimePhase, sanitizeExtV2 } from './extended-systems'
 import { drawOverworldSkillEffect, drawRebirthAura } from './vfx-canvas'
+import {
+  drawCharacterFashionLayers,
+  getFashionLayerImage,
+  preloadFashionLayers,
+  resolveFashionLoadoutFromRemote,
+  resolveFashionLoadoutFromSave,
+} from './fashion-renderer'
 import { getFashionItemDef } from './premium/fashion-pet'
 import { getEffectiveVipBonuses, getVipTierDef } from './premium/vip'
 import { sanitizePremiumState } from './premium/wallet'
@@ -640,6 +647,8 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     const equippedWeaponSkin = getCosmeticDef(other.weaponSkinId)
     const activeMountDef = other.mountId ? getMountDef(other.mountId) : null
     const activePetDef = other.petId ? getCombatPetDef(other.petId) : null
+    const remoteLoadout = resolveFashionLoadoutFromRemote(other)
+    preloadFashionLayers(remoteLoadout)
 
     const remoteWeapon = other.weaponType ?? remoteJob.weaponTypes[0] ?? 'stick'
     const remoteWeaponColor = equippedWeaponSkin?.primaryColor ?? (other.weaponColor || remoteJob.colors.accent)
@@ -744,11 +753,15 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           }
         }
 
-        const activeWingColors = equippedWing
-          ? { primary: equippedWing.primaryColor, secondary: equippedWing.secondaryColor }
-          : wingsFashion && !wingsFashion.linkedGemItemId
-            ? { primary: wingsFashion.primaryColor, secondary: wingsFashion.secondaryColor }
-            : null
+        const remoteWingImg = getFashionLayerImage(remoteLoadout.wings)
+        const hasLoadedRemoteWing = Boolean(remoteWingImg && remoteWingImg.complete && remoteWingImg.naturalWidth > 0)
+        const activeWingColors = !hasLoadedRemoteWing
+          ? (equippedWing
+              ? { primary: equippedWing.primaryColor, secondary: equippedWing.secondaryColor }
+              : wingsFashion && !wingsFashion.linkedGemItemId
+                ? { primary: wingsFashion.primaryColor, secondary: wingsFashion.secondaryColor }
+                : null)
+          : null
         if (activeWingColors) {
           ctx.save()
           ctx.globalAlpha = 0.9
@@ -773,7 +786,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           ctx.restore()
         }
 
-        if (gemFashion?.id === 'nebula_dragon_wings' || wingsFashion?.id === 'nebula_dragon_wings') {
+        if (!hasLoadedRemoteWing && (gemFashion?.id === 'nebula_dragon_wings' || wingsFashion?.id === 'nebula_dragon_wings')) {
           const wingGem =
             gemFashion?.id === 'nebula_dragon_wings'
               ? gemFashion
@@ -787,16 +800,51 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           }
         }
 
+        const remoteDx = Math.round(-remoteW / 2)
+        const remoteDy = Math.round(-remoteH + remoteFootOffset)
         ctx.save()
         ctx.translate(Math.round(remoteX + ox), Math.round(remoteY + oy + riderSeatY))
+        drawCharacterFashionLayers({
+          ctx,
+          loadout: remoteLoadout,
+          phase: 'behind',
+          dir: other.facing,
+          frame: remoteFrame,
+          dx: remoteDx,
+          dy: remoteDy,
+          dw: remoteW,
+          dh: remoteH,
+        })
         drawResolvedDrawable(
           ctx,
           remoteDrawable,
-          Math.round(-remoteW / 2),
-          Math.round(-remoteH + remoteFootOffset),
+          remoteDx,
+          remoteDy,
           remoteW,
           remoteH,
         )
+        drawCharacterFashionLayers({
+          ctx,
+          loadout: remoteLoadout,
+          phase: 'overBody',
+          dir: other.facing,
+          frame: remoteFrame,
+          dx: remoteDx,
+          dy: remoteDy,
+          dw: remoteW,
+          dh: remoteH,
+        })
+        drawCharacterFashionLayers({
+          ctx,
+          loadout: remoteLoadout,
+          phase: 'overBack',
+          dir: other.facing,
+          frame: remoteFrame,
+          dx: remoteDx,
+          dy: remoteDy,
+          dw: remoteW,
+          dh: remoteH,
+        })
         if (remoteAttacking && !isRemoteGmEpic && !remoteDrawable.sheetId) {
           drawWeaponAttackOverlay(ctx, other.facing, remoteWeapon, atkProgress, remoteWeaponColor)
         }
@@ -814,7 +862,9 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           })
         }
 
-        if (gemFashion?.id === 'aurora_cat_hood' || hairFashion?.id === 'aurora_cat_hood') {
+        const remoteHatImg = getFashionLayerImage(remoteLoadout.hat)
+        const hasLoadedRemoteHat = Boolean(remoteHatImg && remoteHatImg.complete && remoteHatImg.naturalWidth > 0)
+        if (!hasLoadedRemoteHat && (gemFashion?.id === 'aurora_cat_hood' || hairFashion?.id === 'aurora_cat_hood')) {
           const catGem =
             gemFashion?.id === 'aurora_cat_hood'
               ? gemFashion
@@ -910,15 +960,22 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     equippedGemFashion: p.equippedGemFashion,
     unlockedCosmetics: extV2.unlockedCosmetics,
     equippedWing: extV2.equippedWing,
+    equippedWeaponSkin: extV2.equippedWeaponSkin,
   })
   const vipBonus = getEffectiveVipBonuses(prem.vip)
-  const costumeFashion = getFashionItemDef(prem.fashion.equipped.costume)
-  const hairFashion = getFashionItemDef(prem.fashion.equipped.hair)
-  const auraFashion = getFashionItemDef(prem.fashion.equipped.aura)
-  const wingsFashion = getFashionItemDef(prem.fashion.equipped.wings)
-  const mountSkinFashion = getFashionItemDef(prem.fashion.equipped.mountAppearance)
+  const localLoadout = resolveFashionLoadoutFromSave({
+    premium: prem,
+    equippedGemFashion: p.equippedGemFashion,
+    extV2,
+  })
+  preloadFashionLayers(localLoadout)
+  const costumeFashion = getFashionItemDef(localLoadout.costume)
+  const hairFashion = getFashionItemDef(localLoadout.hair)
+  const auraFashion = getFashionItemDef(localLoadout.aura)
+  const wingsFashion = getFashionItemDef(localLoadout.wings)
+  const mountSkinFashion = getFashionItemDef(localLoadout.mountAppearance)
   const equippedWing = getCosmeticDef(extV2.equippedWing)
-  const equippedWeaponSkin = getCosmeticDef(extV2.equippedWeaponSkin)
+  const equippedWeaponSkin = getCosmeticDef(localLoadout.weaponSkin ?? extV2.equippedWeaponSkin)
   const equippedFrame = getCosmeticDef(extV2.equippedFrame)
   ents.push({
     y: p.y,
@@ -1055,11 +1112,15 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           )
         }
       }
-      const activeWingColors = equippedWing
-        ? { primary: equippedWing.primaryColor, secondary: equippedWing.secondaryColor }
-        : wingsFashion && !wingsFashion.linkedGemItemId
-          ? { primary: wingsFashion.primaryColor, secondary: wingsFashion.secondaryColor }
-          : null
+      const localWingImg = getFashionLayerImage(localLoadout.wings)
+      const hasLoadedLocalWing = Boolean(localWingImg && localWingImg.complete && localWingImg.naturalWidth > 0)
+      const activeWingColors = !hasLoadedLocalWing
+        ? (equippedWing
+            ? { primary: equippedWing.primaryColor, secondary: equippedWing.secondaryColor }
+            : wingsFashion && !wingsFashion.linkedGemItemId
+              ? { primary: wingsFashion.primaryColor, secondary: wingsFashion.secondaryColor }
+              : null)
+        : null
       if (activeWingColors) {
         ctx.save()
         ctx.globalAlpha = p.invisible ? 0.15 : 0.9
@@ -1083,7 +1144,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         ctx.stroke()
         ctx.restore()
       }
-      if (gemFashion?.id === 'nebula_dragon_wings' || wingsFashion?.id === 'nebula_dragon_wings') {
+      if (!hasLoadedLocalWing && (gemFashion?.id === 'nebula_dragon_wings' || wingsFashion?.id === 'nebula_dragon_wings')) {
         const wingGem = gemFashion?.id === 'nebula_dragon_wings' ? gemFashion : GEM_SHOP_ITEMS.find((g) => g.id === 'nebula_dragon_wings')
         if (wingGem) {
           ctx.save()
@@ -1093,9 +1154,47 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           ctx.restore()
         }
       }
+      const localDx = Math.round(-drawW / 2)
+      const localDy = Math.round(-drawH + footOffset)
       ctx.save()
       ctx.translate(Math.round(p.x + ox), Math.round(p.y + oy + riderSeatY))
-      drawResolvedDrawable(ctx, drawable, Math.round(-drawW / 2), Math.round(-drawH + footOffset), drawW, drawH)
+      drawCharacterFashionLayers({
+        ctx,
+        loadout: localLoadout,
+        phase: 'behind',
+        dir: game.facing,
+        frame,
+        dx: localDx,
+        dy: localDy,
+        dw: drawW,
+        dh: drawH,
+        alpha: p.invisible ? 0.2 : 1,
+      })
+      drawResolvedDrawable(ctx, drawable, localDx, localDy, drawW, drawH)
+      drawCharacterFashionLayers({
+        ctx,
+        loadout: localLoadout,
+        phase: 'overBody',
+        dir: game.facing,
+        frame,
+        dx: localDx,
+        dy: localDy,
+        dw: drawW,
+        dh: drawH,
+        alpha: p.invisible ? 0.2 : 1,
+      })
+      drawCharacterFashionLayers({
+        ctx,
+        loadout: localLoadout,
+        phase: 'overBack',
+        dir: game.facing,
+        frame,
+        dx: localDx,
+        dy: localDy,
+        dw: drawW,
+        dh: drawH,
+        alpha: p.invisible ? 0.2 : 1,
+      })
       if ((attacking || (castingSkill && !isGmEpic)) && !isGmEpic && !drawable.sheetId) {
         drawWeaponAttackOverlay(
           ctx,
@@ -1118,7 +1217,9 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           layer: 'front',
         })
       }
-      if (gemFashion?.id === 'aurora_cat_hood' || hairFashion?.id === 'aurora_cat_hood') {
+      const localHatImg = getFashionLayerImage(localLoadout.hat)
+      const hasLoadedLocalHat = Boolean(localHatImg && localHatImg.complete && localHatImg.naturalWidth > 0)
+      if (!hasLoadedLocalHat && (gemFashion?.id === 'aurora_cat_hood' || hairFashion?.id === 'aurora_cat_hood')) {
         const catGem = gemFashion?.id === 'aurora_cat_hood' ? gemFashion : GEM_SHOP_ITEMS.find((g) => g.id === 'aurora_cat_hood')
         if (catGem) {
           drawGemItemPixels(ctx, catGem, p.x - 5, p.y + riderSeatY - drawH - 1, 1.25)

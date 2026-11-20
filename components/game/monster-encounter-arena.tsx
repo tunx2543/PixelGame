@@ -21,6 +21,7 @@ import {
 import { auth } from '@/lib/firebase/client'
 import { listUserCharacters } from '@/lib/firebase/characters'
 import { AccountPanel } from './account-panel'
+import { ItemIcon } from './item-icon'
 import { ITEMS, JOBS, MAX_LEVEL, MAX_PLUS, enhanceCost, enhanceRate, expToNext, normalizeJobId, type SkillDef } from '@/lib/game/data'
 import { getSkillIconPath, getSkillVfxSpec } from '@/lib/game/vfx-specs'
 import {
@@ -1477,16 +1478,20 @@ export function MonsterEncounterArena() {
                   return (
                     <div
                       key={item.uid}
+                      title={`${def.name} — ${def.description}`}
                       className="flex items-center justify-between gap-2 border border-border/60 bg-background/50 px-2.5 py-2 text-xs"
                     >
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold text-foreground">
-                          {def.name}
-                          {item.plus > 0 ? ` +${item.plus}` : ''}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground tabular-nums">
-                          ATK +{formatNum(def.atk ?? 0)}
-                        </p>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <ItemIcon itemId={item.itemId} size={28} />
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-foreground">
+                            {def.name}
+                            {item.plus > 0 ? ` +${item.plus}` : ''}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground tabular-nums">
+                            ATK +{formatNum(def.atk ?? 0)}
+                          </p>
+                        </div>
                       </div>
                       <button
                         type="button"

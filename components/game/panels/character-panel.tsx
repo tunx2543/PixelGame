@@ -13,6 +13,8 @@ import {
   isCurrentAccountGm,
   itemLabel,
   itemPower,
+  openPanel,
+  resolvePlayerFashionLoadout,
   unequip,
 } from '@/lib/game/engine'
 import {
@@ -21,6 +23,7 @@ import {
   resolveEffectiveRarity,
 } from '@/lib/game/mmo-systems'
 import { PERMANENT_GM_GAME_UID } from '@/lib/game/permissions'
+import { FASHION_CHARACTER_SLOTS, getFashionItemDef } from '@/lib/game/premium/fashion-pet'
 import { computeEquipmentSetBonuses } from '@/lib/game/rpg-systems'
 import { useGame } from '@/lib/game/use-game'
 import { cn } from '@/lib/utils'
@@ -74,6 +77,7 @@ export function CharacterPanel() {
               dir="down"
               weaponOverride={p.equipment.weapon ? ITEMS[p.equipment.weapon.itemId]?.weaponType : undefined}
               weaponColorOverride={p.equipment.weapon ? ITEMS[p.equipment.weapon.itemId]?.color : undefined}
+              fashion={resolvePlayerFashionLoadout(p)}
               size={84}
               isGm={p.gm}
               rebirthCount={p.rebirthCount ?? 0}
@@ -151,6 +155,45 @@ export function CharacterPanel() {
               </ul>
             )}
           </div>
+
+          {/* Active Fashion Appearance Summary (Does not affect stats) */}
+          {(() => {
+            const fashionLoadout = resolvePlayerFashionLoadout(p)
+            const activeFashionDefs = FASHION_CHARACTER_SLOTS.map((slot) => getFashionItemDef(fashionLoadout[slot])).filter(
+              (d): d is NonNullable<typeof d> => Boolean(d),
+            )
+            return (
+              <div className="border-2 border-cyan-400/35 bg-cyan-950/15 p-2 text-[11px]">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-bold text-cyan-200">แฟชั่น ({activeFashionDefs.length} ชิ้น)</p>
+                  <button
+                    type="button"
+                    onClick={() => openPanel('wardrobe')}
+                    className="text-[10px] font-semibold text-primary hover:underline"
+                  >
+                    ห้องแต่งตัว →
+                  </button>
+                </div>
+                {activeFashionDefs.length === 0 ? (
+                  <p className="mt-1 text-[10px] text-muted-foreground">แสดงรูปลักษณ์อุปกรณ์จริง (ไม่เปลี่ยนสเตตัส)</p>
+                ) : (
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {activeFashionDefs.map((f) => (
+                      <span
+                        key={f.id}
+                        className="inline-flex items-center gap-1 rounded border border-cyan-400/30 bg-background/70 px-1.5 py-0.5 text-[9.5px] text-cyan-100"
+                      >
+                        {f.iconAsset && (
+                          <img src={f.iconAsset} alt="" className="size-3.5 object-contain" />
+                        )}
+                        <span className="max-w-[7rem] truncate">{f.name}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
         </div>
 
         <div className="flex flex-col gap-3">

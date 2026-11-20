@@ -562,6 +562,7 @@ const catalogItems = Object.fromEntries(CATALOG_ASSETS.map((asset, index) => {
     icon: isEffect ? 'armor' : weaponType,
     effect: isEffect,
     color: isEffect ? '#c084fc' : weaponType === 'dagger' ? '#d00000' : weaponType === 'staff' ? '#8b5cf6' : weaponType === 'bow' ? '#16a34a' : '#f59e0b',
+    asset: `/images/items/${id}.png`,
     description: `${isEffect ? 'อุปกรณ์อาคมจากบอส' : `อาวุธสำหรับ ${weaponLabel}`} | ไฟล์: ${asset} | ${isEffect ? `ป้องกัน +${20 + tier * 10}` : `โจมตี +${atk}`}`,
   }
   return [id, item]
@@ -686,7 +687,11 @@ export const GM_ITEMS: Record<string, ItemDef> = Object.fromEntries(
   }),
 )
 
-export const ITEMS: Record<string, ItemDef> = { ...BASE_ITEMS, ...FILE_ITEMS, ...GM_ITEMS }
+const BASE_ITEMS_WITH_ASSETS: Record<string, ItemDef> = Object.fromEntries(
+  Object.entries(BASE_ITEMS).map(([id, def]) => [id, { ...def, asset: def.asset ?? `/images/items/${id}.png` }]),
+)
+
+export const ITEMS: Record<string, ItemDef> = { ...BASE_ITEMS_WITH_ASSETS, ...FILE_ITEMS, ...GM_ITEMS }
 
 export const SHOP_STOCK: string[] = FILE_ITEM_IDS.filter((id) => !ITEMS[id].gmOnly).slice(0, 24)
 /* Legacy consumables are intentionally no longer stocked; all visible item art comes from the weapons archive. */

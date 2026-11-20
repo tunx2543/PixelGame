@@ -36,6 +36,7 @@ import {
   type SaveData,
 } from '@/lib/game/engine'
 import { useGame } from '@/lib/game/use-game'
+import { resolveFashionLoadoutFromSave } from '@/lib/game/fashion-renderer'
 import { MAPS } from '@/lib/game/maps'
 import { AccountPanel } from './account-panel'
 import { formatNum, formatPlayTime } from './format'
@@ -415,6 +416,7 @@ export function TitleScreen() {
                             action="idle"
                             dir="down"
                             size={42}
+                            fashion={resolveFashionLoadoutFromSave(char.saveData)}
                             isGm={char.saveData?.gm}
                             showAura={false}
                             label={`ตัวละคร ${char.name}`}
@@ -489,6 +491,7 @@ export function TitleScreen() {
                     action="auto"
                     dir="down"
                     size={52}
+                    fashion={resolveFashionLoadoutFromSave(guestSave)}
                     isGm={guestSave.gm}
                     label={`ตัวละคร ${guestSave.name}`}
                   />

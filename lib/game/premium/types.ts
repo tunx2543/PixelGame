@@ -180,7 +180,18 @@ export interface VipState {
   lastDailyClaimDate: string | null
 }
 
-export type FashionSlot = 'costume' | 'hair' | 'aura' | 'wings' | 'mountAppearance'
+export type FashionSlot =
+  | 'hat'
+  | 'hair'
+  | 'costume'
+  | 'pants'
+  | 'shoes'
+  | 'wings'
+  | 'back'
+  | 'accessory'
+  | 'aura'
+  | 'weaponSkin'
+  | 'mountAppearance'
 
 export interface FashionItemDef {
   id: string
@@ -191,6 +202,11 @@ export interface FashionItemDef {
   primaryColor: string
   secondaryColor: string
   accentColor: string
+  iconAsset?: string
+  layerSheetAsset?: string
+  goldPrice?: number
+  diamondPrice?: number
+  freeStarter?: boolean
   /** Optional sprite override palette for costumes / hair / mount appearances */
   paletteOverride?: {
     hair?: string

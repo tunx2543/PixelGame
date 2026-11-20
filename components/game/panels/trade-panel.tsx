@@ -16,6 +16,7 @@ import { cancelTradeRequest, updateTradeOffer, type TradeOfferSnapshot } from '@
 import { useGame } from '@/lib/game/use-game'
 import { ITEMS } from '@/lib/game/data'
 import { GEM_SHOP_ITEMS } from '@/lib/game/gem-shop'
+import { ItemIcon } from '../item-icon'
 import { PanelFrame, PxButton } from './panels'
 
 const EMPTY_OFFER: TradeOfferSnapshot = {
@@ -268,7 +269,11 @@ export function TradePanel() {
                     void sync(next, offeredGemItems, false)
                   }}
                 >
-                  <span>{item?.name ?? entry.itemId} +{entry.plus}</span><span className="text-muted-foreground">x{entry.qty}</span>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <ItemIcon itemId={entry.itemId} size={22} />
+                    <span className="truncate">{item?.name ?? entry.itemId} +{entry.plus}</span>
+                  </span>
+                  <span className="shrink-0 text-muted-foreground">x{entry.qty}</span>
                 </button>
               )
             })}
@@ -305,8 +310,12 @@ export function TradePanel() {
           <p className="mt-2 rounded border border-gold/30 bg-gold/5 px-2 py-1.5 text-xs text-gold">Gold: {otherGold.toLocaleString()} G</p>
           <div className="mt-2 grid max-h-48 gap-1 overflow-y-auto">
             {offeredByOther.map((entry) => (
-              <p key={entry.uid} className="flex justify-between rounded border border-border bg-background/50 px-2 py-1.5 text-xs">
-                <span>{ITEMS[entry.itemId]?.name ?? entry.itemId} +{entry.plus}</span><span className="text-muted-foreground">x{entry.qty}</span>
+              <p key={entry.uid} className="flex items-center justify-between gap-2 rounded border border-border bg-background/50 px-2 py-1.5 text-xs">
+                <span className="flex min-w-0 items-center gap-2">
+                  <ItemIcon itemId={entry.itemId} size={22} />
+                  <span className="truncate">{ITEMS[entry.itemId]?.name ?? entry.itemId} +{entry.plus}</span>
+                </span>
+                <span className="shrink-0 text-muted-foreground">x{entry.qty}</span>
               </p>
             ))}
             {!offeredByOther.length && <p className="text-xs text-muted-foreground">ยังไม่มีไอเท็มที่เสนอ</p>}

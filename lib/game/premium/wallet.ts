@@ -73,6 +73,7 @@ export function sanitizePremiumState(
     equippedGemFashion?: string | null
     unlockedCosmetics?: string[]
     equippedWing?: string | null
+    equippedWeaponSkin?: string | null
   },
 ): PremiumState {
   const safeBalance = Math.max(0, Math.floor(Number(context.diamonds ?? 0) || 0))
@@ -110,6 +111,7 @@ export function sanitizePremiumState(
     equippedGemFashion: context.equippedGemFashion,
     unlockedCosmetics: context.unlockedCosmetics,
     equippedWing: context.equippedWing,
+    equippedWeaponSkin: context.equippedWeaponSkin,
   })
   if (vipBonuses.active) {
     for (const fId of vipBonuses.exclusiveFashionIds) {

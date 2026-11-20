@@ -19,8 +19,10 @@ import {
   isPlayerBlocked,
   notify,
   openPanel,
+  resolvePlayerFashionLoadout,
   unblockPlayerAction,
 } from '@/lib/game/engine'
+import { resolveFashionLoadoutFromRemote } from '@/lib/game/fashion-renderer'
 import { MAPS } from '@/lib/game/maps'
 import { createDuelFighter, getJobRole, getJobRoleLabel } from '@/lib/game/mmo-systems'
 import { TITLE_DEFS } from '@/lib/game/rpg-systems'
@@ -100,6 +102,16 @@ export function PlayerInspectModal() {
   const p = g.p
   const selfUid = firebaseAuth.currentUser?.uid ?? 'guest_player'
   const isSelf = Boolean(profile && (profile.userId === selfUid || (p.gameUid && profile.gameUid === p.gameUid)))
+  const onlineEntry = profile
+    ? game.onlinePlayers.find(
+        (o) => o.userId === profile.userId || (profile.gameUid && o.gameUid === profile.gameUid),
+      )
+    : undefined
+  const inspectedFashion = isSelf
+    ? resolvePlayerFashionLoadout(p)
+    : onlineEntry
+      ? resolveFashionLoadoutFromRemote(onlineEntry)
+      : null
   const blocked = profile ? isPlayerBlocked(profile.userId) : isPlayerBlocked(target.userId)
   const job = JOBS[normalizeJobId(profile?.jobId)]
   const roleLabel = getJobRoleLabel(getJobRole(normalizeJobId(profile?.jobId)))
@@ -243,6 +255,7 @@ export function PlayerInspectModal() {
                   action="auto"
                   dir="down"
                   size={68}
+                  fashion={inspectedFashion}
                   rebirthCount={profile.rebirthCount}
                   label={profile.name}
                 />

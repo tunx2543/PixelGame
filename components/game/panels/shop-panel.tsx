@@ -15,9 +15,11 @@ const TYPE_NAME: Record<string, string> = { stick: 'กระบอง', sword: 
 export function ShopPanel() {
   const g = useGame()
   const [tab, setTab] = useState<'buy' | 'sell'>('buy')
+  const [hoveredItemId, setHoveredItemId] = useState<string | null>(null)
   if (!g.p) return null
   const p = g.p
   const isRemoteVip = hasVipRemoteAccess(p) && !isNearTownNpcRole('shop')
+  const tooltipDef = hoveredItemId ? ITEMS[hoveredItemId] : null
 
   return (
     <PanelFrame
@@ -43,6 +45,23 @@ export function ShopPanel() {
         ))}
       </div>
 
+      {tooltipDef && (
+        <div className="mb-3 flex items-center gap-3 border-2 border-primary/50 bg-background/80 p-2.5 text-xs">
+          <div className="grid size-11 shrink-0 place-items-center border border-border bg-muted">
+            <ItemIcon itemId={tooltipDef.id} size={36} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-bold text-primary">{tooltipDef.name}</p>
+            <p className="truncate text-[11px] text-muted-foreground">
+              {tooltipDef.description}
+              {tooltipDef.atk ? ` · ATK +${tooltipDef.atk}` : ''}
+              {tooltipDef.def ? ` · DEF +${tooltipDef.def}` : ''}
+              {tooltipDef.reqLevel && tooltipDef.reqLevel > 1 ? ` · Lv.${tooltipDef.reqLevel}` : ''}
+            </p>
+          </div>
+        </div>
+      )}
+
       {tab === 'buy' ? (
         <ul className="grid gap-2 md:grid-cols-2">
           {SHOP_STOCK.map((id) => {
@@ -51,7 +70,13 @@ export function ShopPanel() {
             const stack = def.kind === 'consumable' || def.kind === 'material'
             const cmp = compareEquipmentItem({ itemId: id, plus: 0 }, p)
             return (
-              <li key={id} className="flex items-center gap-3 border-2 border-border bg-muted p-2">
+              <li
+                key={id}
+                title={`${def.name} — ${def.description}`}
+                onMouseEnter={() => setHoveredItemId(id)}
+                onMouseLeave={() => setHoveredItemId((cur) => (cur === id ? null : cur))}
+                className="flex items-center gap-3 border-2 border-border bg-muted p-2"
+              >
                 <ItemIcon itemId={id} size={36} />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -104,27 +129,36 @@ export function ShopPanel() {
         <p className="py-8 text-center text-sm text-muted-foreground">กระเป๋าว่างเปล่า</p>
       ) : (
         <ul className="grid gap-2 md:grid-cols-2">
-          {p.inventory.map((it) => (
-            <li key={it.uid} className="flex items-center gap-3 border-2 border-border bg-muted p-2">
-              <ItemIcon itemId={it.itemId} size={36} />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm text-foreground">
-                  {itemLabel(it)} {it.qty > 1 && <span className="text-muted-foreground">x{it.qty}</span>}
-                </p>
-                <p className="text-xs text-gold">{formatNum(sellPrice(it))} G / ชิ้น</p>
-              </div>
-              <div className="flex flex-col gap-1">
-                <PxButton variant="accent" onClick={() => sellItem(it.uid, 1)}>
-                  ขาย
-                </PxButton>
-                {it.qty > 1 && (
-                  <PxButton variant="secondary" onClick={() => sellItem(it.uid, it.qty)}>
-                    ทั้งหมด
+          {p.inventory.map((it) => {
+            const def = ITEMS[it.itemId]
+            return (
+              <li
+                key={it.uid}
+                title={def ? `${def.name} — ${def.description}` : undefined}
+                onMouseEnter={() => setHoveredItemId(it.itemId)}
+                onMouseLeave={() => setHoveredItemId((cur) => (cur === it.itemId ? null : cur))}
+                className="flex items-center gap-3 border-2 border-border bg-muted p-2"
+              >
+                <ItemIcon itemId={it.itemId} size={36} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm text-foreground">
+                    {itemLabel(it)} {it.qty > 1 && <span className="text-muted-foreground">x{it.qty}</span>}
+                  </p>
+                  <p className="text-xs text-gold">{formatNum(sellPrice(it))} G / ชิ้น</p>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <PxButton variant="accent" onClick={() => sellItem(it.uid, 1)}>
+                    ขาย
                   </PxButton>
-                )}
-              </div>
-            </li>
-          ))}
+                  {it.qty > 1 && (
+                    <PxButton variant="secondary" onClick={() => sellItem(it.uid, it.qty)}>
+                      ทั้งหมด
+                    </PxButton>
+                  )}
+                </div>
+              </li>
+            )
+          })}
         </ul>
       )}
     </PanelFrame>

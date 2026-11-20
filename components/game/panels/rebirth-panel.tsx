@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Sparkles } from 'lucide-react'
-import { rebirth } from '@/lib/game/engine'
+import { rebirth, resolvePlayerFashionLoadout } from '@/lib/game/engine'
 import { useGame } from '@/lib/game/use-game'
 import { resolveRebirthAuraSpec } from '@/lib/game/vfx-specs'
 import { cn } from '@/lib/utils'
@@ -51,6 +51,7 @@ export function RebirthPanel() {
                 action="idle"
                 dir="down"
                 size={136}
+                fashion={resolvePlayerFashionLoadout(p)}
                 rebirthCount={previewTier}
                 label={`ตัวอย่างออร่า ${previewSpec.title}`}
               />

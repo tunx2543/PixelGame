@@ -21,6 +21,7 @@ import {
 } from '@/lib/game/rpg-systems'
 import { useGame } from '@/lib/game/use-game'
 import { formatNum } from '../format'
+import { ItemIcon } from '../item-icon'
 import { PanelFrame, PxButton } from './panels'
 
 const SLOT_LABELS: Record<EquipmentSlot, string> = {
@@ -98,12 +99,19 @@ export function CraftPanel() {
               >
                 <div>
                   <div className="flex items-start justify-between gap-2">
-                    <p
-                      className="text-sm font-bold"
-                      style={{ color: resultRune?.color ?? resultItem?.color ?? '#f8fafc' }}
-                    >
-                      {recipe.name}
-                    </p>
+                    <div className="flex min-w-0 items-center gap-2">
+                      {recipe.resultItemId && (
+                        <div className="grid size-8 shrink-0 place-items-center border border-border/70 bg-muted">
+                          <ItemIcon itemId={recipe.resultItemId} size={26} />
+                        </div>
+                      )}
+                      <p
+                        className="truncate text-sm font-bold"
+                        style={{ color: resultRune?.color ?? resultItem?.color ?? '#f8fafc' }}
+                      >
+                        {recipe.name}
+                      </p>
+                    </div>
                     <span className="shrink-0 text-xs font-bold text-gold tabular-nums">
                       {formatNum(recipe.goldCost)} G
                     </span>
@@ -165,15 +173,18 @@ export function CraftPanel() {
                     key={it.uid}
                     className="flex items-center justify-between gap-2 border border-border/80 bg-background/60 p-2.5"
                   >
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-bold" style={{ color: def.color }}>
-                        {def.name}
-                        {it.plus > 0 ? ` +${it.plus}` : ''}
-                      </p>
-                      <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
-                        ได้รับ: +{formatNum(y.gold)} G · หินตีบวก x{y.stones}
-                        {y.bonusRuneId ? ` · ${RUNE_DEFS[y.bonusRuneId]?.name}` : ''}
-                      </p>
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <ItemIcon itemId={it.itemId} size={28} />
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-bold" style={{ color: def.color }}>
+                          {def.name}
+                          {it.plus > 0 ? ` +${it.plus}` : ''}
+                        </p>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
+                          ได้รับ: +{formatNum(y.gold)} G · หินตีบวก x{y.stones}
+                          {y.bonusRuneId ? ` · ${RUNE_DEFS[y.bonusRuneId]?.name}` : ''}
+                        </p>
+                      </div>
                     </div>
                     <PxButton
                       variant="danger"

@@ -13,13 +13,16 @@ import {
   itemLabel,
   itemPower,
   openPanel,
+  resolvePlayerFashionLoadout,
   unequip,
+  unequipAllFashionAction,
 } from '@/lib/game/engine'
 import {
   EQUIPMENT_RARITY_META,
   formatAffixLabel,
   resolveEffectiveRarity,
 } from '@/lib/game/mmo-systems'
+import { FASHION_CHARACTER_SLOTS, FASHION_SLOT_LABELS, getFashionItemDef } from '@/lib/game/premium/fashion-pet'
 import {
   RUNE_DEFS,
   TITLE_DEFS,
@@ -61,6 +64,11 @@ export function EquipmentPanel() {
   const vipRemoteEnhance = hasVipRemoteAccess(p)
   const nearBlacksmith = isNearTownNpcRole('enhance')
   const canOpenEnhance = vipRemoteEnhance || nearBlacksmith
+  const fashionLoadout = resolvePlayerFashionLoadout(p)
+  const equippedFashionList = FASHION_CHARACTER_SLOTS.map((slot) => ({
+    slot,
+    def: getFashionItemDef(fashionLoadout[slot]),
+  })).filter((entry): entry is { slot: typeof entry.slot; def: NonNullable<typeof entry.def> } => Boolean(entry.def))
 
   const bagCandidates = p.inventory.filter((it) => {
     const def = ITEMS[it.itemId]
@@ -119,6 +127,7 @@ export function EquipmentPanel() {
                 dir="down"
                 weaponOverride={p.equipment.weapon ? ITEMS[p.equipment.weapon.itemId]?.weaponType : undefined}
                 weaponColorOverride={p.equipment.weapon ? ITEMS[p.equipment.weapon.itemId]?.color : undefined}
+                fashion={fashionLoadout}
                 size={88}
                 isGm={p.gm}
                 rebirthCount={p.rebirthCount ?? 0}
@@ -169,6 +178,46 @@ export function EquipmentPanel() {
                 </ul>
               )}
             </div>
+
+            <div className="border-2 border-cyan-400/35 bg-cyan-950/15 p-2.5 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-bold text-cyan-200">รูปลักษณ์แฟชั่นที่ใส่อยู่</p>
+                <span className="text-[10px] text-muted-foreground">{equippedFashionList.length} ชิ้น</span>
+              </div>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">
+                แฟชั่นแยกจากอุปกรณ์จริงและไม่เปลี่ยนค่าสเตตัสตัวละคร
+              </p>
+              {equippedFashionList.length > 0 && (
+                <ul className="mt-1.5 space-y-1">
+                  {equippedFashionList.slice(0, 6).map(({ slot, def }) => (
+                    <li key={slot} className="flex items-center gap-1.5 text-[10.5px] text-foreground">
+                      {def.iconAsset && <img src={def.iconAsset} alt="" className="size-4 shrink-0 object-contain" />}
+                      <span className="truncate font-medium">{def.name}</span>
+                      <span className="ml-auto shrink-0 text-[9.5px] text-muted-foreground">
+                        {FASHION_SLOT_LABELS[slot].split('(')[0].trim()}
+                      </span>
+                    </li>
+                  ))}
+                  {equippedFashionList.length > 6 && (
+                    <li className="text-[10px] text-cyan-300">+{equippedFashionList.length - 6} ชิ้นเพิ่มเติม</li>
+                  )}
+                </ul>
+              )}
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <PxButton variant="primary" className="flex-1 px-2 py-1 text-[10px]" onClick={() => openPanel('wardrobe')}>
+                  แต่งตัวแฟชั่น
+                </PxButton>
+                {equippedFashionList.length > 0 && (
+                  <PxButton
+                    variant="secondary"
+                    className="px-2 py-1 text-[10px]"
+                    onClick={() => unequipAllFashionAction()}
+                  >
+                    ถอดทั้งหมด
+                  </PxButton>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Right: 5 Paperdoll Equipment Slots + Bag Quick-Equip */}
@@ -192,6 +241,7 @@ export function EquipmentPanel() {
                 return (
                   <div
                     key={slot}
+                    title={it && def ? `${itemLabel(it)} — ${def.description}` : SLOT_LABELS[slot]}
                     onClick={() => setActiveSlot(slot)}
                     onDragOver={(e) => {
                       e.preventDefault()
@@ -308,6 +358,7 @@ export function EquipmentPanel() {
                     return (
                       <div
                         key={it.uid}
+                        title={`${itemLabel(it)} — ${def.description}`}
                         className={cn('flex items-center justify-between gap-2 rounded border bg-card/85 p-1.5', rarityMeta.borderColorClass)}
                       >
                         <div className="flex min-w-0 items-center gap-2">

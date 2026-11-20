@@ -5,6 +5,7 @@ import { getOptionalClient } from '@/lib/supabase/client'
 import { ITEMS } from '@/lib/game/data'
 import { addItem, broadcastWorldNewsAction, closePanel, game, notify, saveGame } from '@/lib/game/engine'
 import { useGame } from '@/lib/game/use-game'
+import { ItemIcon } from '../item-icon'
 import { PanelFrame, PxButton } from './panels'
 
 const RATES = [
@@ -92,7 +93,7 @@ export function GachaPanel() {
             return (
               <div key={entry.itemId} className="border-2 border-border bg-muted/60 p-2 text-center">
                 <div className="mx-auto mb-2 grid size-12 place-items-center overflow-hidden rounded-lg border-2 border-white/20 bg-card text-2xl" style={{ color: item.color }}>
-                  {item.asset ? <img src={item.asset} alt={item.name} className="pixelated size-full object-contain" /> : <span aria-hidden="true">{entry.rarity.slice(0, 1)}</span>}
+                  <ItemIcon itemId={entry.itemId} size={40} />
                 </div>
                 <p className="truncate text-xs text-foreground">{item.name}</p>
                 <p className={`mt-1 text-xs ${entry.rarity === 'แรร์' ? 'text-accent' : 'text-primary'}`}>{entry.rarity} · {entry.rate}%</p>

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { JOBS, type JobDef } from '@/lib/game/data'
-import { availableJobs, changeJob, currentJob } from '@/lib/game/engine'
+import { availableJobs, changeJob, currentJob, resolvePlayerFashionLoadout } from '@/lib/game/engine'
 import { useGame } from '@/lib/game/use-game'
 import { formatNum } from '../format'
 import { SpriteModelCanvas, type PreviewAction } from '../sprite-model-canvas'
@@ -119,6 +119,7 @@ export function JobPanel() {
               action={previewAction}
               dir="down"
               size={76}
+              fashion={resolvePlayerFashionLoadout(p)}
               label={`โมเดลอาชีพ ${job.name}`}
             />
           </div>

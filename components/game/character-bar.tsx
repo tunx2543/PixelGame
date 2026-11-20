@@ -9,6 +9,7 @@ import {
   isCurrentAccountGm,
   openPanel,
   quitToTitle,
+  resolvePlayerFashionLoadout,
   type PanelId,
 } from '@/lib/game/engine'
 import { PERMANENT_GM_GAME_UID } from '@/lib/game/permissions'
@@ -67,6 +68,7 @@ export function CharacterBar({ compact = false }: { compact?: boolean; layout?: 
             dir="down"
             size={30}
             variant="portrait"
+            fashion={resolvePlayerFashionLoadout(p)}
             isGm={isGmDev}
             showShadow={false}
             showAura={false}

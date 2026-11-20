@@ -8,9 +8,12 @@ import {
   ArrowUpRight,
   Backpack,
   Check,
+  Eye,
   Lock,
+  RotateCcw,
   Search,
   Shield,
+  ShieldCheck,
   Skull,
   Sparkles,
   Swords,
@@ -64,17 +67,32 @@ import {
   formatAffixLabel,
   resolveEffectiveRarity,
 } from '@/lib/game/mmo-systems'
+import { resolveFashionLoadoutFromSave, type FashionLoadout } from '@/lib/game/fashion-renderer'
+import { sanitizeExtV2 } from '@/lib/game/extended-systems'
+import {
+  FASHION_CHARACTER_SLOTS,
+  FASHION_SLOT_LABELS,
+  PREMIUM_FASHION_ITEMS,
+  getFashionItemDef,
+} from '@/lib/game/premium/fashion-pet'
+import type { FashionSlot } from '@/lib/game/premium/types'
+import { getEffectiveVipBonuses } from '@/lib/game/premium/vip'
+import { sanitizePremiumState } from '@/lib/game/premium/wallet'
 import { computeEquipmentSetBonuses } from '@/lib/game/rpg-systems'
 import { pickNewerSave } from '@/lib/game/save-sync'
+import type { Dir } from '@/lib/game/sprites'
 import { cn } from '@/lib/utils'
 
-const FILTER_TABS: ReadonlyArray<{ id: InventoryFilterTab; label: string }> = [
+type FullInventoryTab = InventoryFilterTab | 'fashion'
+
+const FILTER_TABS: ReadonlyArray<{ id: FullInventoryTab; label: string }> = [
   { id: 'all', label: 'ทั้งหมด' },
   { id: 'monster_drops', label: 'ดรอปจากมอนสเตอร์' },
   { id: 'equipable', label: 'สวมใส่ได้' },
   { id: 'weapon', label: 'อาวุธ' },
   { id: 'armor', label: 'ชุดเกราะ & ประดับ' },
   { id: 'consumable_material', label: 'ยา & วัสดุ' },
+  { id: 'fashion', label: 'แฟชั่น' },
 ]
 
 const RARITY_STYLES: Record<
@@ -130,13 +148,16 @@ export function InventoryScreen() {
   const [loading, setLoading] = useState(true)
   const [syncNotice, setSyncNotice] = useState<string>('กำลังโหลดข้อมูลคลังไอเทม...')
 
-  const [tab, setTab] = useState<InventoryFilterTab>('all')
+  const [tab, setTab] = useState<FullInventoryTab>('all')
   const [slotFilter, setSlotFilter] = useState<EquipmentSlot | null>(null)
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<InventorySortMode>('power')
   const [selectedUid, setSelectedUid] = useState<string | null>(null)
   const [inspectedEquippedSlot, setInspectedEquippedSlot] = useState<EquipmentSlot | null>(null)
   const [actionFeedback, setActionFeedback] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null)
+  const [fashionSlotFilter, setFashionSlotFilter] = useState<'all' | FashionSlot>('all')
+  const [fashionPreviewOverrides, setFashionPreviewOverrides] = useState<Partial<Record<FashionSlot, string | null>>>({})
+  const [previewDir, setPreviewDir] = useState<Dir>('down')
 
   const saveRef = useRef<SaveData | null>(null)
   saveRef.current = save
@@ -243,7 +264,7 @@ export function InventoryScreen() {
   const summary = useMemo(() => (save ? getInventorySummary(save) : null), [save])
 
   const filteredEntries = useMemo(() => {
-    if (!save) return []
+    if (!save || tab === 'fashion') return []
     const base = filterAndSortInventory(save, { tab, search, sort })
     if (!slotFilter) return base
     return base.filter((entry) => entry.targetSlot === slotFilter)
@@ -331,6 +352,130 @@ export function InventoryScreen() {
     [slotId, syncSave, user],
   )
 
+  const handleEquipFashion = useCallback(
+    (slot: FashionSlot, fashionId: string | null) => {
+      const currentSave = saveRef.current
+      if (!currentSave) return
+      const extV2 = sanitizeExtV2(currentSave.extV2)
+      const prem = sanitizePremiumState(currentSave.premium, {
+        characterId: String(currentSave.gameUid ?? currentSave.uid ?? 'char_local'),
+        diamonds: currentSave.diamonds ?? 0,
+        ownedGemItems: currentSave.ownedGemItems,
+        equippedGemFashion: currentSave.equippedGemFashion,
+        unlockedCosmetics: extV2.unlockedCosmetics,
+        equippedWing: extV2.equippedWing,
+        equippedWeaponSkin: extV2.equippedWeaponSkin,
+      })
+      const vipBonuses = getEffectiveVipBonuses(prem.vip)
+
+      let nextGemFashion = currentSave.equippedGemFashion ?? null
+      const nextExtV2 = { ...extV2 }
+
+      if (fashionId === null) {
+        const prevId = prem.fashion.equipped[slot]
+        prem.fashion.equipped[slot] = null
+        if (prevId) {
+          const prevDef = getFashionItemDef(prevId)
+          if (prevDef?.linkedGemItemId && nextGemFashion === prevDef.linkedGemItemId) {
+            nextGemFashion = null
+          }
+          if (prevDef?.linkedLegacyCosmeticId) {
+            if (nextExtV2.equippedWing === prevDef.linkedLegacyCosmeticId) nextExtV2.equippedWing = null
+            if (nextExtV2.equippedWeaponSkin === prevDef.linkedLegacyCosmeticId) nextExtV2.equippedWeaponSkin = null
+          }
+        }
+        const nextSave: SaveData = {
+          ...currentSave,
+          premium: prem,
+          equippedGemFashion: nextGemFashion,
+          extV2: nextExtV2,
+          savedAt: Date.now(),
+        }
+        saveRef.current = nextSave
+        setSave(nextSave)
+        setActionFeedback({ tone: 'ok', text: `ถอดแฟชั่นช่อง ${FASHION_SLOT_LABELS[slot].split('(')[0].trim()} แล้ว (ค่าสถานะคงเดิม)` })
+        void syncSave(nextSave, user, slotId)
+        return
+      }
+
+      const def = getFashionItemDef(fashionId)
+      if (!def || def.slot !== slot) return
+      const isVipExclusive = vipBonuses.active && vipBonuses.exclusiveFashionIds.includes(fashionId)
+      const unlocked = prem.fashion.unlockedIds.includes(fashionId) || isVipExclusive || Boolean(def.freeStarter)
+      if (!unlocked) {
+        setActionFeedback({ tone: 'err', text: 'ยังไม่ได้ปลดล็อกแฟชั่นชิ้นนี้' })
+        return
+      }
+      if (def.vipRequired && (!vipBonuses.active || vipBonuses.level < def.vipRequired)) {
+        setActionFeedback({ tone: 'err', text: `ต้องมี VIP ${def.vipRequired} จึงจะสวมใส่ได้` })
+        return
+      }
+      if (!prem.fashion.unlockedIds.includes(fashionId)) {
+        prem.fashion.unlockedIds.push(fashionId)
+      }
+      prem.fashion.equipped[slot] = fashionId
+      if (def.linkedGemItemId) nextGemFashion = def.linkedGemItemId
+      if (def.linkedLegacyCosmeticId) {
+        if (!nextExtV2.unlockedCosmetics.includes(def.linkedLegacyCosmeticId)) {
+          nextExtV2.unlockedCosmetics.push(def.linkedLegacyCosmeticId)
+        }
+        if (def.slot === 'wings') nextExtV2.equippedWing = def.linkedLegacyCosmeticId
+        if (def.slot === 'weaponSkin') nextExtV2.equippedWeaponSkin = def.linkedLegacyCosmeticId
+      }
+
+      const nextSave: SaveData = {
+        ...currentSave,
+        premium: prem,
+        equippedGemFashion: nextGemFashion,
+        extV2: nextExtV2,
+        savedAt: Date.now(),
+      }
+      saveRef.current = nextSave
+      setSave(nextSave)
+      setFashionPreviewOverrides((prev) => {
+        if (!(slot in prev)) return prev
+        const next = { ...prev }
+        delete next[slot]
+        return next
+      })
+      setActionFeedback({ tone: 'ok', text: `สวมใส่แฟชั่น ${def.name} สำเร็จ (ค่าสถานะคงเดิม)` })
+      void syncSave(nextSave, user, slotId)
+    },
+    [slotId, syncSave, user],
+  )
+
+  const handleUnequipAllFashion = useCallback(() => {
+    const currentSave = saveRef.current
+    if (!currentSave) return
+    const extV2 = sanitizeExtV2(currentSave.extV2)
+    const prem = sanitizePremiumState(currentSave.premium, {
+      characterId: String(currentSave.gameUid ?? currentSave.uid ?? 'char_local'),
+      diamonds: currentSave.diamonds ?? 0,
+      ownedGemItems: currentSave.ownedGemItems,
+      equippedGemFashion: currentSave.equippedGemFashion,
+      unlockedCosmetics: extV2.unlockedCosmetics,
+      equippedWing: extV2.equippedWing,
+      equippedWeaponSkin: extV2.equippedWeaponSkin,
+    })
+    for (const slot of FASHION_CHARACTER_SLOTS) {
+      prem.fashion.equipped[slot] = null
+    }
+    extV2.equippedWing = null
+    extV2.equippedWeaponSkin = null
+    const nextSave: SaveData = {
+      ...currentSave,
+      premium: prem,
+      equippedGemFashion: null,
+      extV2,
+      savedAt: Date.now(),
+    }
+    saveRef.current = nextSave
+    setSave(nextSave)
+    setFashionPreviewOverrides({})
+    setActionFeedback({ tone: 'ok', text: 'ถอดแฟชั่นทั้งหมดแล้ว (ค่าสถานะคงเดิม)' })
+    void syncSave(nextSave, user, slotId)
+  }, [slotId, syncSave, user])
+
   if (loading || !save || !currentStats || !slotCards || !equipBonusSummary || !summary) {
     return (
       <main className="flex min-h-dvh w-full items-center justify-center bg-background p-6">
@@ -347,6 +492,32 @@ export function InventoryScreen() {
   const weaponDef = save.equipment.weapon ? ITEMS[save.equipment.weapon.itemId] : undefined
   const inspectedEquippedItem = inspectedEquippedSlot ? save.equipment[inspectedEquippedSlot] : null
   const inspectedEquippedDef = inspectedEquippedItem ? ITEMS[inspectedEquippedItem.itemId] : null
+  const saveExtV2 = sanitizeExtV2(save.extV2)
+  const savePrem = sanitizePremiumState(save.premium, {
+    characterId: String(save.gameUid ?? save.uid ?? 'char_local'),
+    diamonds: save.diamonds ?? 0,
+    ownedGemItems: save.ownedGemItems,
+    equippedGemFashion: save.equippedGemFashion,
+    unlockedCosmetics: saveExtV2.unlockedCosmetics,
+    equippedWing: saveExtV2.equippedWing,
+    equippedWeaponSkin: saveExtV2.equippedWeaponSkin,
+  })
+  const vipBonuses = getEffectiveVipBonuses(savePrem.vip)
+  const equippedFashionLoadout = resolveFashionLoadoutFromSave({
+    premium: savePrem,
+    equippedGemFashion: save.equippedGemFashion,
+    extV2: saveExtV2,
+  })
+  const hasFashionPreview = Object.keys(fashionPreviewOverrides).length > 0
+  const previewFashionLoadout: FashionLoadout = {
+    ...equippedFashionLoadout,
+    ...fashionPreviewOverrides,
+  }
+  const ownedFashionList = PREMIUM_FASHION_ITEMS.filter((f) => {
+    const isVip = vipBonuses.active && vipBonuses.exclusiveFashionIds.includes(f.id)
+    return savePrem.fashion.unlockedIds.includes(f.id) || isVip || Boolean(f.freeStarter)
+  })
+  const equippedFashionCount = FASHION_CHARACTER_SLOTS.filter((slot) => Boolean(equippedFashionLoadout[slot])).length
 
   return (
     <main className="h-dvh w-full overflow-y-auto bg-background text-foreground">
@@ -398,19 +569,39 @@ export function InventoryScreen() {
           {/* Character Preview + Live Stat Table */}
           <section className="pixel-panel p-4">
             <div className="flex items-center gap-3 border-b border-border/70 pb-3">
-              <div className="grid size-16 shrink-0 place-items-center border-2 border-[#0e0f1a] bg-[#131726]">
-                <SpriteModelCanvas
-                  mode="job"
-                  id={save.jobId}
-                  action="idle"
-                  dir="down"
-                  weaponOverride={weaponDef?.weaponType}
-                  weaponColorOverride={weaponDef?.color}
-                  size={60}
-                  isGm={save.gm}
-                  rebirthCount={save.rebirthCount ?? 0}
-                  label={`ตัวละคร ${save.name}`}
-                />
+              <div className="flex flex-col items-center gap-1">
+                <div className="grid size-20 shrink-0 place-items-center border-2 border-[#0e0f1a] bg-[#131726]">
+                  <SpriteModelCanvas
+                    mode="job"
+                    id={save.jobId}
+                    action="auto"
+                    dir={previewDir}
+                    weaponOverride={weaponDef?.weaponType}
+                    weaponColorOverride={weaponDef?.color}
+                    fashion={previewFashionLoadout}
+                    size={76}
+                    isGm={save.gm}
+                    rebirthCount={save.rebirthCount ?? 0}
+                    label={`ตัวละคร ${save.name}`}
+                  />
+                </div>
+                <div className="flex gap-0.5">
+                  {(['down', 'left', 'right', 'up'] as Dir[]).map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setPreviewDir(d)}
+                      className={cn(
+                        'rounded border px-1 py-0 text-[9px]',
+                        previewDir === d
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-border bg-secondary text-muted-foreground',
+                      )}
+                    >
+                      {{ down: 'หน้า', left: 'ซ้าย', right: 'ขวา', up: 'หลัง' }[d]}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="truncate text-base font-bold text-primary">{save.name}</h2>
@@ -418,6 +609,20 @@ export function InventoryScreen() {
                   Lv.{save.level} · {job.name}
                 </p>
                 <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{syncNotice}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
+                  <span className="rounded border border-cyan-400/40 bg-cyan-500/10 px-1.5 py-0.5 text-cyan-200">
+                    {hasFashionPreview ? 'พรีวิวแฟชั่น' : `แฟชั่น ${equippedFashionCount} ชิ้น`}
+                  </span>
+                  {hasFashionPreview && (
+                    <button
+                      type="button"
+                      onClick={() => setFashionPreviewOverrides({})}
+                      className="inline-flex items-center gap-0.5 text-amber-300 hover:underline"
+                    >
+                      <RotateCcw className="size-3" aria-hidden /> ล้างพรีวิว
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -980,8 +1185,153 @@ export function InventoryScreen() {
               )}
             </div>
 
-            {/* Collected Items Grid */}
-            {filteredEntries.length === 0 ? (
+            {/* Collected Items Grid OR Fashion Wardrobe */}
+            {tab === 'fashion' ? (
+              <div className="mt-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 border border-emerald-400/35 bg-emerald-950/15 px-3 py-2 text-xs">
+                  <span className="flex items-center gap-1.5 text-emerald-200">
+                    <ShieldCheck className="size-4 shrink-0" aria-hidden />
+                    แฟชั่นปลดล็อกแล้ว {ownedFashionList.length} ชิ้น · กำลังใส่ {equippedFashionCount} ส่วน (ไม่เปลี่ยนสเตตัสอุปกรณ์จริง)
+                  </span>
+                  <div className="flex gap-1.5">
+                    {hasFashionPreview && (
+                      <button
+                        type="button"
+                        onClick={() => setFashionPreviewOverrides({})}
+                        className="pixel-btn bg-secondary px-2.5 py-1 text-[11px] text-foreground"
+                      >
+                        ล้างพรีวิว
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      disabled={equippedFashionCount === 0}
+                      onClick={handleUnequipAllFashion}
+                      className="pixel-btn bg-secondary px-2.5 py-1 text-[11px] text-foreground disabled:opacity-45"
+                    >
+                      ถอดแฟชั่นทั้งหมด
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setFashionSlotFilter('all')}
+                    className={cn(
+                      'border px-2.5 py-1 text-[11px] font-semibold',
+                      fashionSlotFilter === 'all'
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-border bg-secondary/70 text-foreground/80',
+                    )}
+                  >
+                    ทั้งหมด ({ownedFashionList.length})
+                  </button>
+                  {FASHION_CHARACTER_SLOTS.map((slot) => {
+                    const count = ownedFashionList.filter((f) => f.slot === slot).length
+                    if (count === 0) return null
+                    return (
+                      <button
+                        key={slot}
+                        type="button"
+                        onClick={() => setFashionSlotFilter(slot)}
+                        className={cn(
+                          'border px-2.5 py-1 text-[11px] font-semibold',
+                          fashionSlotFilter === slot
+                            ? 'border-primary bg-primary text-primary-foreground'
+                            : 'border-border bg-secondary/70 text-foreground/80',
+                        )}
+                      >
+                        {FASHION_SLOT_LABELS[slot].split('(')[0].trim()} ({count})
+                      </button>
+                    )
+                  })}
+                </div>
+
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+                  {(fashionSlotFilter === 'all'
+                    ? ownedFashionList
+                    : ownedFashionList.filter((f) => f.slot === fashionSlotFilter)
+                  ).map((f) => {
+                    const equipped = equippedFashionLoadout[f.slot] === f.id
+                    const isPreviewing = fashionPreviewOverrides[f.slot] === f.id
+                    const vipBlocked = Boolean(f.vipRequired && (!vipBonuses.active || vipBonuses.level < f.vipRequired))
+
+                    return (
+                      <div
+                        key={f.id}
+                        className={cn(
+                          'flex flex-col justify-between gap-2.5 border-2 p-3 text-xs',
+                          equipped
+                            ? 'border-cyan-400 bg-cyan-500/10'
+                            : isPreviewing
+                              ? 'border-amber-400 bg-amber-500/10'
+                              : 'border-border bg-card/70',
+                        )}
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <div
+                            className="grid size-12 shrink-0 place-items-center overflow-hidden border bg-[#0d1220]"
+                            style={{ borderColor: f.primaryColor }}
+                          >
+                            <img
+                              src={f.iconAsset ?? `/assets/fashion/icons/${f.id}.png`}
+                              alt={f.name}
+                              className="size-11 object-contain"
+                            />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate font-bold text-foreground">{f.name}</p>
+                            <p className="mt-0.5 text-[10.5px] text-primary">
+                              {FASHION_SLOT_LABELS[f.slot].split('(')[0].trim()} · {f.rarity}
+                            </p>
+                            <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{f.description}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 border-t border-white/10 pt-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setFashionPreviewOverrides((prev) => {
+                                if (prev[f.slot] === f.id) {
+                                  const next = { ...prev }
+                                  delete next[f.slot]
+                                  return next
+                                }
+                                return { ...prev, [f.slot]: f.id }
+                              })
+                            }
+                            className={cn(
+                              'pixel-btn inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px]',
+                              isPreviewing
+                                ? 'bg-amber-500/25 text-amber-200 ring-1 ring-amber-400'
+                                : 'bg-secondary text-foreground',
+                            )}
+                          >
+                            <Eye className="size-3.5" aria-hidden />
+                            {isPreviewing ? 'ปิดพรีวิว' : 'พรีวิว'}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={vipBlocked}
+                            onClick={() => handleEquipFashion(f.slot, equipped ? null : f.id)}
+                            className={cn(
+                              'pixel-btn px-3 py-1.5 text-xs font-bold disabled:opacity-45',
+                              equipped
+                                ? 'bg-secondary text-foreground hover:brightness-110'
+                                : 'bg-accent text-accent-foreground hover:brightness-110',
+                            )}
+                          >
+                            {vipBlocked ? `ต้องมี VIP ${f.vipRequired}` : equipped ? 'ถอดออก' : 'สวมใส่'}
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : filteredEntries.length === 0 ? (
               <div className="mt-4 border border-border/70 bg-background/50 px-4 py-10 text-center">
                 <p className="text-sm font-semibold text-foreground">
                   ไม่พบไอเทมในหมวดนี้

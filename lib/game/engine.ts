@@ -172,7 +172,8 @@ import {
   isVipActive,
   resolveVipLevelFromExp,
 } from './premium/vip'
-import { getFashionItemDef } from './premium/fashion-pet'
+import { FASHION_CHARACTER_SLOTS, getFashionItemDef } from './premium/fashion-pet'
+import { resolveFashionLoadoutFromSave } from './fashion-renderer'
 import { getPremiumProduct, getPremiumProductByItemOrId } from './premium/catalog'
 import {
   EXTRA_INVENTORY_SCROLL_CAP,
@@ -436,6 +437,7 @@ export function ensurePremiumState(p: SaveData): PremiumState {
     equippedGemFashion: p.equippedGemFashion,
     unlockedCosmetics: p.extV2?.unlockedCosmetics,
     equippedWing: p.extV2?.equippedWing,
+    equippedWeaponSkin: p.extV2?.equippedWeaponSkin,
   })
   if (p.premium && typeof p.premium === 'object') {
     Object.assign(p.premium, sanitized)
@@ -3214,7 +3216,14 @@ export function equipGemShopItem(itemId: string) {
   if (!shopItem || shopItem.category === 'utility' || !p.ownedGemItems.includes(itemId)) return
 
   if (shopItem.category === 'fashion') {
-    p.equippedGemFashion = p.equippedGemFashion === itemId ? null : itemId
+    const nextEquip = p.equippedGemFashion === itemId ? null : itemId
+    p.equippedGemFashion = nextEquip
+    const prem = ensurePremiumState(p)
+    const fDef = getFashionItemDef(itemId)
+    if (fDef) {
+      if (!prem.fashion.unlockedIds.includes(itemId)) prem.fashion.unlockedIds.push(itemId)
+      prem.fashion.equipped[fDef.slot] = nextEquip ? itemId : null
+    }
   } else {
     const nextEquip = p.equippedGemCompanion === itemId ? null : itemId
     p.equippedGemCompanion = nextEquip
@@ -4293,10 +4302,11 @@ export function unlockCosmeticAction(cosmeticId: string): { ok: boolean; message
   else extV2.equippedFrame = cosmeticId
   p.extV2 = extV2
   const prem = ensurePremiumState(p)
-  if (def.slot === 'wing' && !prem.fashion.unlockedIds.includes(cosmeticId)) {
+  if ((def.slot === 'wing' || def.slot === 'weaponSkin') && !prem.fashion.unlockedIds.includes(cosmeticId)) {
     prem.fashion.unlockedIds.push(cosmeticId)
-    prem.fashion.equipped.wings = cosmeticId
   }
+  if (def.slot === 'wing') prem.fashion.equipped.wings = cosmeticId
+  else if (def.slot === 'weaponSkin') prem.fashion.equipped.weaponSkin = cosmeticId
   saveGame()
   notify()
   return { ok: true, message: `ปลดล็อกและสวมใส่ ${def.name} แล้ว!` }
@@ -4311,10 +4321,14 @@ export function equipCosmeticAction(slot: CosmeticSlot, cosmeticId: string | nul
   if (slot === 'wing') {
     extV2.equippedWing = cosmeticId
     const prem = ensurePremiumState(p)
+    if (cosmeticId && !prem.fashion.unlockedIds.includes(cosmeticId)) prem.fashion.unlockedIds.push(cosmeticId)
     prem.fashion.equipped.wings = cosmeticId
-  }
-  else if (slot === 'weaponSkin') extV2.equippedWeaponSkin = cosmeticId
-  else extV2.equippedFrame = cosmeticId
+  } else if (slot === 'weaponSkin') {
+    extV2.equippedWeaponSkin = cosmeticId
+    const prem = ensurePremiumState(p)
+    if (cosmeticId && !prem.fashion.unlockedIds.includes(cosmeticId)) prem.fashion.unlockedIds.push(cosmeticId)
+    prem.fashion.equipped.weaponSkin = cosmeticId
+  } else extV2.equippedFrame = cosmeticId
   p.extV2 = extV2
   saveGame()
   notify()
@@ -5219,6 +5233,111 @@ export async function claimVipDailyRewardAction(requestId?: string): Promise<{ o
   }
 }
 
+export function resolvePlayerFashionLoadout(p: SaveData | null | undefined = game.p): Record<FashionSlot, string | null> {
+  if (!p) {
+    return {
+      hat: null,
+      hair: null,
+      costume: null,
+      pants: null,
+      shoes: null,
+      wings: null,
+      back: null,
+      accessory: null,
+      aura: null,
+      weaponSkin: null,
+      mountAppearance: null,
+    }
+  }
+  const base = resolveFashionLoadoutFromSave(p)
+  return {
+    hat: base.hat ?? null,
+    hair: base.hair ?? null,
+    costume: base.costume ?? null,
+    pants: base.pants ?? null,
+    shoes: base.shoes ?? null,
+    wings: base.wings ?? null,
+    back: base.back ?? null,
+    accessory: base.accessory ?? null,
+    aura: base.aura ?? null,
+    weaponSkin: base.weaponSkin ?? null,
+    mountAppearance: base.mountAppearance ?? null,
+  }
+}
+
+export function unlockFashionShopItemAction(fashionId: string): { ok: boolean; message: string } {
+  const p = player()
+  const prem = ensurePremiumState(p)
+  const def = getFashionItemDef(fashionId)
+  if (!def) return { ok: false, message: 'ไม่พบชุดแฟชั่นนี้' }
+
+  if (prem.fashion.unlockedIds.includes(fashionId)) {
+    return { ok: false, message: 'คุณเป็นเจ้าของแฟชั่นชิ้นนี้แล้ว' }
+  }
+  if (def.freeStarter) {
+    prem.fashion.unlockedIds.push(fashionId)
+    saveGame()
+    notify()
+    return { ok: true, message: `ปลดล็อก ${def.name} แล้ว!` }
+  }
+  if (def.goldPrice && def.goldPrice > 0) {
+    if (p.gold < def.goldPrice) {
+      return { ok: false, message: `ทองไม่พอ (ต้องการ ${def.goldPrice.toLocaleString()} G)` }
+    }
+    p.gold -= def.goldPrice
+    prem.fashion.unlockedIds.push(fashionId)
+    logPremiumAudit(p, {
+      action: 'FASHION_EQUIP',
+      details: `ซื้อแฟชั่น ${def.name} ด้วยทอง ${def.goldPrice.toLocaleString()} G`,
+      verifiedByServer: false,
+    })
+    say('loot', `ซื้อแฟชั่น ${def.name} สำเร็จ (-${def.goldPrice.toLocaleString()} G)`)
+    saveGame()
+    notify()
+    return { ok: true, message: `ปลดล็อก ${def.name} สำเร็จ!` }
+  }
+  if (def.diamondPrice && def.diamondPrice > 0) {
+    if ((p.diamonds ?? 0) < def.diamondPrice) {
+      return { ok: false, message: `เพชรไม่พอ (ต้องการ ${def.diamondPrice.toLocaleString()} เพชร)` }
+    }
+    const txRes = commitDiamondDelta(p, -def.diamondPrice, {
+      type: 'spend',
+      source: 'wardrobe_fashion_shop',
+      itemId: def.id,
+      note: `ซื้อแฟชั่น ${def.name}`,
+    })
+    if (!txRes.ok) return { ok: false, message: txRes.message }
+    prem.fashion.unlockedIds.push(fashionId)
+    logPremiumAudit(p, {
+      action: 'FASHION_EQUIP',
+      details: `ซื้อแฟชั่น ${def.name} ด้วย ${def.diamondPrice.toLocaleString()} เพชร`,
+      verifiedByServer: false,
+    })
+    say('loot', `ซื้อแฟชั่น ${def.name} สำเร็จ (-${def.diamondPrice.toLocaleString()} เพชร)`)
+    saveGame()
+    notify()
+    return { ok: true, message: `ปลดล็อก ${def.name} สำเร็จ!` }
+  }
+  return { ok: false, message: 'แฟชั่นชิ้นนี้ปลดล็อกได้จากร้านค้าเพชร/VIP/Season Pass' }
+}
+
+export function unequipAllFashionAction(): { ok: boolean; message: string } {
+  const p = player()
+  const prem = ensurePremiumState(p)
+  for (const slot of FASHION_CHARACTER_SLOTS) {
+    prem.fashion.equipped[slot] = null
+  }
+  p.equippedGemFashion = null
+  const extV2 = sanitizeExtV2(p.extV2)
+  extV2.equippedWing = null
+  extV2.equippedWeaponSkin = null
+  p.extV2 = extV2
+  logPremiumAudit(p, { action: 'FASHION_EQUIP', details: 'ถอดแฟชั่นทั้งหมด', verifiedByServer: false })
+  saveGame()
+  notify()
+  return { ok: true, message: 'ถอดแฟชั่นทุกชิ้นแล้ว (ค่าสถานะอุปกรณ์คงเดิม)' }
+}
+
 export function equipFashionAction(slot: FashionSlot, fashionId: string | null): { ok: boolean; message: string } {
   const p = player()
   const prem = ensurePremiumState(p)
@@ -5235,6 +5354,7 @@ export function equipFashionAction(slot: FashionSlot, fashionId: string | null):
       if (prevDef?.linkedLegacyCosmeticId) {
         const extV2 = sanitizeExtV2(p.extV2)
         if (extV2.equippedWing === prevDef.linkedLegacyCosmeticId) extV2.equippedWing = null
+        if (extV2.equippedWeaponSkin === prevDef.linkedLegacyCosmeticId) extV2.equippedWeaponSkin = null
         p.extV2 = extV2
       }
     }
@@ -5247,7 +5367,7 @@ export function equipFashionAction(slot: FashionSlot, fashionId: string | null):
   const def = getFashionItemDef(fashionId)
   if (!def || def.slot !== slot) return { ok: false, message: 'ไม่พบแฟชั่นในหมวดหมู่นี้' }
   const isVipExclusive = bonuses.active && bonuses.exclusiveFashionIds.includes(fashionId)
-  const unlocked = prem.fashion.unlockedIds.includes(fashionId) || isVipExclusive
+  const unlocked = prem.fashion.unlockedIds.includes(fashionId) || isVipExclusive || Boolean(def.freeStarter)
   if (!unlocked) {
     return { ok: false, message: 'ยังไม่ได้ปลดล็อกแฟชั่นชิ้นนี้' }
   }
@@ -5270,6 +5390,7 @@ export function equipFashionAction(slot: FashionSlot, fashionId: string | null):
       extV2.unlockedCosmetics.push(def.linkedLegacyCosmeticId)
     }
     if (def.slot === 'wings') extV2.equippedWing = def.linkedLegacyCosmeticId
+    if (def.slot === 'weaponSkin') extV2.equippedWeaponSkin = def.linkedLegacyCosmeticId
     p.extV2 = extV2
   }
 
@@ -5758,7 +5879,7 @@ export async function redeemGiftCodeAction(rawCode: string): Promise<{ ok: boole
     const claimed = await claimRedeemCodeInFirestore(cleanCode, {
       characterId: prem.wallet.characterId || getActiveCharacterSlot(),
       playerName: p.name,
-      gameUid: p.gameUid,
+      gameUid: p.gameUid || '1000',
     })
     const rewardParts: string[] = []
     if (claimed.gold > 0) {
@@ -6878,6 +6999,7 @@ export function loadGame(d: SaveData) {
       equippedGemFashion: d.equippedGemFashion,
       unlockedCosmetics: d.extV2?.unlockedCosmetics,
       equippedWing: d.extV2?.equippedWing,
+      equippedWeaponSkin: d.extV2?.equippedWeaponSkin,
     }),
     blockedUids: Array.isArray(d.blockedUids) ? [...new Set(d.blockedUids.filter((x): x is string => typeof x === 'string').slice(0, 50))] : [],
     appliedTradeIds: Array.isArray(d.appliedTradeIds) ? [...new Set(d.appliedTradeIds.filter((x): x is string => typeof x === 'string').slice(-40))] : [],

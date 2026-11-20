@@ -6,11 +6,14 @@ import {
   ArrowUpDown,
   Backpack,
   Crown,
+  Eye,
   Feather,
   Gem,
   Lock,
   PawPrint,
+  RotateCcw,
   Search,
+  ShieldCheck,
   Sparkles,
   Swords,
   Wind,
@@ -20,26 +23,38 @@ import {
   canEquip,
   closePanel,
   consumeItem,
+  ensurePremiumState,
   equip,
   equipCombatPet,
   equipCosmeticAction,
-  equipGemShopItem,
+  equipFashionAction,
   equipMount,
   getInventoryCapacity,
   getQuickSlots,
   itemLabel,
   itemPower,
   openPanel,
+  resolvePlayerFashionLoadout,
   saveGame,
   setQuickSlot,
   toggleMountRiding,
+  unequipAllFashionAction,
 } from '@/lib/game/engine'
+import type { FashionLoadout } from '@/lib/game/fashion-renderer'
 import {
   COSMETIC_DEFS,
   QUICK_SLOT_COUNT,
   sanitizeExtV2,
 } from '@/lib/game/extended-systems'
-import { GEM_SHOP_ITEMS } from '@/lib/game/gem-shop'
+import {
+  FASHION_CHARACTER_SLOTS,
+  FASHION_SLOT_LABELS,
+  PREMIUM_FASHION_ITEMS,
+  getFashionItemDef,
+} from '@/lib/game/premium/fashion-pet'
+import type { FashionSlot } from '@/lib/game/premium/types'
+import { getEffectiveVipBonuses } from '@/lib/game/premium/vip'
+import type { Dir } from '@/lib/game/sprites'
 import { getMountDef, sanitizeMountState } from '@/lib/game/mounts'
 import { compareEquipmentItem } from '@/lib/game/item-compare'
 import {
@@ -55,6 +70,7 @@ import {
 import { useGame } from '@/lib/game/use-game'
 import { cn } from '@/lib/utils'
 import { ItemIcon } from '../item-icon'
+import { SpriteModelCanvas } from '../sprite-model-canvas'
 import { PanelFrame, PxButton } from './panels'
 
 type InventoryTabId =
@@ -138,6 +154,9 @@ export function InventoryPanel() {
   const [selectedUid, setSelectedUid] = useState<string | null>(null)
   const [hoveredUid, setHoveredUid] = useState<string | null>(null)
   const [assignFeedback, setAssignFeedback] = useState<string | null>(null)
+  const [fashionSlotFilter, setFashionSlotFilter] = useState<'all' | FashionSlot>('all')
+  const [fashionPreviewOverrides, setFashionPreviewOverrides] = useState<Partial<Record<FashionSlot, string | null>>>({})
+  const [fashionPreviewDir, setFashionPreviewDir] = useState<Dir>('down')
 
   const inventory = p?.inventory ?? []
   const capacity = p ? getInventoryCapacity(p) : 40
@@ -218,14 +237,18 @@ export function InventoryPanel() {
   if (!p) return null
 
   const quickSlots = getQuickSlots()
+  const prem = ensurePremiumState(p)
+  const vipBonuses = getEffectiveVipBonuses(prem.vip)
   const extV2 = sanitizeExtV2(p.extV2)
   const petState = sanitizePetState(p.petState, p.ownedGemItems, p.equippedGemCompanion)
   const mountState = sanitizeMountState(p.mountState, p.ownedGemItems)
 
-  const ownedGemFashion = GEM_SHOP_ITEMS.filter(
-    (item) => item.category === 'fashion' && p.ownedGemItems.includes(item.id),
-  )
-  const unlockedCosmetics = COSMETIC_DEFS.filter((c) => extV2.unlockedCosmetics.includes(c.id))
+  const currentFashionLoadout = resolvePlayerFashionLoadout(p)
+  const ownedFashionItems = PREMIUM_FASHION_ITEMS.filter((f) => {
+    const isVip = vipBonuses.active && vipBonuses.exclusiveFashionIds.includes(f.id)
+    return prem.fashion.unlockedIds.includes(f.id) || isVip || Boolean(f.freeStarter)
+  })
+  const unlockedFrames = COSMETIC_DEFS.filter((c) => c.slot === 'frame' && extV2.unlockedCosmetics.includes(c.id))
   const ownedPetIds = Object.keys(petState.ownedPets)
   const ownedMountIds = Object.keys(mountState.ownedMounts)
 
@@ -419,96 +442,288 @@ export function InventoryPanel() {
         )}
 
         {/* Tab 7: Fashion */}
-        {tab === 'fashion' && (
+        {tab === 'fashion' && (() => {
+          const hasPreview = Object.keys(fashionPreviewOverrides).length > 0
+          const previewLoadout: FashionLoadout = {
+            ...currentFashionLoadout,
+            ...fashionPreviewOverrides,
+          }
+          const visibleFashionItems =
+            fashionSlotFilter === 'all'
+              ? ownedFashionItems
+              : ownedFashionItems.filter((f) => f.slot === fashionSlotFilter)
+          const equippedFashionCount = FASHION_CHARACTER_SLOTS.filter((slot) => Boolean(currentFashionLoadout[slot])).length
+
+          return (
           <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-              <p className="text-muted-foreground">
-                ชุดแฟชั่นที่ครอบครอง: {ownedGemFashion.length} ชุด · ปีก/สกิน/กรอบชื่อ: {unlockedCosmetics.length} ชิ้น
-              </p>
-              <div className="flex gap-1.5">
-                <PxButton variant="secondary" onClick={() => openPanel('wardrobe')}>
-                  <span className="inline-flex items-center gap-1">
-                    <Feather className="size-3" aria-hidden />
-                    ห้องแต่งตัวแฟชั่น
-                  </span>
-                </PxButton>
-                <PxButton variant="secondary" onClick={() => openPanel('gem-shop')}>
-                  <span className="inline-flex items-center gap-1">
-                    <Gem className="size-3" aria-hidden />
-                    ร้านค้าเพชร
-                  </span>
-                </PxButton>
+            {/* Live Fashion Preview Header */}
+            <div className="grid gap-3 rounded border-2 border-border bg-muted/50 p-2.5 sm:grid-cols-[136px_1fr] sm:items-center">
+              <div className="flex flex-col items-center gap-1.5 rounded border border-border bg-[#0d111f] p-2">
+                <span
+                  className={cn(
+                    'rounded border px-1.5 py-0.5 text-[9.5px] font-semibold',
+                    hasPreview
+                      ? 'border-amber-400/60 bg-amber-500/20 text-amber-200'
+                      : 'border-cyan-400/40 bg-cyan-500/15 text-cyan-200',
+                  )}
+                >
+                  {hasPreview ? 'กำลังพรีวิวก่อนใส่' : 'ชุดที่สวมใส่จริง'}
+                </span>
+                <SpriteModelCanvas
+                  mode="job"
+                  id={p.jobId}
+                  action="auto"
+                  dir={fashionPreviewDir}
+                  weaponOverride={p.equipment.weapon ? ITEMS[p.equipment.weapon.itemId]?.weaponType : undefined}
+                  weaponColorOverride={p.equipment.weapon ? ITEMS[p.equipment.weapon.itemId]?.color : undefined}
+                  fashion={previewLoadout}
+                  size={84}
+                  isGm={p.gm}
+                  rebirthCount={p.rebirthCount ?? 0}
+                  label={`พรีวิวแฟชั่น ${p.name}`}
+                />
+                <div className="flex flex-wrap justify-center gap-1">
+                  {(['down', 'left', 'right', 'up'] as Dir[]).map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setFashionPreviewDir(d)}
+                      className={cn(
+                        'rounded border px-1 py-0.5 text-[9px]',
+                        fashionPreviewDir === d
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-border bg-secondary text-muted-foreground',
+                      )}
+                    >
+                      {{ down: 'หน้า', left: 'ซ้าย', right: 'ขวา', up: 'หลัง' }[d]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="font-bold text-foreground">
+                      แฟชั่นที่ปลดล็อก: {ownedFashionItems.length} ชิ้น · สวมใส่อยู่ {equippedFashionCount} ส่วน
+                    </p>
+                    <p className="mt-0.5 inline-flex items-center gap-1 text-[10.5px] text-emerald-300">
+                      <ShieldCheck className="size-3.5 shrink-0" aria-hidden />
+                      แยกจากสเตตัสอุปกรณ์จริง — กดพรีวิวก่อนสวมใส่ได้ทันที
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {hasPreview && (
+                      <PxButton variant="secondary" className="px-2 py-1 text-[10px]" onClick={() => setFashionPreviewOverrides({})}>
+                        <span className="inline-flex items-center gap-1">
+                          <RotateCcw className="size-3" aria-hidden />
+                          ล้างพรีวิว
+                        </span>
+                      </PxButton>
+                    )}
+                    <PxButton
+                      variant="secondary"
+                      disabled={equippedFashionCount === 0}
+                      className="px-2 py-1 text-[10px]"
+                      onClick={() => {
+                        const res = unequipAllFashionAction()
+                        setFashionPreviewOverrides({})
+                        setAssignFeedback(res.message)
+                      }}
+                    >
+                      ถอดทั้งหมด
+                    </PxButton>
+                    <PxButton variant="secondary" className="px-2 py-1 text-[10px]" onClick={() => openPanel('wardrobe')}>
+                      <span className="inline-flex items-center gap-1">
+                        <Feather className="size-3" aria-hidden />
+                        ห้องแต่งตัว
+                      </span>
+                    </PxButton>
+                    <PxButton variant="secondary" className="px-2 py-1 text-[10px]" onClick={() => openPanel('gem-shop')}>
+                      <span className="inline-flex items-center gap-1">
+                        <Gem className="size-3" aria-hidden />
+                        ร้านค้า
+                      </span>
+                    </PxButton>
+                  </div>
+                </div>
+
+                {/* Quick active slot summary */}
+                <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
+                  {FASHION_CHARACTER_SLOTS.slice(0, 9).map((slot) => {
+                    const activeId = fashionPreviewOverrides[slot] !== undefined ? fashionPreviewOverrides[slot] : currentFashionLoadout[slot]
+                    const def = getFashionItemDef(activeId)
+                    return (
+                      <button
+                        key={slot}
+                        type="button"
+                        onClick={() => setFashionSlotFilter(slot)}
+                        className={cn(
+                          'flex items-center justify-between gap-1 rounded border px-1.5 py-0.5 text-left text-[10px]',
+                          fashionSlotFilter === slot ? 'border-primary bg-primary/10' : 'border-border/60 bg-background/60',
+                        )}
+                      >
+                        <span className="truncate text-muted-foreground">{FASHION_SLOT_LABELS[slot].split('(')[0].trim()}</span>
+                        <span className="truncate font-semibold text-foreground">{def?.name ?? '-'}</span>
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
             </div>
 
-            {ownedGemFashion.length === 0 && unlockedCosmetics.length === 0 ? (
+            {/* Slot filter pills */}
+            <div className="flex flex-wrap gap-1">
+              <PxButton
+                variant={fashionSlotFilter === 'all' ? 'primary' : 'secondary'}
+                className="px-2 py-0.5 text-[10px]"
+                onClick={() => setFashionSlotFilter('all')}
+              >
+                ทั้งหมด ({ownedFashionItems.length})
+              </PxButton>
+              {FASHION_CHARACTER_SLOTS.map((slot) => {
+                const cnt = ownedFashionItems.filter((f) => f.slot === slot).length
+                if (cnt === 0) return null
+                return (
+                  <PxButton
+                    key={slot}
+                    variant={fashionSlotFilter === slot ? 'primary' : 'secondary'}
+                    className="px-2 py-0.5 text-[10px]"
+                    onClick={() => setFashionSlotFilter(slot)}
+                  >
+                    {FASHION_SLOT_LABELS[slot].split('(')[0].trim()} ({cnt})
+                  </PxButton>
+                )
+              })}
+            </div>
+
+            {visibleFashionItems.length === 0 && (fashionSlotFilter !== 'all' || unlockedFrames.length === 0) ? (
               <p className="rounded border border-border/70 bg-secondary/20 py-8 text-center text-xs text-muted-foreground">
-                ยังไม่มีแฟชั่นที่ปลดล็อก — เลือกซื้อได้ที่ร้านค้าเพชร หรือห้องแต่งตัวแฟชั่น
+                ยังไม่มีแฟชั่นในหมวดนี้ — เลือกปลดล็อกเพิ่มได้ที่ห้องแต่งตัวแฟชั่น หรือร้านค้าเพชร
               </p>
             ) : (
-              <div className="grid gap-2 sm:grid-cols-2">
-                {ownedGemFashion.map((fashion) => {
-                  const equipped = p.equippedGemFashion === fashion.id
+              <div className="grid max-h-[16.5rem] gap-2 overflow-y-auto pr-0.5 sm:grid-cols-2">
+                {visibleFashionItems.map((f) => {
+                  const equipped = currentFashionLoadout[f.slot] === f.id
+                  const isPreviewing = fashionPreviewOverrides[f.slot] === f.id
+                  const vipBlocked = Boolean(f.vipRequired && (!vipBonuses.active || vipBonuses.level < f.vipRequired))
+
                   return (
                     <div
-                      key={fashion.id}
+                      key={f.id}
                       className={cn(
-                        'flex items-center justify-between gap-2 rounded border-2 p-2.5 text-xs',
-                        equipped ? 'border-accent bg-accent/10' : 'border-border bg-card/80',
-                      )}
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate font-bold text-foreground">{fashion.name}</p>
-                        <p className="truncate text-[10px] text-muted-foreground">{fashion.description}</p>
-                      </div>
-                      <PxButton
-                        variant={equipped ? 'secondary' : 'accent'}
-                        onClick={() => equipGemShopItem(fashion.id)}
-                      >
-                        {equipped ? 'ถอด' : 'สวมใส่'}
-                      </PxButton>
-                    </div>
-                  )
-                })}
-                {unlockedCosmetics.map((cos) => {
-                  const equipped =
-                    (cos.slot === 'wing' && extV2.equippedWing === cos.id) ||
-                    (cos.slot === 'weaponSkin' && extV2.equippedWeaponSkin === cos.id) ||
-                    (cos.slot === 'frame' && extV2.equippedFrame === cos.id)
-                  const Icon = cos.slot === 'wing' ? Feather : cos.slot === 'weaponSkin' ? Swords : Crown
-                  return (
-                    <div
-                      key={cos.id}
-                      className={cn(
-                        'flex items-center justify-between gap-2 rounded border-2 p-2.5 text-xs',
-                        equipped ? 'border-accent bg-accent/10' : 'border-border bg-card/80',
+                        'flex items-center justify-between gap-2 rounded border-2 p-2 text-xs',
+                        equipped
+                          ? 'border-cyan-400 bg-cyan-500/10'
+                          : isPreviewing
+                            ? 'border-amber-400 bg-amber-500/10'
+                            : 'border-border bg-card/80',
                       )}
                     >
                       <div className="flex min-w-0 items-center gap-2">
                         <span
-                          className="grid size-8 shrink-0 place-items-center rounded border"
-                          style={{ borderColor: cos.primaryColor, backgroundColor: `${cos.primaryColor}22` }}
+                          className="grid size-10 shrink-0 place-items-center overflow-hidden rounded border bg-[#0d1220]"
+                          style={{ borderColor: f.primaryColor }}
                         >
-                          <Icon className="size-4" style={{ color: cos.primaryColor }} aria-hidden />
+                          <img
+                            src={f.iconAsset ?? `/assets/fashion/icons/${f.id}.png`}
+                            alt={f.name}
+                            className="size-9 object-contain"
+                          />
                         </span>
                         <div className="min-w-0">
-                          <p className="truncate font-bold text-foreground">{cos.name}</p>
-                          <p className="truncate text-[10px] text-muted-foreground">{cos.description}</p>
+                          <p className="truncate font-bold text-foreground">{f.name}</p>
+                          <p className="truncate text-[10px] text-muted-foreground">
+                            {FASHION_SLOT_LABELS[f.slot].split('(')[0].trim()} · {f.rarity}
+                          </p>
                         </div>
                       </div>
-                      <PxButton
-                        variant={equipped ? 'secondary' : 'accent'}
-                        onClick={() => equipCosmeticAction(cos.slot, equipped ? null : cos.id)}
-                      >
-                        {equipped ? 'ถอด' : 'สวมใส่'}
-                      </PxButton>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setFashionPreviewOverrides((prev) => {
+                              if (prev[f.slot] === f.id) {
+                                const next = { ...prev }
+                                delete next[f.slot]
+                                return next
+                              }
+                              return { ...prev, [f.slot]: f.id }
+                            })
+                          }
+                          title="พรีวิวก่อนใส่"
+                          className={cn(
+                            'pixel-btn inline-flex items-center gap-1 px-2 py-1 text-[10px]',
+                            isPreviewing ? 'bg-amber-500/25 text-amber-200 ring-1 ring-amber-400' : 'bg-secondary text-foreground',
+                          )}
+                        >
+                          <Eye className="size-3" aria-hidden />
+                          {isPreviewing ? 'ปิด' : 'ดู'}
+                        </button>
+                        <PxButton
+                          variant={equipped ? 'secondary' : 'accent'}
+                          disabled={vipBlocked}
+                          className="px-2 py-1 text-[10px]"
+                          onClick={() => {
+                            const res = equipFashionAction(f.slot, equipped ? null : f.id)
+                            setAssignFeedback(res.message)
+                            if (res.ok) {
+                              setFashionPreviewOverrides((prev) => {
+                                if (!(f.slot in prev)) return prev
+                                const next = { ...prev }
+                                delete next[f.slot]
+                                return next
+                              })
+                            }
+                          }}
+                        >
+                          {vipBlocked ? `VIP ${f.vipRequired}` : equipped ? 'ถอด' : 'สวมใส่'}
+                        </PxButton>
+                      </div>
                     </div>
                   )
                 })}
+
+                {fashionSlotFilter === 'all' &&
+                  unlockedFrames.map((cos) => {
+                    const equipped = extV2.equippedFrame === cos.id
+                    return (
+                      <div
+                        key={cos.id}
+                        className={cn(
+                          'flex items-center justify-between gap-2 rounded border-2 p-2 text-xs',
+                          equipped ? 'border-accent bg-accent/10' : 'border-border bg-card/80',
+                        )}
+                      >
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span
+                            className="grid size-10 shrink-0 place-items-center overflow-hidden rounded border bg-[#0d1220]"
+                            style={{ borderColor: cos.primaryColor }}
+                          >
+                            <img src={`/assets/fashion/icons/${cos.id}.png`} alt={cos.name} className="size-9 object-contain" />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="truncate font-bold text-foreground">{cos.name}</p>
+                            <p className="flex items-center gap-1 truncate text-[10px] text-amber-300">
+                              <Crown className="size-3" aria-hidden /> กรอบชื่อ
+                            </p>
+                          </div>
+                        </div>
+                        <PxButton
+                          variant={equipped ? 'secondary' : 'accent'}
+                          className="px-2 py-1 text-[10px]"
+                          onClick={() => equipCosmeticAction('frame', equipped ? null : cos.id)}
+                        >
+                          {equipped ? 'ถอด' : 'สวมใส่'}
+                        </PxButton>
+                      </div>
+                    )
+                  })}
               </div>
             )}
           </div>
-        )}
+          )
+        })()}
 
         {/* Tab 8: Pets & Mounts */}
         {tab === 'pets' && (
