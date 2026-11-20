@@ -1,17 +1,21 @@
 'use client'
 
 import { useState } from 'react'
-import { Keyboard, Layout, PackageCheck, RefreshCw, RotateCcw, Sliders, Sparkles, Volume2, VolumeX } from 'lucide-react'
+import { Gauge, Keyboard, Layout, PackageCheck, RefreshCw, RotateCcw, Sliders, Sparkles, Volume2, VolumeX } from 'lucide-react'
 import { getBgmVolume, isBgmMuted, setBgmVolume, toggleBgmMute } from '@/lib/game/bgm'
 import { toggleZenHud } from '@/lib/game/engine'
 import { isSfxMuted, playQuestClaimSfx, setSfxMuted } from '@/lib/game/sfx'
 import {
   resetUiLayout,
   setDockMode,
+  setGraphicsQualityPreset,
   updateUiPref,
   useUiLayout,
   type DockMode,
+  type FpsLimit,
+  type GraphicsQuality,
   type HotkeyPreset,
+  type ResolutionScale,
 } from '@/lib/game/ui-layout'
 import { useGame } from '@/lib/game/use-game'
 import {
@@ -122,6 +126,144 @@ export function SettingsPanel() {
             <PxButton variant={sfxMuted ? 'secondary' : 'accent'} onClick={handleToggleSfx}>
               {sfxMuted ? 'ปิดเสียง SFX' : 'เปิดเสียง SFX'}
             </PxButton>
+          </div>
+        </section>
+
+        {/* Graphics & Performance Section */}
+        <section className="space-y-3 rounded border border-border bg-secondary/35 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="flex items-center gap-1.5 text-sm font-bold text-primary">
+              <Gauge className="size-4" aria-hidden />
+              กราฟิก & ลดอาการหน่วง (Graphics & Performance)
+            </h3>
+            <span className="rounded border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+              {layout.preferences.graphicsQuality === 'high'
+                ? 'คุณภาพสูง'
+                : layout.preferences.graphicsQuality === 'medium'
+                  ? 'กลาง · สมดุลลื่น'
+                  : 'ประหยัด · ลดแลคสูงสุด'}
+            </span>
+          </div>
+
+          <div>
+            <p className="mb-1.5 font-semibold text-foreground">พรีเซ็ตคุณภาพกราฟิก</p>
+            <div className="grid grid-cols-3 gap-1.5">
+              {(
+                [
+                  ['high', 'สูง (High)', 'ภาพคมชัด 100% · เอฟเฟกต์และเงาครบ'],
+                  ['medium', 'กลาง (Medium)', '85% · 60 FPS · ลดอนุภาคนิดหน่อย'],
+                  ['low', 'ลื่นพิเศษ (Low)', '70% · 30 FPS · ปิดเงา/แสงฟุ้ง ลดหน่วง'],
+                ] as Array<[GraphicsQuality, string, string]>
+              ).map(([preset, label, desc]) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => {
+                    setGraphicsQualityPreset(preset)
+                    setStatusMsg(`ปรับกราฟิกเป็นโหมด "${label}" แล้ว`)
+                  }}
+                  className={`pixel-btn p-2 text-left transition-colors ${
+                    layout.preferences.graphicsQuality === preset
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-background/70 text-foreground hover:bg-secondary'
+                  }`}
+                >
+                  <p className="font-bold">{label}</p>
+                  <p className={`mt-0.5 text-[10px] ${layout.preferences.graphicsQuality === preset ? 'opacity-90' : 'text-muted-foreground'}`}>
+                    {desc}
+                  </p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            <div>
+              <p className="mb-1 font-semibold text-foreground">จำกัดเฟรมเรต (FPS Cap)</p>
+              <div className="grid grid-cols-3 gap-1">
+                {(
+                  [
+                    [0, 'อัตโนมัติ'],
+                    [60, '60 FPS'],
+                    [30, '30 FPS'],
+                  ] as Array<[FpsLimit, string]>
+                ).map(([cap, label]) => (
+                  <button
+                    key={cap}
+                    type="button"
+                    onClick={() => updateUiPref('fpsLimit', cap)}
+                    className={`pixel-btn px-2 py-1.5 text-center text-[11px] font-bold ${
+                      layout.preferences.fpsLimit === cap
+                        ? 'bg-accent text-accent-foreground'
+                        : 'bg-background/70 text-foreground hover:bg-secondary'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-1 font-semibold text-foreground">ความละเอียดเรนเดอร์ (Resolution)</p>
+              <div className="grid grid-cols-3 gap-1">
+                {(
+                  [
+                    [1, '100%'],
+                    [0.85, '85%'],
+                    [0.7, '70% (ลื่น)'],
+                  ] as Array<[ResolutionScale, string]>
+                ).map(([scale, label]) => (
+                  <button
+                    key={scale}
+                    type="button"
+                    onClick={() => updateUiPref('resolutionScale', scale)}
+                    className={`pixel-btn px-2 py-1.5 text-center text-[11px] font-bold ${
+                      layout.preferences.resolutionScale === scale
+                        ? 'bg-accent text-accent-foreground'
+                        : 'bg-background/70 text-foreground hover:bg-secondary'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-3">
+            <button
+              type="button"
+              onClick={() => updateUiPref('reduceParticles', !layout.preferences.reduceParticles)}
+              className="flex items-center justify-between rounded border border-border bg-background/60 px-2.5 py-2 text-left hover:border-primary/60"
+            >
+              <span>ลดอนุภาค & อากาศ</span>
+              <span className={`font-bold ${layout.preferences.reduceParticles ? 'text-emerald-300' : 'text-muted-foreground'}`}>
+                {layout.preferences.reduceParticles ? 'เปิด' : 'ปิด'}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => updateUiPref('disableShadowsAndGlow', !layout.preferences.disableShadowsAndGlow)}
+              className="flex items-center justify-between rounded border border-border bg-background/60 px-2.5 py-2 text-left hover:border-primary/60"
+            >
+              <span>ปิดเงา & แสงฟุ้ง</span>
+              <span className={`font-bold ${layout.preferences.disableShadowsAndGlow ? 'text-emerald-300' : 'text-muted-foreground'}`}>
+                {layout.preferences.disableShadowsAndGlow ? 'เปิด' : 'ปิด'}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => updateUiPref('crispPixelScale', !layout.preferences.crispPixelScale)}
+              className="flex items-center justify-between rounded border border-border bg-background/60 px-2.5 py-2 text-left hover:border-primary/60"
+            >
+              <span>พิกเซลคมชัด</span>
+              <span className={`font-bold ${layout.preferences.crispPixelScale ? 'text-emerald-300' : 'text-muted-foreground'}`}>
+                {layout.preferences.crispPixelScale ? 'เปิด' : 'ปิด'}
+              </span>
+            </button>
           </div>
         </section>
 

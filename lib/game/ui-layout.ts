@@ -5,6 +5,9 @@ import { game, notify, registerWindowBridge, type PanelId } from './engine'
 
 export type DockMode = 'auto' | 'floating' | 'tabbed'
 export type HotkeyPreset = 'f-keys' | 'legacy-1-3'
+export type GraphicsQuality = 'high' | 'medium' | 'low'
+export type FpsLimit = 0 | 30 | 60
+export type ResolutionScale = 1 | 0.85 | 0.7
 
 export interface WindowLayoutRect {
   x: number
@@ -30,6 +33,12 @@ export interface UiPreferences {
   hotkeyPreset: HotkeyPreset
   compactHud: boolean
   autoHideCombatHud: boolean
+  graphicsQuality: GraphicsQuality
+  fpsLimit: FpsLimit
+  resolutionScale: ResolutionScale
+  reduceParticles: boolean
+  disableShadowsAndGlow: boolean
+  crispPixelScale: boolean
 }
 
 export interface UiLayoutSnapshot {
@@ -42,6 +51,44 @@ export interface UiLayoutSnapshot {
 
 const STORAGE_KEY = 'pixel-rpg-ui-layout-v2'
 
+export const GRAPHICS_QUALITY_PRESETS: Record<
+  GraphicsQuality,
+  Pick<
+    UiPreferences,
+    | 'graphicsQuality'
+    | 'fpsLimit'
+    | 'resolutionScale'
+    | 'reduceParticles'
+    | 'disableShadowsAndGlow'
+    | 'crispPixelScale'
+  >
+> = {
+  high: {
+    graphicsQuality: 'high',
+    fpsLimit: 0,
+    resolutionScale: 1,
+    reduceParticles: false,
+    disableShadowsAndGlow: false,
+    crispPixelScale: false,
+  },
+  medium: {
+    graphicsQuality: 'medium',
+    fpsLimit: 60,
+    resolutionScale: 0.85,
+    reduceParticles: true,
+    disableShadowsAndGlow: false,
+    crispPixelScale: false,
+  },
+  low: {
+    graphicsQuality: 'low',
+    fpsLimit: 30,
+    resolutionScale: 0.7,
+    reduceParticles: true,
+    disableShadowsAndGlow: true,
+    crispPixelScale: true,
+  },
+}
+
 const DEFAULT_PREFERENCES: UiPreferences = {
   questTrackerCollapsed: false,
   questTrackerHidden: false,
@@ -52,6 +99,7 @@ const DEFAULT_PREFERENCES: UiPreferences = {
   hotkeyPreset: 'f-keys',
   compactHud: false,
   autoHideCombatHud: true,
+  ...GRAPHICS_QUALITY_PRESETS.high,
 }
 
 export const WINDOW_META: Record<PanelId, { title: string; defaultW: number; defaultH: number }> = {
@@ -424,8 +472,25 @@ export function updateUiPref<K extends keyof UiPreferences>(key: K, val: UiPrefe
   emit()
 }
 
+export function setGraphicsQualityPreset(preset: GraphicsQuality) {
+  state.preferences = {
+    ...state.preferences,
+    ...GRAPHICS_QUALITY_PRESETS[preset],
+  }
+  persist()
+  emit()
+}
+
 export function getUiPreferences(): UiPreferences {
   return state.preferences
+}
+
+export function subscribeUiLayout(cb: () => void): () => void {
+  initUiLayoutBridge()
+  listeners.add(cb)
+  return () => {
+    listeners.delete(cb)
+  }
 }
 
 export function resetUiLayout() {
@@ -446,13 +511,7 @@ export function resetUiLayout() {
 
 export function useUiLayout(): UiLayoutSnapshot {
   return useSyncExternalStore(
-    (cb) => {
-      initUiLayoutBridge()
-      listeners.add(cb)
-      return () => {
-        listeners.delete(cb)
-      }
-    },
+    subscribeUiLayout,
     () => state,
     () => SERVER_SNAPSHOT,
   )

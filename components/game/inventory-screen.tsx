@@ -54,6 +54,7 @@ import {
   getSlotThaiLabel,
   previewEquipStatDelta,
   previewUnequipStatDelta,
+  renameWithTicketInSave,
   resolveItemRarity,
   unequipInventorySlot,
   useConsumableInInventory,
@@ -155,6 +156,9 @@ export function InventoryScreen() {
   const [selectedUid, setSelectedUid] = useState<string | null>(null)
   const [inspectedEquippedSlot, setInspectedEquippedSlot] = useState<EquipmentSlot | null>(null)
   const [actionFeedback, setActionFeedback] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null)
+  const [pendingRenameUid, setPendingRenameUid] = useState<string | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
+  const [renameErr, setRenameErr] = useState<string | null>(null)
   const [fashionSlotFilter, setFashionSlotFilter] = useState<'all' | FashionSlot>('all')
   const [fashionPreviewOverrides, setFashionPreviewOverrides] = useState<Partial<Record<FashionSlot, string | null>>>({})
   const [previewDir, setPreviewDir] = useState<Dir>('down')
@@ -344,12 +348,39 @@ export function InventoryScreen() {
         setActionFeedback({ tone: 'err', text: res.error })
         return
       }
+      if (res.requiresNameInput) {
+        setPendingRenameUid(itemUid)
+        setRenameDraft('')
+        setRenameErr(null)
+        return
+      }
       saveRef.current = res.nextSave
       setSave(res.nextSave)
       setActionFeedback({ tone: 'ok', text: res.message })
       void syncSave(res.nextSave, user, slotId)
     },
     [slotId, syncSave, user],
+  )
+
+  const handleConfirmRename = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault()
+      const currentSave = saveRef.current
+      if (!currentSave || !pendingRenameUid) return
+      const res = renameWithTicketInSave(currentSave, pendingRenameUid, renameDraft)
+      if (res.error) {
+        setRenameErr(res.error)
+        return
+      }
+      saveRef.current = res.nextSave
+      setSave(res.nextSave)
+      setPendingRenameUid(null)
+      setRenameDraft('')
+      setRenameErr(null)
+      setActionFeedback({ tone: 'ok', text: res.message })
+      void syncSave(res.nextSave, user, slotId)
+    },
+    [pendingRenameUid, renameDraft, slotId, syncSave, user],
   )
 
   const handleEquipFashion = useCallback(
@@ -1467,6 +1498,58 @@ export function InventoryScreen() {
           </div>
         </section>
       </div>
+
+      {pendingRenameUid && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="inv-rename-title"
+        >
+          <form onSubmit={handleConfirmRename} className="pixel-panel w-full max-w-sm space-y-3 p-4 shadow-2xl">
+            <div>
+              <h2 id="inv-rename-title" className="text-sm font-bold text-primary">
+                ใช้บัตรเปลี่ยนชื่อตัวละคร
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                ชื่อปัจจุบัน: <strong className="text-foreground">{save.name}</strong> · กรอกชื่อใหม่ 1–16 ตัวอักษร
+              </p>
+            </div>
+            <input
+              type="text"
+              maxLength={16}
+              autoFocus
+              value={renameDraft}
+              onChange={(e) => {
+                setRenameDraft(e.target.value)
+                if (renameErr) setRenameErr(null)
+              }}
+              placeholder="กรอกชื่อตัวละครใหม่..."
+              className="w-full border-2 border-border bg-input px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
+            />
+            {renameErr && <p className="text-[11px] font-medium text-destructive">{renameErr}</p>}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingRenameUid(null)
+                  setRenameDraft('')
+                  setRenameErr(null)
+                }}
+                className="pixel-btn bg-secondary px-3 py-1.5 text-xs font-semibold text-foreground hover:brightness-110"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="submit"
+                className="pixel-btn bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:brightness-110"
+              >
+                ยืนยันเปลี่ยนชื่อ
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </main>
   )
 }

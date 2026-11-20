@@ -5,7 +5,7 @@ import { Flame, Leaf, Pickaxe, Sparkles, Utensils } from 'lucide-react'
 import { ITEMS } from '@/lib/game/data'
 import { MAPS } from '@/lib/game/maps'
 import {
-  consumeItem,
+  consumeItemWithFeedback,
   cookFoodAction,
   countItem,
   gatherNearbyNodeAction,
@@ -192,9 +192,9 @@ export function LifeSkillsPanel() {
                       onClick={() => {
                         const target = p.inventory.find((i) => i.itemId === food.itemId)
                         if (target) {
-                          consumeItem(target.uid)
-                          playQuestClaimSfx(false)
-                          setNotice(`รับประทาน ${food.name} แล้ว! บัฟทำงานทันที`)
+                          const res = consumeItemWithFeedback(target.uid)
+                          if (res.ok) playQuestClaimSfx(false)
+                          setNotice(res.message)
                         }
                       }}
                     >

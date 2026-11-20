@@ -54,10 +54,12 @@ import {
 import { getFashionItemDef } from './premium/fashion-pet'
 import { getEffectiveVipBonuses, getVipTierDef } from './premium/vip'
 import { sanitizePremiumState } from './premium/wallet'
+import { getUiPreferences } from './ui-layout'
 
 const cameraState = createCameraState('town')
 let prevRenderTime = 0
 let lastRenderCam = { mapId: 'town', x: 0, y: 0 }
+let renderDisableShadows = false
 
 function drawMountForegroundSaddleStrap(
   ctx: CanvasRenderingContext2D,
@@ -257,11 +259,16 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   if (!p) return
   const map = currentMap()
   preloadMapCatalogSprites(map.id)
+  const uiPrefs = getUiPreferences()
+  const lowQuality = uiPrefs.graphicsQuality === 'low'
+  const reduceParticles = uiPrefs.reduceParticles || lowQuality
+  const disableGlow = uiPrefs.disableShadowsAndGlow || lowQuality
+  renderDisableShadows = disableGlow
   const t = game.time
   const dt = prevRenderTime > 0 ? Math.min(0.05, Math.max(0, t - prevRenderTime)) : 0.016
   prevRenderTime = t
-  ctx.imageSmoothingEnabled = true
-  ctx.imageSmoothingQuality = 'medium'
+  ctx.imageSmoothingEnabled = !uiPrefs.crispPixelScale
+  ctx.imageSmoothingQuality = uiPrefs.graphicsQuality === 'high' ? 'medium' : 'low'
 
   const cssW = cw / dpr
   const cssH = ch / dpr
@@ -293,33 +300,35 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   const minTy = Math.max(0, Math.floor(camY / TILE) - 2)
   const maxTy = Math.min(map.height - 1, Math.ceil((camY + viewH) / TILE) + 3)
 
-  // Subtle animated tile glints (water, lava, ice, magic circles)
-  const glintPhase = Math.floor(t * 2.4)
-  for (let ty = minTy; ty <= maxTy; ty++) {
-    for (let tx = minTx; tx <= maxTx; tx++) {
-      const tile = map.tiles[ty * map.width + tx]
-      if (tile === T.WATER && (tx * 7 + ty * 13 + glintPhase) % 11 === 0) {
-        ctx.fillStyle = 'rgba(202, 240, 248, 0.35)'
-        ctx.fillRect(tx * TILE + 3 + ((tx + glintPhase) % 6), ty * TILE + 4 + ((ty * 3) % 7), 4, 1)
-      } else if (tile === T.LAVA && (tx * 5 + ty * 11 + glintPhase) % 9 === 0) {
-        ctx.fillStyle = 'rgba(255, 224, 102, 0.55)'
-        ctx.fillRect(tx * TILE + 4 + ((tx * 2 + glintPhase) % 5), ty * TILE + 5 + ((ty * 3) % 6), 3, 2)
-      } else if (tile === T.MAGIC_CIRCLE) {
-        const cx = (tx + 0.5) * TILE
-        const cy = (ty + 0.5) * TILE
-        const pulse = 0.45 + Math.sin(t * 3.5 + tx) * 0.25
-        ctx.save()
-        ctx.strokeStyle = `rgba(199, 125, 255, ${pulse})`
-        ctx.lineWidth = 1.1
-        ctx.beginPath()
-        ctx.ellipse(cx, cy, 9 + Math.sin(t * 2.5) * 1.5, 6 + Math.sin(t * 2.5), 0, 0, Math.PI * 2)
-        ctx.stroke()
-        ctx.restore()
+  // Subtle animated tile glints (water, lava, magic circles)
+  if (!lowQuality) {
+    const glintPhase = Math.floor(t * 2.4)
+    for (let ty = minTy; ty <= maxTy; ty++) {
+      for (let tx = minTx; tx <= maxTx; tx++) {
+        const tile = map.tiles[ty * map.width + tx]
+        if (!reduceParticles && tile === T.WATER && (tx * 7 + ty * 13 + glintPhase) % 11 === 0) {
+          ctx.fillStyle = 'rgba(202, 240, 248, 0.35)'
+          ctx.fillRect(tx * TILE + 3 + ((tx + glintPhase) % 6), ty * TILE + 4 + ((ty * 3) % 7), 4, 1)
+        } else if (!reduceParticles && tile === T.LAVA && (tx * 5 + ty * 11 + glintPhase) % 9 === 0) {
+          ctx.fillStyle = 'rgba(255, 224, 102, 0.55)'
+          ctx.fillRect(tx * TILE + 4 + ((tx * 2 + glintPhase) % 5), ty * TILE + 5 + ((ty * 3) % 6), 3, 2)
+        } else if (tile === T.MAGIC_CIRCLE) {
+          const cx = (tx + 0.5) * TILE
+          const cy = (ty + 0.5) * TILE
+          const pulse = 0.45 + Math.sin(t * 3.5 + tx) * 0.25
+          ctx.save()
+          ctx.strokeStyle = `rgba(199, 125, 255, ${pulse})`
+          ctx.lineWidth = 1.1
+          ctx.beginPath()
+          ctx.ellipse(cx, cy, 9 + Math.sin(t * 2.5) * 1.5, 6 + Math.sin(t * 2.5), 0, 0, Math.PI * 2)
+          ctx.stroke()
+          ctx.restore()
+        }
       }
     }
   }
 
-  if (map.theme === 'volcano') {
+  if (map.theme === 'volcano' && !lowQuality) {
     ctx.fillStyle = `rgba(255,120,0,${0.04 + Math.sin(t * 2) * 0.02})`
     ctx.fillRect(0, 0, mapW, mapH)
   }
@@ -357,15 +366,17 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     ctx.beginPath()
     ctx.ellipse(padX, padY, rx * 0.56, ry * 0.58, 0, 0, Math.PI * 2)
     ctx.fill()
-    for (let i = 0; i < 6; i++) {
-      const a = t * 2 + i * 1.05
-      ctx.fillStyle = i % 2 ? '#e0aaff' : '#caf0f8'
-      ctx.fillRect(
-        Math.round(padX + Math.cos(a) * (rx * 0.72)),
-        Math.round(padY + Math.sin(a * 1.3) * (ry * 0.72)),
-        1.2,
-        1.2,
-      )
+    if (!reduceParticles) {
+      for (let i = 0; i < 6; i++) {
+        const a = t * 2 + i * 1.05
+        ctx.fillStyle = i % 2 ? '#e0aaff' : '#caf0f8'
+        ctx.fillRect(
+          Math.round(padX + Math.cos(a) * (rx * 0.72)),
+          Math.round(padY + Math.sin(a * 1.3) * (ry * 0.72)),
+          1.2,
+          1.2,
+        )
+      }
     }
   }
 
@@ -376,30 +387,32 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   )
 
   // Ground glow halos for light-emitting RPG objects
-  for (const obj of visibleObjects) {
-    const ox = (obj.tx + 0.5) * TILE
-    const oy = (obj.ty + 0.72) * TILE
-    const flicker = 0.85 + Math.sin(t * 7 + obj.tx * 1.7 + obj.ty) * 0.15
-    if (obj.kind === 'lamp_post' || obj.kind === 'torch' || obj.kind === 'campfire' || obj.kind === 'anvil_forge') {
-      ctx.fillStyle = `rgba(255, 190, 90, ${0.14 * flicker})`
-      ctx.beginPath()
-      ctx.ellipse(ox, oy, 16 * flicker, 11 * flicker, 0, 0, Math.PI * 2)
-      ctx.fill()
-    } else if (obj.kind === 'magma_brazier') {
-      ctx.fillStyle = `rgba(255, 105, 30, ${0.18 * flicker})`
-      ctx.beginPath()
-      ctx.ellipse(ox, oy, 18 * flicker, 12 * flicker, 0, 0, Math.PI * 2)
-      ctx.fill()
-    } else if (obj.kind === 'crystal_spire' || obj.kind === 'ice_spire') {
-      ctx.fillStyle = `rgba(114, 239, 221, ${0.13 * flicker})`
-      ctx.beginPath()
-      ctx.ellipse(ox, oy, 15, 10, 0, 0, Math.PI * 2)
-      ctx.fill()
-    } else if (obj.kind === 'dream_shrine') {
-      ctx.fillStyle = `rgba(255, 179, 198, ${0.16 * flicker})`
-      ctx.beginPath()
-      ctx.ellipse(ox, oy, 20, 13, 0, 0, Math.PI * 2)
-      ctx.fill()
+  if (!disableGlow) {
+    for (const obj of visibleObjects) {
+      const ox = (obj.tx + 0.5) * TILE
+      const oy = (obj.ty + 0.72) * TILE
+      const flicker = 0.85 + Math.sin(t * 7 + obj.tx * 1.7 + obj.ty) * 0.15
+      if (obj.kind === 'lamp_post' || obj.kind === 'torch' || obj.kind === 'campfire' || obj.kind === 'anvil_forge') {
+        ctx.fillStyle = `rgba(255, 190, 90, ${0.14 * flicker})`
+        ctx.beginPath()
+        ctx.ellipse(ox, oy, 16 * flicker, 11 * flicker, 0, 0, Math.PI * 2)
+        ctx.fill()
+      } else if (obj.kind === 'magma_brazier') {
+        ctx.fillStyle = `rgba(255, 105, 30, ${0.18 * flicker})`
+        ctx.beginPath()
+        ctx.ellipse(ox, oy, 18 * flicker, 12 * flicker, 0, 0, Math.PI * 2)
+        ctx.fill()
+      } else if (obj.kind === 'crystal_spire' || obj.kind === 'ice_spire') {
+        ctx.fillStyle = `rgba(114, 239, 221, ${0.13 * flicker})`
+        ctx.beginPath()
+        ctx.ellipse(ox, oy, 15, 10, 0, 0, Math.PI * 2)
+        ctx.fill()
+      } else if (obj.kind === 'dream_shrine') {
+        ctx.fillStyle = `rgba(255, 179, 198, ${0.16 * flicker})`
+        ctx.beginPath()
+        ctx.ellipse(ox, oy, 20, 13, 0, 0, Math.PI * 2)
+        ctx.fill()
+      }
     }
   }
 
@@ -777,7 +790,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         const oy = other.facing === 'up' ? -lungeDist : other.facing === 'down' ? lungeDist : 0
         shadow(ctx, remoteX, remoteY, isMounted ? 9 : 6.5)
 
-        if (other.moving) {
+        if (other.moving && !reduceParticles) {
           ctx.save()
           ctx.fillStyle = isMounted && activeMountDef?.auraColor ? activeMountDef.auraColor : 'rgba(255,255,255,0.28)'
           const dustPhase = (t * 4) % 1
@@ -814,6 +827,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
             radiusX: 12,
             spriteHeight: remoteH,
             layer: 'back',
+            disableGlow,
           })
         }
 
@@ -966,6 +980,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
             radiusX: 12,
             spriteHeight: remoteH,
             layer: 'front',
+            disableGlow,
           })
         }
 
@@ -987,8 +1002,10 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           ctx.save()
           ctx.globalAlpha = 0.72
           ctx.strokeStyle = pCol
-          ctx.shadowColor = aCol
-          ctx.shadowBlur = 7
+          if (!disableGlow) {
+            ctx.shadowColor = aCol
+            ctx.shadowBlur = 7
+          }
           ctx.lineWidth = 1.5
           ctx.beginPath()
           ctx.ellipse(remoteX, remoteY - 7, 12 + Math.sin(t * 4) * 1.5, 8, t * 0.3, 0, Math.PI * 2)
@@ -1213,7 +1230,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         ctx.stroke()
         ctx.restore()
       }
-      if (game.moving && !p.invisible) {
+      if (game.moving && !p.invisible && !reduceParticles) {
         ctx.save()
         const isSprintingMount = isRidingOrHopping && mountAnimState?.action === 'run'
         ctx.fillStyle = isRidingOrHopping && activeMount?.def.auraColor ? activeMount.def.auraColor : 'rgba(255,255,255,0.28)'
@@ -1251,6 +1268,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           spriteHeight: drawH,
           alphaScale: p.invisible ? 0.25 : 1,
           layer: 'back',
+          disableGlow,
         })
       }
 
@@ -1435,6 +1453,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           spriteHeight: drawH,
           alphaScale: p.invisible ? 0.25 : 1,
           layer: 'front',
+          disableGlow,
         })
       }
       const localHatImg = getFashionLayerImage(localLoadout.hat)
@@ -1451,8 +1470,10 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         ctx.save()
         ctx.globalAlpha = p.invisible ? 0.12 : 0.72
         ctx.strokeStyle = pCol
-        ctx.shadowColor = aCol
-        ctx.shadowBlur = 7
+        if (!disableGlow) {
+          ctx.shadowColor = aCol
+          ctx.shadowBlur = 7
+        }
         ctx.lineWidth = 1.5
         ctx.beginPath()
         ctx.ellipse(p.x, p.y - 7, 12 + Math.sin(t * 4) * 1.5, 8, t * 0.3, 0, Math.PI * 2)
@@ -1580,6 +1601,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         radius: e.r,
         progress: k,
         alpha,
+        disableGlow,
       })
       continue
     }
@@ -1632,19 +1654,20 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
 
   // Ambient weather / biome particles in screen space
   if (
-    map.theme === 'frost' ||
-    map.theme === 'snow' ||
-    map.theme === 'dream' ||
-    map.theme === 'isles' ||
-    map.theme === 'volcano' ||
-    map.theme === 'abyss' ||
-    map.theme === 'forest' ||
-    map.theme === 'crystal' ||
-    map.theme === 'sky' ||
-    map.theme === 'world'
+    !lowQuality &&
+    (map.theme === 'frost' ||
+      map.theme === 'snow' ||
+      map.theme === 'dream' ||
+      map.theme === 'isles' ||
+      map.theme === 'volcano' ||
+      map.theme === 'abyss' ||
+      map.theme === 'forest' ||
+      map.theme === 'crystal' ||
+      map.theme === 'sky' ||
+      map.theme === 'world')
   ) {
     ctx.save()
-    const count = map.theme === 'sky' ? 14 : 24
+    const count = reduceParticles ? (map.theme === 'sky' ? 6 : 10) : (map.theme === 'sky' ? 14 : 24)
     for (let i = 0; i < count; i++) {
       if (map.theme === 'sky') {
         const px = ((i * 197 + t * (16 + (i % 4) * 5)) % (cw + 80)) - 40
@@ -1695,11 +1718,6 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     map.theme === 'ruins' ||
     map.theme === 'crystal'
   ) {
-    const sx = (p.x - camX) * s
-    const sy = (p.y - 8 - camY) * s
-    const inner = (map.theme === 'cave' ? 54 : map.theme === 'abyss' ? 95 : 110) * s
-    const outer = (map.theme === 'cave' ? 165 : map.theme === 'abyss' ? 245 : 270) * s
-    const g = ctx.createRadialGradient(sx, sy, inner, sx, sy, outer)
     const dark =
       map.theme === 'cave'
         ? 'rgba(3,3,12,0.84)'
@@ -1712,10 +1730,20 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
               : map.theme === 'crystal'
                 ? 'rgba(12,8,34,0.38)'
                 : 'rgba(30,0,0,0.48)'
-    g.addColorStop(0, 'rgba(0,0,0,0)')
-    g.addColorStop(1, dark)
-    ctx.fillStyle = g
-    ctx.fillRect(0, 0, cw, ch)
+    if (disableGlow) {
+      ctx.fillStyle = map.theme === 'cave' ? 'rgba(3,3,12,0.42)' : dark.replace(/0\.[0-9]+\)$/, '0.18)')
+      ctx.fillRect(0, 0, cw, ch)
+    } else {
+      const sx = (p.x - camX) * s
+      const sy = (p.y - 8 - camY) * s
+      const inner = (map.theme === 'cave' ? 54 : map.theme === 'abyss' ? 95 : 110) * s
+      const outer = (map.theme === 'cave' ? 165 : map.theme === 'abyss' ? 245 : 270) * s
+      const g = ctx.createRadialGradient(sx, sy, inner, sx, sy, outer)
+      g.addColorStop(0, 'rgba(0,0,0,0)')
+      g.addColorStop(1, dark)
+      ctx.fillStyle = g
+      ctx.fillRect(0, 0, cw, ch)
+    }
   }
 
   // Day / Dusk / Night atmospheric tint
@@ -1925,24 +1953,44 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   }
 
   {
-    const [x, y] = toS(p.x, p.y - 38)
-    // Overhead micro HP/MP bar matching 2D MMORPG reference
+    const isLocalMounted = Boolean(
+      activeMount &&
+        (activeMount.mounted || game.mountTransition === 'mounting' || game.mountTransition === 'dismounting'),
+    )
+    const [x, y] = toS(p.x, p.y - (isLocalMounted ? 44 : 38))
+    // Compact HP & MP bar anchored cleanly below the character's feet
     const stats = getStats(p)
     if (stats) {
-      const bw = 22 * s
-      const hpH = 1.9 * s
-      const mpH = 1.2 * s
-      const barY = y + 6 * dpr
+      const [barCx, barTopY] = toS(p.x, p.y + (isLocalMounted ? 6.5 : 5))
+      const bw = 24 * s
+      const hpH = 2.1 * s
+      const mpH = 1.4 * s
+      const gap = Math.max(1, 0.5 * dpr)
       ctx.fillStyle = 'rgba(10, 8, 20, 0.92)'
-      ctx.fillRect(Math.round(x - bw / 2 - dpr), Math.round(barY - dpr), Math.round(bw + 2 * dpr), Math.round(hpH + mpH + 2.5 * dpr))
+      ctx.fillRect(
+        Math.round(barCx - bw / 2 - dpr),
+        Math.round(barTopY - dpr),
+        Math.round(bw + 2 * dpr),
+        Math.round(hpH + mpH + gap + 2 * dpr),
+      )
       ctx.fillStyle = '#3a0d12'
-      ctx.fillRect(Math.round(x - bw / 2), Math.round(barY), Math.round(bw), Math.round(hpH))
+      ctx.fillRect(Math.round(barCx - bw / 2), Math.round(barTopY), Math.round(bw), Math.round(hpH))
       ctx.fillStyle = '#e5484d'
-      ctx.fillRect(Math.round(x - bw / 2), Math.round(barY), Math.round(bw * Math.max(0, Math.min(1, p.hp / Math.max(1, stats.maxHp)))), Math.round(hpH))
+      ctx.fillRect(
+        Math.round(barCx - bw / 2),
+        Math.round(barTopY),
+        Math.round(bw * Math.max(0, Math.min(1, p.hp / Math.max(1, stats.maxHp)))),
+        Math.round(hpH),
+      )
       ctx.fillStyle = '#132445'
-      ctx.fillRect(Math.round(x - bw / 2), Math.round(barY + hpH + 0.5 * dpr), Math.round(bw), Math.round(mpH))
+      ctx.fillRect(Math.round(barCx - bw / 2), Math.round(barTopY + hpH + gap), Math.round(bw), Math.round(mpH))
       ctx.fillStyle = '#4c8bf5'
-      ctx.fillRect(Math.round(x - bw / 2), Math.round(barY + hpH + 0.5 * dpr), Math.round(bw * Math.max(0, Math.min(1, p.mp / Math.max(1, stats.maxMp)))), Math.round(mpH))
+      ctx.fillRect(
+        Math.round(barCx - bw / 2),
+        Math.round(barTopY + hpH + gap),
+        Math.round(bw * Math.max(0, Math.min(1, p.mp / Math.max(1, stats.maxMp)))),
+        Math.round(mpH),
+      )
     }
     const activeTitleDef = p.rpgExt?.activeTitle ? TITLE_DEFS.find((item) => item.id === p.rpgExt?.activeTitle) : null
     const gmPrefix = p.gm ? '[GM] ' : ''
@@ -1996,6 +2044,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
 }
 
 function shadow(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
+  if (renderDisableShadows) return
   ctx.fillStyle = 'rgba(0,0,0,0.28)'
   ctx.beginPath()
   ctx.ellipse(x, y, r, r * 0.4, 0, 0, Math.PI * 2)

@@ -5,7 +5,7 @@ import { Lock, Sparkles } from 'lucide-react'
 import { ITEMS } from '@/lib/game/data'
 import {
   canEquip,
-  consumeItem,
+  consumeItemWithFeedback,
   currentJob,
   getActiveAccountGameUid,
   getInventoryCapacity,
@@ -35,6 +35,7 @@ import { PanelFrame, PxButton } from './panels'
 export function CharacterPanel() {
   const g = useGame()
   const [selected, setSelected] = useState<string | null>(null)
+  const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null)
   if (!g.p) return null
   const p = g.p
   const s = getStats()
@@ -252,12 +253,22 @@ export function CharacterPanel() {
                 )}
                 {equipErr && <p className="text-[11px] text-destructive">{equipErr}</p>}
               </div>
-              {def.kind === 'consumable' && <PxButton onClick={() => consumeItem(item.uid)}>ใช้</PxButton>}
+              {def.kind === 'consumable' && (
+                <PxButton
+                  onClick={() => {
+                    const res = consumeItemWithFeedback(item.uid)
+                    setFeedback({ ok: res.ok, text: res.message })
+                  }}
+                >
+                  ใช้
+                </PxButton>
+              )}
               {(def.kind === 'weapon' || def.kind === 'armor') && (
                 <PxButton
                   onClick={() => {
-                    consumeItem(item.uid)
-                    setSelected(null)
+                    const res = consumeItemWithFeedback(item.uid)
+                    setFeedback({ ok: res.ok, text: res.message })
+                    if (res.ok) setSelected(null)
                   }}
                   disabled={!!equipErr}
                 >
@@ -267,6 +278,19 @@ export function CharacterPanel() {
             </div>
           ) : (
             <p className="text-xs text-muted-foreground">คลิกไอเทมเพื่อดูรายละเอียด • ขายของได้ที่พ่อค้า • ฝากของได้ที่คลัง</p>
+          )}
+          {feedback && (
+            <div
+              role="status"
+              className={cn(
+                'border px-2.5 py-1.5 text-xs font-medium',
+                feedback.ok
+                  ? 'border-emerald-400/50 bg-emerald-500/10 text-emerald-200'
+                  : 'border-rose-400/50 bg-rose-500/10 text-rose-200',
+              )}
+            >
+              {feedback.text}
+            </div>
           )}
         </div>
       </div>

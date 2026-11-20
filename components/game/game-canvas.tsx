@@ -22,7 +22,7 @@ import {
 } from '@/lib/game/engine'
 import { TILE } from '@/lib/game/maps'
 import { render, screenToWorld } from '@/lib/game/renderer'
-import { getUiPreferences } from '@/lib/game/ui-layout'
+import { getUiPreferences, subscribeUiLayout } from '@/lib/game/ui-layout'
 
 const MOVE_KEYS = new Set(['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd'])
 
@@ -84,24 +84,48 @@ export function GameCanvas() {
     let dpr = 1
     let raf = 0
     let last = performance.now()
+    let lastFrameAt = last
     let uiAcc = 0
 
     const resize = () => {
+      const prefs = getUiPreferences()
       const isCompact =
         window.innerWidth <= 960 ||
         window.innerHeight <= 560 ||
         (typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches)
-      dpr = Math.min(window.devicePixelRatio || 1, isCompact ? 1.5 : 2)
+      const maxDpr =
+        prefs.graphicsQuality === 'low'
+          ? 1
+          : prefs.graphicsQuality === 'medium'
+            ? 1.25
+            : isCompact
+              ? 1.5
+              : 2
+      const resScale = prefs.resolutionScale || 1
+      dpr = Math.max(0.65, Math.min(window.devicePixelRatio || 1, maxDpr) * resScale)
       const r = canvas.getBoundingClientRect()
       canvas.width = Math.max(1, Math.floor(r.width * dpr))
       canvas.height = Math.max(1, Math.floor(r.height * dpr))
+      canvas.style.imageRendering = prefs.crispPixelScale ? 'pixelated' : 'auto'
     }
     resize()
     const ro = new ResizeObserver(resize)
     ro.observe(canvas)
+    const unsubUiPrefs = subscribeUiLayout(() => {
+      resize()
+    })
 
     const loop = (now: number) => {
-      const dt = Math.max(0, Math.min(0.05, (now - last) / 1000))
+      const prefs = getUiPreferences()
+      if (prefs.fpsLimit > 0) {
+        const minFrameMs = 1000 / prefs.fpsLimit
+        if (now - lastFrameAt < minFrameMs - 1.5) {
+          raf = requestAnimationFrame(loop)
+          return
+        }
+      }
+      lastFrameAt = now
+      const dt = Math.max(0, Math.min(0.06, (now - last) / 1000))
       last = now
       try {
         update(dt)
@@ -243,6 +267,7 @@ export function GameCanvas() {
     return () => {
       cancelAnimationFrame(raf)
       ro.disconnect()
+      unsubUiPrefs()
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
       window.removeEventListener('blur', onBlur)

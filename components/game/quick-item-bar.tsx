@@ -160,7 +160,10 @@ export function QuickItemBar({ compact = false }: { compact?: boolean }) {
                 }}
                 onClick={() => {
                   if (hasItem) {
-                    useQuickSlot(idx)
+                    const ok = useQuickSlot(idx)
+                    if (!ok && def) {
+                      showFeedback(`ยังใช้ ${def.name} ไม่ได้ในขณะนี้`)
+                    }
                   } else {
                     openPanel('inventory')
                   }

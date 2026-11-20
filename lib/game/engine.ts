@@ -56,6 +56,7 @@ import {
   createDefaultTowerState,
   getActivePetBonuses,
   getCombatPetDef,
+  MAX_PET_LEVEL,
   getQuestMetricValue,
   grantActivePetExp,
   isQuestClaimed,
@@ -811,6 +812,8 @@ export const game = {
   offlineAfkReward: null as OfflineAfkSummary | null,
   invasion: null as null | { active: boolean; wave: number; maxWaves: number; rewardDiamonds: number },
   topupBadge: { approvedUnclaimed: 0, gmPending: 0 },
+  pendingNameChangeUid: null as string | null,
+  lastItemFeedback: null as null | { ok: boolean; message: string; at: number },
   zenHud: false,
   version: 0,
 }
@@ -1197,78 +1200,90 @@ export function itemCooldownRemaining(itemId: string): number {
 export function consumeItem(id: string): boolean {
   const p = player()
   const it = p.inventory.find((i) => i.uid === id)
-  if (!it) return false
+  if (!it) {
+    game.lastItemFeedback = { ok: false, message: 'ไม่พบไอเทมนี้ในกระเป๋า', at: Date.now() }
+    return false
+  }
   const def = ITEMS[it.itemId]
   if (!def) return false
   if (def.kind === 'weapon' || def.kind === 'armor') {
     equip(id)
+    game.lastItemFeedback = { ok: true, message: `สวมใส่ ${def.name} แล้ว`, at: Date.now() }
     return true
   }
-  if (def.kind !== 'consumable') return false
+  if (def.kind !== 'consumable') {
+    const msg = `${def.name} เป็นวัตถุดิบ/ไอเทมทั่วไป ไม่สามารถกดใช้งานโดยตรงได้`
+    game.lastItemFeedback = { ok: false, message: msg, at: Date.now() }
+    say('error', msg)
+    notify()
+    return false
+  }
+
+  const failConsume = (msg: string): false => {
+    game.lastItemFeedback = { ok: false, message: msg, at: Date.now() }
+    say('error', msg)
+    notify()
+    return false
+  }
+  const succeedConsume = (msg: string, chatType: ChatType = 'system'): true => {
+    game.lastItemFeedback = { ok: true, message: msg, at: Date.now() }
+    say(chatType, msg)
+    saveGame()
+    notify()
+    return true
+  }
 
   const cdLeft = itemCooldownRemaining(def.id)
   if (cdLeft > 0) {
-    warn(`${def.name} ติดคูลดาวน์ (${cdLeft.toFixed(1)}s)`)
-    return false
+    return failConsume(`${def.name} ติดคูลดาวน์ (${cdLeft.toFixed(1)}s)`)
   }
   const cdDur = getItemCooldownDuration(def.id)
+
+  if (def.id === 'name_change_ticket') {
+    game.pendingNameChangeUid = it.uid
+    game.lastItemFeedback = { ok: true, message: 'กรุณากรอกชื่อตัวละครใหม่ที่ต้องการเปลี่ยน', at: Date.now() }
+    notify()
+    return true
+  }
 
   if (def.id === 'starlight_loot_magnet') {
     p.lootMagnetUntil = Math.max(Date.now(), p.lootMagnetUntil ?? 0) + 5 * 60 * 1000
     removeUid(p.inventory, id, 1)
     if (cdDur > 0) game.itemCd[def.id] = cdDur
-    say('system', 'แม่เหล็กแสงดาวทำงาน 5 นาที — เก็บดรอปของคุณในระยะ 120 px')
-    saveGame()
-    notify()
-    return true
+    return succeedConsume('แม่เหล็กแสงดาวทำงาน 5 นาที — เก็บดรอปของคุณในระยะ 120 px')
   }
 
   if (def.id === 'astral_bag_expansion') {
     if (p.inventoryCapacityBonus >= 60) {
-      say('error', 'กระเป๋าดวงดาวเพิ่มช่องถึงขีดจำกัด +60 แล้ว')
-      notify()
-      return false
+      return failConsume('กระเป๋าดวงดาวเพิ่มช่องถึงขีดจำกัด +60 แล้ว')
     }
     removeUid(p.inventory, id, 1)
     p.inventoryCapacityBonus = Math.min(60, p.inventoryCapacityBonus + 20)
     if (cdDur > 0) game.itemCd[def.id] = cdDur
-    say('system', `กระเป๋าเพิ่มเป็น ${getInventoryCapacity(p)} ช่องถาวร`)
-    saveGame()
-    notify()
-    return true
+    return succeedConsume(`กระเป๋าเพิ่มเป็น ${getInventoryCapacity(p)} ช่องถาวร`)
   }
 
   if (def.id === 'bag_scroll_10') {
     const prem = ensurePremiumState(p)
     if (prem.storage.extraInventorySlots >= EXTRA_INVENTORY_SCROLL_CAP) {
-      say('error', `ขยายช่องกระเป๋าพรีเมียมครบขีดจำกัด +${EXTRA_INVENTORY_SCROLL_CAP} ช่องแล้ว`)
-      notify()
-      return false
+      return failConsume(`ขยายช่องกระเป๋าพรีเมียมครบขีดจำกัด +${EXTRA_INVENTORY_SCROLL_CAP} ช่องแล้ว`)
     }
     removeUid(p.inventory, id, 1)
     prem.storage.extraInventorySlots = Math.min(EXTRA_INVENTORY_SCROLL_CAP, prem.storage.extraInventorySlots + 10)
     logPremiumAudit(p, { action: 'STORAGE_EXPAND', details: `ใช้คัมภีร์ขยายกระเป๋า +10 ช่อง (รวม ${getInventoryCapacity(p)} ช่อง)`, verifiedByServer: false })
-    say('system', `ขยายกระเป๋าสำเร็จ! ความจุรวม ${getInventoryCapacity(p)} ช่อง`)
-    saveGame()
-    notify()
-    return true
+    return succeedConsume(`ขยายกระเป๋าสำเร็จ! ความจุรวม ${getInventoryCapacity(p)} ช่อง`)
   }
 
   if (def.id === 'storage_scroll_15' || def.id === 'storage_scroll_30') {
     const prem = ensurePremiumState(p)
     const addSlots = def.id === 'storage_scroll_30' ? 30 : 15
     if (prem.storage.extraStorageSlots >= EXTRA_STORAGE_SCROLL_CAP) {
-      say('error', `ขยายคลังเก็บของครบขีดจำกัด +${EXTRA_STORAGE_SCROLL_CAP} ช่องแล้ว`)
-      notify()
-      return false
+      return failConsume(`ขยายคลังเก็บของครบขีดจำกัด +${EXTRA_STORAGE_SCROLL_CAP} ช่องแล้ว`)
     }
     removeUid(p.inventory, id, 1)
     prem.storage.extraStorageSlots = Math.min(EXTRA_STORAGE_SCROLL_CAP, prem.storage.extraStorageSlots + addSlots)
     logPremiumAudit(p, { action: 'STORAGE_EXPAND', details: `ใช้ ${def.name} (ความจุคลังรวม ${getStorageCapacity(p)} ช่อง)`, verifiedByServer: false })
-    say('system', `ขยายคลังเก็บของเป็น ${getStorageCapacity(p)} ช่องถาวร`)
-    saveGame()
-    notify()
-    return true
+    return succeedConsume(`ขยายคลังเก็บของเป็น ${getStorageCapacity(p)} ช่องถาวร`)
   }
 
   if (def.id === 'vip_card_7d' || def.id === 'vip_card_30d' || def.id === 'vip_exp_crystal') {
@@ -1287,26 +1302,24 @@ export function consumeItem(id: string): boolean {
       if (!prem.fashion.unlockedIds.includes(fId)) prem.fashion.unlockedIds.push(fId)
     }
     logPremiumAudit(p, { action: 'VIP_ACTIVATE', details: `ใช้ ${def.name} -> VIP ${prem.vip.vipLevel} (${prem.vip.vipExp} EXP)`, verifiedByServer: false })
-    say('loot', `★ เปิดใช้งาน VIP ระดับ ${prem.vip.vipLevel} (+${expGain} VIP EXP)!`)
-    saveGame()
-    notify()
-    return true
+    return succeedConsume(`★ เปิดใช้งาน VIP ระดับ ${prem.vip.vipLevel} (+${expGain} VIP EXP)!`, 'loot')
   }
 
   if (def.id === 'pet_exp_elixir') {
     p.petState = sanitizePetState(p.petState, p.ownedGemItems, p.equippedGemCompanion)
-    if (!p.petState.activePetId) {
-      say('error', 'กรุณาสวมใส่สัตว์เลี้ยงก่อนใช้น้ำทิพย์ฝึกสัตว์เลี้ยง')
-      notify()
-      return false
+    const activePetId = p.petState.activePetId
+    if (!activePetId) {
+      return failConsume('กรุณาสวมใส่สัตว์เลี้ยงก่อนใช้น้ำทิพย์ฝึกสัตว์เลี้ยง')
+    }
+    const petProg = p.petState.ownedPets[activePetId]
+    if (petProg && petProg.level >= MAX_PET_LEVEL) {
+      return failConsume(`คู่หูเลเวลสูงสุด (Lv.${MAX_PET_LEVEL}) แล้ว`)
     }
     removeUid(p.inventory, id, 1)
     const res = grantActivePetExp(p.petState, 250)
     p.petState = res.nextPetState
-    say('loot', `คู่หูได้รับ +250 EXP${res.leveledUp ? ` และอัปเป็น Lv.${res.newLevel}!` : ''}`)
-    saveGame()
-    notify()
-    return true
+    if (cdDur > 0) game.itemCd[def.id] = cdDur
+    return succeedConsume(`คู่หูได้รับ +250 EXP${res.leveledUp ? ` และอัปเป็น Lv.${res.newLevel}!` : ''}`, 'loot')
   }
 
   if (def.id === 'double_exp_scroll') {
@@ -1324,14 +1337,12 @@ export function consumeItem(id: string): boolean {
     removeUid(p.inventory, id, 1)
     if (cdDur > 0) game.itemCd[def.id] = cdDur
     addFloat(p.x, p.y - 28, 'EXP +35%!', '#facc15', 10)
-    say('loot', 'เปิดใช้งานคัมภีร์คูณค่าประสบการณ์ +35% · ATK/DEF +15% นาน 10 นาที')
-    saveGame()
-    notify()
-    return true
+    return succeedConsume('เปิดใช้งานคัมภีร์คูณค่าประสบการณ์ +35% · ATK/DEF +15% นาน 10 นาที', 'loot')
   }
 
   const foodDef = getFoodBuffForItem(def.id)
   if (foodDef) {
+    const s = getStats()
     const extV2 = sanitizeExtV2(p.extV2)
     extV2.activeFoodBuff = {
       itemId: foodDef.itemId,
@@ -1343,33 +1354,111 @@ export function consumeItem(id: string): boolean {
       expMul: foodDef.expMul,
     }
     p.extV2 = extV2
+    const healNotes: string[] = []
+    if (def.heal && p.hp < s.maxHp) {
+      const gained = Math.min(def.heal, s.maxHp - p.hp)
+      p.hp = Math.min(s.maxHp, p.hp + def.heal)
+      addFloat(p.x, p.y - 22, `+${gained} HP`, '#7ae582')
+      healNotes.push(`+${gained} HP`)
+    }
+    if (def.mana && p.mp < s.maxMp) {
+      const gainedMp = Math.min(def.mana, s.maxMp - p.mp)
+      p.mp = Math.min(s.maxMp, p.mp + def.mana)
+      addFloat(p.x, p.y - 18, `+${gainedMp} MP`, '#4cc9f0')
+      healNotes.push(`+${gainedMp} MP`)
+    }
     removeUid(p.inventory, id, 1)
     if (cdDur > 0) game.itemCd[def.id] = cdDur
     addFloat(p.x, p.y - 28, `${foodDef.name}!`, '#fbbf24', 10)
-    say('system', `รับประทาน ${foodDef.name} (ATK +${foodDef.atkPct}% · DEF +${foodDef.defPct}% นาน ${Math.round(foodDef.durationSec / 60)} นาที)`)
-    saveGame()
-    notify()
-    return true
+    const healSuffix = healNotes.length > 0 ? ` · ${healNotes.join(' ')}` : ''
+    return succeedConsume(
+      `รับประทาน ${foodDef.name} (ATK +${foodDef.atkPct}% · DEF +${foodDef.defPct}% นาน ${Math.round(foodDef.durationSec / 60)} นาที${healSuffix})`,
+    )
+  }
+
+  if (def.id === 'return_scroll' || def.id === 'town_warp_tome') {
+    removeUid(p.inventory, id, 1)
+    if (cdDur > 0) game.itemCd[def.id] = cdDur
+    const town = MAPS.town
+    changeMap('town', town.spawn.x, town.spawn.y)
+    return succeedConsume(`ใช้ ${def.name} วาร์ปกลับเมืองเริ่มต้นเรียบร้อยแล้ว`)
   }
 
   const s = getStats()
+  const needHp = Boolean(def.heal && p.hp < s.maxHp)
+  const needMp = Boolean(def.mana && p.mp < s.maxMp)
+  if ((def.heal || def.mana) && !needHp && !needMp) {
+    const fullLabel = def.heal && def.mana ? 'HP และ MP เต็มอยู่แล้ว' : def.heal ? 'HP เต็มอยู่แล้ว' : 'MP เต็มอยู่แล้ว'
+    return failConsume(fullLabel)
+  }
+
+  const restoreNotes: string[] = []
   if (def.heal) {
+    const gained = Math.min(def.heal, Math.max(0, s.maxHp - p.hp))
     p.hp = Math.min(s.maxHp, p.hp + def.heal)
-    addFloat(p.x, p.y - 22, `+${def.heal}`, '#7ae582')
+    if (gained > 0) {
+      addFloat(p.x, p.y - 22, `+${gained}`, '#7ae582')
+      restoreNotes.push(`+${gained} HP`)
+    }
   }
   if (def.mana) {
+    const gainedMp = Math.min(def.mana, Math.max(0, s.maxMp - p.mp))
     p.mp = Math.min(s.maxMp, p.mp + def.mana)
-    addFloat(p.x, p.y - 22, `+${def.mana}`, '#4cc9f0')
+    if (gainedMp > 0) {
+      addFloat(p.x, p.y - 22, `+${gainedMp}`, '#4cc9f0')
+      restoreNotes.push(`+${gainedMp} MP`)
+    }
   }
   removeUid(p.inventory, id, 1)
   if (cdDur > 0) game.itemCd[def.id] = cdDur
-  if (def.id === 'return_scroll' || def.id === 'town_warp_tome') {
-    const town = MAPS.town
-    changeMap('town', town.spawn.x, town.spawn.y)
+  return succeedConsume(`ใช้ ${def.name} สำเร็จ${restoreNotes.length > 0 ? ` (${restoreNotes.join(' · ')})` : ''}`)
+}
+
+export function consumeItemWithFeedback(id: string): { ok: boolean; message: string } {
+  const ok = consumeItem(id)
+  return {
+    ok,
+    message: game.lastItemFeedback?.message ?? (ok ? 'ใช้งานไอเทมสำเร็จ' : 'ไม่สามารถใช้งานไอเทมนี้ได้'),
   }
+}
+
+export function confirmNameChangeTicketAction(rawName: string): { ok: boolean; message: string } {
+  if (!game.p) return { ok: false, message: 'ไม่พบข้อมูลตัวละคร' }
+  const p = game.p
+  const ticketUid = game.pendingNameChangeUid
+  if (!ticketUid) return { ok: false, message: 'ไม่ได้เปิดใช้งานบัตรเปลี่ยนชื่อ' }
+  const ticket = p.inventory.find((entry) => entry.uid === ticketUid && entry.itemId === 'name_change_ticket')
+  if (!ticket) {
+    game.pendingNameChangeUid = null
+    notify()
+    return { ok: false, message: 'ไม่พบบัตรเปลี่ยนชื่อในกระเป๋าแล้ว' }
+  }
+  const nextName = rawName.trim().replace(/\s+/g, ' ')
+  if (nextName.length < 1 || nextName.length > 16) {
+    return { ok: false, message: 'ชื่อตัวละครต้องมี 1 - 16 ตัวอักษร' }
+  }
+  if (nextName === p.name) {
+    return { ok: false, message: 'กรุณากรอกชื่อใหม่ที่แตกต่างจากชื่อเดิม' }
+  }
+  const prevName = p.name
+  removeUid(p.inventory, ticket.uid, 1)
+  p.name = nextName
+  game.pendingNameChangeUid = null
+  const cdDur = getItemCooldownDuration('name_change_ticket')
+  if (cdDur > 0) game.itemCd['name_change_ticket'] = cdDur
+  addFloat(p.x, p.y - 30, 'เปลี่ยนชื่อสำเร็จ!', '#fbbf24', 10)
+  const msg = `เปลี่ยนชื่อตัวละครจาก "${prevName}" เป็น "${nextName}" เรียบร้อยแล้ว!`
+  game.lastItemFeedback = { ok: true, message: msg, at: Date.now() }
+  say('system', msg)
   saveGame()
   notify()
-  return true
+  return { ok: true, message: msg }
+}
+
+export function cancelNameChangeTicketAction() {
+  if (!game.pendingNameChangeUid) return
+  game.pendingNameChangeUid = null
+  notify()
 }
 
 export function getQuickSlots(): Array<string | null> {

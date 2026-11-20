@@ -14,6 +14,7 @@ export interface RebirthAuraDrawOptions {
   spriteHeight?: number
   alphaScale?: number
   layer?: 'all' | 'back' | 'front'
+  disableGlow?: boolean
 }
 
 function drawStarSparkle(
@@ -142,14 +143,17 @@ function drawDetailedWings(
   t: number,
   variant: 'monarch_violet' | 'celestial_gold',
   alphaScale: number,
+  disableGlow = false,
 ) {
   const flap = Math.sin(t * (variant === 'celestial_gold' ? 3.2 : 3.6)) * (h * 0.045)
   ctx.save()
 
   if (variant === 'monarch_violet') {
     const wingSpan = rx * 1.65
-    ctx.shadowColor = '#a855f7'
-    ctx.shadowBlur = Math.max(6, rx * 0.72)
+    if (!disableGlow) {
+      ctx.shadowColor = '#a855f7'
+      ctx.shadowBlur = Math.max(6, rx * 0.72)
+    }
 
     for (const side of [-1, 1] as const) {
       // 5 dramatic dark-violet monarch feathers curving outward & downward
@@ -197,8 +201,10 @@ function drawDetailedWings(
   } else {
     // Tier 6: Radiant White-Gold Celestial Angel Wings
     const wingSpan = rx * 1.82
-    ctx.shadowColor = '#fbbf24'
-    ctx.shadowBlur = Math.max(8, rx * 0.85)
+    if (!disableGlow) {
+      ctx.shadowColor = '#fbbf24'
+      ctx.shadowBlur = Math.max(8, rx * 0.85)
+    }
 
     for (const side of [-1, 1] as const) {
       // Back golden aura fan
@@ -263,6 +269,7 @@ function drawCrownHalo(
   t: number,
   variant: 'monarch_violet' | 'celestial_gold',
   alphaScale: number,
+  disableGlow = false,
 ) {
   const bob = Math.sin(t * 3.1) * (h * 0.025)
   ctx.save()
@@ -270,8 +277,10 @@ function drawCrownHalo(
   if (variant === 'monarch_violet') {
     const cy = headY + h * 0.08 + bob
     const archR = rx * 0.78
-    ctx.shadowColor = '#c084fc'
-    ctx.shadowBlur = Math.max(6, rx * 0.65)
+    if (!disableGlow) {
+      ctx.shadowColor = '#c084fc'
+      ctx.shadowBlur = Math.max(6, rx * 0.65)
+    }
     ctx.globalAlpha = 0.88 * alphaScale
     ctx.strokeStyle = '#d8b4fe'
     ctx.lineWidth = Math.max(1.3, rx * 0.1)
@@ -298,8 +307,10 @@ function drawCrownHalo(
     // Tier 6: Golden Sun-Cross Celestial Halo
     const cy = headY - h * 0.02 + bob
     const ringR = Math.max(4, rx * 0.42)
-    ctx.shadowColor = '#fbbf24'
-    ctx.shadowBlur = Math.max(8, rx * 0.75)
+    if (!disableGlow) {
+      ctx.shadowColor = '#fbbf24'
+      ctx.shadowBlur = Math.max(8, rx * 0.75)
+    }
 
     // Outer radiant sun ring
     ctx.globalAlpha = 0.94 * alphaScale
@@ -354,6 +365,7 @@ export function drawRebirthAura(
   if (spec.style === 'none') return
 
   const layer = opts.layer ?? 'all'
+  const disableGlow = Boolean(opts.disableGlow)
   const t = opts.timeSec
   const rx = opts.radiusX ?? 12
   const ry = Math.max(3.4, rx * 0.35)
@@ -371,23 +383,25 @@ export function drawRebirthAura(
   if (layer === 'all' || layer === 'back') {
     const pulse = (0.7 + Math.sin(t * 4.4) * 0.14) * aScale
 
-    // Soft elliptical aura floor glow
-    ctx.save()
-    ctx.translate(opts.x, groundY)
-    ctx.scale(1, cRy / Math.max(1, cRx))
-    const floorGlow = ctx.createRadialGradient(0, 0, cRx * 0.1, 0, 0, cRx * 1.15)
-    floorGlow.addColorStop(0, tier === 6 ? 'rgba(254, 240, 138, 0.42)' : tier === 5 ? 'rgba(216, 180, 254, 0.36)' : 'rgba(125, 211, 252, 0.32)')
-    floorGlow.addColorStop(0.65, tier === 6 ? 'rgba(251, 191, 36, 0.18)' : tier === 5 ? 'rgba(168, 85, 247, 0.2)' : 'rgba(56, 189, 248, 0.16)')
-    floorGlow.addColorStop(1, 'rgba(0, 0, 0, 0)')
-    ctx.globalAlpha = pulse
-    ctx.fillStyle = floorGlow
-    ctx.beginPath()
-    ctx.arc(0, 0, cRx * 1.15, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.restore()
+    // Soft elliptical aura floor glow (skip gradient allocation in low-glow mode)
+    if (!disableGlow) {
+      ctx.save()
+      ctx.translate(opts.x, groundY)
+      ctx.scale(1, cRy / Math.max(1, cRx))
+      const floorGlow = ctx.createRadialGradient(0, 0, cRx * 0.1, 0, 0, cRx * 1.15)
+      floorGlow.addColorStop(0, tier === 6 ? 'rgba(254, 240, 138, 0.42)' : tier === 5 ? 'rgba(216, 180, 254, 0.36)' : 'rgba(125, 211, 252, 0.32)')
+      floorGlow.addColorStop(0.65, tier === 6 ? 'rgba(251, 191, 36, 0.18)' : tier === 5 ? 'rgba(168, 85, 247, 0.2)' : 'rgba(56, 189, 248, 0.16)')
+      floorGlow.addColorStop(1, 'rgba(0, 0, 0, 0)')
+      ctx.globalAlpha = pulse
+      ctx.fillStyle = floorGlow
+      ctx.beginPath()
+      ctx.arc(0, 0, cRx * 1.15, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.restore()
+    }
 
     // Vertical celestial light column & rising curtain rays
-    if (spec.hasAstralPillar) {
+    if (spec.hasAstralPillar && !disableGlow) {
       const colH = h * (0.95 + tier * 0.08)
       const colW = cRx * (0.95 + tier * 0.06)
       const colGrad = ctx.createLinearGradient(opts.x, groundY - colH, opts.x, groundY)
@@ -416,8 +430,10 @@ export function drawRebirthAura(
     }
 
     // Concentric arcane ground rings + geometric star polygons
-    ctx.shadowColor = spec.glowColor
-    ctx.shadowBlur = Math.max(5, rx * (0.45 + tier * 0.07))
+    if (!disableGlow) {
+      ctx.shadowColor = spec.glowColor
+      ctx.shadowBlur = Math.max(5, rx * (0.45 + tier * 0.07))
+    }
 
     ctx.globalAlpha = (0.76 + tier * 0.03) * aScale
     ctx.strokeStyle = spec.primaryColor
@@ -475,7 +491,7 @@ export function drawRebirthAura(
 
     // Wings behind character (Tier 5 dark-violet monarch / Tier 6 white-gold seraphim)
     if (spec.hasWings && spec.wingVariant !== 'none') {
-      drawDetailedWings(ctx, opts.x, opts.y - h * 0.56, rx, h, t, spec.wingVariant, aScale)
+      drawDetailedWings(ctx, opts.x, opts.y - h * 0.56, rx, h, t, spec.wingVariant, aScale, disableGlow)
     }
 
     // Back crystal spires / light blades on far half of circle (Tier 5 & 6)
@@ -501,7 +517,7 @@ export function drawRebirthAura(
   if (layer === 'all' || layer === 'front') {
     // Crown / Celestial Sun-Cross Halo strictly above the head (Tier 5 & Tier 6)
     if (spec.hasHaloCrown && spec.wingVariant !== 'none') {
-      drawCrownHalo(ctx, opts.x, opts.y - h * 1.07, rx, h, t, spec.wingVariant, aScale)
+      drawCrownHalo(ctx, opts.x, opts.y - h * 1.07, rx, h, t, spec.wingVariant, aScale, disableGlow)
     }
 
     // Compact flank crystal spires only on outer left/right edges so character torso & face stay clear
@@ -523,7 +539,7 @@ export function drawRebirthAura(
     }
 
     // Floating faceted crystals cleanly outside character silhouette (Tier 2: 2, Tier 3: 4, Tier 4: 6, Tier 5: 4, Tier 6: 6)
-    if (spec.orbitShardCount > 0) {
+    if (spec.orbitShardCount > 0 && !disableGlow) {
       const cSize = Math.max(2.8, rx * (0.22 + (tier >= 4 ? 0.04 : 0)))
       for (let i = 0; i < spec.orbitShardCount; i++) {
         const side = i % 2 === 0 ? -1 : 1
@@ -540,17 +556,19 @@ export function drawRebirthAura(
     }
 
     // Twinkling 4-point star sparkles framing the outer perimeter without covering face/body
-    const sparkCount = 4 + tier * 2
-    const sparkSize = Math.max(1.5, rx * 0.12)
-    for (let i = 0; i < sparkCount; i++) {
-      const phase = (t * (0.7 + (i % 3) * 0.18) + i / sparkCount) % 1
-      const side = i % 2 === 0 ? -1 : 1
-      const outerFrac = 0.72 + ((i * 37) % 10) / 22
-      const spreadX = side * cRx * outerFrac + Math.sin(i * 2.17 + t * 0.9) * rx * 0.14
-      const py = groundY - phase * h * 1.12
-      const fade = Math.sin(phase * Math.PI)
-      const col = i % 3 === 0 ? '#ffffff' : spec.secondaryColor
-      drawStarSparkle(ctx, opts.x + spreadX, py, sparkSize * (0.75 + (i % 2) * 0.35), col, fade * 0.88 * aScale)
+    if (!disableGlow) {
+      const sparkCount = 4 + tier * 2
+      const sparkSize = Math.max(1.5, rx * 0.12)
+      for (let i = 0; i < sparkCount; i++) {
+        const phase = (t * (0.7 + (i % 3) * 0.18) + i / sparkCount) % 1
+        const side = i % 2 === 0 ? -1 : 1
+        const outerFrac = 0.72 + ((i * 37) % 10) / 22
+        const spreadX = side * cRx * outerFrac + Math.sin(i * 2.17 + t * 0.9) * rx * 0.14
+        const py = groundY - phase * h * 1.12
+        const fade = Math.sin(phase * Math.PI)
+        const col = i % 3 === 0 ? '#ffffff' : spec.secondaryColor
+        drawStarSparkle(ctx, opts.x + spreadX, py, sparkSize * (0.75 + (i % 2) * 0.35), col, fade * 0.88 * aScale)
+      }
     }
   }
 
@@ -612,6 +630,7 @@ export interface OverworldSkillVfxOptions {
   radius: number
   progress: number
   alpha: number
+  disableGlow?: boolean
 }
 
 /**
@@ -634,6 +653,7 @@ export function drawOverworldSkillEffect(
     scale,
     progress: opts.progress,
     alpha: opts.alpha,
+    disableGlow: opts.disableGlow,
   })
 }
 
@@ -696,16 +716,19 @@ function drawStyleEffect(
     scale: number
     progress: number
     alpha: number
+    disableGlow?: boolean
   },
 ) {
-  const { style, primaryColor, secondaryColor, sourceX, sourceY, targetX, targetY, floorY, scale, progress: k, alpha } = p
+  const { style, primaryColor, secondaryColor, sourceX, sourceY, targetX, targetY, floorY, scale, progress: k, alpha, disableGlow } = p
   const s = scale
 
   ctx.save()
   ctx.strokeStyle = primaryColor
   ctx.fillStyle = primaryColor
-  ctx.shadowColor = primaryColor
-  ctx.shadowBlur = Math.max(4, 5 * s)
+  if (!disableGlow) {
+    ctx.shadowColor = primaryColor
+    ctx.shadowBlur = Math.max(4, 5 * s)
+  }
 
   switch (style) {
     case 'heavy_cleave': {

@@ -22,7 +22,7 @@ import { ITEMS, JOBS, type EquipmentSlot, type ItemDef } from '@/lib/game/data'
 import {
   canEquip,
   closePanel,
-  consumeItem,
+  consumeItemWithFeedback,
   ensurePremiumState,
   equip,
   equipCombatPet,
@@ -41,6 +41,7 @@ import {
   summonMount,
   toggleMountRiding,
   unequipAllFashionAction,
+  type PanelId,
 } from '@/lib/game/engine'
 import type { FashionLoadout } from '@/lib/game/fashion-renderer'
 import {
@@ -155,7 +156,7 @@ export function InventoryPanel() {
   const [sortBy, setSortBy] = useState<SortOption>('default')
   const [selectedUid, setSelectedUid] = useState<string | null>(null)
   const [hoveredUid, setHoveredUid] = useState<string | null>(null)
-  const [assignFeedback, setAssignFeedback] = useState<string | null>(null)
+  const [assignFeedback, setAssignFeedback] = useState<{ ok: boolean; text: string } | null>(null)
   const [fashionSlotFilter, setFashionSlotFilter] = useState<'all' | FashionSlot>('all')
   const [fashionPreviewOverrides, setFashionPreviewOverrides] = useState<Partial<Record<FashionSlot, string | null>>>({})
   const [fashionPreviewDir, setFashionPreviewDir] = useState<Dir>('down')
@@ -195,7 +196,7 @@ export function InventoryPanel() {
         if (typeFilter === 'cloak' && def.slot !== 'cloak') return false
         if (typeFilter === 'potion' && !(def.kind === 'consumable' && (def.heal || def.mana) && !def.id.startsWith('food_'))) return false
         if (typeFilter === 'food' && !def.id.startsWith('food_')) return false
-        if (typeFilter === 'scroll' && !(def.kind === 'consumable' && (def.icon === 'scroll' || def.icon === 'ticket' || def.icon === 'core'))) return false
+        if (typeFilter === 'scroll' && !(def.kind === 'consumable' && !(def.heal || def.mana) && !def.id.startsWith('food_'))) return false
       }
 
       // Rarity filter
@@ -289,7 +290,10 @@ export function InventoryPanel() {
     if (targetIdx === undefined) {
       const existingIdx = quickSlots.findIndex((s) => s === itemId)
       if (existingIdx >= 0) {
-        setAssignFeedback(`${ITEMS[itemId]?.name ?? itemId} อยู่ในช่องลัดที่ ${existingIdx === 9 ? 0 : existingIdx + 1} แล้ว`)
+        setAssignFeedback({
+          ok: true,
+          text: `${ITEMS[itemId]?.name ?? itemId} อยู่ในช่องลัดที่ ${existingIdx === 9 ? 0 : existingIdx + 1} แล้ว`,
+        })
         return
       }
       targetIdx = quickSlots.findIndex((s) => s === null)
@@ -298,8 +302,23 @@ export function InventoryPanel() {
     const res = setQuickSlot(targetIdx, itemId)
     if (res.ok) {
       const keyNum = targetIdx === 9 ? '0' : String(targetIdx + 1)
-      setAssignFeedback(`ใส่ ${ITEMS[itemId]?.name ?? itemId} ลงช่องลัด [${keyNum}] แล้ว`)
+      setAssignFeedback({
+        ok: true,
+        text: `ใส่ ${ITEMS[itemId]?.name ?? itemId} ลงช่องลัด [${keyNum}] แล้ว`,
+      })
+    } else if (res.message) {
+      setAssignFeedback({ ok: false, text: res.message })
     }
+  }
+
+  const getMaterialShortcut = (itemId: string): { label: string; panel: PanelId } | null => {
+    if (itemId === 'enhance_stone') return { label: 'ไปตีบวก', panel: 'enhance' }
+    if (itemId === 'pet_essence') return { label: 'เลี้ยงคู่หู', panel: 'pets' }
+    if (itemId.startsWith('fish_') || itemId.startsWith('herb_')) return { label: 'ทำอาหาร/ปรุงยา', panel: 'lifeskills' }
+    if (itemId.startsWith('ore_') || itemId === 'earth_core' || itemId === 'ember_core' || itemId === 'abyss_crystal' || itemId === 'demon_horn') {
+      return { label: 'ไปคราฟต์', panel: 'craft' }
+    }
+    return { label: 'หน้าคราฟต์', panel: 'craft' }
   }
 
   return (
@@ -438,8 +457,16 @@ export function InventoryPanel() {
         )}
 
         {assignFeedback && (
-          <p className="border border-accent/50 bg-accent/10 px-2.5 py-1.5 text-xs text-accent" role="status">
-            {assignFeedback}
+          <p
+            className={cn(
+              'border px-2.5 py-1.5 text-xs',
+              assignFeedback.ok
+                ? 'border-accent/50 bg-accent/10 text-accent'
+                : 'border-destructive/60 bg-destructive/15 text-[#ff8b8e]',
+            )}
+            role="status"
+          >
+            {assignFeedback.text}
           </p>
         )}
 
@@ -530,7 +557,7 @@ export function InventoryPanel() {
                       onClick={() => {
                         const res = unequipAllFashionAction()
                         setFashionPreviewOverrides({})
-                        setAssignFeedback(res.message)
+                        setAssignFeedback({ ok: res.ok, text: res.message })
                       }}
                     >
                       ถอดทั้งหมด
@@ -668,7 +695,7 @@ export function InventoryPanel() {
                           className="px-2 py-1 text-[10px]"
                           onClick={() => {
                             const res = equipFashionAction(f.slot, equipped ? null : f.id)
-                            setAssignFeedback(res.message)
+                            setAssignFeedback({ ok: res.ok, text: res.message })
                             if (res.ok) {
                               setFashionPreviewOverrides((prev) => {
                                 if (!(f.slot in prev)) return prev
@@ -931,7 +958,10 @@ export function InventoryPanel() {
                         <>
                           <PxButton
                             className="flex-1 py-1 text-[10px]"
-                            onClick={() => consumeItem(item.uid)}
+                            onClick={() => {
+                              const res = consumeItemWithFeedback(item.uid)
+                              setAssignFeedback({ ok: res.ok, text: res.message })
+                            }}
                           >
                             ใช้
                           </PxButton>
@@ -945,6 +975,19 @@ export function InventoryPanel() {
                           </PxButton>
                         </>
                       )}
+                      {def.kind === 'material' && (() => {
+                        const shortcut = getMaterialShortcut(item.itemId)
+                        if (!shortcut) return null
+                        return (
+                          <PxButton
+                            variant="secondary"
+                            className="w-full py-1 text-[10px]"
+                            onClick={() => openPanel(shortcut.panel)}
+                          >
+                            {shortcut.label}
+                          </PxButton>
+                        )
+                      })()}
                     </div>
                   </div>
                 )

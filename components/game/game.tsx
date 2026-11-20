@@ -6,7 +6,9 @@ import { auth } from '@/lib/firebase/client'
 import { Eye, RotateCw } from 'lucide-react'
 import { ITEMS } from '@/lib/game/data'
 import {
+  cancelNameChangeTicketAction,
   checkPendingStripeTopupAction,
+  confirmNameChangeTicketAction,
   game,
   say,
   toggleZenHud,
@@ -68,6 +70,8 @@ export function Game() {
   const [narrowPortrait, setNarrowPortrait] = useState(false)
   const [portraitDismissed, setPortraitDismissed] = useState(false)
   const [mobileCombatReveal, setMobileCombatReveal] = useState(false)
+  const [renameInput, setRenameInput] = useState('')
+  const [renameError, setRenameError] = useState<string | null>(null)
   const handledTopupSessionRef = useRef<string | null>(null)
   const isPlaying = Boolean(g.p)
 
@@ -253,6 +257,70 @@ export function Game() {
         <Panels />
         {showCheckin && <CheckinModal onClose={() => setShowCheckin(false)} />}
         <OfflineAfkModal />
+
+        {g.pendingNameChangeUid && (
+          <div
+            className="pointer-events-auto absolute inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="rename-ticket-title"
+          >
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                const res = confirmNameChangeTicketAction(renameInput)
+                if (!res.ok) {
+                  setRenameError(res.message)
+                  return
+                }
+                setRenameInput('')
+                setRenameError(null)
+              }}
+              className="pixel-panel w-full max-w-sm space-y-3 p-4 shadow-2xl"
+            >
+              <div>
+                <h2 id="rename-ticket-title" className="text-sm font-bold text-primary">
+                  ใช้บัตรเปลี่ยนชื่อตัวละคร
+                </h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  ชื่อปัจจุบัน: <strong className="text-foreground">{g.p.name}</strong> · กรอกชื่อใหม่ 1–16 ตัวอักษร
+                </p>
+              </div>
+              <input
+                type="text"
+                maxLength={16}
+                autoFocus
+                value={renameInput}
+                onChange={(e) => {
+                  setRenameInput(e.target.value)
+                  if (renameError) setRenameError(null)
+                }}
+                placeholder="กรอกชื่อตัวละครใหม่..."
+                className="w-full border-2 border-border bg-input px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
+              />
+              {renameError && <p className="text-[11px] font-medium text-destructive">{renameError}</p>}
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRenameInput('')
+                    setRenameError(null)
+                    cancelNameChangeTicketAction()
+                  }}
+                  className="pixel-btn bg-secondary px-3 py-1.5 text-xs font-semibold text-foreground hover:brightness-110"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  className="pixel-btn bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:brightness-110"
+                >
+                  ยืนยันเปลี่ยนชื่อ
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
 
         {narrowPortrait && !portraitDismissed && (
           <div className="pointer-events-auto absolute inset-x-3 top-1/2 z-50 -translate-y-1/2 pixel-panel p-4 text-center shadow-2xl">

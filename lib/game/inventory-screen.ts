@@ -9,6 +9,7 @@ import {
 import {
   getInventoryCapacity,
   getStats,
+  getStorageCapacity,
   type InvItem,
   type SaveData,
 } from './engine'
@@ -17,6 +18,17 @@ import {
   getEquipRestriction,
   resolveItemEquipmentSlot,
 } from './equipment-ui'
+import { getFoodBuffForItem, sanitizeExtV2 } from './extended-systems'
+import { MAPS, TILE } from './maps'
+import type { VipTierId } from './premium/types'
+import { getEffectiveVipBonuses, resolveVipLevelFromExp } from './premium/vip'
+import {
+  EXTRA_INVENTORY_SCROLL_CAP,
+  EXTRA_STORAGE_SCROLL_CAP,
+  appendAuditLog,
+  sanitizePremiumState,
+} from './premium/wallet'
+import { MAX_PET_LEVEL, grantActivePetExp, sanitizePetState } from './systems'
 
 export type InventoryFilterTab =
   | 'all'
@@ -316,7 +328,7 @@ export function previewUnequipStatDelta(
 export function useConsumableInInventory(
   save: SaveData,
   itemUid: string,
-): { nextSave: SaveData; message: string; error: string | null } {
+): { nextSave: SaveData; message: string; error: string | null; requiresNameInput?: boolean } {
   const targetIdx = save.inventory.findIndex((entry) => entry.uid === itemUid)
   if (targetIdx < 0) {
     return { nextSave: save, message: '', error: 'ไม่พบไอเทมนี้ในกระเป๋า' }
@@ -328,24 +340,52 @@ export function useConsumableInInventory(
     return { nextSave: save, message: '', error: 'ไอเทมนี้ไม่สามารถกดใช้งานได้' }
   }
 
-  if (def.id === 'return_scroll' || def.id === 'town_warp_tome' || def.id === 'name_change_ticket') {
+  if (def.id === 'name_change_ticket') {
     return {
       nextSave: save,
-      message: '',
-      error: 'ไอเทมนี้ใช้ได้เฉพาะภายในแผนที่โลกเกมหลัก',
+      message: 'กรุณากรอกชื่อตัวละครใหม่ที่ต้องการเปลี่ยน',
+      error: null,
+      requiresNameInput: true,
     }
   }
 
   const nextSave: SaveData = structuredClone(save)
   const entry = nextSave.inventory[targetIdx]
+  const consumeOne = () => {
+    entry.qty -= 1
+    if (entry.qty <= 0) nextSave.inventory.splice(targetIdx, 1)
+  }
+  const buildPremCtx = () => ({
+    characterId: String(nextSave.gameUid ?? nextSave.uid ?? 'char_local'),
+    diamonds: nextSave.diamonds ?? 0,
+    ownedGemItems: nextSave.ownedGemItems,
+    equippedGemFashion: nextSave.equippedGemFashion,
+    unlockedCosmetics: sanitizeExtV2(nextSave.extV2).unlockedCosmetics,
+    equippedWing: sanitizeExtV2(nextSave.extV2).equippedWing,
+    equippedWeaponSkin: sanitizeExtV2(nextSave.extV2).equippedWeaponSkin,
+  })
+
+  if (def.id === 'return_scroll' || def.id === 'town_warp_tome') {
+    const town = MAPS.town
+    nextSave.mapId = 'town'
+    nextSave.x = town.spawn.x * TILE
+    nextSave.y = town.spawn.y * TILE
+    nextSave.savedAt = Date.now()
+    consumeOne()
+    return {
+      nextSave,
+      message: `ใช้ ${def.name} วาร์ปกลับเมืองเริ่มต้นเรียบร้อยแล้ว`,
+      error: null,
+    }
+  }
 
   if (def.id === 'astral_bag_expansion') {
     if ((nextSave.inventoryCapacityBonus ?? 0) >= 60) {
       return { nextSave: save, message: '', error: 'ขยายกระเป๋าถึงขีดจำกัดสูงสุด (+60 ช่อง) แล้ว' }
     }
     nextSave.inventoryCapacityBonus = Math.min(60, (nextSave.inventoryCapacityBonus ?? 0) + 20)
-    entry.qty -= 1
-    if (entry.qty <= 0) nextSave.inventory.splice(targetIdx, 1)
+    nextSave.savedAt = Date.now()
+    consumeOne()
     return {
       nextSave,
       message: `ขยายกระเป๋าสำเร็จ! ความจุปัจจุบัน ${getInventoryCapacity(nextSave)} ช่อง`,
@@ -353,13 +393,186 @@ export function useConsumableInInventory(
     }
   }
 
+  if (def.id === 'bag_scroll_10') {
+    const prem = sanitizePremiumState(nextSave.premium, buildPremCtx())
+    if (prem.storage.extraInventorySlots >= EXTRA_INVENTORY_SCROLL_CAP) {
+      return {
+        nextSave: save,
+        message: '',
+        error: `ขยายช่องกระเป๋าพรีเมียมครบขีดจำกัด +${EXTRA_INVENTORY_SCROLL_CAP} ช่องแล้ว`,
+      }
+    }
+    prem.storage.extraInventorySlots = Math.min(EXTRA_INVENTORY_SCROLL_CAP, prem.storage.extraInventorySlots + 10)
+    nextSave.premium = prem
+    appendAuditLog(prem, {
+      action: 'STORAGE_EXPAND',
+      characterId: prem.wallet.characterId || String(nextSave.gameUid ?? nextSave.uid ?? 'char_local'),
+      actorUid: String(nextSave.gameUid ?? nextSave.uid ?? 'guest'),
+      actorRole: nextSave.gm ? 'gm' : 'player',
+      details: `ใช้คัมภีร์ขยายกระเป๋า +10 ช่อง (รวม ${getInventoryCapacity(nextSave)} ช่อง)`,
+      verifiedByServer: false,
+    })
+    nextSave.savedAt = Date.now()
+    consumeOne()
+    return {
+      nextSave,
+      message: `ขยายกระเป๋าสำเร็จ! ความจุรวม ${getInventoryCapacity(nextSave)} ช่อง`,
+      error: null,
+    }
+  }
+
+  if (def.id === 'storage_scroll_15' || def.id === 'storage_scroll_30') {
+    const prem = sanitizePremiumState(nextSave.premium, buildPremCtx())
+    const addSlots = def.id === 'storage_scroll_30' ? 30 : 15
+    if (prem.storage.extraStorageSlots >= EXTRA_STORAGE_SCROLL_CAP) {
+      return {
+        nextSave: save,
+        message: '',
+        error: `ขยายคลังเก็บของครบขีดจำกัด +${EXTRA_STORAGE_SCROLL_CAP} ช่องแล้ว`,
+      }
+    }
+    prem.storage.extraStorageSlots = Math.min(EXTRA_STORAGE_SCROLL_CAP, prem.storage.extraStorageSlots + addSlots)
+    nextSave.premium = prem
+    appendAuditLog(prem, {
+      action: 'STORAGE_EXPAND',
+      characterId: prem.wallet.characterId || String(nextSave.gameUid ?? nextSave.uid ?? 'char_local'),
+      actorUid: String(nextSave.gameUid ?? nextSave.uid ?? 'guest'),
+      actorRole: nextSave.gm ? 'gm' : 'player',
+      details: `ใช้ ${def.name} (ความจุคลังรวม ${getStorageCapacity(nextSave)} ช่อง)`,
+      verifiedByServer: false,
+    })
+    nextSave.savedAt = Date.now()
+    consumeOne()
+    return {
+      nextSave,
+      message: `ขยายคลังเก็บของเป็น ${getStorageCapacity(nextSave)} ช่องถาวร`,
+      error: null,
+    }
+  }
+
+  if (def.id === 'vip_card_7d' || def.id === 'vip_card_30d' || def.id === 'vip_exp_crystal') {
+    const prem = sanitizePremiumState(nextSave.premium, buildPremCtx())
+    const now = Date.now()
+    const days = def.id === 'vip_card_30d' ? 30 : 7
+    const expGain = def.id === 'vip_exp_crystal' ? 600 : def.id === 'vip_card_30d' ? 450 : 150
+    const tierFloor: VipTierId = def.id === 'vip_card_30d' ? 2 : 1
+    const baseTime = prem.vip.expiresAtMs && prem.vip.expiresAtMs > now ? prem.vip.expiresAtMs : now
+    prem.vip.expiresAtMs = baseTime + days * 24 * 60 * 60 * 1000
+    prem.vip.vipExp += expGain
+    prem.vip.vipLevel = Math.max(tierFloor, prem.vip.vipLevel, resolveVipLevelFromExp(prem.vip.vipExp)) as VipTierId
+    const bonus = getEffectiveVipBonuses(prem.vip, now)
+    for (const fId of bonus.exclusiveFashionIds) {
+      if (!prem.fashion.unlockedIds.includes(fId)) prem.fashion.unlockedIds.push(fId)
+    }
+    appendAuditLog(prem, {
+      action: 'VIP_ACTIVATE',
+      characterId: prem.wallet.characterId || String(nextSave.gameUid ?? nextSave.uid ?? 'char_local'),
+      actorUid: String(nextSave.gameUid ?? nextSave.uid ?? 'guest'),
+      actorRole: nextSave.gm ? 'gm' : 'player',
+      details: `ใช้ ${def.name} -> VIP ${prem.vip.vipLevel} (${prem.vip.vipExp} EXP)`,
+      verifiedByServer: false,
+    })
+    nextSave.premium = prem
+    nextSave.savedAt = Date.now()
+    consumeOne()
+    return {
+      nextSave,
+      message: `★ เปิดใช้งาน VIP ระดับ ${prem.vip.vipLevel} (+${expGain} VIP EXP) สำเร็จ!`,
+      error: null,
+    }
+  }
+
+  if (def.id === 'pet_exp_elixir') {
+    const petState = sanitizePetState(nextSave.petState, nextSave.ownedGemItems, nextSave.equippedGemCompanion)
+    const activePetId = petState.activePetId
+    if (!activePetId) {
+      return {
+        nextSave: save,
+        message: '',
+        error: 'กรุณาสวมใส่สัตว์เลี้ยงก่อนใช้น้ำทิพย์ฝึกสัตว์เลี้ยง',
+      }
+    }
+    const curProg = petState.ownedPets[activePetId]
+    if (curProg && curProg.level >= MAX_PET_LEVEL) {
+      return {
+        nextSave: save,
+        message: '',
+        error: `คู่หูเลเวลสูงสุด (Lv.${MAX_PET_LEVEL}) แล้ว`,
+      }
+    }
+    const res = grantActivePetExp(petState, 250)
+    nextSave.petState = res.nextPetState
+    nextSave.savedAt = Date.now()
+    consumeOne()
+    return {
+      nextSave,
+      message: `คู่หูได้รับ +250 EXP${res.leveledUp ? ` และอัปเป็น Lv.${res.newLevel}!` : ''}`,
+      error: null,
+    }
+  }
+
+  if (def.id === 'double_exp_scroll') {
+    const extV2 = sanitizeExtV2(nextSave.extV2)
+    extV2.activeFoodBuff = {
+      itemId: def.id,
+      name: 'คัมภีร์คูณ EXP +35%',
+      expiresAtMs: Date.now() + 10 * 60 * 1000,
+      atkPct: 15,
+      defPct: 15,
+      critBonus: 0.05,
+      expMul: 1.35,
+    }
+    nextSave.extV2 = extV2
+    nextSave.savedAt = Date.now()
+    consumeOne()
+    return {
+      nextSave,
+      message: 'เปิดใช้งานคัมภีร์คูณค่าประสบการณ์ +35% · ATK/DEF +15% นาน 10 นาทีแล้ว',
+      error: null,
+    }
+  }
+
   if (def.id === 'starlight_loot_magnet') {
     nextSave.lootMagnetUntil = Math.max(Date.now(), nextSave.lootMagnetUntil ?? 0) + 5 * 60 * 1000
-    entry.qty -= 1
-    if (entry.qty <= 0) nextSave.inventory.splice(targetIdx, 1)
+    nextSave.savedAt = Date.now()
+    consumeOne()
     return {
       nextSave,
       message: 'เปิดใช้งานแม่เหล็กดูดของแสงดาว 5 นาทีแล้ว',
+      error: null,
+    }
+  }
+
+  const foodDef = getFoodBuffForItem(def.id)
+  if (foodDef) {
+    const stats = getStats(nextSave)
+    const extV2 = sanitizeExtV2(nextSave.extV2)
+    extV2.activeFoodBuff = {
+      itemId: foodDef.itemId,
+      name: foodDef.name,
+      expiresAtMs: Date.now() + foodDef.durationSec * 1000,
+      atkPct: foodDef.atkPct,
+      defPct: foodDef.defPct,
+      critBonus: foodDef.critBonus,
+      expMul: foodDef.expMul,
+    }
+    nextSave.extV2 = extV2
+    const notes: string[] = [`ATK +${foodDef.atkPct}%`, `DEF +${foodDef.defPct}%`]
+    if (def.heal) {
+      const gained = Math.max(0, Math.min(stats.maxHp, nextSave.hp + def.heal) - nextSave.hp)
+      nextSave.hp = Math.min(stats.maxHp, nextSave.hp + def.heal)
+      if (gained > 0) notes.push(`+${gained} HP`)
+    }
+    if (def.mana) {
+      const gainedMp = Math.max(0, Math.min(stats.maxMp, nextSave.mp + def.mana) - nextSave.mp)
+      nextSave.mp = Math.min(stats.maxMp, nextSave.mp + def.mana)
+      if (gainedMp > 0) notes.push(`+${gainedMp} MP`)
+    }
+    nextSave.savedAt = Date.now()
+    consumeOne()
+    return {
+      nextSave,
+      message: `รับประทาน ${foodDef.name} (${notes.join(' · ')}) สำเร็จ`,
       error: null,
     }
   }
@@ -380,17 +593,47 @@ export function useConsumableInInventory(
     nextSave.mp = Math.min(stats.maxMp, nextSave.mp + def.mana)
     const gained = nextSave.mp - beforeMp
     if (gained <= 0 && notes.length === 0) {
-      return { nextSave: save, message: '', error: 'MP เต็มอยู่แล้ว' }
+      return { nextSave: save, message: '', error: def.heal ? 'HP และ MP เต็มอยู่แล้ว' : 'MP เต็มอยู่แล้ว' }
     }
     if (gained > 0) notes.push(`+${gained} MP`)
   }
 
-  entry.qty -= 1
-  if (entry.qty <= 0) nextSave.inventory.splice(targetIdx, 1)
+  nextSave.savedAt = Date.now()
+  consumeOne()
 
   return {
     nextSave,
     message: `ใช้ ${def.name} สำเร็จ (${notes.join(' · ') || 'ใช้งานแล้ว'})`,
+    error: null,
+  }
+}
+
+export function renameWithTicketInSave(
+  save: SaveData,
+  itemUid: string,
+  rawName: string,
+): { nextSave: SaveData; message: string; error: string | null } {
+  const targetIdx = save.inventory.findIndex((entry) => entry.uid === itemUid && entry.itemId === 'name_change_ticket')
+  if (targetIdx < 0) {
+    return { nextSave: save, message: '', error: 'ไม่พบบัตรเปลี่ยนชื่อในกระเป๋า' }
+  }
+  const nextName = rawName.trim().replace(/\s+/g, ' ')
+  if (nextName.length < 1 || nextName.length > 16) {
+    return { nextSave: save, message: '', error: 'ชื่อตัวละครต้องมี 1 - 16 ตัวอักษร' }
+  }
+  if (nextName === save.name) {
+    return { nextSave: save, message: '', error: 'กรุณากรอกชื่อใหม่ที่แตกต่างจากชื่อเดิม' }
+  }
+  const nextSave: SaveData = structuredClone(save)
+  const entry = nextSave.inventory[targetIdx]
+  entry.qty -= 1
+  if (entry.qty <= 0) nextSave.inventory.splice(targetIdx, 1)
+  const prevName = nextSave.name
+  nextSave.name = nextName
+  nextSave.savedAt = Date.now()
+  return {
+    nextSave,
+    message: `เปลี่ยนชื่อตัวละครจาก "${prevName}" เป็น "${nextName}" เรียบร้อยแล้ว`,
     error: null,
   }
 }
