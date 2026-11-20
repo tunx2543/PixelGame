@@ -533,6 +533,8 @@ export interface PetModelSpec {
   animationFrames: {
     idle: number
     walk: number
+    run: number
+    follow: number
     attack: number
   }
 }
@@ -554,7 +556,7 @@ function buildPetModelSpec(def: CombatPetDef): PetModelSpec {
     supports4Way: true,
     floating,
     auraColor: def.colors.accent,
-    animationFrames: { idle: 4, walk: 6, attack: 4 },
+    animationFrames: { idle: 4, walk: 6, run: 6, follow: 6, attack: 4 },
   }
 }
 

@@ -38,6 +38,7 @@ import {
   sanitizePetState,
 } from '@/lib/game/systems'
 import { PET_STAT_CAPS } from '@/lib/game/premium/fashion-pet'
+import { getPetVisualTierLabel } from '@/lib/game/pet-follow'
 import { useGame } from '@/lib/game/use-game'
 import { formatNum } from '../format'
 import type { Dir } from '@/lib/game/sprites'
@@ -142,6 +143,8 @@ export function PetsPanel() {
                         id={activeBonus.petId}
                         action={previewAction}
                         dir={previewDir}
+                        petLevel={activeBonus.level}
+                        petStars={activeBonus.stars}
                         size={52}
                         label={`พรีวิว ${activeBonus.def.name}`}
                       />
@@ -149,6 +152,9 @@ export function PetsPanel() {
                     <div>
                       <p className="text-sm font-bold text-primary">
                         กำลังใช้งาน: {activeBonus.def.name} (Lv.{activeBonus.level} · {'★'.repeat(activeBonus.stars)})
+                      </p>
+                      <p className="mt-0.5 text-[11px] font-medium text-emerald-300">
+                        {getPetVisualTierLabel(activeBonus.level, activeBonus.stars)}
                       </p>
                       <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
                         พลังช่วยยิง {formatNum(activeBonus.companionAtk)}/{formatNum(PET_STAT_CAPS.maxCompanionAtk)} · ยิงทุก{' '}
@@ -237,9 +243,11 @@ export function PetsPanel() {
                 <div className="flex flex-wrap items-center gap-1" role="group" aria-label="โหมดแอนิเมชั่นพรีวิว">
                   {(
                     [
-                      ['auto', 'สลับท่าอัตโนมัติ'],
-                      ['walk', 'ท่าเดิน'],
-                      ['attack', 'ท่าโจมตี'],
+                      ['auto', 'อัตโนมัติ'],
+                      ['walk', 'เดิน'],
+                      ['follow', 'เดินตาม'],
+                      ['run', 'วิ่งตาม'],
+                      ['attack', 'โจมตี'],
                     ] as const
                   ).map(([act, label]) => (
                     <button
@@ -304,6 +312,8 @@ export function PetsPanel() {
                           id={pet.id}
                           action={previewAction}
                           dir={previewDir}
+                          petLevel={lv}
+                          petStars={stars}
                           size={60}
                           label={`โมเดล ${pet.name}`}
                         />
@@ -315,10 +325,11 @@ export function PetsPanel() {
                             {owned ? `Lv.${lv} · ${'★'.repeat(stars)}` : pet.rarity}
                           </span>
                         </div>
-                        {pet.tierLabel && (
+                        {(pet.tierLabel || owned) && (
                           <p className="mt-0.5 font-mono text-[10px] text-amber-300/90">
                             {isPhao ? 'ผอบ · ' : ''}
                             {pet.tierLabel}
+                            {owned ? ` · ${getPetVisualTierLabel(lv, stars)}` : ''}
                           </p>
                         )}
                         <p className="mt-0.5 text-[11px] text-muted-foreground">{pet.description}</p>

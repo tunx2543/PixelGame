@@ -1,5 +1,6 @@
 import { MONSTER_CATALOG_META } from './biome-monsters'
 import { getCatalogMonsterFrameSpec } from './catalog-sprites'
+import { COMBAT_PETS } from './systems'
 import type { Dir, SpriteAction } from './sprites'
 
 export type HeroSheetId =
@@ -190,6 +191,52 @@ export function getMountSheetSpec(mountId?: string | null): SpriteSheetSpec | nu
   return MOUNT_SPRITE_SHEETS[mountId as MountSheetId] ?? null
 }
 
+const PET_FRAME_SIZE = 136
+export const PET_FOOT_PAD_FRAC = 20 / PET_FRAME_SIZE
+const PET_ANCHOR_Y = (PET_FRAME_SIZE - 20) / PET_FRAME_SIZE
+
+function makePetSheetSpec(id: string): SpriteSheetSpec {
+  const base = `/assets/hd/pets/${id}`
+  return {
+    id: `pet_${id}`,
+    sheetPath: `${base}/sheet.png`,
+    portraitPath: `${base}/portrait.png`,
+    frameWidth: PET_FRAME_SIZE,
+    frameHeight: PET_FRAME_SIZE,
+    cols: 6,
+    rows: 15,
+    anchorX: 0.5,
+    anchorY: PET_ANCHOR_Y,
+    hdScale: 4,
+    actions: {
+      idle_down: { row: 0, frames: 4, baseFacing: 'front' },
+      idle_right: { row: 1, frames: 4, baseFacing: 'right' },
+      idle_up: { row: 2, frames: 4, baseFacing: 'back' },
+      walk_down: { row: 3, frames: 6, baseFacing: 'front' },
+      walk_right: { row: 4, frames: 6, baseFacing: 'right' },
+      walk_up: { row: 5, frames: 6, baseFacing: 'back' },
+      run_down: { row: 6, frames: 6, baseFacing: 'front' },
+      run_right: { row: 7, frames: 6, baseFacing: 'right' },
+      run_up: { row: 8, frames: 6, baseFacing: 'back' },
+      follow_down: { row: 9, frames: 6, baseFacing: 'front' },
+      follow_right: { row: 10, frames: 6, baseFacing: 'right' },
+      follow_up: { row: 11, frames: 6, baseFacing: 'back' },
+      attack_down: { row: 12, frames: 4, baseFacing: 'front' },
+      attack_right: { row: 13, frames: 4, baseFacing: 'right' },
+      attack_up: { row: 14, frames: 4, baseFacing: 'back' },
+    },
+  }
+}
+
+export const PET_SPRITE_SHEETS: Record<string, SpriteSheetSpec> = Object.fromEntries(
+  COMBAT_PETS.map((pet) => [pet.id, makePetSheetSpec(pet.id)]),
+)
+
+export function getPetSheetSpec(petId?: string | null): SpriteSheetSpec | null {
+  if (!petId) return null
+  return PET_SPRITE_SHEETS[petId] ?? null
+}
+
 export const JOB_TO_HERO_SHEET: Record<string, HeroSheetId> = {
   novice: 'novice',
   swordsman: 'swordsman',
@@ -277,6 +324,11 @@ export function preloadMountSpriteSheet(mountId?: string | null): void {
   if (spec) getSheetImage(spec.sheetPath)
 }
 
+export function preloadPetSpriteSheet(petId?: string | null): void {
+  const spec = getPetSheetSpec(petId)
+  if (spec) getSheetImage(spec.sheetPath)
+}
+
 function buildFrameDrawSpec(
   spec: SpriteSheetSpec,
   row: number,
@@ -357,6 +409,33 @@ export function getMountSheetFrameSpec(
   return {
     ...drawSpec,
     footPadFrac: MOUNT_FOOT_PAD_FRAC,
+  }
+}
+
+export function getPetSheetFrameSpec(
+  petId: string | undefined,
+  dir: Dir,
+  action: SpriteAction,
+  frame: number,
+): SheetFrameDrawSpec | null {
+  const spec = getPetSheetSpec(petId)
+  if (!spec) return null
+
+  const normalizedAction =
+    action === 'skill'
+      ? 'attack'
+      : action === 'idle' || action === 'walk' || action === 'run' || action === 'follow' || action === 'attack'
+        ? action
+        : 'idle'
+  const dirKey = dir === 'down' ? 'down' : dir === 'up' ? 'up' : 'right'
+  const flipX = dir === 'left'
+  const rowSpec = spec.actions[`${normalizedAction}_${dirKey}`] ?? spec.actions.idle_down
+  const col = Math.abs(Math.floor(frame)) % rowSpec.frames
+  const drawSpec = buildFrameDrawSpec(spec, rowSpec.row, col, flipX)
+  if (!drawSpec) return null
+  return {
+    ...drawSpec,
+    footPadFrac: PET_FOOT_PAD_FRAC,
   }
 }
 

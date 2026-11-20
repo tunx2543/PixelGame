@@ -6,7 +6,8 @@ import { getCatalogMonsterFrameCount } from '@/lib/game/catalog-sprites'
 import { JOBS, MONSTERS, normalizeJobId, type WeaponType } from '@/lib/game/data'
 import { getJobModelSpec, getMonsterModelSpec, getMountModelSpec, getPetModelSpec } from '@/lib/game/models-2d'
 import { getMountDef, getMountRiderSeatOffset, type MountAnimAction } from '@/lib/game/mounts'
-import { preloadMountSpriteSheet } from '@/lib/game/sprite-sheets'
+import { getPetVisualTier } from '@/lib/game/pet-follow'
+import { preloadMountSpriteSheet, preloadPetSpriteSheet } from '@/lib/game/sprite-sheets'
 import {
   canvasToResolvedDrawable,
   type Dir,
@@ -49,6 +50,8 @@ export interface SpriteModelCanvasProps {
   fashion?: FashionLoadout | null
   mountLevel?: number
   mountSkinId?: string | null
+  petLevel?: number
+  petStars?: number
   showRider?: boolean
   riderJobId?: string
   className?: string
@@ -73,6 +76,8 @@ export function SpriteModelCanvas({
   fashion,
   mountLevel = 1,
   mountSkinId = null,
+  petLevel = 1,
+  petStars = 1,
   showRider = false,
   riderJobId = 'swordsman',
   className = '',
@@ -124,6 +129,9 @@ export function SpriteModelCanvas({
     if (mode === 'mount') {
       preloadMountSpriteSheet(id)
     }
+    if (mode === 'pet') {
+      preloadPetSpriteSheet(id)
+    }
 
     const observer =
       typeof IntersectionObserver !== 'undefined'
@@ -168,6 +176,20 @@ export function SpriteModelCanvas({
           } else {
             effectiveAction = 'dismount'
             attackProgress = (cycle - 5.05) / 1.15
+          }
+        } else if (mode === 'pet') {
+          const cycle = elapsed % 6.4
+          if (cycle < 1.15) {
+            effectiveAction = 'idle'
+          } else if (cycle < 2.4) {
+            effectiveAction = 'walk'
+          } else if (cycle < 3.7) {
+            effectiveAction = 'follow'
+          } else if (cycle < 5.05) {
+            effectiveAction = 'run'
+          } else {
+            effectiveAction = 'attack'
+            attackProgress = (cycle - 5.05) / 1.35
           }
         } else {
           const cycle = elapsed % 5.1
@@ -231,11 +253,13 @@ export function SpriteModelCanvas({
             ? hopFrame
             : effectiveAction === 'run'
               ? Math.floor(elapsed * 12) % walkMod
-              : effectiveAction === 'walk'
-                ? Math.floor(elapsed * (mode === 'job' ? 8.5 : isCatalogMonster ? 7.5 : 8.5)) % walkMod
-                : mode === 'job' && !reducedMotion && Math.sin(elapsed * 1.4) > 0.96
-                  ? -1
-                  : Math.floor(elapsed * (isCatalogMonster ? 5.0 : 2.6)) % idleCount
+              : effectiveAction === 'follow'
+                ? Math.floor(elapsed * 9.5) % walkMod
+                : effectiveAction === 'walk'
+                  ? Math.floor(elapsed * (mode === 'job' ? 8.5 : isCatalogMonster ? 7.5 : 8.5)) % walkMod
+                  : mode === 'job' && !reducedMotion && Math.sin(elapsed * 1.4) > 0.96
+                    ? -1
+                    : Math.floor(elapsed * (isCatalogMonster ? 5.0 : 2.6)) % idleCount
 
       let drawable: ResolvedDrawable
       let auraColor: string | undefined
@@ -272,8 +296,10 @@ export function SpriteModelCanvas({
         auraColor = auraDef?.primaryColor ?? spec.auraColor
       } else if (mode === 'pet') {
         const spec = getPetModelSpec(id)
-        const petAction: SpriteAction = effectiveAction === 'skill' ? 'attack' : effectiveAction === 'run' ? 'walk' : effectiveAction
-        drawable = canvasToResolvedDrawable(petSprite(spec.petId, dir, petAction, frame, attackFrame))
+        const petAction: SpriteAction = effectiveAction === 'skill' ? 'attack' : effectiveAction
+        drawable = canvasToResolvedDrawable(
+          petSprite(spec.petId, dir, petAction, frame, attackFrame, petLevel, petStars),
+        )
         auraColor = spec.auraColor
         isFlying = spec.floating
       } else if (mode === 'mount') {
@@ -325,7 +351,8 @@ export function SpriteModelCanvas({
         : Boolean(drawable.canvas && drawable.canvas.width > 0 && drawable.canvas.height > 0)
       const fashionSig = mode === 'job' ? getFashionRenderSignature(fashion) : ''
       const mountSig = mode === 'mount' ? `m${mountLevel}|${mountSkinId ?? ''}|${showRider ? riderJobId : ''}` : ''
-      const sig = `${effectiveAction}|${frame}|${hoverY}|${lungeOffset}|${slashBucket}|${auraBucket}|${rebirthCount}|${gmReady ? '1' : '0'}|${sheetId}|${sourceReady ? '1' : '0'}|${mMotionBucket}|${fashionSig}|${mountSig}|${canvas.width}x${canvas.height}`
+      const petSig = mode === 'pet' ? `p${getPetVisualTier(petLevel, petStars)}` : ''
+      const sig = `${effectiveAction}|${frame}|${hoverY}|${lungeOffset}|${slashBucket}|${auraBucket}|${rebirthCount}|${gmReady ? '1' : '0'}|${sheetId}|${sourceReady ? '1' : '0'}|${mMotionBucket}|${fashionSig}|${mountSig}|${petSig}|${canvas.width}x${canvas.height}`
 
       if (sig !== lastSig) {
         lastSig = sig
@@ -618,7 +645,7 @@ export function SpriteModelCanvas({
       observer?.disconnect()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, id, action, dir, weaponOverride, weaponColorOverride, size, scale, isGm, rebirthCount, showShadow, showAura, variant, fashionDep, mountLevel, mountSkinId, showRider, riderJobId])
+  }, [mode, id, action, dir, weaponOverride, weaponColorOverride, size, scale, isGm, rebirthCount, showShadow, showAura, variant, fashionDep, mountLevel, mountSkinId, petLevel, petStars, showRider, riderJobId])
 
   return (
     <canvas

@@ -380,10 +380,18 @@ export function EncounterStageCanvas({
           if (activePet) {
             const petBoltAge = (now - petAtk) / 260
             const petIsAttacking = petAtk > 0 && petBoltAge >= 0 && petBoltAge < 1.3
-            const petAction: SpriteAction = petIsAttacking ? 'attack' : ph === 'FIGHTING' ? 'walk' : 'idle'
+            const petAction: SpriteAction = petIsAttacking ? 'attack' : ph === 'FIGHTING' ? 'follow' : 'idle'
             const petAtkFrame = petIsAttacking ? Math.min(3, Math.floor((petBoltAge / 1.3) * 4)) : 0
             const petFrame = petIsAttacking ? petAtkFrame : Math.floor(t * 3.2) % 6
-            const pImg = petSprite(activePet.petId, 'right', petAction, petFrame, petAtkFrame)
+            const pImg = petSprite(
+              activePet.petId,
+              'right',
+              petAction,
+              petFrame,
+              petAtkFrame,
+              activePet.level,
+              activePet.stars,
+            )
             const pHd = pImg.dataset?.hdScale ? Number(pImg.dataset.hdScale) : 1
             const pScale = 1.9 / Math.max(1, pHd)
             const pw = Math.round(pImg.width * pScale)

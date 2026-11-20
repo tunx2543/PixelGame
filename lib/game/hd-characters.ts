@@ -1,7 +1,8 @@
 import type { WeaponType } from './data'
 import type { MountModelSpec, PetModelSpec } from './models-2d'
 import { getMountVisualTier } from './mounts'
-import { MOUNT_FOOT_PAD_FRAC } from './sprite-sheets'
+import { getPetVisualTier } from './pet-follow'
+import { MOUNT_FOOT_PAD_FRAC, PET_FOOT_PAD_FRAC } from './sprite-sheets'
 import type { Dir, HumanColors, SpriteAction } from './sprites'
 
 const HD_INK = '#291713'
@@ -1454,11 +1455,139 @@ function drawPetAttackVfx(
   ctx.restore()
 }
 
+export function drawPetLevelAndStarFx(
+  ctx: CanvasRenderingContext2D,
+  W: number,
+  H: number,
+  spec: PetModelSpec,
+  dir: Dir,
+  action: SpriteAction,
+  f: number,
+  level = 1,
+  stars = 1,
+): void {
+  const tier = getPetVisualTier(level, stars)
+  const cx = W / 2
+  const footY = H - Math.round(H * PET_FOOT_PAD_FRAC)
+  const isMove = action === 'walk' || action === 'run' || action === 'follow'
+  const isRun = action === 'run'
+  const isFollow = action === 'follow'
+  const phase = f / (isMove ? 6 : 4)
+  const rad = phase * Math.PI * 2
+  const bobY = isRun
+    ? Math.round(Math.sin(rad) * 4 - 2)
+    : isFollow
+      ? Math.round(-Math.abs(Math.sin(rad)) * 6)
+      : Math.round(Math.sin(rad) * 2)
+  const centerY = footY - 26 + bobY
+  const primary = spec.colors.primary
+  const accent = spec.colors.accent
+
+  if (tier <= 1) {
+    if (isRun && (dir === 'left' || dir === 'right')) {
+      ctx.save()
+      ctx.strokeStyle = 'rgba(255,255,255,0.45)'
+      ctx.lineWidth = 2
+      const dirSign = dir === 'left' ? 1 : -1
+      for (let i = 0; i < 2; i++) {
+        const ly = centerY - 6 + i * 12
+        ctx.beginPath()
+        ctx.moveTo(cx + dirSign * 28, ly)
+        ctx.lineTo(cx + dirSign * 50, ly)
+        ctx.stroke()
+      }
+      ctx.restore()
+    }
+    return
+  }
+
+  ctx.save()
+  const tierColor =
+    tier >= 5 ? '#fef08a' : tier === 4 ? accent : tier === 3 ? '#fbbf24' : primary
+
+  // Tier 2+: subtle spirit aura glow & star badge sparkle
+  if (tier >= 2) {
+    const wash = ctx.createRadialGradient(cx, centerY, 4, cx, centerY, tier >= 4 ? 46 : 36)
+    wash.addColorStop(0, tier >= 5 ? 'rgba(254, 240, 138, 0.28)' : 'rgba(255,255,255,0.18)')
+    wash.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = wash
+    ctx.beginPath()
+    ctx.arc(cx, centerY, tier >= 4 ? 46 : 36, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // Tier 3+: golden / mystic rune ring at pet base
+  if (tier >= 3) {
+    ctx.strokeStyle = tierColor
+    ctx.lineWidth = tier >= 4 ? 2.4 : 1.8
+    ctx.globalAlpha = 0.62 + Math.sin(rad) * 0.16
+    ctx.beginPath()
+    ctx.ellipse(cx, footY + 1, tier >= 4 ? 32 : 26, tier >= 4 ? 9 : 7, 0, 0, Math.PI * 2)
+    ctx.stroke()
+    if (tier >= 4) {
+      ctx.globalAlpha = 0.35
+      ctx.lineWidth = 1.6
+      ctx.beginPath()
+      ctx.ellipse(cx, footY + 1, 38, 11, 0, 0, Math.PI * 2)
+      ctx.stroke()
+    }
+    ctx.globalAlpha = 1
+  }
+
+  // Tier 4+: orbiting elemental starlight motes
+  if (tier >= 4) {
+    const moteCount = tier >= 5 ? 5 : 3
+    for (let i = 0; i < moteCount; i++) {
+      const a = rad + (i * Math.PI * 2) / moteCount
+      const mx = cx + Math.cos(a) * 34
+      const my = centerY + Math.sin(a * 1.4) * 14
+      ctx.fillStyle = i % 2 === 0 ? tierColor : accent
+      ctx.beginPath()
+      ctx.arc(mx, my, tier >= 5 ? 3 : 2.3, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+
+  // Tier 5: sovereign celestial halo above pet + star crown pips
+  if (tier >= 5) {
+    const crownY = centerY - 38 + Math.round(Math.sin(rad) * 2)
+    ctx.strokeStyle = '#fbbf24'
+    ctx.lineWidth = 2.4
+    ctx.beginPath()
+    ctx.ellipse(cx, crownY, 16, 4.5, 0, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.fillStyle = '#ffffff'
+    for (const dx of [-12, 0, 12]) {
+      ctx.beginPath()
+      ctx.arc(cx + dx, crownY + (dx === 0 ? -3 : 0), 2.3, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+
+  if (isRun && (dir === 'left' || dir === 'right')) {
+    ctx.strokeStyle = tierColor
+    ctx.globalAlpha = 0.55
+    ctx.lineWidth = 2
+    const dirSign = dir === 'left' ? 1 : -1
+    for (let i = 0; i < 3; i++) {
+      const ly = centerY - 8 + i * 10
+      ctx.beginPath()
+      ctx.moveTo(cx + dirSign * 28, ly)
+      ctx.lineTo(cx + dirSign * 54, ly)
+      ctx.stroke()
+    }
+  }
+
+  ctx.restore()
+}
+
 export function renderHdPetSprite(
   spec: PetModelSpec,
   dir: Dir,
   action: SpriteAction,
   f: number,
+  level = 1,
+  stars = 1,
 ): HTMLCanvasElement {
   const hdScale = 4
   const W = 34 * hdScale
@@ -1466,22 +1595,25 @@ export function renderHdPetSprite(
   const { c, ctx } = makeSmoothCanvas(W, H, hdScale)
 
   const cx = W / 2
-  const footY = H - 18
+  const footY = H - Math.round(H * PET_FOOT_PAD_FRAC)
   const isSide = dir === 'left' || dir === 'right'
   const isUp = dir === 'up'
-  const isAtk = action === 'attack'
-  const isWalk = action === 'walk'
+  const isAtk = action === 'attack' || action === 'skill'
+  const isWalk = action === 'walk' || action === 'run' || action === 'follow'
+  const isRun = action === 'run'
   const atkF = isAtk ? f % 4 : 0
   const walkPhase = (f % 6) / 6
 
-  // Shared motion kinematics for walk & attack
+  // Shared motion kinematics for walk, run, follow & attack
   const idleFloat = Math.sin((f / 4) * Math.PI * 2) * (spec.floating ? 4.5 : 2)
-  const walkHop = isWalk ? -Math.abs(Math.sin(walkPhase * Math.PI * 2)) * (spec.floating ? 6 : 8) : 0
+  const walkHop = isWalk
+    ? -Math.abs(Math.sin(walkPhase * Math.PI * 2)) * (spec.floating ? 6 : isRun ? 10 : 8)
+    : 0
   const atkLungeX = isAtk ? (atkF === 0 ? -4 : atkF === 1 ? 10 : atkF === 2 ? 12 : 3) : 0
   const atkLungeY = isAtk ? (atkF === 0 ? 4 : atkF === 1 ? -7 : atkF === 2 ? -5 : 0) : 0
-  const stride = isWalk ? Math.sin(walkPhase * Math.PI * 2) * 8 : isAtk && atkF === 2 ? 7 : 0
+  const stride = isWalk ? Math.sin(walkPhase * Math.PI * 2) * (isRun ? 11 : 8) : isAtk && atkF === 2 ? 7 : 0
   const wingFlap = isWalk
-    ? Math.sin(walkPhase * Math.PI * 2) * 13
+    ? Math.sin(walkPhase * Math.PI * 2) * (isRun ? 16 : 13)
     : isAtk
       ? [14, -14, -18, 4][atkF]
       : Math.sin((f / 4) * Math.PI * 2) * 5
@@ -2265,6 +2397,7 @@ export function renderHdPetSprite(
   }
 
   ctx.restore()
+  drawPetLevelAndStarFx(ctx, W, H, spec, dir, action, f, level, stars)
   return c
 }
 

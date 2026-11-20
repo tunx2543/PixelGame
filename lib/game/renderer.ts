@@ -39,7 +39,8 @@ import {
   resolveMountAnimationState,
   type MountDef,
 } from './mounts'
-import { preloadMountSpriteSheet } from './sprite-sheets'
+import { preloadMountSpriteSheet, preloadPetSpriteSheet } from './sprite-sheets'
+import { resolvePetAnimationFrame } from './pet-follow'
 import { TITLE_DEFS } from './rpg-systems'
 import { GATHERING_NODES, getCosmeticDef, getWorldTimePhase, sanitizeExtV2 } from './extended-systems'
 import { drawOverworldSkillEffect, drawRebirthAura } from './vfx-canvas'
@@ -1016,21 +1017,22 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       const petY =
         remoteY -
         (isFloating ? 5 : 1) +
-        (isFloating ? Math.sin(t * 4 + remoteY * 0.1) * 2.2 : other.moving ? -Math.abs(Math.sin(t * 9)) * 1.8 : 0)
-      const petAction: SpriteAction = remoteAttacking ? 'attack' : other.moving ? 'walk' : 'idle'
+        (isFloating ? Math.sin(t * 4 + remoteY * 0.1) * 2.2 : other.moving ? -Math.abs(Math.sin(t * 9.5)) * 1.6 : 0)
+      const petAction: SpriteAction = remoteAttacking ? 'attack' : other.moving ? 'follow' : 'idle'
       const petFrame = remoteAttacking
         ? remoteAtkFrame
-        : petAction === 'walk'
-          ? Math.floor(t * 9) % 6
-          : Math.floor(t * 2.6) % 4
-      const pImg = petSprite(activePetDef.id, other.facing, petAction, petFrame, remoteAtkFrame)
+        : petAction === 'follow'
+          ? Math.floor(t * 9.5) % 6
+          : Math.floor(t * 2.8) % 4
+      const pImg = petSprite(activePetDef.id, other.facing, petAction, petFrame, remoteAtkFrame, 1, 1)
       const pHd = pImg.dataset?.hdScale ? Number(pImg.dataset.hdScale) : 1
       const pScale = (activePetDef.id === 'aurora_cloud_dragon' ? 0.78 : isPhao ? 0.72 : 0.68) / pHd
       const pDrawW = pImg.width * pScale
       const pDrawH = pImg.height * pScale
+      const pFootPad = pImg.dataset?.footPadFrac ? Number(pImg.dataset.footPadFrac) * pDrawH : 2
 
       ents.push({
-        y: remoteY + 1,
+        y: remoteY + 0.5,
         draw: () => {
           ctx.save()
           shadow(ctx, petX, remoteY + 1, isPhao ? 5 : 4)
@@ -1045,7 +1047,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
             ctx.restore()
           }
           if (pImg.width > 0 && pImg.height > 0) {
-            ctx.drawImage(pImg, petX - pDrawW / 2, petY - pDrawH + 2, pDrawW, pDrawH)
+            ctx.drawImage(pImg, petX - pDrawW / 2, petY - pDrawH + pFootPad, pDrawW, pDrawH)
           }
           ctx.restore()
         },
@@ -1467,36 +1469,62 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   })
 
   if (activePet) {
+    preloadPetSpriteSheet(activePet.petId)
     const isPhao = activePet.def.category === 'phao' || activePet.petId.startsWith('phao_')
     const petSpec = getPetModelSpec(activePet.petId)
     const isFloating = petSpec.floating
-    const petOffsetX = game.facing === 'left' ? 14 : game.facing === 'right' ? -14 : -15
-    const petX = p.x + petOffsetX + Math.sin(t * 2.5) * 1.4
-    const petY =
-      p.y -
-      (isFloating ? 5 : 1) +
-      (isFloating ? Math.sin(t * 4) * 2.2 : game.moving ? -Math.abs(Math.sin(game.walkT * 9)) * 1.8 : 0)
-    const petAttacking = game.petAttackAnim > 0
-    const petAtkProgress = petAttacking ? Math.max(0, Math.min(1, 1 - game.petAttackAnim / 0.45)) : 0
+    const pf = game.petFollow.initialized && game.petFollow.petId === activePet.petId ? game.petFollow : null
+    const petBaseX = pf ? pf.x : p.x + (game.facing === 'left' ? 14 : game.facing === 'right' ? -14 : -15)
+    const petBaseY = pf ? pf.y : p.y
+    const petDir = pf ? pf.dir : game.facing
+    const petAction: SpriteAction = pf
+      ? pf.action
+      : game.petAttackAnim > 0
+        ? 'attack'
+        : game.moving
+          ? 'follow'
+          : 'idle'
+    const petAnimT = pf ? pf.animT : t
+    const petAttacking = petAction === 'attack' || game.petAttackAnim > 0
+    const petAtkProgress = game.petAttackAnim > 0 ? Math.max(0, Math.min(1, 1 - game.petAttackAnim / 0.45)) : 0
     const petAtkFrame = Math.min(3, Math.floor(petAtkProgress * 4))
-    const petAction: SpriteAction = petAttacking ? 'attack' : game.moving ? 'walk' : 'idle'
-    const petFrame = petAttacking
-      ? petAtkFrame
-      : petAction === 'walk'
-        ? Math.floor(game.walkT * 9) % 6
-        : Math.floor(t * 2.6) % 4
-    const pImg = petSprite(activePet.petId, game.facing, petAction, petFrame, petAtkFrame)
+    const petFrame = resolvePetAnimationFrame(
+      petAction === 'attack' || petAction === 'walk' || petAction === 'run' || petAction === 'follow' || petAction === 'idle'
+        ? petAction
+        : 'idle',
+      petAnimT,
+      game.petAttackAnim,
+    )
+    const floatBob = isFloating
+      ? -4.5 + Math.sin(t * 4) * 2.2
+      : petAction === 'run'
+        ? -Math.abs(Math.sin(petAnimT * 12)) * 2.1
+        : petAction === 'follow' || petAction === 'walk'
+          ? -Math.abs(Math.sin(petAnimT * 9.5)) * 1.4
+          : 0
+    const petX = petBaseX + (isFloating ? Math.sin(t * 2.5) * 1.1 : 0)
+    const petY = petBaseY + floatBob
+    const pImg = petSprite(
+      activePet.petId,
+      petDir,
+      petAttacking ? 'attack' : petAction,
+      petFrame,
+      petAtkFrame,
+      activePet.level,
+      activePet.stars,
+    )
     const pHd = pImg.dataset?.hdScale ? Number(pImg.dataset.hdScale) : 1
     const pScale = (activePet.petId === 'aurora_cloud_dragon' ? 0.78 : isPhao ? 0.72 : 0.68) / pHd
     const pDrawW = pImg.width * pScale
     const pDrawH = pImg.height * pScale
+    const pFootPad = pImg.dataset?.footPadFrac ? Number(pImg.dataset.footPadFrac) * pDrawH : 2
 
     ents.push({
-      y: p.y + 1,
+      y: petBaseY + 0.5,
       draw: () => {
         ctx.save()
         ctx.globalAlpha = p.invisible ? 0.18 : 1
-        shadow(ctx, petX, p.y + 1, isPhao ? 5 : 4)
+        shadow(ctx, petX, petBaseY + 1, isPhao ? 5 : 4)
         if (isPhao) {
           ctx.save()
           ctx.strokeStyle = activePet.def.colors.accent
@@ -1508,7 +1536,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           ctx.restore()
         }
         if (pImg.width > 0 && pImg.height > 0) {
-          ctx.drawImage(pImg, petX - pDrawW / 2, petY - pDrawH + 2, pDrawW, pDrawH)
+          ctx.drawImage(pImg, petX - pDrawW / 2, petY - pDrawH + pFootPad, pDrawW, pDrawH)
         }
         ctx.restore()
       },

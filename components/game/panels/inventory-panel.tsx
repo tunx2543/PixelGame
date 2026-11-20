@@ -761,13 +761,22 @@ export function InventoryPanel() {
                         active ? 'border-emerald-400 bg-emerald-500/10' : 'border-border bg-card/80',
                       )}
                     >
-                      <div className="min-w-0">
-                        <p className="truncate font-bold text-foreground">
-                          {def.name} <span className="text-amber-300">Lv.{prog.level}</span>
-                        </p>
-                        <p className="truncate text-[10px] text-muted-foreground">
-                          {def.rarity} · ★{prog.stars ?? 1} · ATK +{def.atkBuff}
-                        </p>
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <img
+                          src={`/assets/hd/pets/${petId}/portrait.png`}
+                          alt={def.name}
+                          width={36}
+                          height={36}
+                          className="pixelated size-9 shrink-0 rounded border border-[#c9993f]/40 bg-[#0b1024]/90 object-contain"
+                        />
+                        <div className="min-w-0">
+                          <p className="truncate font-bold text-foreground">
+                            {def.name} <span className="text-amber-300">Lv.{prog.level}</span>
+                          </p>
+                          <p className="truncate text-[10px] text-muted-foreground">
+                            {def.rarity} · ★{prog.stars ?? 1} · ATK +{def.atkBuff}
+                          </p>
+                        </div>
                       </div>
                       <PxButton
                         variant={active ? 'secondary' : 'accent'}

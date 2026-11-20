@@ -13,6 +13,7 @@ import {
   MODEL_DIRS,
   type ModelDir,
 } from '@/lib/game/models-2d'
+import { getPetVisualTierLabel } from '@/lib/game/pet-follow'
 import type { SpriteAction } from '@/lib/game/sprites'
 import { getSkillIconPath, getSkillVfxSpec, resolveRebirthAuraSpec } from '@/lib/game/vfx-specs'
 import { formatNum } from './format'
@@ -23,6 +24,7 @@ const ACTION_OPTIONS: Array<{ id: PreviewAction; label: string; short: string }>
   { id: 'auto', label: 'เล่นวนอัตโนมัติ', short: 'อัตโนมัติ' },
   { id: 'idle', label: 'ยืนหายใจ (Idle)', short: 'Idle' },
   { id: 'walk', label: 'เดิน (Walk)', short: 'Walk' },
+  { id: 'follow', label: 'เดินตาม (Follow)', short: 'Follow' },
   { id: 'run', label: 'วิ่ง (Run)', short: 'Run' },
   { id: 'mount', label: 'ขึ้นขี่ (Mount)', short: 'Mount' },
   { id: 'dismount', label: 'ลงขี่ (Dismount)', short: 'Dismount' },
@@ -40,6 +42,7 @@ const DIR_LABELS: Record<ModelDir, string> = {
 const ACTION_THAI: Record<SpriteAction, string> = {
   idle: 'ยืนหายใจ',
   walk: 'กำลังเดิน',
+  follow: 'เดินตาม',
   run: 'กำลังวิ่ง',
   mount: 'กระโดดขึ้นขี่',
   dismount: 'ลงจากสัตว์ขี่',
@@ -163,6 +166,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
   const [liveAutoPhase, setLiveAutoPhase] = useState<SpriteAction>('idle')
   const [previewRebirth, setPreviewRebirth] = useState<number>(1)
   const [previewMountLevel, setPreviewMountLevel] = useState<number>(1)
+  const [previewPetTier, setPreviewPetTier] = useState<{ level: number; stars: number }>({ level: 1, stars: 1 })
   const [showMountRider, setShowMountRider] = useState<boolean>(true)
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null)
   const [vfxNonce, setVfxNonce] = useState<number>(0)
@@ -260,8 +264,10 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
           <div className="flex flex-wrap gap-1" role="group" aria-label="เลือกแอนิเมชั่น">
             {ACTION_OPTIONS.filter((opt) =>
               tab === 'mounts'
-                ? opt.id !== 'attack' && opt.id !== 'skill'
-                : opt.id !== 'run' && opt.id !== 'mount' && opt.id !== 'dismount',
+                ? opt.id !== 'attack' && opt.id !== 'skill' && opt.id !== 'follow'
+                : tab === 'pets'
+                  ? opt.id !== 'mount' && opt.id !== 'dismount' && opt.id !== 'skill'
+                  : opt.id !== 'run' && opt.id !== 'follow' && opt.id !== 'mount' && opt.id !== 'dismount',
             ).map((opt) => (
               <button
                 key={opt.id}
@@ -278,7 +284,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                   <Play className="size-3" aria-hidden />
                 ) : opt.id === 'idle' ? (
                   <Pause className="size-3" aria-hidden />
-                ) : opt.id === 'walk' || opt.id === 'run' ? (
+                ) : opt.id === 'walk' || opt.id === 'run' || opt.id === 'follow' ? (
                   <Footprints className="size-3" aria-hidden />
                 ) : opt.id === 'mount' || opt.id === 'dismount' ? (
                   <Wind className="size-3" aria-hidden />
@@ -764,6 +770,8 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                 id={selectedPetEntry.pet.id}
                 action={action}
                 dir={dir}
+                petLevel={previewPetTier.level}
+                petStars={previewPetTier.stars}
                 size={compact ? 124 : 144}
                 onAutoPhaseChange={setLiveAutoPhase}
                 label={`โมเดล ${selectedPetEntry.pet.name}`}
@@ -812,6 +820,39 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
               </div>
             </div>
 
+            <div className="flex flex-wrap items-center justify-between gap-2 border border-emerald-400/30 bg-background/60 px-2 py-1.5 text-[11px]">
+              <div className="flex flex-wrap items-center gap-1" role="group" aria-label="ระดับรูปลักษณ์สัตว์เลี้ยง">
+                <span className="mr-1 text-muted-foreground">ระดับรูปลักษณ์:</span>
+                {[
+                  { level: 1, stars: 1, label: 'Lv.1 ★1 พื้นฐาน' },
+                  { level: 6, stars: 1, label: 'Lv.6 ★1 ปราณเรือง' },
+                  { level: 6, stars: 2, label: 'Lv.6 ★2 ประกายทอง' },
+                  { level: 12, stars: 3, label: 'Lv.12 ★3 อาร์เคน' },
+                  { level: 20, stars: 5, label: 'Lv.20 ★5 เทพดารา' },
+                ].map((tierOpt) => {
+                  const activeTier = previewPetTier.level === tierOpt.level && previewPetTier.stars === tierOpt.stars
+                  return (
+                    <button
+                      key={`${tierOpt.level}-${tierOpt.stars}`}
+                      type="button"
+                      aria-pressed={activeTier}
+                      onClick={() => setPreviewPetTier({ level: tierOpt.level, stars: tierOpt.stars })}
+                      className={`pixel-btn px-1.5 py-0.5 text-[10px] font-semibold ${
+                        activeTier
+                          ? 'bg-emerald-400 text-slate-950'
+                          : 'bg-secondary text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {tierOpt.label}
+                    </button>
+                  )
+                })}
+              </div>
+              <span className="text-[10px] font-semibold text-emerald-300">
+                {getPetVisualTierLabel(previewPetTier.level, previewPetTier.stars)}
+              </span>
+            </div>
+
             <div className="grid grid-cols-3 gap-1.5 text-center text-[11px] sm:grid-cols-5">
               {[
                 ['พลังยิง', formatNum(selectedPetEntry.pet.baseAtk)],
@@ -828,7 +869,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
             </div>
 
             <p className="font-mono text-[10px] text-muted-foreground tabular-nums">
-              {selectedPetEntry.model.canvasSize.width}x{selectedPetEntry.model.canvasSize.height}px • 4 ทิศทาง • Idle 4F / Walk 6F / Attack (เปิดฝาผอบ) 4F
+              {selectedPetEntry.model.canvasSize.width}x{selectedPetEntry.model.canvasSize.height}px • 4 ทิศทาง • Idle 4F / Walk 6F / Follow 6F / Run 6F / Attack 4F
             </p>
           </div>
         </section>
@@ -1024,6 +1065,8 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                     id={pet.id}
                     action={compact && !selected && action === 'auto' ? 'idle' : action}
                     dir={dir}
+                    petLevel={selected ? previewPetTier.level : 1}
+                    petStars={selected ? previewPetTier.stars : 1}
                     size={88}
                     label={`พรีวิว ${pet.name}`}
                   />

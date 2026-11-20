@@ -19,11 +19,13 @@ import {
 } from './gm-sprite'
 import {
   drawMountLevelAndSkinFx,
+  drawPetLevelAndStarFx,
   renderHdHumanSprite,
   renderHdMountSprite,
   renderHdPetSprite,
 } from './hd-characters'
 import { getMountVisualTier } from './mounts'
+import { getPetVisualTier } from './pet-follow'
 import { getCatalogMonsterAtlas, hasCatalogMonsterAtlas } from './catalog-sprites'
 import { buildHdMapCanvas } from './hd-tiles'
 import {
@@ -33,7 +35,10 @@ import {
   getMonsterSheetFrameSpec,
   getMountSheetFrameSpec,
   getNpcSheetFrameSpec,
+  getPetSheetFrameSpec,
   MOUNT_FOOT_PAD_FRAC,
+  PET_FOOT_PAD_FRAC,
+  preloadPetSpriteSheet,
   type SheetFrameDrawSpec,
 } from './sprite-sheets'
 
@@ -647,7 +652,7 @@ export function resolveNpcDrawable(
 /* ---------------- Articulated Humanoids (All 12 Jobs) ---------------- */
 
 export type Dir = 'down' | 'up' | 'left' | 'right'
-export type SpriteAction = 'idle' | 'walk' | 'run' | 'mount' | 'dismount' | 'attack' | 'skill'
+export type SpriteAction = 'idle' | 'walk' | 'run' | 'follow' | 'mount' | 'dismount' | 'attack' | 'skill'
 export type HatStyle = RegistryHatStyle
 
 export interface HumanColors {
@@ -1270,7 +1275,7 @@ export function humanSprite(
   const action: 'idle' | 'walk' | 'attack' =
     requestedAction === 'skill'
       ? 'attack'
-      : requestedAction === 'run'
+      : requestedAction === 'run' || requestedAction === 'follow'
         ? 'walk'
         : requestedAction === 'mount' || requestedAction === 'dismount'
           ? 'idle'
@@ -2076,17 +2081,49 @@ export function petSprite(
   action: SpriteAction = 'idle',
   frame = 0,
   attackFrameOverride?: number,
+  level = 1,
+  stars = 1,
 ): HTMLCanvasElement {
+  const normAction: SpriteAction =
+    action === 'skill'
+      ? 'attack'
+      : action === 'mount' || action === 'dismount'
+        ? 'idle'
+        : action
   const f =
-    action === 'attack'
+    normAction === 'attack'
       ? Math.abs(attackFrameOverride ?? frame) % 4
-      : action === 'walk'
+      : normAction === 'walk' || normAction === 'run' || normAction === 'follow'
         ? Math.abs(frame) % 6
         : Math.abs(frame) % 4
   const spec = getPetModelSpec(petId)
-  const key = `hd_pet2d|${spec.petId}|${dir}|${action}|${f}`
+  const tier = getPetVisualTier(level, stars)
+  if (typeof document !== 'undefined') {
+    preloadPetSpriteSheet(spec.petId)
+  }
+  const frameSpec = typeof document !== 'undefined' ? getPetSheetFrameSpec(spec.petId, dir, normAction, f) : null
+  const sheetReadyFlag = frameSpec ? 's1' : 's0'
+  const key = `hd_pet2d|${spec.petId}|${dir}|${normAction}|${f}|t${tier}|${sheetReadyFlag}`
   return cached(key, () => {
-    return renderHdPetSprite(spec, dir, action, f)
+    if (frameSpec && typeof document !== 'undefined') {
+      const c = document.createElement('canvas')
+      c.width = frameSpec.sw
+      c.height = frameSpec.sh
+      c.dataset.hdScale = String(frameSpec.hdScale)
+      c.dataset.sheetId = frameSpec.sheetId
+      c.dataset.anchorX = String(frameSpec.anchorX)
+      c.dataset.anchorY = String(frameSpec.anchorY)
+      c.dataset.footPadFrac = String(frameSpec.footPadFrac ?? PET_FOOT_PAD_FRAC)
+      const ctx = c.getContext('2d')
+      if (ctx) {
+        ctx.imageSmoothingEnabled = true
+        ctx.imageSmoothingQuality = 'high'
+        drawSheetFrameSpec(ctx, frameSpec, 0, 0, frameSpec.sw, frameSpec.sh)
+        drawPetLevelAndStarFx(ctx, frameSpec.sw, frameSpec.sh, spec, dir, normAction, f, level, stars)
+        return c
+      }
+    }
+    return renderHdPetSprite(spec, dir, normAction, f, level, stars)
   })
 }
 

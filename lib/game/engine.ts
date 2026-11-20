@@ -82,7 +82,14 @@ import {
   type MountState,
   type MountTransitionPhase,
 } from './mounts'
-import { preloadMountSpriteSheet } from './sprite-sheets'
+import {
+  createDefaultPetFollowState,
+  resetPetFollowToPlayer,
+  stepPetFollow,
+  type PetFollowState,
+} from './pet-follow'
+import { getPetModelSpec } from './models-2d'
+import { preloadMountSpriteSheet, preloadPetSpriteSheet } from './sprite-sheets'
 import {
   claimDailyMission,
   onDailyMissionCompleted,
@@ -753,6 +760,7 @@ export const game = {
   skillVfxColor: '#38bdf8',
   petAttackCd: 0,
   petAttackAnim: 0,
+  petFollow: createDefaultPetFollowState() as PetFollowState,
   skillCd: {} as Record<string, number>,
   itemCd: {} as Record<string, number>,
   blockingUi: false,
@@ -1547,6 +1555,7 @@ export function changeMap(rawMapId: string, tx: number, ty: number) {
   p.mapId = mapId
   p.x = (tx + 0.5) * TILE
   p.y = (ty + 0.5) * TILE
+  syncPetFollowToPlayer(true)
   game.projectiles = []
   game.effects = []
   game.floats = []
@@ -1560,6 +1569,33 @@ export function changeMap(rawMapId: string, tx: number, ty: number) {
   say('system', `เข้าสู่ ${map.name} (${map.levelLabel})`)
   saveGame()
   notify()
+}
+
+function syncPetFollowToPlayer(forceSnap = true) {
+  const p = game.p
+  if (!p) {
+    game.petFollow = createDefaultPetFollowState()
+    return
+  }
+  const activePet = getActivePetBonuses(p.petState, p.equippedGemCompanion, p.ownedGemItems)
+  const petId = activePet?.petId ?? null
+  if (petId) preloadPetSpriteSheet(petId)
+  if (!forceSnap && game.petFollow.initialized && game.petFollow.petId === petId && game.petFollow.mapId === p.mapId) {
+    return
+  }
+  const map = MAPS[p.mapId] ?? currentMap()
+  const isPhao = Boolean(activePet && (activePet.def.category === 'phao' || activePet.petId.startsWith('phao_')))
+  const isMounted = Boolean(p.mountState?.mounted && p.mountState?.activeMountId)
+  game.petFollow = resetPetFollowToPlayer(game.petFollow, {
+    petId,
+    mapId: p.mapId,
+    playerX: p.x,
+    playerY: p.y,
+    playerDir: game.facing,
+    isPhao,
+    isMounted,
+    isBlocked: (x, y) => boxBlocked(map, x, y, 3, 2),
+  })
 }
 
 export function getMapMinLevel(map: MapDef): number {
@@ -3240,6 +3276,7 @@ export function equipGemShopItem(itemId: string) {
     p.equippedGemCompanion = nextEquip
     p.petState = sanitizePetState(p.petState, p.ownedGemItems, nextEquip)
     p.petState.activePetId = nextEquip
+    syncPetFollowToPlayer(true)
   }
   const equipped = p.equippedGemFashion === itemId || p.equippedGemCompanion === itemId
   say('system', equipped ? `สวมใส่ ${shopItem.name} แล้ว` : `ถอด ${shopItem.name} แล้ว`)
@@ -3326,9 +3363,10 @@ export function unlockCombatPet(petId: string): { ok: boolean; message: string }
   const costGold = def.unlockGold ?? 0
   if (p.gold < costGold) return { ok: false, message: `ทองไม่พอ (ต้องการ ${costGold.toLocaleString()} G)` }
   p.gold -= costGold
-  p.petState.ownedPets[petId] = { level: 1, exp: 0 }
+  p.petState.ownedPets[petId] = { level: 1, exp: 0, stars: 1 }
   p.petState.activePetId = petId
   p.equippedGemCompanion = null
+  syncPetFollowToPlayer(true)
   clampVitals()
   saveGame()
   notify()
@@ -3349,6 +3387,7 @@ export function equipCombatPet(petId: string | null) {
     p.equippedGemCompanion = def?.linkedGemItemId ?? null
     say('system', `เรียกคู่หู ${def?.name ?? petId} ออกมาช่วยสู้แล้ว`)
   }
+  syncPetFollowToPlayer(true)
   clampVitals()
   saveGame()
   notify()
@@ -6945,6 +6984,7 @@ function resetRuntime() {
   game.attackAnim = 0
   game.skillAnim = 0
   game.petAttackAnim = 0
+  game.petFollow = createDefaultPetFollowState()
   game.skillCd = {}
   game.bubble = null
   game.socialTargetId = null
@@ -6973,6 +7013,7 @@ function startSession(p: SaveData, welcome: string, persist = false) {
     p.x = (map.spawn.x + 0.5) * TILE
     p.y = (map.spawn.y + 0.5) * TILE
   }
+  syncPetFollowToPlayer(true)
   populateMap()
   clampVitals()
   syncBgmForMap(map.id, game.monsters.some((m) => !m.dead && Boolean(MONSTERS[m.defId]?.boss)))
@@ -7277,37 +7318,64 @@ export function update(dt: number) {
     else basicAttack()
   }
 
+  // Active Pet Follow AI update
+  const activePet = getActivePetBonuses(p.petState, p.equippedGemCompanion, p.ownedGemItems)
+  const activePetSpec = activePet ? getPetModelSpec(activePet.petId) : null
+  const activeMount = getActiveMountBonuses(p.mountState, p.ownedGemItems)
+  if (activePet) preloadPetSpriteSheet(activePet.petId)
+  game.petFollow = stepPetFollow(game.petFollow, {
+    dt,
+    petId: activePet?.petId ?? null,
+    mapId: map.id,
+    playerX: p.x,
+    playerY: p.y,
+    playerDir: game.facing,
+    playerMoving: game.moving,
+    playerSpeed: getStats().speed,
+    isPhao: Boolean(activePet && (activePet.def.category === 'phao' || activePet.petId.startsWith('phao_'))),
+    isMounted: Boolean(activeMount?.mounted),
+    isFloating: activePetSpec?.floating,
+    petAttackAnim: game.petAttackAnim,
+    isBlocked: (x, y) => boxBlocked(map, x, y, 3, 2),
+  })
+
   // Active combat pet auto-assist projectile
-  if (!map.safe && game.petAttackCd <= 0) {
-    const petBonus = getActivePetBonuses(p.petState, p.equippedGemCompanion, p.ownedGemItems)
-    if (petBonus) {
-      let bestTarget: Monster | null = null
-      let bestDist = 135
-      for (const m of game.monsters) {
-        if (m.dead) continue
-        const d = Math.hypot(m.x - p.x, m.y - p.y)
-        if (d < bestDist && (m.provoked || game.autoFarm || d < 85)) {
-          bestDist = d
-          bestTarget = m
-        }
+  if (!map.safe && game.petAttackCd <= 0 && activePet) {
+    let bestTarget: Monster | null = null
+    let bestDist = 135
+    for (const m of game.monsters) {
+      if (m.dead) continue
+      const d = Math.hypot(m.x - p.x, m.y - p.y)
+      if (d < bestDist && (m.provoked || game.autoFarm || d < 85)) {
+        bestDist = d
+        bestTarget = m
       }
-      if (bestTarget) {
-        game.petAttackCd = petBonus.attackInterval
-        game.petAttackAnim = 0.45
-        const petOffsetX = game.facing === 'left' ? 12 : game.facing === 'right' ? -12 : -14
-        game.projectiles.push({
-          x: p.x + petOffsetX,
-          y: p.y - 10,
-          targetUid: bestTarget.uid,
-          speed: 195,
-          color: petBonus.def.colors.accent,
-          size: 2.5,
-          mults: [],
-          aoe: 0,
-          delay: 0,
-          flatDmg: petBonus.companionAtk,
-        })
+    }
+    if (bestTarget) {
+      game.petAttackCd = activePet.attackInterval
+      game.petAttackAnim = 0.45
+      const petOffsetX = game.facing === 'left' ? 12 : game.facing === 'right' ? -12 : -14
+      const launchX = game.petFollow.initialized ? game.petFollow.x : p.x + petOffsetX
+      const launchY = game.petFollow.initialized ? game.petFollow.y - 8 : p.y - 10
+      const adx = bestTarget.x - launchX
+      const ady = bestTarget.y - launchY
+      if (Math.abs(adx) > Math.abs(ady)) {
+        game.petFollow.dir = adx < 0 ? 'left' : 'right'
+      } else {
+        game.petFollow.dir = ady < 0 ? 'up' : 'down'
       }
+      game.projectiles.push({
+        x: launchX,
+        y: launchY,
+        targetUid: bestTarget.uid,
+        speed: 195,
+        color: activePet.def.colors.accent,
+        size: 2.5,
+        mults: [],
+        aoe: 0,
+        delay: 0,
+        flatDmg: activePet.companionAtk,
+      })
     }
   }
 
