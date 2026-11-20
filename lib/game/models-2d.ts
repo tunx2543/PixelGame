@@ -1,7 +1,7 @@
 import { MONSTER_CATALOG_META, normalizeMonsterId } from './biome-monsters'
 import { getCatalogMonsterAtlas } from './catalog-sprites'
 import { JOBS, MONSTERS, type JobDef, type MonsterDef, type MonsterSprite, type WeaponType } from './data'
-import { MOUNT_DEFS, type MountArchetype, type MountDef } from './mounts'
+import { MOUNT_DEFS, resolveMountId, type MountArchetype, type MountDef } from './mounts'
 import { COMBAT_PETS, type CombatPetDef } from './systems'
 
 export type ModelDir = 'down' | 'up' | 'left' | 'right'
@@ -622,8 +622,9 @@ export const MOUNT_MODEL_SPECS: Record<string, MountModelSpec> = Object.fromEntr
 )
 
 export function getMountModelSpec(mountId?: string | null): MountModelSpec {
-  if (mountId && MOUNT_MODEL_SPECS[mountId]) {
-    return MOUNT_MODEL_SPECS[mountId]
+  const resolved = resolveMountId(mountId)
+  if (resolved && MOUNT_MODEL_SPECS[resolved]) {
+    return MOUNT_MODEL_SPECS[resolved]
   }
   return MOUNT_MODEL_SPECS.meadow_pony
 }

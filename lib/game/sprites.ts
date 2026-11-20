@@ -2173,9 +2173,9 @@ function renderMountModel(spec: MountModelSpec, dir: Dir, action: SpriteAction, 
     const lLegY = action === 'walk' && f % 2 === 0 ? footY - 2 : footY
     const rLegY = action === 'walk' && f % 2 === 1 ? footY - 2 : footY
 
-    // Flying wings for griffin / kirin / cloud_dragon
+    // Flying wings for dragon
     if (spec.flying) {
-      const span = spec.archetype === 'cloud_dragon' ? 16 : 14
+      const span = spec.archetype === 'dragon' ? 16 : 14
       s.line(cx - 5, by - 1, cx - span, by - 7 + wingFlap, c2, 3)
       s.line(cx - span, by - 7 + wingFlap, cx - span - 2, by + wingFlap, c1, 2)
       s.line(cx - 5, by, cx - span + 3, by - 4 + wingFlap, accent, 1)
@@ -2189,7 +2189,7 @@ function renderMountModel(spec: MountModelSpec, dir: Dir, action: SpriteAction, 
     s.line(cx + 5, by + 6, cx + 5, rLegY, dark, 2)
     s.line(cx - 3, by + 5, cx - 3, rLegY - 1, c1, 2)
     s.line(cx + 3, by + 5, cx + 3, lLegY - 1, c1, 2)
-    if (spec.archetype === 'kirin' || spec.archetype === 'cloud_dragon') {
+    if (spec.archetype === 'dragon') {
       s.px(cx - 3, rLegY - 1, accent)
       s.px(cx + 3, lLegY - 1, accent)
     }
@@ -2206,25 +2206,25 @@ function renderMountModel(spec: MountModelSpec, dir: Dir, action: SpriteAction, 
       s.rect(cx - 4, by - 10 + rearTilt, 9, 8, c1)
       s.rect(cx - 3, by - 11 + rearTilt, 7, 5, hi)
       // Ears / Horns / Beak
-      if (spec.archetype === 'warhorse') {
+      if (spec.archetype === 'horse') {
         s.line(cx - 3, by - 11 + rearTilt, cx - 4, by - 15 + rearTilt, c2, 1)
         s.line(cx + 3, by - 11 + rearTilt, cx + 4, by - 15 + rearTilt, c2, 1)
         s.rect(cx - 1, by - 12 + rearTilt, 3, 3, accent)
-      } else if (spec.archetype === 'direwolf') {
+      } else if (spec.archetype === 'wolf' || spec.archetype === 'dog' || spec.archetype === 'cat') {
         s.line(cx - 3, by - 11 + rearTilt, cx - 5, by - 15 + rearTilt, c2, 2)
         s.line(cx + 3, by - 11 + rearTilt, cx + 5, by - 15 + rearTilt, c2, 2)
         s.rect(cx - 2, by - 7 + rearTilt, 5, 3, '#e2e8f0')
-      } else if (spec.archetype === 'griffin') {
-        s.rect(cx - 3, by - 12 + rearTilt, 7, 5, '#f8fafc')
-        s.rect(cx - 1, by - 9 + rearTilt, 3, 3, '#fbbf24') // curved eagle beak
-      } else if (spec.archetype === 'kirin' || spec.archetype === 'cloud_dragon') {
-        s.line(cx - 2, by - 12 + rearTilt, cx - 6, by - 17 + rearTilt, accent, 1)
-        s.line(cx + 2, by - 12 + rearTilt, cx + 6, by - 17 + rearTilt, accent, 1)
-        s.px(cx, by - 13 + rearTilt, '#ffffff')
+      } else if (spec.archetype === 'chocobo') {
+        s.rect(cx - 3, by - 12 + rearTilt, 7, 5, '#fef08a')
+        s.rect(cx - 1, by - 9 + rearTilt, 3, 3, '#f59e0b') // chocobo beak
+      } else if (spec.archetype === 'dragon') {
+        s.line(cx - 2, by - 12 + rearTilt, cx - 6, by - 17 + rearTilt, c2, 1)
+        s.line(cx + 2, by - 12 + rearTilt, cx + 6, by - 17 + rearTilt, c2, 1)
+        s.px(cx, by - 13 + rearTilt, accent)
       }
       // Eyes & Bridle
-      s.px(cx - 2, by - 9 + rearTilt, spec.archetype === 'direwolf' || spec.archetype === 'kirin' ? accent : '#ffd60a')
-      s.px(cx + 2, by - 9 + rearTilt, spec.archetype === 'direwolf' || spec.archetype === 'kirin' ? accent : '#ffd60a')
+      s.px(cx - 2, by - 9 + rearTilt, spec.archetype === 'wolf' || spec.archetype === 'chocobo' ? accent : '#ffd60a')
+      s.px(cx + 2, by - 9 + rearTilt, spec.archetype === 'wolf' || spec.archetype === 'chocobo' ? accent : '#ffd60a')
       s.rect(cx - 5, by - 1, 11, 1, accent)
     } else {
       // Rear Tail view (up)
@@ -2241,14 +2241,11 @@ function renderMountModel(spec: MountModelSpec, dir: Dir, action: SpriteAction, 
   const tailWave = action === 'walk' ? (f % 2 === 0 ? -2 : 1) : f % 2
 
   // Flowing Tail
-  if (spec.archetype === 'cloud_dragon') {
+  if (spec.archetype === 'dragon') {
     s.line(cx - 9, by + 2, cx - 16, by + tailWave, c1, 3)
     s.line(cx - 16, by + tailWave, cx - 20, by - 4 + tailWave, accent, 2)
     s.px(cx - 20, by - 5 + tailWave, '#ffffff')
-  } else if (spec.archetype === 'kirin') {
-    s.line(cx - 9, by + 1, cx - 15, by - 2 + tailWave, c2, 2)
-    s.rect(cx - 18, by - 4 + tailWave, 4, 3, accent)
-  } else if (spec.archetype === 'direwolf') {
+  } else if (spec.archetype === 'wolf' || spec.archetype === 'dog' || spec.archetype === 'cat') {
     s.line(cx - 9, by + 2, cx - 17, by - 1 + tailWave, c1, 3)
     s.px(cx - 18, by - 2 + tailWave, '#e0f2fe')
   } else {
@@ -2272,10 +2269,10 @@ function renderMountModel(spec: MountModelSpec, dir: Dir, action: SpriteAction, 
   // Near legs
   s.line(cx - 7, by + 5, cx - 8 - hStride, footY, c2, 2)
   s.line(cx + 7, by + 5, cx + 8 + fStride, footY, c1, 2)
-  if (spec.archetype === 'kirin' || spec.archetype === 'cloud_dragon') {
+  if (spec.archetype === 'dragon') {
     s.px(cx - 8 - hStride, footY, accent)
     s.px(cx + 8 + fStride, footY, accent)
-  } else if (spec.archetype === 'warhorse') {
+  } else if (spec.archetype === 'horse') {
     s.px(cx - 8 - hStride, footY, '#343a40')
     s.px(cx + 8 + fStride, footY, '#343a40')
   }
@@ -2295,47 +2292,43 @@ function renderMountModel(spec: MountModelSpec, dir: Dir, action: SpriteAction, 
   const hy = by - 9 + rearTilt
   s.line(cx + 6, by, hx, hy + 4, c1, 4)
 
-  if (spec.archetype === 'warhorse') {
-    // Mane along neck
+  if (spec.archetype === 'horse') {
     s.line(cx + 4, by - 2, hx - 2, hy + 1, c2, 2)
-    // Equine head & snout
     s.rect(hx - 1, hy, 6, 5, c1)
     s.rect(hx + 4, hy + 2, 4, 3, hi)
     s.line(hx, hy, hx - 1, hy - 3, c1, 1)
     s.px(hx + 3, hy + 1, '#1a1423')
-    s.line(hx + 1, hy + 3, hx + 6, hy + 4, accent, 1) // golden bridle
-  } else if (spec.archetype === 'direwolf') {
-    // Frost fur ruff
-    s.rect(cx + 5, by - 3 + rearTilt, 5, 5, '#cbd5e1')
+    s.line(hx + 1, hy + 3, hx + 6, hy + 4, accent, 1)
+  } else if (spec.archetype === 'wolf' || spec.archetype === 'dog' || spec.archetype === 'cat') {
+    s.rect(cx + 5, by - 3 + rearTilt, 5, 5, accent)
     s.rect(hx - 1, hy + 1, 7, 5, c1)
     s.rect(hx + 5, hy + 3, 4, 2, hi)
     s.line(hx, hy + 1, hx - 2, hy - 3, c2, 2)
-    s.px(hx + 4, hy + 2, accent)
-    s.px(hx + 7, hy + 5, '#ffffff') // fang
-  } else if (spec.archetype === 'griffin') {
-    // White-gold eagle head & curved golden beak
-    s.rect(cx + 5, by - 3 + rearTilt, 5, 5, '#fef3c7')
-    s.rect(hx - 1, hy, 6, 5, '#f8fafc')
-    s.rect(hx + 5, hy + 2, 3, 2, '#f59e0b')
-    s.px(hx + 7, hy + 4, '#d97706')
-    s.line(hx, hy, hx - 3, hy - 3, accent, 1) // crest feather
+    s.px(hx + 4, hy + 2, '#0f172a')
+  } else if (spec.archetype === 'chocobo') {
+    s.rect(cx + 5, by - 3 + rearTilt, 5, 5, accent)
+    s.rect(hx - 1, hy, 6, 5, hi)
+    s.rect(hx + 5, hy + 2, 3, 2, '#f97316')
+    s.line(hx, hy, hx - 3, hy - 3, hi, 1)
     s.px(hx + 3, hy + 1, '#0f172a')
-  } else if (spec.archetype === 'kirin') {
-    // Starlight mane & twin dragon-antler horns
-    s.line(cx + 4, by - 2 + rearTilt, hx - 2, hy + 1, accent, 2)
-    s.rect(hx - 1, hy, 6, 5, c1)
-    s.rect(hx + 4, hy + 2, 4, 3, hi)
-    s.line(hx + 1, hy, hx - 3, hy - 6, accent, 1)
-    s.line(hx + 3, hy, hx + 1, hy - 6, '#ffffff', 1)
-    s.px(hx + 3, hy + 1, '#38bdf8')
+  } else if (spec.archetype === 'elephant') {
+    s.rect(hx - 1, hy, 7, 6, c1)
+    s.line(hx + 6, hy + 3, hx + 8, hy + 8, c1, 2) // trunk
+    s.px(hx + 5, hy + 5, '#ffffff') // tusk
+  } else if (spec.archetype === 'panda') {
+    s.rect(hx - 1, hy, 7, 6, '#f8fafc')
+    s.px(hx + 1, hy - 1, c2) // black ear
+    s.px(hx + 4, hy + 2, c2) // eye patch
+  } else if (spec.archetype === 'turtle') {
+    s.rect(hx - 1, hy + 3, 6, 5, c1)
+    s.px(hx + 3, hy + 4, '#0f172a')
   } else {
-    // Aurora Cloud Dragon head, horns & whiskers
+    // Dragon head & horns
     s.line(cx + 4, by - 2 + rearTilt, hx - 2, hy + 2, accent, 2)
     s.rect(hx - 1, hy, 7, 5, c1)
     s.rect(hx + 5, hy + 2, 4, 3, hi)
-    s.line(hx, hy, hx - 4, hy - 5, accent, 2)
-    s.line(hx + 2, hy, hx - 1, hy - 5, '#ffffff', 1)
-    s.line(hx + 6, hy + 4, hx + 10, hy + 2, accent, 1) // whisker
+    s.line(hx, hy, hx - 4, hy - 5, c2, 2)
+    s.line(hx + 2, hy, hx - 1, hy - 5, c2, 1)
     s.px(hx + 4, hy + 1, '#ffd60a')
   }
 

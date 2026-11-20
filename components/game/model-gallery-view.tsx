@@ -140,11 +140,15 @@ function getPetTraitTags(petId: string): string[] {
 
 function getMountTraitTags(archetype: string): string[] {
   const map: Record<string, string[]> = {
-    warhorse: ['อานศึกสีชาดขอบทอง', 'แผงคอพลิ้ว + บังเหียนทอง', 'ท่าควบ 4 ขา 6 เฟรม'],
-    direwolf: ['แผงขนน้ำแข็งสีเงิน', 'เขี้ยวหิมะ + ดวงตาคริสตัล', 'หางพวงน้ำแข็ง'],
-    griffin: ['หัวพญาอินทรี + จะงอยปากทอง', 'ปีกทองกระพือกลางอากาศ', 'ร่างราชสีห์สี่ขา'],
-    kirin: ['เขากิเลนคู่ประกายดารา', 'แผงคอดวงดาว', 'กีบแสงดาวเรืองรอง'],
-    cloud_dragon: ['มังกรฟ้าหนวดยาว', 'ปีกเมฆาแสงเหนือ', 'หางมังกรพลิ้วไสว'],
+    horse: ['อาชาขนน้ำตาลอานหนัง', 'แผงคอเข้ม + บังเหียนทอง', 'ท่าควบคล่องแคล่ว 6 เฟรม'],
+    wolf: ['หมาป่าขนเงินพวงหางฟู', 'ผ้าพันคอครามตราสัตว์ป่า', 'เขี้ยวคม + ฝีเท้าไว'],
+    chocobo: ['โจโคโบะขนสีทองอร่าม', 'อานน้ำเงิน + ผ้าพันคอขุนพล', 'ทรงตัวปราดเปรียว 6 เฟรม'],
+    dragon: ['มังกรแดงชาดสยายปีกกว้าง', 'เขาทมิฬ + เกล็ดท้องทอง', 'โผบินออร่าไฟคริมสัน'],
+    elephant: ['พญาช้างศึกพรมทองน้ำเงิน', 'งาขาว + มงกุฎหน้าผากทอง', 'พลังชีวิตและเกราะมหาศาล'],
+    cat: ['เหมียวขนปุยสีเทา-ขาว', 'ผ้าพันคอแดง + อานหนังจิ๋ว', 'ก้าวคล่องแคล่วน่ารัก'],
+    dog: ['ชิบะขนส้มทองแสนซื่อสัตย์', 'ผ้าพันคอมรกต + อานหลัง', 'วิ่งไวกระฉับกระเฉง'],
+    turtle: ['เต่าศิลากระดองเหล็กแกร่ง', 'อานเสบียงน้ำเงินทอง', 'เกราะหนาป้องกันสูง'],
+    panda: ['แพนด้ายักษ์ใบไม้มงคลบนหัว', 'กระเป๋าอานนักเดินทาง', 'พลังชีวิตสูงและหนักแน่น'],
   }
   return map[archetype] ?? ['โมเดลสัตว์ขี่ 4 ทิศทาง']
 }
@@ -159,7 +163,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
   const [selectedJobId, setSelectedJobId] = useState<string>('novice')
   const [monsterBiomeFilter, setMonsterBiomeFilter] = useState<string>('all')
   const [selectedMonsterId, setSelectedMonsterId] = useState<string>('meadow_dewmother')
-  const [selectedMountId, setSelectedMountId] = useState<string>('starlight_kirin')
+  const [selectedMountId, setSelectedMountId] = useState<string>('aurora_cloud_dragon')
   const [selectedPetId, setSelectedPetId] = useState<string>('phao_gold_naga')
   const [action, setAction] = useState<PreviewAction>('auto')
   const [dir, setDir] = useState<ModelDir>('down')

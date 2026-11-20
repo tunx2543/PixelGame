@@ -2676,12 +2676,12 @@ export function renderHdMountSprite(
   // Head + Horns/Ears
   const hx = dir === 'right' || dir === 'left' ? cx + 38 : cx
   const hy = footY - 68 + bob
-  ctx.fillStyle = spec.archetype === 'griffin' ? '#f8fafc' : hi
+  ctx.fillStyle = spec.archetype === 'chocobo' ? '#fef08a' : hi
   ctx.beginPath()
   ctx.ellipse(hx, hy, 18, 15, 0, 0, Math.PI * 2)
   ctx.fill()
   ctx.stroke()
-  if (spec.archetype === 'kirin' || spec.archetype === 'cloud_dragon') {
+  if (spec.archetype === 'dragon') {
     ctx.fillStyle = spec.colors.accent
     ctx.beginPath()
     ctx.moveTo(hx - 6, hy - 10)

@@ -22,19 +22,21 @@ import {
   resolveMountAnimationState,
 } from './mounts';
 
-test('MOUNT_DEFS preserves all 5 mount IDs, rarities, and distinct configurations', () => {
-  assert.equal(MOUNT_DEFS.length, 5);
+test('MOUNT_DEFS preserves all 9 mount IDs, rarities, and distinct configurations', () => {
+  assert.equal(MOUNT_DEFS.length, 9);
   assert.deepEqual(
     MOUNT_DEFS.map((m) => m.id),
-    ['meadow_pony', 'frost_wolf', 'royal_griffin', 'starlight_kirin', 'aurora_cloud_dragon'],
+    ['meadow_pony', 'dog', 'cat', 'turtle', 'frost_wolf', 'panda', 'chocobo', 'elephant', 'aurora_cloud_dragon'],
   );
   assert.deepEqual(
     MOUNT_DEFS.map((m) => m.rarity),
-    ['ทั่วไป', 'หายาก', 'อีปิก', 'ตำนาน', 'มายา'],
+    ['ทั่วไป', 'ทั่วไป', 'ทั่วไป', 'หายาก', 'หายาก', 'อีปิก', 'อีปิก', 'ตำนาน', 'มายา'],
   );
   for (const def of MOUNT_DEFS) {
     assert.equal(getMountDef(def.id)?.id, def.id);
   }
+  assert.equal(getMountDef('royal_griffin')?.id, 'chocobo');
+  assert.equal(getMountDef('starlight_kirin')?.id, 'elephant');
   assert.equal(getMountDef('non_existent'), null);
   assert.equal(getMountDef(null), null);
 });
@@ -66,7 +68,7 @@ test('summon, mount, dismount, select, and store state transitions preserve owne
     mounted: false,
     ownedMounts: {
       meadow_pony: { level: 3 },
-      royal_griffin: { level: 5 },
+      chocobo: { level: 5 },
     },
   });
 
@@ -81,28 +83,28 @@ test('summon, mount, dismount, select, and store state transitions preserve owne
   assert.equal(riding.mounted, true);
 
   // Selecting another owned mount updates activeMountId and keeps riding state or autoMounts
-  const switched = selectMountState(riding, 'royal_griffin', [], false);
-  assert.equal(switched.activeMountId, 'royal_griffin');
+  const switched = selectMountState(riding, 'chocobo', [], false);
+  assert.equal(switched.activeMountId, 'chocobo');
   assert.equal(switched.mounted, true);
 
   // Dismounting keeps activeMountId summoned
   const dismounted = setMountRidingState(switched, false);
-  assert.equal(dismounted.activeMountId, 'royal_griffin');
+  assert.equal(dismounted.activeMountId, 'chocobo');
   assert.equal(dismounted.mounted, false);
 
   // Storing clears activeMountId and mounted while keeping ownedMounts intact
   const stored = storeMountState(dismounted);
   assert.equal(stored.activeMountId, null);
   assert.equal(stored.mounted, false);
-  assert.equal(stored.ownedMounts.royal_griffin.level, 5);
+  assert.equal(stored.ownedMounts.chocobo.level, 5);
   assert.equal(stored.ownedMounts.meadow_pony.level, 3);
 
   // Cannot summon unowned mount
-  const invalidSummon = summonMountState(stored, 'starlight_kirin');
+  const invalidSummon = summonMountState(stored, 'elephant');
   assert.equal(invalidSummon.activeMountId, null);
 });
 
-test('sanitizeMountState handles Save/Load clamping, unknown IDs, and linked gem items', () => {
+test('sanitizeMountState handles Save/Load clamping, legacy aliases, unknown IDs, and linked gem items', () => {
   const restored = sanitizeMountState(
     {
       activeMountId: 'frost_wolf',
@@ -110,6 +112,7 @@ test('sanitizeMountState handles Save/Load clamping, unknown IDs, and linked gem
       ownedMounts: {
         frost_wolf: { level: 999 },
         meadow_pony: { level: -3 },
+        royal_griffin: { level: 4 },
         removed_fake_mount: { level: 4 },
       },
     },
@@ -120,6 +123,7 @@ test('sanitizeMountState handles Save/Load clamping, unknown IDs, and linked gem
   assert.equal(restored.mounted, true);
   assert.equal(restored.ownedMounts.frost_wolf.level, MAX_MOUNT_LEVEL);
   assert.equal(restored.ownedMounts.meadow_pony.level, 1);
+  assert.equal(restored.ownedMounts.chocobo.level, 4);
   assert.equal(restored.ownedMounts.aurora_cloud_dragon.level, 1);
   assert.equal(restored.ownedMounts.removed_fake_mount, undefined);
 
@@ -130,11 +134,11 @@ test('sanitizeMountState handles Save/Load clamping, unknown IDs, and linked gem
 
 test('getActiveMountBonuses preserves exact bonus formulas without altering stat math', () => {
   const state = sanitizeMountState({
-    activeMountId: 'royal_griffin',
+    activeMountId: 'chocobo',
     mounted: true,
-    ownedMounts: { royal_griffin: { level: 4 } },
+    ownedMounts: { chocobo: { level: 4 } },
   });
-  const def = getMountDef('royal_griffin')!;
+  const def = getMountDef('chocobo')!;
   const bonuses = getActiveMountBonuses(state);
   assert.ok(bonuses);
   const expectedScale = 1 + (4 - 1) * 0.16;

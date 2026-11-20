@@ -31,9 +31,13 @@ export type NpcSheetId =
 export type MountSheetId =
   | 'meadow_pony'
   | 'frost_wolf'
-  | 'royal_griffin'
-  | 'starlight_kirin'
+  | 'chocobo'
   | 'aurora_cloud_dragon'
+  | 'elephant'
+  | 'cat'
+  | 'dog'
+  | 'turtle'
+  | 'panda'
 
 export interface SpriteSheetActionSpec {
   row: number
@@ -181,14 +185,27 @@ function makeMountSheetSpec(id: MountSheetId): SpriteSheetSpec {
 export const MOUNT_SPRITE_SHEETS: Record<MountSheetId, SpriteSheetSpec> = {
   meadow_pony: makeMountSheetSpec('meadow_pony'),
   frost_wolf: makeMountSheetSpec('frost_wolf'),
-  royal_griffin: makeMountSheetSpec('royal_griffin'),
-  starlight_kirin: makeMountSheetSpec('starlight_kirin'),
+  chocobo: makeMountSheetSpec('chocobo'),
   aurora_cloud_dragon: makeMountSheetSpec('aurora_cloud_dragon'),
+  elephant: makeMountSheetSpec('elephant'),
+  cat: makeMountSheetSpec('cat'),
+  dog: makeMountSheetSpec('dog'),
+  turtle: makeMountSheetSpec('turtle'),
+  panda: makeMountSheetSpec('panda'),
+}
+
+const MOUNT_SHEET_ALIASES: Record<string, MountSheetId> = {
+  horse: 'meadow_pony',
+  wolf: 'frost_wolf',
+  dragon: 'aurora_cloud_dragon',
+  royal_griffin: 'chocobo',
+  starlight_kirin: 'elephant',
 }
 
 export function getMountSheetSpec(mountId?: string | null): SpriteSheetSpec | null {
   if (!mountId) return null
-  return MOUNT_SPRITE_SHEETS[mountId as MountSheetId] ?? null
+  const resolved = MOUNT_SHEET_ALIASES[mountId] ?? mountId
+  return MOUNT_SPRITE_SHEETS[resolved as MountSheetId] ?? null
 }
 
 const PET_FRAME_SIZE = 136
