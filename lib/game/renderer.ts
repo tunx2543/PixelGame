@@ -31,7 +31,15 @@ import {
   type SpriteAction,
 } from './sprites'
 import { getActivePetBonuses, getCombatPetDef } from './systems'
-import { getActiveMountBonuses, getMountDef } from './mounts'
+import {
+  getActiveMountBonuses,
+  getMountDef,
+  getMountRiderSeatOffset,
+  getMountVisualTier,
+  resolveMountAnimationState,
+  type MountDef,
+} from './mounts'
+import { preloadMountSpriteSheet } from './sprite-sheets'
 import { TITLE_DEFS } from './rpg-systems'
 import { GATHERING_NODES, getCosmeticDef, getWorldTimePhase, sanitizeExtV2 } from './extended-systems'
 import { drawOverworldSkillEffect, drawRebirthAura } from './vfx-canvas'
@@ -49,6 +57,52 @@ import { sanitizePremiumState } from './premium/wallet'
 const cameraState = createCameraState('town')
 let prevRenderTime = 0
 let lastRenderCam = { mapId: 'town', x: 0, y: 0 }
+
+function drawMountForegroundSaddleStrap(
+  ctx: CanvasRenderingContext2D,
+  seatX: number,
+  seatY: number,
+  dir: Dir,
+  def: MountDef,
+  level = 1,
+  skinColor?: string,
+) {
+  const tier = getMountVisualTier(level)
+  const trimCol = skinColor ?? (tier >= 5 ? '#fef08a' : tier >= 3 ? '#fbbf24' : def.colors.accent)
+  const saddleCol = def.colors.saddle
+  ctx.save()
+  ctx.fillStyle = saddleCol
+  ctx.strokeStyle = '#1a1224'
+  ctx.lineWidth = 0.8
+  if (dir === 'up') {
+    // High rear saddle cantle & thigh guard visible behind rider's back
+    ctx.beginPath()
+    ctx.roundRect(seatX - 4.5, seatY - 3, 9, 4, 1.5)
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = trimCol
+    ctx.fillRect(seatX - 3.5, seatY - 2.6, 7, 1)
+  } else if (dir === 'down') {
+    // Saddle pommel & flank knees wrap in front of lower boots
+    ctx.beginPath()
+    ctx.roundRect(seatX - 4.2, seatY - 2.5, 8.4, 3.2, 1.4)
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = trimCol
+    ctx.fillRect(seatX - 2, seatY - 2.2, 4, 1.2)
+  } else {
+    // Side view: outer saddle flap, stirrup leather strap & gold buckle over rider's thigh
+    const flapX = dir === 'right' ? seatX - 3.2 : seatX - 4.8
+    ctx.beginPath()
+    ctx.roundRect(flapX, seatY - 3, 8, 4.2, 1.5)
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = trimCol
+    ctx.fillRect(flapX + 1, seatY - 2.6, 6, 1)
+    ctx.fillRect(seatX - 0.8, seatY + 0.2, 1.8, 1.8)
+  }
+  ctx.restore()
+}
 
 export function screenToWorld(cssX: number, cssY: number, cssW: number, cssH: number): { x: number; y: number } {
   const safeW = Math.max(1, cssW)
@@ -678,9 +732,41 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     const remoteFootOffset = isRemoteGmEpic ? 10 : 2
 
     const isMounted = Boolean(activeMountDef)
-    const mountHover =
-      isMounted && activeMountDef?.flying ? Math.round(Math.sin(t * 4.2) * 1.5 - 2) : 0
-    const riderSeatY = isMounted && activeMountDef ? activeMountDef.seatOffsetY + mountHover : 0
+    const remoteMountAnim = isMounted && activeMountDef
+      ? resolveMountAnimationState({
+          mounted: true,
+          flying: activeMountDef.flying,
+          moving: other.moving,
+          moveHoldT: other.moving ? 0.5 : 0,
+          attacking: remoteAttacking,
+          attackFrame: remoteAtkFrame,
+          transition: 'none',
+          animRemaining: 0,
+          animMax: 0.4,
+          walkT: t,
+          timeSec: t,
+        })
+      : null
+    const mountHover = remoteMountAnim?.mountHoverY ?? 0
+    const remoteSeat =
+      isMounted && activeMountDef && remoteMountAnim
+        ? getMountRiderSeatOffset(activeMountDef.id, other.facing, remoteMountAnim.action, remoteMountAnim.frame)
+        : null
+    const riderSeatX = remoteSeat?.x ?? 0
+    const riderSeatY = remoteSeat ? remoteSeat.y + mountHover : 0
+    const remoteRiderDrawable =
+      isMounted && !remoteAttacking
+        ? resolveHumanDrawable(
+            styledColors,
+            other.facing,
+            0,
+            remoteWeapon,
+            remoteWeaponColor,
+            false,
+            'idle',
+            undefined,
+          )
+        : remoteDrawable
 
     ents.push({
       y: remoteY,
@@ -730,15 +816,17 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           })
         }
 
-        if (isMounted && activeMountDef) {
-          const mAction: SpriteAction = other.moving ? 'walk' : remoteAttacking ? 'attack' : 'idle'
-          const mFrame =
-            mAction === 'walk'
-              ? Math.floor(t * 10) % 6
-              : mAction === 'attack'
-                ? remoteAtkFrame
-                : Math.floor(t * 2.5) % 4
-          const mImg = mountSprite(activeMountDef.id, other.facing, mAction, mFrame, remoteAtkFrame)
+        if (isMounted && activeMountDef && remoteMountAnim) {
+          preloadMountSpriteSheet(activeMountDef.id)
+          const mImg = mountSprite(
+            activeMountDef.id,
+            other.facing,
+            remoteMountAnim.action,
+            remoteMountAnim.frame,
+            remoteAtkFrame,
+            1,
+            mountSkinFashion?.id,
+          )
           if (mImg.width > 0 && mImg.height > 0) {
             const mHd = mImg.dataset?.hdScale ? Number(mImg.dataset.hdScale) : 1
             const mDrawW = (mImg.width * 0.78) / mHd
@@ -770,16 +858,16 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           ctx.strokeStyle = activeWingColors.secondary
           ctx.lineWidth = 1
           ctx.beginPath()
-          ctx.moveTo(remoteX - 2, remoteY + riderSeatY - 15)
-          ctx.lineTo(remoteX - 14, remoteY + riderSeatY - 23 - flap)
-          ctx.lineTo(remoteX - 10, remoteY + riderSeatY - 11 - flap * 0.4)
+          ctx.moveTo(remoteX + riderSeatX - 2, remoteY + riderSeatY - 15)
+          ctx.lineTo(remoteX + riderSeatX - 14, remoteY + riderSeatY - 23 - flap)
+          ctx.lineTo(remoteX + riderSeatX - 10, remoteY + riderSeatY - 11 - flap * 0.4)
           ctx.closePath()
           ctx.fill()
           ctx.stroke()
           ctx.beginPath()
-          ctx.moveTo(remoteX + 2, remoteY + riderSeatY - 15)
-          ctx.lineTo(remoteX + 14, remoteY + riderSeatY - 23 - flap)
-          ctx.lineTo(remoteX + 10, remoteY + riderSeatY - 11 - flap * 0.4)
+          ctx.moveTo(remoteX + riderSeatX + 2, remoteY + riderSeatY - 15)
+          ctx.lineTo(remoteX + riderSeatX + 14, remoteY + riderSeatY - 23 - flap)
+          ctx.lineTo(remoteX + riderSeatX + 10, remoteY + riderSeatY - 11 - flap * 0.4)
           ctx.closePath()
           ctx.fill()
           ctx.stroke()
@@ -795,21 +883,28 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
             ctx.save()
             ctx.globalAlpha = 0.86
             const wingBob = Math.sin(t * 5) * 0.7
-            drawGemItemPixels(ctx, wingGem, remoteX - 8, remoteY + riderSeatY - remoteH + 5 + wingBob, 2)
+            drawGemItemPixels(ctx, wingGem, remoteX + riderSeatX - 8, remoteY + riderSeatY - remoteH + 5 + wingBob, 2)
             ctx.restore()
           }
         }
 
         const remoteDx = Math.round(-remoteW / 2)
         const remoteDy = Math.round(-remoteH + remoteFootOffset)
+        const remoteClipH = isMounted && remoteSeat ? Math.round(remoteH * remoteSeat.legClipRatio) : 0
+        const remoteRiderFrame = isMounted && !remoteAttacking ? 0 : remoteFrame
         ctx.save()
-        ctx.translate(Math.round(remoteX + ox), Math.round(remoteY + oy + riderSeatY))
+        ctx.translate(Math.round(remoteX + riderSeatX + ox), Math.round(remoteY + oy + riderSeatY))
+        if (remoteClipH > 0) {
+          ctx.beginPath()
+          ctx.rect(remoteDx - 12, remoteDy - 12, remoteW + 24, remoteH - remoteClipH + 14)
+          ctx.clip()
+        }
         drawCharacterFashionLayers({
           ctx,
           loadout: remoteLoadout,
           phase: 'behind',
           dir: other.facing,
-          frame: remoteFrame,
+          frame: remoteRiderFrame,
           dx: remoteDx,
           dy: remoteDy,
           dw: remoteW,
@@ -817,7 +912,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         })
         drawResolvedDrawable(
           ctx,
-          remoteDrawable,
+          remoteRiderDrawable,
           remoteDx,
           remoteDy,
           remoteW,
@@ -828,7 +923,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           loadout: remoteLoadout,
           phase: 'overBody',
           dir: other.facing,
-          frame: remoteFrame,
+          frame: remoteRiderFrame,
           dx: remoteDx,
           dy: remoteDy,
           dw: remoteW,
@@ -839,16 +934,27 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           loadout: remoteLoadout,
           phase: 'overBack',
           dir: other.facing,
-          frame: remoteFrame,
+          frame: remoteRiderFrame,
           dx: remoteDx,
           dy: remoteDy,
           dw: remoteW,
           dh: remoteH,
         })
-        if (remoteAttacking && !isRemoteGmEpic && !remoteDrawable.sheetId) {
+        if (remoteAttacking && !isRemoteGmEpic && !remoteRiderDrawable.sheetId) {
           drawWeaponAttackOverlay(ctx, other.facing, remoteWeapon, atkProgress, remoteWeaponColor)
         }
         ctx.restore()
+        if (isMounted && activeMountDef) {
+          drawMountForegroundSaddleStrap(
+            ctx,
+            Math.round(remoteX + riderSeatX + ox * 0.6),
+            Math.round(remoteY + oy * 0.6 + riderSeatY),
+            other.facing,
+            activeMountDef,
+            1,
+            mountSkinFashion?.primaryColor,
+          )
+        }
 
         if (remoteRebirth > 0) {
           drawRebirthAura(ctx, {
@@ -1036,12 +1142,65 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         else oy = lungeDist
       }
 
-      const isMounted = Boolean(activeMount?.mounted)
-      const mountHover =
-        isMounted && activeMount?.def.flying ? Math.round(Math.sin(t * 4.2) * 1.5 - 2) : 0
-      const riderSeatY = isMounted && activeMount ? activeMount.def.seatOffsetY + mountHover : 0
+      const hasTransitionMount = Boolean(
+        activeMount && (game.mountTransition === 'mounting' || game.mountTransition === 'dismounting'),
+      )
+      const isRidingOrHopping = Boolean(activeMount && (activeMount.mounted || hasTransitionMount))
+      const isSummonedCompanion = Boolean(activeMount && !activeMount.mounted && !hasTransitionMount)
+      const mountAnimState = activeMount
+        ? resolveMountAnimationState({
+            mounted: Boolean(activeMount.mounted),
+            flying: activeMount.def.flying,
+            moving: game.moving,
+            moveHoldT: game.moveHoldT,
+            walkOnly: game.mountWalkOnly,
+            attacking: attacking || castingSkill,
+            attackFrame: castingSkill ? skillFrame : atkFrame,
+            transition: game.mountTransition,
+            animRemaining: game.mountAnim,
+            animMax: game.mountAnimMax,
+            walkT: game.walkT,
+            timeSec: t,
+          })
+        : null
+      const mountHover = mountAnimState?.mountHoverY ?? 0
+      const seatOffset =
+        isRidingOrHopping && activeMount && mountAnimState
+          ? getMountRiderSeatOffset(activeMount.mountId, game.facing, mountAnimState.action, mountAnimState.frame)
+          : null
+      const transitionRatio =
+        game.mountTransition === 'mounting'
+          ? mountAnimState?.transitionProgress ?? 1
+          : game.mountTransition === 'dismounting'
+            ? 1 - (mountAnimState?.transitionProgress ?? 0)
+            : activeMount?.mounted
+              ? 1
+              : 0
+      const riderSeatX =
+        seatOffset && mountAnimState
+          ? seatOffset.x * transitionRatio + mountAnimState.riderArcX
+          : 0
+      const riderSeatY =
+        seatOffset && mountAnimState
+          ? seatOffset.y * transitionRatio + mountHover + mountAnimState.riderArcY
+          : 0
+      const isSeatedInSaddle = isRidingOrHopping && transitionRatio > 0.45
 
-      shadow(ctx, p.x, p.y, isMounted ? 9 : 6)
+      const localRiderDrawable =
+        isSeatedInSaddle && !attacking && !castingSkill
+          ? resolveHumanDrawable(
+              styledColors,
+              game.facing,
+              0,
+              weaponType,
+              weaponDrawColor,
+              false,
+              'idle',
+              undefined,
+            )
+          : drawable
+
+      shadow(ctx, p.x, p.y, isRidingOrHopping ? 9 : 6)
       if (game.invulnUntil > t) {
         ctx.save()
         ctx.strokeStyle = '#22d3ee'
@@ -1054,21 +1213,23 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       }
       if (game.moving && !p.invisible) {
         ctx.save()
-        ctx.fillStyle = isMounted && activeMount?.def.auraColor ? activeMount.def.auraColor : 'rgba(255,255,255,0.28)'
-        const dustPhase = (game.walkT * 4) % 1
-        ctx.globalAlpha = (1 - dustPhase) * (isMounted ? 0.6 : 0.45)
+        const isSprintingMount = isRidingOrHopping && mountAnimState?.action === 'run'
+        ctx.fillStyle = isRidingOrHopping && activeMount?.def.auraColor ? activeMount.def.auraColor : 'rgba(255,255,255,0.28)'
+        const dustPhase = (game.walkT * (isSprintingMount ? 5.5 : 4)) % 1
+        ctx.globalAlpha = (1 - dustPhase) * (isSprintingMount ? 0.78 : isRidingOrHopping ? 0.6 : 0.45)
         const dx = game.facing === 'left' ? 5 : game.facing === 'right' ? -5 : (stride > 0 ? -3 : 3)
-        ctx.fillRect(Math.round(p.x + dx - dustPhase * dx), Math.round(p.y - 1 - dustPhase * 2), isMounted ? 3 : 2, 1.5)
+        ctx.fillRect(Math.round(p.x + dx - dustPhase * dx), Math.round(p.y - 1 - dustPhase * 2), isSprintingMount ? 4 : isRidingOrHopping ? 3 : 2, isSprintingMount ? 2 : 1.5)
         ctx.restore()
       }
       ctx.globalAlpha = p.invisible ? 0.18 : 1
-      if (isMounted && (activeMount?.def.auraColor || mountSkinFashion)) {
+      if (isRidingOrHopping && activeMount && (activeMount.def.auraColor || mountSkinFashion || activeMount.level >= 5)) {
+        const tier = getMountVisualTier(activeMount.level)
         ctx.save()
-        ctx.strokeStyle = mountSkinFashion?.primaryColor ?? activeMount?.def.auraColor ?? '#38bdf8'
-        ctx.lineWidth = mountSkinFashion ? 1.8 : 1.2
+        ctx.strokeStyle = mountSkinFashion?.primaryColor ?? activeMount.def.auraColor ?? (tier >= 3 ? '#fbbf24' : '#38bdf8')
+        ctx.lineWidth = mountSkinFashion || tier >= 4 ? 1.8 : 1.2
         ctx.globalAlpha = (p.invisible ? 0.12 : 0.45) + Math.sin(t * 4) * 0.14
         ctx.beginPath()
-        ctx.ellipse(p.x, p.y - 1, mountSkinFashion ? 15 : 13, 5.5, 0, 0, Math.PI * 2)
+        ctx.ellipse(p.x, p.y - 1, mountSkinFashion || tier >= 4 ? 15 : 13, 5.5, 0, 0, Math.PI * 2)
         ctx.stroke()
         ctx.restore()
       }
@@ -1090,15 +1251,51 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           layer: 'back',
         })
       }
-      if (isMounted && activeMount) {
-        const mAction: SpriteAction = game.moving ? 'walk' : attacking ? 'attack' : 'idle'
-        const mFrame =
-          mAction === 'walk'
-            ? Math.floor(game.walkT * 10) % 6
-            : mAction === 'attack'
-              ? atkFrame
-              : Math.floor(t * 2.5) % 4
-        const mImg = mountSprite(activeMount.mountId, game.facing, mAction, mFrame, atkFrame)
+
+      const drawSummonedCompanionMount = () => {
+        if (!isSummonedCompanion || !activeMount || !mountAnimState) return
+        preloadMountSpriteSheet(activeMount.mountId)
+        const compX = p.x + (game.facing === 'left' ? 19 : game.facing === 'right' ? -19 : -18)
+        const compY = p.y + (game.facing === 'up' ? -4 : 3)
+        shadow(ctx, compX, compY, 7.5)
+        const mImg = mountSprite(
+          activeMount.mountId,
+          game.facing,
+          mountAnimState.action,
+          mountAnimState.frame,
+          atkFrame,
+          activeMount.level,
+          mountSkinFashion?.id,
+        )
+        if (mImg.width > 0 && mImg.height > 0) {
+          const mHd = mImg.dataset?.hdScale ? Number(mImg.dataset.hdScale) : 1
+          const mDrawW = (mImg.width * 0.72) / mHd
+          const mDrawH = (mImg.height * 0.72) / mHd
+          ctx.drawImage(
+            mImg,
+            compX - mDrawW / 2,
+            compY + mountHover * 0.75 - mDrawH + 3,
+            mDrawW,
+            mDrawH,
+          )
+        }
+      }
+
+      if (isSummonedCompanion && game.facing === 'up') {
+        drawSummonedCompanionMount()
+      }
+
+      if (isRidingOrHopping && activeMount && mountAnimState) {
+        preloadMountSpriteSheet(activeMount.mountId)
+        const mImg = mountSprite(
+          activeMount.mountId,
+          game.facing,
+          mountAnimState.action,
+          mountAnimState.frame,
+          atkFrame,
+          activeMount.level,
+          mountSkinFashion?.id,
+        )
         if (mImg.width > 0 && mImg.height > 0) {
           const mHd = mImg.dataset?.hdScale ? Number(mImg.dataset.hdScale) : 1
           const mDrawW = (mImg.width * 0.78) / mHd
@@ -1129,16 +1326,16 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         ctx.strokeStyle = activeWingColors.secondary
         ctx.lineWidth = 1
         ctx.beginPath()
-        ctx.moveTo(p.x - 2, p.y + riderSeatY - 15)
-        ctx.lineTo(p.x - 14, p.y + riderSeatY - 23 - flap)
-        ctx.lineTo(p.x - 10, p.y + riderSeatY - 11 - flap * 0.4)
+        ctx.moveTo(p.x + riderSeatX - 2, p.y + riderSeatY - 15)
+        ctx.lineTo(p.x + riderSeatX - 14, p.y + riderSeatY - 23 - flap)
+        ctx.lineTo(p.x + riderSeatX - 10, p.y + riderSeatY - 11 - flap * 0.4)
         ctx.closePath()
         ctx.fill()
         ctx.stroke()
         ctx.beginPath()
-        ctx.moveTo(p.x + 2, p.y + riderSeatY - 15)
-        ctx.lineTo(p.x + 14, p.y + riderSeatY - 23 - flap)
-        ctx.lineTo(p.x + 10, p.y + riderSeatY - 11 - flap * 0.4)
+        ctx.moveTo(p.x + riderSeatX + 2, p.y + riderSeatY - 15)
+        ctx.lineTo(p.x + riderSeatX + 14, p.y + riderSeatY - 23 - flap)
+        ctx.lineTo(p.x + riderSeatX + 10, p.y + riderSeatY - 11 - flap * 0.4)
         ctx.closePath()
         ctx.fill()
         ctx.stroke()
@@ -1150,33 +1347,40 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           ctx.save()
           ctx.globalAlpha = p.invisible ? 0.14 : 0.86
           const wingBob = Math.sin(t * 5) * 0.7
-          drawGemItemPixels(ctx, wingGem, p.x - 8, p.y + riderSeatY - drawH + 5 + wingBob, 2)
+          drawGemItemPixels(ctx, wingGem, p.x + riderSeatX - 8, p.y + riderSeatY - drawH + 5 + wingBob, 2)
           ctx.restore()
         }
       }
       const localDx = Math.round(-drawW / 2)
       const localDy = Math.round(-drawH + footOffset)
+      const localClipH = isSeatedInSaddle && seatOffset ? Math.round(drawH * seatOffset.legClipRatio) : 0
+      const riderFrame = isSeatedInSaddle && !attacking && !castingSkill ? 0 : frame
       ctx.save()
-      ctx.translate(Math.round(p.x + ox), Math.round(p.y + oy + riderSeatY))
+      ctx.translate(Math.round(p.x + riderSeatX + ox), Math.round(p.y + oy + riderSeatY))
+      if (localClipH > 0) {
+        ctx.beginPath()
+        ctx.rect(localDx - 12, localDy - 12, drawW + 24, drawH - localClipH + 14)
+        ctx.clip()
+      }
       drawCharacterFashionLayers({
         ctx,
         loadout: localLoadout,
         phase: 'behind',
         dir: game.facing,
-        frame,
+        frame: riderFrame,
         dx: localDx,
         dy: localDy,
         dw: drawW,
         dh: drawH,
         alpha: p.invisible ? 0.2 : 1,
       })
-      drawResolvedDrawable(ctx, drawable, localDx, localDy, drawW, drawH)
+      drawResolvedDrawable(ctx, localRiderDrawable, localDx, localDy, drawW, drawH)
       drawCharacterFashionLayers({
         ctx,
         loadout: localLoadout,
         phase: 'overBody',
         dir: game.facing,
-        frame,
+        frame: riderFrame,
         dx: localDx,
         dy: localDy,
         dw: drawW,
@@ -1188,14 +1392,14 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         loadout: localLoadout,
         phase: 'overBack',
         dir: game.facing,
-        frame,
+        frame: riderFrame,
         dx: localDx,
         dy: localDy,
         dw: drawW,
         dh: drawH,
         alpha: p.invisible ? 0.2 : 1,
       })
-      if ((attacking || (castingSkill && !isGmEpic)) && !isGmEpic && !drawable.sheetId) {
+      if ((attacking || (castingSkill && !isGmEpic)) && !isGmEpic && !localRiderDrawable.sheetId) {
         drawWeaponAttackOverlay(
           ctx,
           game.facing,
@@ -1205,6 +1409,20 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         )
       }
       ctx.restore()
+      if (isSeatedInSaddle && activeMount) {
+        drawMountForegroundSaddleStrap(
+          ctx,
+          Math.round(p.x + riderSeatX + ox * 0.6),
+          Math.round(p.y + oy * 0.6 + riderSeatY),
+          game.facing,
+          activeMount.def,
+          activeMount.level,
+          mountSkinFashion?.primaryColor,
+        )
+      }
+      if (isSummonedCompanion && game.facing !== 'up') {
+        drawSummonedCompanionMount()
+      }
       if ((p.rebirthCount ?? 0) > 0) {
         drawRebirthAura(ctx, {
           x: p.x,

@@ -18,10 +18,12 @@ import {
   type GmAnimAction,
 } from './gm-sprite'
 import {
+  drawMountLevelAndSkinFx,
   renderHdHumanSprite,
   renderHdMountSprite,
   renderHdPetSprite,
 } from './hd-characters'
+import { getMountVisualTier } from './mounts'
 import { getCatalogMonsterAtlas, hasCatalogMonsterAtlas } from './catalog-sprites'
 import { buildHdMapCanvas } from './hd-tiles'
 import {
@@ -29,7 +31,9 @@ import {
   getHeroSheetFrame,
   getHeroSheetFrameSpec,
   getMonsterSheetFrameSpec,
+  getMountSheetFrameSpec,
   getNpcSheetFrameSpec,
+  MOUNT_FOOT_PAD_FRAC,
   type SheetFrameDrawSpec,
 } from './sprite-sheets'
 
@@ -643,7 +647,7 @@ export function resolveNpcDrawable(
 /* ---------------- Articulated Humanoids (All 12 Jobs) ---------------- */
 
 export type Dir = 'down' | 'up' | 'left' | 'right'
-export type SpriteAction = 'idle' | 'walk' | 'attack' | 'skill'
+export type SpriteAction = 'idle' | 'walk' | 'run' | 'mount' | 'dismount' | 'attack' | 'skill'
 export type HatStyle = RegistryHatStyle
 
 export interface HumanColors {
@@ -1264,7 +1268,13 @@ export function humanSprite(
   }
 
   const action: 'idle' | 'walk' | 'attack' =
-    requestedAction === 'skill' ? 'attack' : requestedAction
+    requestedAction === 'skill'
+      ? 'attack'
+      : requestedAction === 'run'
+        ? 'walk'
+        : requestedAction === 'mount' || requestedAction === 'dismount'
+          ? 'idle'
+          : requestedAction
   const f = action === 'attack'
     ? Math.abs(attackFrameOverride ?? frame) % 4
     : action === 'walk'
@@ -2308,16 +2318,43 @@ export function mountSprite(
   action: SpriteAction = 'idle',
   frame = 0,
   attackFrameOverride?: number,
+  level = 1,
+  mountSkinId?: string | null,
 ): HTMLCanvasElement {
   const f =
-    action === 'attack'
+    action === 'attack' || action === 'skill'
       ? Math.abs(attackFrameOverride ?? frame) % 4
-      : action === 'walk'
+      : action === 'walk' || action === 'run'
         ? Math.abs(frame) % 6
         : Math.abs(frame) % 4
   const spec = getMountModelSpec(mountId)
-  const key = `hd_mount2d|${spec.mountId}|${dir}|${action}|${f}`
-  return cached(key, () => renderHdMountSprite(spec, dir, action, f))
+  const tier = getMountVisualTier(level)
+  const skinKey = mountSkinId ?? ''
+  const frameSpec = typeof document !== 'undefined' ? getMountSheetFrameSpec(spec.mountId, dir, action, f) : null
+  const sheetReadyFlag = frameSpec ? 's1' : 's0'
+  const key = `hd_mount2d|${spec.mountId}|${dir}|${action}|${f}|t${tier}|${skinKey}|${sheetReadyFlag}`
+
+  return cached(key, () => {
+    if (frameSpec && typeof document !== 'undefined') {
+      const c = document.createElement('canvas')
+      c.width = frameSpec.sw
+      c.height = frameSpec.sh
+      c.dataset.hdScale = String(frameSpec.hdScale)
+      c.dataset.sheetId = frameSpec.sheetId
+      c.dataset.anchorX = String(frameSpec.anchorX)
+      c.dataset.anchorY = String(frameSpec.anchorY)
+      c.dataset.footPadFrac = String(frameSpec.footPadFrac ?? MOUNT_FOOT_PAD_FRAC)
+      const ctx = c.getContext('2d')
+      if (ctx) {
+        ctx.imageSmoothingEnabled = true
+        ctx.imageSmoothingQuality = 'high'
+        drawSheetFrameSpec(ctx, frameSpec, 0, 0, frameSpec.sw, frameSpec.sh)
+        drawMountLevelAndSkinFx(ctx, frameSpec.sw, frameSpec.sh, spec, dir, action, f, level, mountSkinId)
+        return c
+      }
+    }
+    return renderHdMountSprite(spec, dir, action, f, level, mountSkinId)
+  })
 }
 
 /* ---------------- Tiles ---------------- */

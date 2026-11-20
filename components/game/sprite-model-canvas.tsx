@@ -5,6 +5,8 @@ import { normalizeMonsterId } from '@/lib/game/biome-monsters'
 import { getCatalogMonsterFrameCount } from '@/lib/game/catalog-sprites'
 import { JOBS, MONSTERS, normalizeJobId, type WeaponType } from '@/lib/game/data'
 import { getJobModelSpec, getMonsterModelSpec, getMountModelSpec, getPetModelSpec } from '@/lib/game/models-2d'
+import { getMountDef, getMountRiderSeatOffset, type MountAnimAction } from '@/lib/game/mounts'
+import { preloadMountSpriteSheet } from '@/lib/game/sprite-sheets'
 import {
   canvasToResolvedDrawable,
   type Dir,
@@ -45,6 +47,10 @@ export interface SpriteModelCanvasProps {
   showAura?: boolean
   variant?: 'full' | 'portrait'
   fashion?: FashionLoadout | null
+  mountLevel?: number
+  mountSkinId?: string | null
+  showRider?: boolean
+  riderJobId?: string
   className?: string
   label?: string
   onAutoPhaseChange?: (phase: SpriteAction) => void
@@ -65,6 +71,10 @@ export function SpriteModelCanvas({
   showAura = true,
   variant = 'full',
   fashion,
+  mountLevel = 1,
+  mountSkinId = null,
+  showRider = false,
+  riderJobId = 'swordsman',
   className = '',
   label,
   onAutoPhaseChange,
@@ -111,6 +121,9 @@ export function SpriteModelCanvas({
     if (mode === 'job' && fashion) {
       preloadFashionLayers(fashion)
     }
+    if (mode === 'mount') {
+      preloadMountSpriteSheet(id)
+    }
 
     const observer =
       typeof IntersectionObserver !== 'undefined'
@@ -141,20 +154,42 @@ export function SpriteModelCanvas({
       let attackProgress = 0
 
       if (action === 'auto' && !reducedMotion) {
-        const cycle = elapsed % 5.1
-        if (cycle < 1.35) {
-          effectiveAction = 'idle'
-        } else if (cycle < 2.7) {
-          effectiveAction = 'walk'
-        } else if (cycle < 3.8) {
-          effectiveAction = 'attack'
-          attackProgress = (cycle - 2.7) / 1.1
+        if (mode === 'mount') {
+          const cycle = elapsed % 6.2
+          if (cycle < 1.2) {
+            effectiveAction = 'idle'
+          } else if (cycle < 2.5) {
+            effectiveAction = 'walk'
+          } else if (cycle < 3.9) {
+            effectiveAction = 'run'
+          } else if (cycle < 5.05) {
+            effectiveAction = 'mount'
+            attackProgress = (cycle - 3.9) / 1.15
+          } else {
+            effectiveAction = 'dismount'
+            attackProgress = (cycle - 5.05) / 1.15
+          }
         } else {
-          effectiveAction = 'skill'
-          attackProgress = (cycle - 3.8) / 1.3
+          const cycle = elapsed % 5.1
+          if (cycle < 1.35) {
+            effectiveAction = 'idle'
+          } else if (cycle < 2.7) {
+            effectiveAction = 'walk'
+          } else if (cycle < 3.8) {
+            effectiveAction = 'attack'
+            attackProgress = (cycle - 2.7) / 1.1
+          } else {
+            effectiveAction = 'skill'
+            attackProgress = (cycle - 3.8) / 1.3
+          }
         }
-      } else if (action === 'attack' || action === 'skill') {
-        attackProgress = reducedMotion ? 0.5 : (elapsed * 1.45) % 1
+      } else if (
+        action === 'attack' ||
+        action === 'skill' ||
+        action === 'mount' ||
+        action === 'dismount'
+      ) {
+        attackProgress = reducedMotion ? 0.5 : (elapsed * 1.35) % 1
       }
 
       if (lastPhase !== effectiveAction) {
@@ -180,21 +215,27 @@ export function SpriteModelCanvas({
       const isCatalogMonster = mode === 'monster'
       const isAttack = effectiveAction === 'attack'
       const isSkill = effectiveAction === 'skill'
+      const isMountHop = effectiveAction === 'mount' || effectiveAction === 'dismount'
       const atkCount = isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'attack') : 4
       const skillCount = isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'skill') : 4
       const walkMod = mode === 'job' ? 4 : isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'walk') : 6
       const idleCount = isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'idle') : 4
       const attackFrame = isAttack ? Math.min(atkCount - 1, Math.floor(attackProgress * atkCount)) : 0
       const skillFrame = isSkill ? Math.min(skillCount - 1, Math.floor(attackProgress * skillCount)) : 0
+      const hopFrame = isMountHop ? Math.min(3, Math.floor(attackProgress * 4)) : 0
       const frame = isSkill
         ? skillFrame
         : isAttack
           ? attackFrame
-          : effectiveAction === 'walk'
-            ? Math.floor(elapsed * (mode === 'job' ? 8.5 : isCatalogMonster ? 7.5 : 8.0)) % walkMod
-            : mode === 'job' && !reducedMotion && Math.sin(elapsed * 1.4) > 0.96
-              ? -1
-              : Math.floor(elapsed * (isCatalogMonster ? 5.0 : 2.6)) % idleCount
+          : isMountHop
+            ? hopFrame
+            : effectiveAction === 'run'
+              ? Math.floor(elapsed * 12) % walkMod
+              : effectiveAction === 'walk'
+                ? Math.floor(elapsed * (mode === 'job' ? 8.5 : isCatalogMonster ? 7.5 : 8.5)) % walkMod
+                : mode === 'job' && !reducedMotion && Math.sin(elapsed * 1.4) > 0.96
+                  ? -1
+                  : Math.floor(elapsed * (isCatalogMonster ? 5.0 : 2.6)) % idleCount
 
       let drawable: ResolvedDrawable
       let auraColor: string | undefined
@@ -231,14 +272,16 @@ export function SpriteModelCanvas({
         auraColor = auraDef?.primaryColor ?? spec.auraColor
       } else if (mode === 'pet') {
         const spec = getPetModelSpec(id)
-        const petAction: SpriteAction = effectiveAction === 'skill' ? 'attack' : effectiveAction
+        const petAction: SpriteAction = effectiveAction === 'skill' ? 'attack' : effectiveAction === 'run' ? 'walk' : effectiveAction
         drawable = canvasToResolvedDrawable(petSprite(spec.petId, dir, petAction, frame, attackFrame))
         auraColor = spec.auraColor
         isFlying = spec.floating
       } else if (mode === 'mount') {
         const spec = getMountModelSpec(id)
         const mountAction: SpriteAction = effectiveAction === 'skill' ? 'attack' : effectiveAction
-        drawable = canvasToResolvedDrawable(mountSprite(spec.mountId, dir, mountAction, frame, attackFrame))
+        drawable = canvasToResolvedDrawable(
+          mountSprite(spec.mountId, dir, mountAction, frame, attackFrame, mountLevel, mountSkinId),
+        )
         auraColor = spec.auraColor
         isFlying = spec.flying
       } else {
@@ -281,7 +324,8 @@ export function SpriteModelCanvas({
         ? drawable.sheetSpec.image.complete && drawable.sheetSpec.image.naturalWidth > 0
         : Boolean(drawable.canvas && drawable.canvas.width > 0 && drawable.canvas.height > 0)
       const fashionSig = mode === 'job' ? getFashionRenderSignature(fashion) : ''
-      const sig = `${effectiveAction}|${frame}|${hoverY}|${lungeOffset}|${slashBucket}|${auraBucket}|${rebirthCount}|${gmReady ? '1' : '0'}|${sheetId}|${sourceReady ? '1' : '0'}|${mMotionBucket}|${fashionSig}|${canvas.width}x${canvas.height}`
+      const mountSig = mode === 'mount' ? `m${mountLevel}|${mountSkinId ?? ''}|${showRider ? riderJobId : ''}` : ''
+      const sig = `${effectiveAction}|${frame}|${hoverY}|${lungeOffset}|${slashBucket}|${auraBucket}|${rebirthCount}|${gmReady ? '1' : '0'}|${sheetId}|${sourceReady ? '1' : '0'}|${mMotionBucket}|${fashionSig}|${mountSig}|${canvas.width}x${canvas.height}`
 
       if (sig !== lastSig) {
         lastSig = sig
@@ -441,6 +485,51 @@ export function SpriteModelCanvas({
             })
           }
           drawResolvedDrawable(ctx, drawable, dx, dy, drawW, drawH)
+          if (mode === 'mount' && showRider) {
+            const jobDef = JOBS[normalizeJobId(riderJobId)]
+            const riderColors = jobHumanColors(jobDef.id, jobDef.colors, false)
+            const riderWeapon = jobDef.weaponTypes[0] ?? 'stick'
+            const riderDrawable = resolveHumanDrawable(
+              riderColors,
+              dir,
+              0,
+              riderWeapon,
+              jobDef.colors.accent,
+              false,
+              'idle',
+              undefined,
+            )
+            const seatAction: MountAnimAction =
+              effectiveAction === 'walk' ||
+              effectiveAction === 'run' ||
+              effectiveAction === 'mount' ||
+              effectiveAction === 'dismount' ||
+              effectiveAction === 'attack'
+                ? effectiveAction
+                : 'idle'
+            const seat = getMountRiderSeatOffset(id, dir, seatAction, frame)
+            const worldToPreviewScale = drawW / Math.max(1, drawable.width / Math.max(1, drawable.hdScale))
+            const seatPxX = Math.round(seat.x * worldToPreviewScale)
+            const seatPxY = Math.round(-footPad + seat.y * worldToPreviewScale)
+            const riderH = Math.round(33 * worldToPreviewScale)
+            const riderW = Math.round(riderH * (riderDrawable.width / Math.max(1, riderDrawable.height)))
+            const riderClip = Math.round(riderH * seat.legClipRatio)
+            const riderDx = Math.round(seatPxX - riderW / 2)
+            const riderDy = Math.round(seatPxY - riderH + 2 * worldToPreviewScale)
+            ctx.save()
+            ctx.beginPath()
+            ctx.rect(riderDx - 8, riderDy - 8, riderW + 16, riderH - riderClip + 10)
+            ctx.clip()
+            drawResolvedDrawable(ctx, riderDrawable, riderDx, riderDy, riderW, riderH)
+            ctx.restore()
+            const mDef = getMountDef(id)
+            if (mDef) {
+              ctx.fillStyle = mDef.colors.saddle
+              ctx.fillRect(seatPxX - Math.round(4 * worldToPreviewScale), seatPxY - Math.round(2.5 * worldToPreviewScale), Math.round(8 * worldToPreviewScale), Math.round(3.2 * worldToPreviewScale))
+              ctx.fillStyle = mDef.colors.accent
+              ctx.fillRect(seatPxX - Math.round(2.5 * worldToPreviewScale), seatPxY - Math.round(2.2 * worldToPreviewScale), Math.round(5 * worldToPreviewScale), Math.round(1.1 * worldToPreviewScale))
+            }
+          }
           if (mode === 'job' && fashion) {
             drawCharacterFashionLayers({
               ctx,
@@ -529,7 +618,7 @@ export function SpriteModelCanvas({
       observer?.disconnect()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, id, action, dir, weaponOverride, weaponColorOverride, size, scale, isGm, rebirthCount, showShadow, showAura, variant, fashionDep])
+  }, [mode, id, action, dir, weaponOverride, weaponColorOverride, size, scale, isGm, rebirthCount, showShadow, showAura, variant, fashionDep, mountLevel, mountSkinId, showRider, riderJobId])
 
   return (
     <canvas

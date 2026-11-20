@@ -23,6 +23,9 @@ const ACTION_OPTIONS: Array<{ id: PreviewAction; label: string; short: string }>
   { id: 'auto', label: 'เล่นวนอัตโนมัติ', short: 'อัตโนมัติ' },
   { id: 'idle', label: 'ยืนหายใจ (Idle)', short: 'Idle' },
   { id: 'walk', label: 'เดิน (Walk)', short: 'Walk' },
+  { id: 'run', label: 'วิ่ง (Run)', short: 'Run' },
+  { id: 'mount', label: 'ขึ้นขี่ (Mount)', short: 'Mount' },
+  { id: 'dismount', label: 'ลงขี่ (Dismount)', short: 'Dismount' },
   { id: 'attack', label: 'โจมตี (Attack)', short: 'Attack' },
   { id: 'skill', label: 'ใช้สกิล (Skill)', short: 'Skill' },
 ]
@@ -37,6 +40,9 @@ const DIR_LABELS: Record<ModelDir, string> = {
 const ACTION_THAI: Record<SpriteAction, string> = {
   idle: 'ยืนหายใจ',
   walk: 'กำลังเดิน',
+  run: 'กำลังวิ่ง',
+  mount: 'กระโดดขึ้นขี่',
+  dismount: 'ลงจากสัตว์ขี่',
   attack: 'โจมตี',
   skill: 'ใช้สกิล',
 }
@@ -156,6 +162,8 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
   const [dir, setDir] = useState<ModelDir>('down')
   const [liveAutoPhase, setLiveAutoPhase] = useState<SpriteAction>('idle')
   const [previewRebirth, setPreviewRebirth] = useState<number>(1)
+  const [previewMountLevel, setPreviewMountLevel] = useState<number>(1)
+  const [showMountRider, setShowMountRider] = useState<boolean>(true)
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null)
   const [vfxNonce, setVfxNonce] = useState<number>(0)
 
@@ -250,7 +258,11 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
 
         <div className="flex flex-wrap items-center gap-1.5">
           <div className="flex flex-wrap gap-1" role="group" aria-label="เลือกแอนิเมชั่น">
-            {ACTION_OPTIONS.map((opt) => (
+            {ACTION_OPTIONS.filter((opt) =>
+              tab === 'mounts'
+                ? opt.id !== 'attack' && opt.id !== 'skill'
+                : opt.id !== 'run' && opt.id !== 'mount' && opt.id !== 'dismount',
+            ).map((opt) => (
               <button
                 key={opt.id}
                 type="button"
@@ -266,8 +278,10 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                   <Play className="size-3" aria-hidden />
                 ) : opt.id === 'idle' ? (
                   <Pause className="size-3" aria-hidden />
-                ) : opt.id === 'walk' ? (
+                ) : opt.id === 'walk' || opt.id === 'run' ? (
                   <Footprints className="size-3" aria-hidden />
+                ) : opt.id === 'mount' || opt.id === 'dismount' ? (
+                  <Wind className="size-3" aria-hidden />
                 ) : opt.id === 'skill' ? (
                   <Sparkles className="size-3" aria-hidden />
                 ) : (
@@ -621,6 +635,8 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                 id={selectedMountEntry.mount.id}
                 action={action}
                 dir={dir}
+                mountLevel={previewMountLevel}
+                showRider={showMountRider}
                 size={compact ? 124 : 144}
                 onAutoPhaseChange={setLiveAutoPhase}
                 label={`โมเดลสัตว์ขี่ ${selectedMountEntry.mount.name}`}
@@ -669,6 +685,45 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
               </div>
             </div>
 
+            <div className="flex flex-wrap items-center justify-between gap-2 border border-amber-400/30 bg-background/60 px-2 py-1.5 text-[11px]">
+              <div className="flex flex-wrap items-center gap-1" role="group" aria-label="ระดับอัปเกรดสัตว์ขี่">
+                <span className="mr-1 text-muted-foreground">ระดับรูปลักษณ์:</span>
+                {[
+                  { lv: 1, label: 'Lv.1 พื้นฐาน' },
+                  { lv: 3, label: 'Lv.3 เกราะเงิน' },
+                  { lv: 5, label: 'Lv.5 เกราะทอง' },
+                  { lv: 7, label: 'Lv.7 อาร์เคน' },
+                  { lv: 9, label: 'Lv.9 มงกุฎเทพ' },
+                ].map((tierOpt) => (
+                  <button
+                    key={tierOpt.lv}
+                    type="button"
+                    aria-pressed={previewMountLevel === tierOpt.lv}
+                    onClick={() => setPreviewMountLevel(tierOpt.lv)}
+                    className={`pixel-btn px-1.5 py-0.5 text-[10px] font-semibold ${
+                      previewMountLevel === tierOpt.lv
+                        ? 'bg-amber-400 text-slate-950'
+                        : 'bg-secondary text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {tierOpt.label}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                aria-pressed={showMountRider}
+                onClick={() => setShowMountRider((prev) => !prev)}
+                className={`pixel-btn px-2 py-0.5 text-[10px] font-semibold ${
+                  showMountRider
+                    ? 'bg-cyan-500/25 text-cyan-200 ring-1 ring-cyan-400/50'
+                    : 'bg-secondary text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {showMountRider ? 'แสดงผู้ขี่: เปิด' : 'แสดงผู้ขี่: ปิด'}
+              </button>
+            </div>
+
             <div className="grid grid-cols-2 gap-1.5 text-center text-[11px] sm:grid-cols-4">
               {[
                 ['ความเร็วขี่', `+${selectedMountEntry.mount.speedBonusPct}%`],
@@ -684,7 +739,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
             </div>
 
             <p className="font-mono text-[10px] text-muted-foreground tabular-nums">
-              {selectedMountEntry.model.canvasSize.width}x{selectedMountEntry.model.canvasSize.height}px • 4 ทิศทาง • Idle 4F / Gallop 6F / Dash 4F
+              {selectedMountEntry.model.canvasSize.width}x{selectedMountEntry.model.canvasSize.height}px • 4 ทิศทาง • Idle 4F / Walk 6F / Run 6F / Mount 4F / Dismount 4F
             </p>
           </div>
         </section>
@@ -928,6 +983,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                     id={mount.id}
                     action={compact && !selected && action === 'auto' ? 'idle' : action}
                     dir={dir}
+                    mountLevel={selected ? previewMountLevel : 1}
                     size={88}
                     label={`พรีวิวสัตว์ขี่ ${mount.name}`}
                   />

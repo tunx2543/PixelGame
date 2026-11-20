@@ -218,19 +218,28 @@ export function CharacterControlBar({ compactTouchMode = false }: { compactTouch
         {hasMount && (
           <button
             type="button"
+            data-testid="hud-mount-toggle"
             aria-pressed={isMounted}
             onClick={() => toggleMountRiding()}
-            title="ขึ้นขี่ / ลงจากสัตว์ขี่ [M]"
+            title={
+              isMounted
+                ? 'ลงจากสัตว์ขี่ [M]'
+                : mountState.activeMountId
+                  ? 'ขึ้นขี่สัตว์ที่เรียกไว้ [M]'
+                  : 'เรียกและขึ้นขี่สัตว์ [M]'
+            }
             className={cn(
               'pixel-btn flex items-center gap-1 whitespace-nowrap font-semibold',
               compactTouchMode ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-1 text-[10px]',
               isMounted
                 ? 'bg-amber-500/30 text-amber-200 hover:bg-amber-500/40'
-                : 'bg-secondary text-muted-foreground hover:text-foreground',
+                : mountState.activeMountId
+                  ? 'bg-cyan-500/20 text-cyan-200 hover:bg-cyan-500/30'
+                  : 'bg-secondary text-muted-foreground hover:text-foreground',
             )}
           >
             <Wind className="size-3" aria-hidden />
-            <span>{isMounted ? 'ลงขี่' : 'ขี่สัตว์'}</span>
+            <span>{isMounted ? 'ลงขี่' : 'ขึ้นขี่'}</span>
             {!compactTouchMode && <span className="font-mono text-[8px] opacity-75">[M]</span>}
           </button>
         )}

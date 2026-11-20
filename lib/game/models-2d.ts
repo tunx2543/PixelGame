@@ -590,11 +590,14 @@ export interface MountModelSpec {
   animationFrames: {
     idle: number
     walk: number
+    run: number
+    mount: number
+    dismount: number
     attack: number
   }
 }
 
-export const MOUNT_MODEL_CANVAS_SIZE = { width: 44, height: 38 } as const
+export const MOUNT_MODEL_CANVAS_SIZE = { width: 56, height: 48 } as const
 
 function buildMountModelSpec(def: MountDef): MountModelSpec {
   return {
@@ -608,7 +611,7 @@ function buildMountModelSpec(def: MountDef): MountModelSpec {
     supports4Way: true,
     flying: def.flying,
     auraColor: def.auraColor,
-    animationFrames: { idle: 4, walk: 6, attack: 4 },
+    animationFrames: { idle: 4, walk: 6, run: 6, mount: 4, dismount: 4, attack: 4 },
   }
 }
 

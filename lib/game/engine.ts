@@ -70,13 +70,19 @@ import {
 } from './systems'
 import {
   MAX_MOUNT_LEVEL,
+  MOUNT_TRANSITION_DURATION,
   createDefaultMountState,
   getActiveMountBonuses,
   getMountDef,
   mountUpgradeCost,
   sanitizeMountState,
+  setMountRidingState,
+  storeMountState,
+  summonMountState,
   type MountState,
+  type MountTransitionPhase,
 } from './mounts'
+import { preloadMountSpriteSheet } from './sprite-sheets'
 import {
   claimDailyMission,
   onDailyMissionCompleted,
@@ -735,6 +741,11 @@ export const game = {
   facing: 'down' as Dir,
   moving: false,
   walkT: 0,
+  moveHoldT: 0,
+  mountTransition: 'none' as MountTransitionPhase,
+  mountAnim: 0,
+  mountAnimMax: MOUNT_TRANSITION_DURATION.mount as number,
+  mountWalkOnly: false,
   attackCd: 0,
   attackAnim: 0,
   skillAnim: 0,
@@ -3374,6 +3385,10 @@ export function unlockMount(mountId: string): { ok: boolean; message: string } {
   p.mountState.ownedMounts[mountId] = { level: 1 }
   p.mountState.activeMountId = mountId
   p.mountState.mounted = true
+  preloadMountSpriteSheet(mountId)
+  game.mountTransition = 'mounting'
+  game.mountAnim = MOUNT_TRANSITION_DURATION.mount
+  game.mountAnimMax = MOUNT_TRANSITION_DURATION.mount
   clampVitals()
   saveGame()
   notify()
@@ -3381,17 +3396,69 @@ export function unlockMount(mountId: string): { ok: boolean; message: string } {
   return { ok: true, message: `ปลดล็อกและขึ้นขี่ ${def.name} สำเร็จ` }
 }
 
-export function equipMount(mountId: string | null) {
+export function summonMount(mountId?: string | null): { ok: boolean; message: string } {
   const p = player()
   p.mountState = sanitizeMountState(p.mountState, p.ownedGemItems)
+  const targetId = mountId ?? p.mountState.activeMountId ?? Object.keys(p.mountState.ownedMounts)[0]
+  if (!targetId || !p.mountState.ownedMounts[targetId]) {
+    say('error', 'ยังไม่มีสัตว์ขี่ — ปลดล็อกได้ในเมนู สัตว์เลี้ยง (ผอบ) & สัตว์ขี่')
+    notify()
+    return { ok: false, message: 'ยังไม่มีสัตว์ขี่' }
+  }
+  const wasMountedSame = p.mountState.activeMountId === targetId && p.mountState.mounted
+  p.mountState = summonMountState(p.mountState, targetId, p.ownedGemItems)
+  preloadMountSpriteSheet(targetId)
+  if (wasMountedSame) {
+    game.mountTransition = 'dismounting'
+    game.mountAnim = MOUNT_TRANSITION_DURATION.dismount
+    game.mountAnimMax = MOUNT_TRANSITION_DURATION.dismount
+  } else {
+    game.mountTransition = 'none'
+    game.mountAnim = 0
+  }
+  const def = getMountDef(targetId)
+  clampVitals()
+  saveGame()
+  notify()
+  const msg = `เรียก ${def?.name ?? targetId} ออกมาเคียงข้างแล้ว (กด [M] เพื่อขึ้นขี่)`
+  say('system', msg)
+  return { ok: true, message: msg }
+}
+
+export function storeMount(): { ok: boolean; message: string } {
+  const p = player()
+  p.mountState = sanitizeMountState(p.mountState, p.ownedGemItems)
+  p.mountState = storeMountState(p.mountState, p.ownedGemItems)
+  game.mountTransition = 'none'
+  game.mountAnim = 0
+  clampVitals()
+  saveGame()
+  notify()
+  say('system', 'ลงจากสัตว์ขี่และเก็บเข้าคอกแล้ว')
+  return { ok: true, message: 'เก็บสัตว์ขี่เข้าคอกแล้ว' }
+}
+
+export function toggleMountGait(): boolean {
+  game.mountWalkOnly = !game.mountWalkOnly
+  notify()
+  return game.mountWalkOnly
+}
+
+export function equipMount(mountId: string | null) {
   if (!mountId) {
-    p.mountState.mounted = false
-    p.mountState.activeMountId = null
-    say('system', 'ลงจากสัตว์ขี่และเก็บเข้าคอกแล้ว')
-  } else if (p.mountState.ownedMounts[mountId]) {
+    storeMount()
+    return
+  }
+  const p = player()
+  p.mountState = sanitizeMountState(p.mountState, p.ownedGemItems)
+  if (p.mountState.ownedMounts[mountId]) {
     const def = getMountDef(mountId)
     p.mountState.activeMountId = mountId
     p.mountState.mounted = true
+    preloadMountSpriteSheet(mountId)
+    game.mountTransition = 'mounting'
+    game.mountAnim = MOUNT_TRANSITION_DURATION.mount
+    game.mountAnimMax = MOUNT_TRANSITION_DURATION.mount
     say('system', `เรียกและขึ้นขี่ ${def?.name ?? mountId} แล้ว!`)
   }
   clampVitals()
@@ -3411,10 +3478,17 @@ export function toggleMountRiding(): { ok: boolean; mounted: boolean; message: s
       return { ok: false, mounted: false, message: 'ยังไม่มีสัตว์ขี่' }
     }
     targetId = firstOwned
-    p.mountState.activeMountId = targetId
   }
   const nextMounted = !p.mountState.mounted
-  p.mountState.mounted = nextMounted
+  p.mountState = setMountRidingState(
+    { ...p.mountState, activeMountId: targetId },
+    nextMounted,
+    p.ownedGemItems,
+  )
+  preloadMountSpriteSheet(targetId)
+  game.mountTransition = nextMounted ? 'mounting' : 'dismounting'
+  game.mountAnim = nextMounted ? MOUNT_TRANSITION_DURATION.mount : MOUNT_TRANSITION_DURATION.dismount
+  game.mountAnimMax = game.mountAnim
   const def = getMountDef(targetId)
   const msg = nextMounted ? `ขึ้นขี่ ${def?.name ?? targetId} แล้ว` : `ลงจาก ${def?.name ?? targetId} แล้ว`
   say('system', msg)
@@ -6864,6 +6938,10 @@ function resetRuntime() {
   game.duelTarget = null
   game.keys.clear()
   game.attackHeld = false
+  game.moveHoldT = 0
+  game.mountTransition = 'none'
+  game.mountAnim = 0
+  game.mountWalkOnly = false
   game.attackAnim = 0
   game.skillAnim = 0
   game.petAttackAnim = 0
@@ -7114,6 +7192,10 @@ export function update(dt: number) {
   game.attackCd -= dt
   game.attackAnim = Math.max(0, game.attackAnim - dt)
   game.skillAnim = Math.max(0, game.skillAnim - dt)
+  if (game.mountAnim > 0) {
+    game.mountAnim = Math.max(0, game.mountAnim - dt)
+    if (game.mountAnim <= 0) game.mountTransition = 'none'
+  }
   game.petAttackCd = Math.max(0, game.petAttackCd - dt)
   game.petAttackAnim = Math.max(0, game.petAttackAnim - dt)
   game.guardCd = Math.max(0, game.guardCd - dt)
@@ -7161,7 +7243,10 @@ export function update(dt: number) {
     const sp = getStats().speed * dt
     moveEntity(map, p, (mx / len) * sp, (my / len) * sp)
     game.walkT += dt
+    game.moveHoldT += dt
     game.facing = Math.abs(mx) > Math.abs(my) ? (mx < 0 ? 'left' : 'right') : my < 0 ? 'up' : 'down'
+  } else {
+    game.moveHoldT = 0
   }
 
   const tx = Math.floor(p.x / TILE)

@@ -1,5 +1,7 @@
 import type { WeaponType } from './data'
 import type { MountModelSpec, PetModelSpec } from './models-2d'
+import { getMountVisualTier } from './mounts'
+import { MOUNT_FOOT_PAD_FRAC } from './sprite-sheets'
 import type { Dir, HumanColors, SpriteAction } from './sprites'
 
 const HD_INK = '#291713'
@@ -639,7 +641,9 @@ export function renderHdHumanSprite(
   actionOverride?: SpriteAction,
   attackFrameOverride?: number,
 ): HTMLCanvasElement {
-  const action: SpriteAction = attacking ? 'attack' : actionOverride ?? (frame > 0 ? 'walk' : 'idle')
+  const rawAction: SpriteAction = attacking ? 'attack' : actionOverride ?? (frame > 0 ? 'walk' : 'idle')
+  const action: SpriteAction =
+    rawAction === 'run' ? 'walk' : rawAction === 'mount' || rawAction === 'dismount' ? 'idle' : rawAction
   const isSkill = action === 'skill'
   const isAtk = action === 'attack'
   const f =
@@ -2264,19 +2268,216 @@ export function renderHdPetSprite(
   return c
 }
 
+export function drawMountLevelAndSkinFx(
+  ctx: CanvasRenderingContext2D,
+  W: number,
+  H: number,
+  spec: MountModelSpec,
+  dir: Dir,
+  action: SpriteAction,
+  f: number,
+  level = 1,
+  mountSkinId?: string | null,
+): void {
+  const tier = getMountVisualTier(level)
+  const cx = W / 2
+  const footY = H - Math.round(H * MOUNT_FOOT_PAD_FRAC)
+  const isSide = dir === 'left' || dir === 'right'
+  const isRun = action === 'run' || action === 'attack' || action === 'skill'
+  const isWalk = action === 'walk'
+  const phase = f / (isRun || isWalk ? 6 : 4)
+  const bobY =
+    isRun
+      ? Math.round(Math.sin(phase * Math.PI * 2) * 5 - 3)
+      : isWalk
+        ? Math.round(Math.sin(phase * Math.PI * 2) * 3)
+        : Math.round(Math.sin(phase * Math.PI * 2) * 1.5)
+  const backY = footY - 56 + bobY
+
+  const skinTint =
+    mountSkinId === 'mount_skin_astral'
+      ? { primary: '#818cf8', accent: '#67e8f9', glow: 'rgba(129, 140, 248, 0.36)' }
+      : mountSkinId === 'mount_skin_inferno'
+        ? { primary: '#fb7185', accent: '#fbbf24', glow: 'rgba(249, 115, 22, 0.36)' }
+        : mountSkinId === 'mount_skin_diamond_royal'
+          ? { primary: '#67e8f9', accent: '#fef08a', glow: 'rgba(103, 232, 249, 0.42)' }
+          : null
+
+  const tierAccent =
+    skinTint?.accent ??
+    (tier >= 5
+      ? '#fef08a'
+      : tier === 4
+        ? spec.auraColor ?? spec.colors.accent
+        : tier === 3
+          ? '#fbbf24'
+          : tier === 2
+            ? '#e2e8f0'
+            : spec.colors.accent)
+
+  const tierPrimary = skinTint?.primary ?? spec.auraColor ?? spec.colors.accent
+
+  if (tier <= 1 && !skinTint) {
+    // Tier 1 (Lv.1-2): clean motion speed lines only when sprinting
+    if (isRun) {
+      ctx.save()
+      ctx.strokeStyle = 'rgba(255,255,255,0.42)'
+      ctx.lineWidth = 2
+      const dirSign = dir === 'left' ? 1 : dir === 'right' ? -1 : 0
+      if (dirSign !== 0) {
+        for (let i = 0; i < 2; i++) {
+          const ly = backY + 12 + i * 16
+          ctx.beginPath()
+          ctx.moveTo(cx + dirSign * 42, ly)
+          ctx.lineTo(cx + dirSign * 72, ly)
+          ctx.stroke()
+        }
+      }
+      ctx.restore()
+    }
+    return
+  }
+
+  ctx.save()
+
+  // Optional skin ethereal wash / crest shimmer
+  if (skinTint) {
+    const washGrad = ctx.createRadialGradient(cx, backY + 10, 6, cx, backY + 10, 58)
+    washGrad.addColorStop(0, skinTint.glow)
+    washGrad.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = washGrad
+    ctx.beginPath()
+    ctx.ellipse(cx, backY + 10, 60, 44, 0, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // Tier 2+ (Lv.3+): Silver / Gilded barding chestplate & saddle trim
+  if (tier >= 2) {
+    const armorCol = tier >= 3 ? '#f59e0b' : '#cbd5e1'
+    const armorHi = tier >= 3 ? '#fef08a' : '#f8fafc'
+    const chestX = dir === 'right' ? cx + 32 : dir === 'left' ? cx - 32 : cx
+    const chestY = backY + 16
+    if (dir !== 'up') {
+      ctx.fillStyle = armorCol
+      ctx.strokeStyle = HD_INK
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.moveTo(chestX, chestY - 7)
+      ctx.lineTo(chestX + 10, chestY)
+      ctx.lineTo(chestX, chestY + 9)
+      ctx.lineTo(chestX - 10, chestY)
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+
+      ctx.fillStyle = armorHi
+      ctx.beginPath()
+      ctx.arc(chestX, chestY, 3.2, 0, Math.PI * 2)
+      ctx.fill()
+    }
+
+    // Polished saddle blanket trim & stirrup jewel
+    const saddleX = dir === 'right' ? cx - 4 : dir === 'left' ? cx + 4 : cx
+    ctx.fillStyle = tierAccent
+    ctx.fillRect(saddleX - (isSide ? 14 : 11), backY - 2, isSide ? 28 : 22, 3)
+  }
+
+  // Tier 3+ (Lv.5+): Golden crest & radiant ground rune ring
+  if (tier >= 3) {
+    ctx.strokeStyle = tier >= 4 ? tierPrimary : '#fbbf24'
+    ctx.lineWidth = tier >= 4 ? 2.6 : 2
+    ctx.globalAlpha = 0.58 + Math.sin(phase * Math.PI * 2) * 0.16
+    ctx.beginPath()
+    ctx.ellipse(cx, footY - 2, 46, 12, 0, 0, Math.PI * 2)
+    ctx.stroke()
+
+    if (tier >= 4) {
+      // Arcane outer ring + flank starlight runes
+      ctx.globalAlpha = 0.34
+      ctx.lineWidth = 1.8
+      ctx.beginPath()
+      ctx.ellipse(cx, footY - 2, 56, 15, 0, 0, Math.PI * 2)
+      ctx.stroke()
+    }
+    ctx.globalAlpha = 1
+  }
+
+  // Tier 4+ (Lv.7+): Wing/flank glowing motes & dash trail
+  if (tier >= 4) {
+    const moteCount = tier >= 5 ? 5 : 3
+    for (let i = 0; i < moteCount; i++) {
+      const ang = phase * Math.PI * 2 + (i * Math.PI * 2) / moteCount
+      const mx = cx + Math.cos(ang) * (isSide ? 48 : 42)
+      const my = backY + 4 + Math.sin(ang * 1.5) * 14
+      ctx.fillStyle = i % 2 === 0 ? tierAccent : tierPrimary
+      ctx.beginPath()
+      ctx.arc(mx, my, tier >= 5 ? 3.4 : 2.6, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+
+  // Tier 5 (Lv.9-10): Sovereign Halo Crown floating over mount
+  if (tier >= 5 || skinTint) {
+    const crownY = backY - 38 + Math.round(Math.sin(phase * Math.PI * 2) * 2)
+    ctx.strokeStyle = tierAccent
+    ctx.lineWidth = 2.6
+    ctx.beginPath()
+    ctx.ellipse(cx, crownY, 22, 6, 0, 0, Math.PI * 2)
+    ctx.stroke()
+
+    ctx.fillStyle = '#ffffff'
+    for (const dx of [-18, 0, 18]) {
+      ctx.beginPath()
+      ctx.arc(cx + dx, crownY + (dx === 0 ? -4 : 0), 2.8, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+
+  if (isRun) {
+    ctx.strokeStyle = tierAccent
+    ctx.globalAlpha = 0.55
+    ctx.lineWidth = 2.5
+    const dirSign = dir === 'left' ? 1 : dir === 'right' ? -1 : 0
+    if (dirSign !== 0) {
+      for (let i = 0; i < 3; i++) {
+        const ly = backY + 4 + i * 14
+        ctx.beginPath()
+        ctx.moveTo(cx + dirSign * 44, ly)
+        ctx.lineTo(cx + dirSign * 80, ly)
+        ctx.stroke()
+      }
+    }
+  }
+
+  ctx.restore()
+}
+
 export function renderHdMountSprite(
   spec: MountModelSpec,
   dir: Dir,
   action: SpriteAction,
   f: number,
+  level = 1,
+  mountSkinId?: string | null,
 ): HTMLCanvasElement {
   const hdScale = 4
-  const W = 44 * hdScale
-  const H = 38 * hdScale
+  const W = 56 * hdScale
+  const H = 48 * hdScale
   const { c, ctx } = makeSmoothCanvas(W, H, hdScale)
+  c.dataset.footPadFrac = String(MOUNT_FOOT_PAD_FRAC)
   const cx = W / 2
-  const footY = H - 14
-  const bob = action === 'walk' ? Math.sin((f / 6) * Math.PI * 2) * 6 : Math.sin((f / 4) * Math.PI * 2) * 2
+  const footY = H - Math.round(H * MOUNT_FOOT_PAD_FRAC)
+  const isRun = action === 'run' || action === 'attack' || action === 'skill'
+  const isWalk = action === 'walk'
+  const isMountPose = action === 'mount' || action === 'dismount'
+  const mod = isRun || isWalk ? 6 : 4
+  const bob = isRun
+    ? Math.sin((f / mod) * Math.PI * 2) * 6 - 3
+    : isWalk
+      ? Math.sin((f / mod) * Math.PI * 2) * 4
+      : isMountPose
+        ? 4
+        : Math.sin((f / mod) * Math.PI * 2) * 2
   const c1 = spec.colors.primary
   const hi = shadeCol(c1, 0.32)
   const dark = shadeCol(spec.colors.secondary, -0.25)
@@ -2290,53 +2491,79 @@ export function renderHdMountSprite(
   ctx.lineWidth = 3
 
   if (spec.flying) {
+    const flap = isRun ? Math.sin((f / 6) * Math.PI * 2) * 8 : isWalk ? Math.sin((f / 6) * Math.PI * 2) * 5 : Math.sin((f / 4) * Math.PI * 2) * 3
     ctx.fillStyle = spec.colors.accent
-    for (const sx of [-1, 1]) {
+    if (dir === 'right' || dir === 'left') {
       ctx.beginPath()
-      ctx.ellipse(cx + sx * 36, footY - 56 + bob, 26, 12, sx * -0.35, 0, Math.PI * 2)
+      ctx.moveTo(cx - 10, footY - 56 + bob)
+      ctx.lineTo(cx - 58, footY - 94 + bob + flap)
+      ctx.lineTo(cx - 42, footY - 54 + bob + flap * 0.4)
+      ctx.closePath()
       ctx.fill()
       ctx.stroke()
+    } else {
+      for (const sx of [-1, 1]) {
+        ctx.beginPath()
+        ctx.ellipse(cx + sx * 38, footY - 62 + bob + flap * 0.4, 28, 12, sx * -0.45, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+      }
     }
   }
 
   // Legs
-  const stride = action === 'walk' ? Math.sin((f / 6) * Math.PI * 2) * 14 : 0
+  const stride = isRun ? Math.sin((f / 6) * Math.PI * 2) * 20 : isWalk ? Math.sin((f / 6) * Math.PI * 2) * 14 : 0
   ctx.fillStyle = dark
   for (const [lx, st] of [
     [cx - 28, stride],
-    [cx + 22, -stride],
+    [cx + 18, -stride],
   ] as const) {
     ctx.beginPath()
-    ctx.roundRect(lx + st * 0.4, footY - 34 + bob, 14, 34, 5)
+    ctx.roundRect(lx + st * 0.4, footY - 34 + bob, 11, 34, 4)
     ctx.fill()
     ctx.stroke()
   }
 
   // Body + Saddle
-  ctx.fillStyle = gradVert(ctx, cx, footY - 72 + bob, footY - 24 + bob, hi, dark)
+  const bodyG = ctx.createLinearGradient(cx, footY - 72 + bob, cx, footY - 24 + bob)
+  bodyG.addColorStop(0, hi)
+  bodyG.addColorStop(1, dark)
+  ctx.fillStyle = bodyG
   ctx.beginPath()
-  ctx.ellipse(cx, footY - 46 + bob, 44, 24, 0, 0, Math.PI * 2)
+  ctx.ellipse(cx, footY - 46 + bob, dir === 'down' || dir === 'up' ? 28 : 44, 22, 0, 0, Math.PI * 2)
   ctx.fill()
   ctx.stroke()
 
   ctx.fillStyle = spec.colors.saddle
   ctx.beginPath()
-  ctx.roundRect(cx - 18, footY - 70 + bob, 36, 16, 6)
+  ctx.roundRect(cx - 18, footY - 68 + bob, 36, 14, 5)
   ctx.fill()
   ctx.stroke()
 
-  // Head
+  // Head + Horns/Ears
   const hx = dir === 'right' || dir === 'left' ? cx + 38 : cx
   const hy = footY - 68 + bob
-  ctx.fillStyle = hi
+  ctx.fillStyle = spec.archetype === 'griffin' ? '#f8fafc' : hi
   ctx.beginPath()
-  ctx.ellipse(hx, hy, 20, 17, 0, 0, Math.PI * 2)
+  ctx.ellipse(hx, hy, 18, 15, 0, 0, Math.PI * 2)
   ctx.fill()
   ctx.stroke()
+  if (spec.archetype === 'kirin' || spec.archetype === 'cloud_dragon') {
+    ctx.fillStyle = spec.colors.accent
+    ctx.beginPath()
+    ctx.moveTo(hx - 6, hy - 10)
+    ctx.lineTo(hx - 14, hy - 32)
+    ctx.lineTo(hx - 1, hy - 12)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+  }
   if (dir !== 'up') {
-    drawAnimeEye(ctx, hx + 6, hy - 3, 4.2, 5.2, spec.colors.accent, false)
+    drawAnimeEye(ctx, hx + (dir === 'down' ? 0 : 6), hy - 2, 4.0, 5.0, spec.colors.accent, false)
   }
 
   ctx.restore()
+
+  drawMountLevelAndSkinFx(ctx, W, H, spec, dir, action, f, level, mountSkinId)
   return c
 }

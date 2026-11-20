@@ -27,6 +27,13 @@ export type NpcSheetId =
   | 'gacha'
   | 'rebirth'
 
+export type MountSheetId =
+  | 'meadow_pony'
+  | 'frost_wolf'
+  | 'royal_griffin'
+  | 'starlight_kirin'
+  | 'aurora_cloud_dragon'
+
 export interface SpriteSheetActionSpec {
   row: number
   frames: number
@@ -132,6 +139,57 @@ export const NPC_SPRITE_SHEETS: Record<NpcSheetId, SpriteSheetSpec> = {
   rebirth: makeNpcSheetSpec('rebirth'),
 }
 
+const MOUNT_FRAME_W = 224
+const MOUNT_FRAME_H = 192
+export const MOUNT_FOOT_PAD_FRAC = 22 / MOUNT_FRAME_H
+const MOUNT_ANCHOR_Y = (MOUNT_FRAME_H - 22) / MOUNT_FRAME_H
+
+function makeMountSheetSpec(id: MountSheetId): SpriteSheetSpec {
+  const base = `/assets/hd/mounts/${id}`
+  return {
+    id: `mount_${id}`,
+    sheetPath: `${base}/sheet.png`,
+    portraitPath: `${base}/portrait.png`,
+    frameWidth: MOUNT_FRAME_W,
+    frameHeight: MOUNT_FRAME_H,
+    cols: 6,
+    rows: 15,
+    anchorX: 0.5,
+    anchorY: MOUNT_ANCHOR_Y,
+    hdScale: 4,
+    actions: {
+      idle_down: { row: 0, frames: 4, baseFacing: 'front' },
+      idle_right: { row: 1, frames: 4, baseFacing: 'right' },
+      idle_up: { row: 2, frames: 4, baseFacing: 'back' },
+      walk_down: { row: 3, frames: 6, baseFacing: 'front' },
+      walk_right: { row: 4, frames: 6, baseFacing: 'right' },
+      walk_up: { row: 5, frames: 6, baseFacing: 'back' },
+      run_down: { row: 6, frames: 6, baseFacing: 'front' },
+      run_right: { row: 7, frames: 6, baseFacing: 'right' },
+      run_up: { row: 8, frames: 6, baseFacing: 'back' },
+      mount_down: { row: 9, frames: 4, baseFacing: 'front' },
+      mount_right: { row: 10, frames: 4, baseFacing: 'right' },
+      mount_up: { row: 11, frames: 4, baseFacing: 'back' },
+      dismount_down: { row: 12, frames: 4, baseFacing: 'front' },
+      dismount_right: { row: 13, frames: 4, baseFacing: 'right' },
+      dismount_up: { row: 14, frames: 4, baseFacing: 'back' },
+    },
+  }
+}
+
+export const MOUNT_SPRITE_SHEETS: Record<MountSheetId, SpriteSheetSpec> = {
+  meadow_pony: makeMountSheetSpec('meadow_pony'),
+  frost_wolf: makeMountSheetSpec('frost_wolf'),
+  royal_griffin: makeMountSheetSpec('royal_griffin'),
+  starlight_kirin: makeMountSheetSpec('starlight_kirin'),
+  aurora_cloud_dragon: makeMountSheetSpec('aurora_cloud_dragon'),
+}
+
+export function getMountSheetSpec(mountId?: string | null): SpriteSheetSpec | null {
+  if (!mountId) return null
+  return MOUNT_SPRITE_SHEETS[mountId as MountSheetId] ?? null
+}
+
 export const JOB_TO_HERO_SHEET: Record<string, HeroSheetId> = {
   novice: 'novice',
   swordsman: 'swordsman',
@@ -209,6 +267,14 @@ export function preloadAllSpriteSheets(): void {
   for (const spec of Object.values(NPC_SPRITE_SHEETS)) {
     getSheetImage(spec.sheetPath)
   }
+  for (const spec of Object.values(MOUNT_SPRITE_SHEETS)) {
+    getSheetImage(spec.sheetPath)
+  }
+}
+
+export function preloadMountSpriteSheet(mountId?: string | null): void {
+  const spec = getMountSheetSpec(mountId)
+  if (spec) getSheetImage(spec.sheetPath)
 }
 
 function buildFrameDrawSpec(
@@ -267,6 +333,33 @@ export function getNpcSheetFrameSpec(npcId: string, frame: number): SheetFrameDr
   return buildFrameDrawSpec(spec, 0, Math.abs(frame) % 4, false)
 }
 
+export function getMountSheetFrameSpec(
+  mountId: string | undefined,
+  dir: Dir,
+  action: SpriteAction,
+  frame: number,
+): SheetFrameDrawSpec | null {
+  const spec = getMountSheetSpec(mountId)
+  if (!spec) return null
+
+  const normalizedAction =
+    action === 'attack' || action === 'skill'
+      ? 'run'
+      : action === 'idle' || action === 'walk' || action === 'run' || action === 'mount' || action === 'dismount'
+        ? action
+        : 'idle'
+  const dirKey = dir === 'down' ? 'down' : dir === 'up' ? 'up' : 'right'
+  const flipX = dir === 'left'
+  const rowSpec = spec.actions[`${normalizedAction}_${dirKey}`] ?? spec.actions.idle_down
+  const col = Math.abs(Math.floor(frame)) % rowSpec.frames
+  const drawSpec = buildFrameDrawSpec(spec, rowSpec.row, col, flipX)
+  if (!drawSpec) return null
+  return {
+    ...drawSpec,
+    footPadFrac: MOUNT_FOOT_PAD_FRAC,
+  }
+}
+
 export function getHeroSheetFrameSpec(
   jobId: string | undefined,
   dir: Dir,
@@ -298,7 +391,7 @@ export function getHeroSheetFrameSpec(
 
   const rowSpec = spec.actions[rowKey] ?? spec.actions.walk_down
   const col =
-    action === 'idle'
+    action === 'idle' || action === 'mount' || action === 'dismount'
       ? frame < 0
         ? 0
         : frame % 2 === 1

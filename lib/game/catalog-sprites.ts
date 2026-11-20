@@ -97,13 +97,13 @@ export function getCatalogMonsterAtlas(defId?: string | null): CatalogAtlasEntry
 
 export function getCatalogMonsterFrameCount(defId: string, action: SpriteAction): number {
   const entry = CATALOG_MONSTERS[defId]
-  if (!entry) return action === 'walk' ? 6 : 4
+  if (!entry) return action === 'walk' || action === 'run' ? 6 : 4
   const anim =
     action === 'skill'
       ? entry.anims.skill ?? entry.anims.attack ?? entry.anims.walk ?? entry.anims.idle
       : action === 'attack'
         ? entry.anims.attack ?? entry.anims.skill ?? entry.anims.walk ?? entry.anims.idle
-        : action === 'walk'
+        : action === 'walk' || action === 'run'
           ? entry.anims.walk ?? entry.anims.idle ?? entry.anims.attack ?? entry.anims.skill
           : entry.anims.idle ?? entry.anims.walk ?? entry.anims.attack ?? entry.anims.skill
   return anim?.frames.length ?? 4
@@ -148,7 +148,7 @@ export function getCatalogMonsterFrameSpec(
     anim = entry.anims.skill ?? entry.anims.attack ?? entry.anims.walk ?? entry.anims.idle
   } else if (action === 'attack') {
     anim = entry.anims.attack ?? entry.anims.skill ?? entry.anims.walk ?? entry.anims.idle
-  } else if (action === 'walk') {
+  } else if (action === 'walk' || action === 'run') {
     anim = entry.anims.walk ?? entry.anims.idle ?? entry.anims.attack ?? entry.anims.skill
   } else {
     if (entry.anims.idle) {

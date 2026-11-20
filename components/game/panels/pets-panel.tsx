@@ -9,6 +9,9 @@ import {
   evolveCombatPetAction,
   feedCombatPet,
   openPanel,
+  resolvePlayerFashionLoadout,
+  storeMount,
+  summonMount,
   toggleMountRiding,
   unlockCombatPet,
   unlockMount,
@@ -18,6 +21,7 @@ import {
   MAX_MOUNT_LEVEL,
   MOUNT_DEFS,
   getActiveMountBonuses,
+  getMountVisualTierLabel,
   mountUpgradeCost,
   sanitizeMountState,
 } from '@/lib/game/mounts'
@@ -421,8 +425,10 @@ export function PetsPanel() {
                       <SpriteModelCanvas
                         mode="mount"
                         id={activeMountBonus.mountId}
-                        action="walk"
+                        action={activeMountBonus.mounted ? 'run' : 'idle'}
                         dir="right"
+                        mountLevel={activeMountBonus.level}
+                        mountSkinId={resolvePlayerFashionLoadout(p).mountAppearance}
                         size={60}
                         label={`พรีวิว ${activeMountBonus.def.name}`}
                       />
@@ -430,7 +436,10 @@ export function PetsPanel() {
                     <div>
                       <p className="text-sm font-bold text-amber-300">
                         สัตว์ขี่ที่เลือก: {activeMountBonus.def.name} (Lv.{activeMountBonus.level}) •{' '}
-                        {activeMountBonus.mounted ? 'กำลังขี่อยู่' : 'ลงพักอยู่'}
+                        {activeMountBonus.mounted ? 'กำลังขี่อยู่' : 'ถูกเรียกไว้ข้างกาย'}
+                      </p>
+                      <p className="mt-0.5 text-[11px] font-medium text-emerald-300">
+                        {getMountVisualTierLabel(activeMountBonus.level)}
                       </p>
                       <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
                         ความเร็วขณะขี่ +{activeMountBonus.speedBonusPct}% · โบนัสติดตัว +{formatNum(activeMountBonus.hpBonus)} HP · +
@@ -453,17 +462,17 @@ export function PetsPanel() {
                     <PxButton
                       variant="secondary"
                       onClick={() => {
-                        equipMount(null)
-                        setNotice('เก็บสัตว์ขี่เข้าคอกแล้ว')
+                        const res = storeMount()
+                        setNotice(res.message)
                       }}
                     >
-                      เก็บเข้าคอก
+                      เก็บสัตว์ขี่
                     </PxButton>
                   </div>
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  ยังไม่ได้เลือกสัตว์ขี่ — ปลดล็อกสัตว์ขี่ด้านล่างเพื่อเพิ่มความเร็วเดินทางและสเตตัสต่อสู้ (กด [M] ขึ้น/ลงได้ทันที)
+                  ยังไม่ได้เรียกสัตว์ขี่ — กด "เรียกสัตว์ขี่" หรือ "ขึ้นขี่" ด้านล่างเพื่อใช้งานและกด [M] ขึ้น/ลงได้ทันที
                 </p>
               )}
             </div>
@@ -478,6 +487,7 @@ export function PetsPanel() {
                 const lvScale = 1 + (lv - 1) * 0.16
                 const speedPct = mount.speedBonusPct + (lv - 1) * 3
                 const upgCost = mountUpgradeCost(lv)
+                const activeMountSkin = isSelected ? resolvePlayerFashionLoadout(p).mountAppearance : null
 
                 return (
                   <div
@@ -495,8 +505,10 @@ export function PetsPanel() {
                         <SpriteModelCanvas
                           mode="mount"
                           id={mount.id}
-                          action={isRiding ? 'walk' : 'idle'}
+                          action={isRiding ? 'run' : isSelected ? 'walk' : 'idle'}
                           dir="right"
+                          mountLevel={lv}
+                          mountSkinId={activeMountSkin}
                           size={62}
                           label={`โมเดลสัตว์ขี่ ${mount.name}`}
                         />
@@ -508,6 +520,9 @@ export function PetsPanel() {
                             {owned ? `Lv.${lv}/${MAX_MOUNT_LEVEL}` : mount.rarity}
                           </span>
                         </div>
+                        <p className="mt-0.5 text-[10px] font-semibold text-emerald-300/90">
+                          {mount.rarity} · {getMountVisualTierLabel(lv)}
+                        </p>
                         <p className="mt-0.5 text-[11px] text-muted-foreground">{mount.description}</p>
                         <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] tabular-nums text-foreground/90">
                           <span className="inline-flex items-center gap-1 text-cyan-300">
@@ -524,21 +539,45 @@ export function PetsPanel() {
                     <div className="flex flex-wrap items-center justify-between gap-1.5 border-t border-border/60 pt-2">
                       {owned ? (
                         <>
-                          <PxButton
-                            variant={isRiding ? 'secondary' : 'accent'}
-                            onClick={() => {
-                              if (isRiding) {
-                                const res = toggleMountRiding()
-                                setNotice(res.message)
-                              } else {
-                                equipMount(mount.id)
-                                playQuestClaimSfx(false)
-                                setNotice(`เรียกและขึ้นขี่ ${mount.name} แล้ว`)
-                              }
-                            }}
-                          >
-                            {isRiding ? 'ลงจากสัตว์ขี่' : 'ขึ้นขี่'}
-                          </PxButton>
+                          <div className="flex flex-wrap gap-1">
+                            {!isSelected || isRiding ? (
+                              <PxButton
+                                variant="secondary"
+                                onClick={() => {
+                                  const res = summonMount(mount.id)
+                                  playQuestClaimSfx(false)
+                                  setNotice(res.message)
+                                }}
+                              >
+                                {isRiding ? 'ลงมายืนข้าง' : 'เรียกสัตว์ขี่'}
+                              </PxButton>
+                            ) : (
+                              <PxButton
+                                variant="secondary"
+                                onClick={() => {
+                                  const res = storeMount()
+                                  setNotice(res.message)
+                                }}
+                              >
+                                เก็บสัตว์ขี่
+                              </PxButton>
+                            )}
+                            <PxButton
+                              variant={isRiding ? 'secondary' : 'accent'}
+                              onClick={() => {
+                                if (isRiding) {
+                                  const res = toggleMountRiding()
+                                  setNotice(res.message)
+                                } else {
+                                  equipMount(mount.id)
+                                  playQuestClaimSfx(false)
+                                  setNotice(`ขึ้นขี่ ${mount.name} แล้ว`)
+                                }
+                              }}
+                            >
+                              {isRiding ? 'ลงขี่' : 'ขึ้นขี่'}
+                            </PxButton>
+                          </div>
                           <PxButton
                             variant="primary"
                             disabled={lv >= MAX_MOUNT_LEVEL || p.gold < upgCost}
@@ -550,7 +589,7 @@ export function PetsPanel() {
                           >
                             <span className="inline-flex items-center gap-1 tabular-nums">
                               <Sparkles className="size-3" aria-hidden />
-                              {lv >= MAX_MOUNT_LEVEL ? 'เลเวลเต็ม' : `ฝึกสัตว์ขี่ (${formatNum(upgCost)} G)`}
+                              {lv >= MAX_MOUNT_LEVEL ? 'เลเวลเต็ม' : `อัปเกรด (${formatNum(upgCost)} G)`}
                             </span>
                           </PxButton>
                         </>

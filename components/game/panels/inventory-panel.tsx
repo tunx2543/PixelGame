@@ -37,6 +37,8 @@ import {
   resolvePlayerFashionLoadout,
   saveGame,
   setQuickSlot,
+  storeMount,
+  summonMount,
   toggleMountRiding,
   unequipAllFashionAction,
 } from '@/lib/game/engine'
@@ -801,13 +803,23 @@ export function InventoryPanel() {
                       </div>
                       <div className="flex shrink-0 gap-1">
                         {!active ? (
-                          <PxButton variant="primary" onClick={() => equipMount(mountId)}>
-                            เลือกใช้
-                          </PxButton>
+                          <>
+                            <PxButton variant="secondary" onClick={() => summonMount(mountId)}>
+                              เรียก
+                            </PxButton>
+                            <PxButton variant="primary" onClick={() => equipMount(mountId)}>
+                              ขึ้นขี่
+                            </PxButton>
+                          </>
                         ) : (
-                          <PxButton variant={riding ? 'secondary' : 'accent'} onClick={() => toggleMountRiding()}>
-                            {riding ? 'ลงขี่' : 'ขึ้นขี่'}
-                          </PxButton>
+                          <>
+                            <PxButton variant={riding ? 'secondary' : 'accent'} onClick={() => toggleMountRiding()}>
+                              {riding ? 'ลงขี่' : 'ขึ้นขี่'}
+                            </PxButton>
+                            <PxButton variant="secondary" onClick={() => storeMount()}>
+                              เก็บ
+                            </PxButton>
+                          </>
                         )}
                       </div>
                     </div>
