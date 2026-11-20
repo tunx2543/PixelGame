@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Keyboard, Layout, RotateCcw, Sliders, Volume2, VolumeX } from 'lucide-react'
+import { Keyboard, Layout, PackageCheck, RefreshCw, RotateCcw, Sliders, Sparkles, Volume2, VolumeX } from 'lucide-react'
 import { getBgmVolume, isBgmMuted, setBgmVolume, toggleBgmMute } from '@/lib/game/bgm'
 import { toggleZenHud } from '@/lib/game/engine'
 import { isSfxMuted, playQuestClaimSfx, setSfxMuted } from '@/lib/game/sfx'
@@ -14,6 +14,12 @@ import {
   type HotkeyPreset,
 } from '@/lib/game/ui-layout'
 import { useGame } from '@/lib/game/use-game'
+import {
+  applyGameUpdateReload,
+  checkForGameUpdates,
+  openChangelogModal,
+  useVersionUpdate,
+} from '@/lib/game/use-version-update'
 import { PanelFrame, PxButton } from './panels'
 
 const HOTKEY_GUIDE: Array<{ key: string; action: string }> = [
@@ -32,6 +38,7 @@ const HOTKEY_GUIDE: Array<{ key: string; action: string }> = [
 export function SettingsPanel() {
   const { p, zenHud } = useGame()
   const layout = useUiLayout()
+  const versionInfo = useVersionUpdate()
   const [bgmMuted, setBgmMutedState] = useState(() => isBgmMuted())
   const [bgmVol, setBgmVolState] = useState(() => Math.round(getBgmVolume() * 100))
   const [sfxMuted, setSfxMutedState] = useState(() => isSfxMuted())
@@ -273,6 +280,72 @@ export function SettingsPanel() {
                 </div>
               ))}
             </div>
+          </div>
+        </section>
+
+        {/* Version & Update Status */}
+        <section className="space-y-2.5 rounded border border-border bg-secondary/35 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="flex items-center gap-1.5 text-sm font-bold text-primary">
+              <PackageCheck className="size-4" aria-hidden />
+              เวอร์ชั่นเกม & การอัปเดต
+            </h3>
+            <span className="rounded border border-amber-400/50 bg-amber-500/15 px-2 py-0.5 font-mono text-[11px] font-bold text-amber-300">
+              v{versionInfo.currentVersion}
+            </span>
+          </div>
+
+          <div className="rounded border border-border/70 bg-background/50 p-2.5">
+            <p className="font-semibold text-foreground">{versionInfo.releaseTitle}</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              บิลด์วันที่ {versionInfo.buildDate}
+              {versionInfo.lastCheckedAt
+                ? ` • ตรวจล่าสุด ${new Date(versionInfo.lastCheckedAt).toLocaleTimeString('th-TH')}`
+                : ''}
+            </p>
+            {versionInfo.checkStatusText && (
+              <p
+                className={`mt-1.5 text-[11px] font-semibold ${
+                  versionInfo.updateAvailable
+                    ? 'text-emerald-300'
+                    : versionInfo.checkError
+                      ? 'text-destructive'
+                      : 'text-amber-200'
+                }`}
+              >
+                {versionInfo.checkStatusText}
+              </p>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <PxButton
+              variant="secondary"
+              disabled={versionInfo.checking}
+              onClick={() => void checkForGameUpdates(true)}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <RefreshCw className={`size-3.5 ${versionInfo.checking ? 'animate-spin' : ''}`} aria-hidden />
+                {versionInfo.checking ? 'กำลังตรวจสอบ...' : 'ตรวจสอบอัปเดตล่าสุด'}
+              </span>
+            </PxButton>
+            <PxButton variant="secondary" onClick={() => openChangelogModal()}>
+              <span className="inline-flex items-center gap-1.5">
+                <Sparkles className="size-3.5 text-amber-300" aria-hidden />
+                ดูบันทึกอัปเดต (Changelog)
+                {versionInfo.unseenUpdate && (
+                  <span className="rounded bg-amber-500/25 px-1 text-[9px] font-bold text-amber-300">ใหม่</span>
+                )}
+              </span>
+            </PxButton>
+            {versionInfo.updateAvailable && (
+              <PxButton variant="accent" onClick={() => void applyGameUpdateReload()}>
+                <span className="inline-flex items-center gap-1.5">
+                  <RefreshCw className="size-3.5" aria-hidden />
+                  อัปเดตเป็น v{versionInfo.remoteVersion ?? versionInfo.currentVersion}
+                </span>
+              </PxButton>
+            )}
           </div>
         </section>
       </div>

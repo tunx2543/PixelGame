@@ -36,6 +36,7 @@ import {
   type SaveData,
 } from '@/lib/game/engine'
 import { useGame } from '@/lib/game/use-game'
+import { openChangelogModal, useVersionUpdate } from '@/lib/game/use-version-update'
 import { resolveFashionLoadoutFromSave } from '@/lib/game/fashion-renderer'
 import { MAPS } from '@/lib/game/maps'
 import { AccountPanel } from './account-panel'
@@ -45,6 +46,7 @@ import { SpriteModelCanvas, type PreviewAction } from './sprite-model-canvas'
 
 export function TitleScreen() {
   const { kickedNotice } = useGame()
+  const versionInfo = useVersionUpdate()
   const [user, setUser] = useState<User | null>(null)
   const [accountIdentity, setAccountIdentity] = useState<UserAccountIdentity | null>(null)
   const [cloudChars, setCloudChars] = useState<CloudCharacterRecord[]>([])
@@ -334,6 +336,25 @@ export function TitleScreen() {
           <p className="mt-1 text-sm font-medium text-amber-100/95 drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)]">
             HD Hand-Drawn Fantasy RPG • ผจญภัยโลกแฟนตาซี 2D
           </p>
+          <button
+            type="button"
+            onClick={() => openChangelogModal()}
+            data-testid="title-version-badge"
+            className="pixel-btn mt-2 inline-flex items-center gap-2 border border-[#c9963b]/70 bg-[#1b1416]/90 px-3 py-1 text-[11px] font-semibold text-amber-200 shadow hover:border-amber-400 hover:brightness-110"
+          >
+            <span className="font-mono font-bold text-amber-300">v{versionInfo.currentVersion}</span>
+            <span className="text-muted-foreground">•</span>
+            <span>บันทึกอัปเดต</span>
+            {versionInfo.updateAvailable ? (
+              <span className="rounded bg-emerald-500/25 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">
+                มี v{versionInfo.remoteVersion ?? versionInfo.currentVersion} ใหม่!
+              </span>
+            ) : versionInfo.unseenUpdate ? (
+              <span className="rounded bg-amber-500/25 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">
+                อัปเดตใหม่
+              </span>
+            ) : null}
+          </button>
         </div>
 
         {kickedNotice && (

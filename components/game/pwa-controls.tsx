@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { Download, Smartphone, WifiOff, X } from 'lucide-react'
 import { useOnlineStatus, usePWAInstall } from '@/lib/game/use-pwa'
+import { markServiceWorkerUpdateReady } from '@/lib/game/use-version-update'
+import { VersionChangelogModal, VersionUpdateBanner } from './version-update-ui'
 
 export function PwaRuntime() {
   const isOnline = useOnlineStatus()
@@ -38,22 +40,46 @@ export function PwaRuntime() {
     }
 
     if (!('serviceWorker' in navigator)) return
+    let active = true
     navigator.serviceWorker
       .register('/sw.js', { scope: '/' })
+      .then((reg) => {
+        if (!active) return
+        if (reg.waiting) {
+          markServiceWorkerUpdateReady()
+        }
+        reg.addEventListener('updatefound', () => {
+          const installing = reg.installing
+          if (!installing) return
+          installing.addEventListener('statechange', () => {
+            if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+              markServiceWorkerUpdateReady()
+            }
+          })
+        })
+      })
       .catch(() => undefined)
+
+    return () => {
+      active = false
+    }
   }, [])
 
-  if (isOnline) return null
-
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="fixed bottom-3 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap border-2 border-[#0e0f1a] bg-amber-600/95 px-2.5 py-1 text-[11px] font-semibold text-white shadow-lg"
-    >
-      <WifiOff className="size-3.5 shrink-0" aria-hidden />
-      <span>โหมดออฟไลน์ — ใช้ข้อมูลในเครื่อง</span>
-    </div>
+    <>
+      <VersionUpdateBanner />
+      <VersionChangelogModal />
+      {!isOnline && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-3 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap border-2 border-[#0e0f1a] bg-amber-600/95 px-2.5 py-1 text-[11px] font-semibold text-white shadow-lg"
+        >
+          <WifiOff className="size-3.5 shrink-0" aria-hidden />
+          <span>โหมดออฟไลน์ — ใช้ข้อมูลในเครื่อง</span>
+        </div>
+      )}
+    </>
   )
 }
 
