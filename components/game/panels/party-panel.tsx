@@ -42,7 +42,7 @@ import {
   sortPartyMembers,
 } from '@/lib/firebase/party-helpers'
 import { formatPresenceStatusLabel } from '@/lib/firebase/presence-helpers'
-import { JOBS } from '@/lib/game/data'
+import { JOBS, normalizeJobId } from '@/lib/game/data'
 import {
   currentMap,
   game,
@@ -526,7 +526,7 @@ export function PartyManagerContent({ active = true }: { active?: boolean }) {
                   const isOnline = isSelf || Boolean(liveOnline)
                   const minLv = targetMap ? getMapMinLevel(targetMap) : 1
                   const canWarp = !isSelf && Boolean(targetMap) && (p.level >= minLv || isCurrentAccountGm())
-                  const jobName = JOBS[liveJobId]?.name ?? 'ผู้ฝึกหัด'
+                  const jobName = JOBS[normalizeJobId(liveJobId)]?.name ?? JOBS.novice.name
 
                   return (
                     <div

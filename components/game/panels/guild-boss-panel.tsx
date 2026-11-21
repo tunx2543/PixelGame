@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Clock, Coins, Crown, Flame, Gift, MapPin, MessageSquare, Send, Shield, Sparkles, Swords, Trophy, Users } from 'lucide-react'
-import { JOBS } from '@/lib/game/data'
+import { JOBS, normalizeJobId } from '@/lib/game/data'
 import {
   addItem,
   applyFieldBossRewardAction,
@@ -245,7 +245,7 @@ export function GuildBossPanel() {
 
   const handleSkillWorldBoss = async () => {
     if (skillCdMs > 0 || busy) return
-    const job = JOBS[p.jobId]
+    const job = JOBS[normalizeJobId(p.jobId)]
     const bestSkill = [...(job?.skills ?? [])]
       .filter((sk) => sk.kind !== 'heal')
       .sort((a, b) => b.mult * (b.hits ?? 1) - a.mult * (a.hits ?? 1))[0]
@@ -497,7 +497,7 @@ export function GuildBossPanel() {
                         className="flex items-center justify-between border border-border/50 bg-background/80 px-2 py-1 text-xs tabular-nums"
                       >
                         <span className="truncate">
-                          #{idx + 1} {c.name} <span className="text-muted-foreground">({JOBS[c.jobId]?.name ?? c.jobId})</span>
+                          #{idx + 1} {c.name} <span className="text-muted-foreground">({JOBS[normalizeJobId(c.jobId)]?.name ?? c.jobId})</span>
                         </span>
                         <span className="font-bold text-amber-300">{formatNum(c.damage)}</span>
                       </div>

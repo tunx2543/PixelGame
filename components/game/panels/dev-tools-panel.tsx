@@ -39,7 +39,7 @@ import {
   type RedeemCodeRecord,
 } from '@/lib/firebase/redeem-codes'
 import firebaseConfig from '../../../firebase-applet-config.json'
-import { ITEMS, JOBS, MAX_LEVEL, MAX_PLUS, MONSTERS } from '@/lib/game/data'
+import { ITEMS, JOBS, MAX_LEVEL, MAX_PLUS, MONSTERS, getJobSlug, normalizeJobId } from '@/lib/game/data'
 import { devCompleteAllDailyMissions, devRerollDailyMissions } from '@/lib/game/daily-missions'
 import {
   castGmSkill,
@@ -281,7 +281,7 @@ export function DevToolsPanel() {
               <p className="font-bold text-amber-300">GM / DEV MODE ACTIVE</p>
               <p className="text-[11px] text-muted-foreground">
                 UID: <span className="font-mono font-bold text-foreground">{PERMANENT_GM_GAME_UID}</span> • Lv.{p.level}{' '}
-                {JOBS[p.jobId]?.name ?? p.jobId}
+                {JOBS[normalizeJobId(p.jobId)]?.name ?? p.jobId}
               </p>
             </div>
           </div>
@@ -411,7 +411,7 @@ export function DevToolsPanel() {
             </div>
 
             <div className="space-y-2 border-2 border-border bg-muted/50 p-2.5">
-              <p className="font-semibold text-primary">เปลี่ยนอาชีพทันที (14 อาชีพ)</p>
+              <p className="font-semibold text-primary">เปลี่ยนอาชีพทันที ({Object.keys(JOBS).length} อาชีพ)</p>
               <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
                 {Object.values(JOBS).map((job) => (
                   <button
@@ -425,7 +425,7 @@ export function DevToolsPanel() {
                     }`}
                   >
                     <span className="block truncate">{job.name}</span>
-                    <span className="block text-[9px] text-muted-foreground">{job.id}</span>
+                    <span className="block text-[9px] text-muted-foreground">{getJobSlug(job.id)}</span>
                   </button>
                 ))}
               </div>

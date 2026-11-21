@@ -2,6 +2,7 @@ import {
   ITEMS,
   JOBS,
   MONSTERS,
+  normalizeJobId,
   type EquipmentSlot,
   type ItemDef,
   type ItemKind,
@@ -747,7 +748,7 @@ export function getInventorySummary(save: SaveData): InventorySummary {
 
 export function formatAllowedJobsLabel(def: ItemDef): string {
   if (def.allowedJobs?.length) {
-    return def.allowedJobs.map((id) => JOBS[id]?.name ?? id).join(', ')
+    return def.allowedJobs.map((id) => JOBS[normalizeJobId(id)]?.name ?? id).join(', ')
   }
   if (def.kind === 'weapon' && def.weaponType) {
     const names = Object.values(JOBS)

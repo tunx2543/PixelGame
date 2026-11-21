@@ -761,7 +761,7 @@ export const CRAFT_RECIPES: CraftRecipe[] = [
       { itemId: 'bone', qty: 4 },
       { itemId: 'enhance_stone', qty: 2 },
     ],
-    description: 'ดาบ Tier 3 ATK +72 สำหรับนักดาบ/อัศวิน/พาลาดิน',
+    description: 'ดาบ Tier 3 ATK +72 สำหรับ Vanguard / Aegis Knight / Shinkage / High Sovereign',
   },
   {
     id: 'craft_crystal_staff',
@@ -1033,7 +1033,7 @@ export const SEED_RIVAL_HEROES: LeaderboardHeroEntry[] = [
   { userId: 'seed_zen', gameUid: '3115', name: 'เซนเงาจันทรา', jobId: 'sinister', level: 62, rebirthCount: 5, combatPower: 6850, arenaRating: 1620, arenaWins: 44, highestTowerFloor: 42, activeTitle: 'reborn_ascendant', guildName: 'เงาอเวจี', isSeed: true },
   { userId: 'seed_aria', gameUid: '4081', name: 'อาเรียผู้เยียวยา', jobId: 'cleric', level: 36, rebirthCount: 1, combatPower: 2150, arenaRating: 1120, arenaWins: 9, highestTowerFloor: 15, activeTitle: 'guild_pillar', guildName: 'วิหารแห่งแสง', isSeed: true },
   { userId: 'seed_kuro', gameUid: '5177', name: 'คุโระนักล่า', jobId: 'mamushi', level: 24, rebirthCount: 0, combatPower: 1180, arenaRating: 1030, arenaWins: 5, highestTowerFloor: 9, activeTitle: 'goblin_slayer', guildName: 'พรานไพร', isSeed: true },
-  { userId: 'seed_mira', gameUid: '6019', name: 'มิร่าเคนเซ', jobId: 'kensei', level: 16, rebirthCount: 0, combatPower: 690, arenaRating: 980, arenaWins: 2, highestTowerFloor: 5, activeTitle: 'slime_hunter', guildName: null, isSeed: true },
+  { userId: 'seed_mira', gameUid: '6019', name: 'มิร่า Shinkage', jobId: 'kensei', level: 16, rebirthCount: 0, combatPower: 690, arenaRating: 980, arenaWins: 2, highestTowerFloor: 5, activeTitle: 'slime_hunter', guildName: null, isSeed: true },
 ]
 
 export interface PvpRoundLog {

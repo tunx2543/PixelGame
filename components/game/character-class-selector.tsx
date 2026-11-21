@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Coins, Droplets, Footprints, Heart, Play, RotateCw, Shield, Sparkles, Sprout, Swords, Target, Wand2, Zap } from 'lucide-react'
-import { JOBS, type JobDef } from '@/lib/game/data'
+import { JOBS, normalizeJobId, type JobDef } from '@/lib/game/data'
 import { MODEL_DIRS, type ModelDir } from '@/lib/game/models-2d'
 import { getSkillIconPath, getSkillVfxSpec, resolveRebirthAuraSpec } from '@/lib/game/vfx-specs'
 import { formatNum } from './format'
@@ -42,7 +42,7 @@ export interface ComputedBaseStats {
 export const CLASS_ROLE_OPTIONS: ClassRoleOption[] = [
   {
     id: 'novice',
-    englishName: 'Novice',
+    englishName: 'Wayfarer',
     thaiName: 'ผู้ฝึกหัด',
     tagline: 'คลาสเริ่มต้น Lv.1 คล่องตัวสมดุล พร้อมสกิลฟื้นฟูและฟาดพลัง',
     accentClass: 'border-[#34d399]/70 bg-[#34d399]/15 text-[#6ee7b7]',
@@ -51,7 +51,7 @@ export const CLASS_ROLE_OPTIONS: ClassRoleOption[] = [
   },
   {
     id: 'swordsman',
-    englishName: 'Swordsman',
+    englishName: 'Vanguard',
     thaiName: 'นักดาบ',
     tagline: 'แนวหน้าอึดถึก พลังชีวิตและพลังป้องกันสูง',
     accentClass: 'border-[#e5484d]/70 bg-[#e5484d]/15 text-[#ff8b8e]',
@@ -60,7 +60,7 @@ export const CLASS_ROLE_OPTIONS: ClassRoleOption[] = [
   },
   {
     id: 'mage',
-    englishName: 'Mage',
+    englishName: 'Arcanist',
     thaiName: 'นักเวท',
     tagline: 'โจมตีเวทระยะไกล ดาเมจรุนแรง มานามหาศาล',
     accentClass: 'border-[#4c8bf5]/70 bg-[#4c8bf5]/15 text-[#8cb8ff]',
@@ -69,7 +69,7 @@ export const CLASS_ROLE_OPTIONS: ClassRoleOption[] = [
   },
   {
     id: 'archer',
-    englishName: 'Archer',
+    englishName: 'Windstalker',
     thaiName: 'นักธนู',
     tagline: 'ยิงไกลคล่องตัว ความเร็วโจมตีและคริติคอลสูง',
     accentClass: 'border-[#4fc3a1]/70 bg-[#4fc3a1]/15 text-[#7de2c4]',
@@ -78,7 +78,7 @@ export const CLASS_ROLE_OPTIONS: ClassRoleOption[] = [
   },
   {
     id: 'cleric',
-    englishName: 'Cleric',
+    englishName: 'Luminary',
     thaiName: 'นักบวช',
     tagline: 'เวทแสงศักดิ์สิทธิ์ ฟื้นฟู HP และช่วยสนับสนุนทีม',
     accentClass: 'border-[#f4d35e]/70 bg-[#f4d35e]/15 text-[#fde68a]',
@@ -87,7 +87,7 @@ export const CLASS_ROLE_OPTIONS: ClassRoleOption[] = [
   },
   {
     id: 'merchant',
-    englishName: 'Merchant',
+    englishName: 'Goldweaver',
     thaiName: 'พ่อค้า',
     tagline: 'เชี่ยวชาญการค้า เพิ่มทองดรอป +15% และตีหนัก',
     accentClass: 'border-[#f59e0b]/70 bg-[#f59e0b]/15 text-[#fcd34d]',
@@ -96,7 +96,7 @@ export const CLASS_ROLE_OPTIONS: ClassRoleOption[] = [
   },
   {
     id: 'thief',
-    englishName: 'Thief',
+    englishName: 'Nightveil',
     thaiName: 'โจร',
     tagline: 'ว่องไวสูงสุด มีดคู่โจมตีเร็วและคริติคอลรุนแรง',
     accentClass: 'border-[#c77dff]/70 bg-[#c77dff]/15 text-[#e9d5ff]',
@@ -106,7 +106,7 @@ export const CLASS_ROLE_OPTIONS: ClassRoleOption[] = [
 ]
 
 export function calculateClassBaseStats(classId: string, level = 10): ComputedBaseStats {
-  const job = JOBS[classId] ?? JOBS.novice
+  const job = JOBS[normalizeJobId(classId)] ?? JOBS.novice
   const safeLevel = Math.max(1, Math.min(999, Math.floor(level)))
   return {
     maxHp: Math.floor((80 + safeLevel * 22) * job.hpMul),
@@ -188,7 +188,7 @@ export function CharacterClassSelector({
   const [previewRebirth, setPreviewRebirth] = useState<number>(1)
   const [vfxNonce, setVfxNonce] = useState<number>(0)
 
-  const activeClassId = value ?? internalClassId
+  const activeClassId = normalizeJobId(value ?? internalClassId)
   const effectiveLevel = value !== undefined ? level : previewLevel
   const activeRole = CLASS_ROLE_OPTIONS.find((r) => r.id === activeClassId) ?? CLASS_ROLE_OPTIONS[0]
   const activeSkill =
@@ -224,7 +224,7 @@ export function CharacterClassSelector({
         <div>
           <h2 className="text-base font-bold text-primary">เลือกสายอาชีพ (Character Class)</h2>
           <p className="text-xs text-muted-foreground">
-            เริ่มจาก Novice (ผู้ฝึกหัด) หรือเปรียบเทียบ 6 อาชีพหลัก (Swordsman, Mage, Archer, Cleric, Merchant, Thief) เพื่อดูค่าสถานะทันที
+            เริ่มจาก Wayfarer (ผู้ฝึกหัด) หรือเปรียบเทียบ 6 อาชีพหลัก (Vanguard, Arcanist, Windstalker, Luminary, Goldweaver, Nightveil) เพื่อดูค่าสถานะทันที
           </p>
         </div>
 

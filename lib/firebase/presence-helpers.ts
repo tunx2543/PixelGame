@@ -1,3 +1,4 @@
+import { normalizeJobId } from '@/lib/game/data'
 import { normalizeGameUidInput } from '@/lib/game/permissions'
 
 export const PRESENCE_HEARTBEAT_MS = 4_000
@@ -231,8 +232,8 @@ export function buildWorldPresencePayload(input: BuildPresenceInput): WorldPrese
 
   const rawName = typeof input.name === 'string' ? input.name.trim() : ''
   const displayName = rawName.slice(0, 24) || 'นักผจญภัย'
-  let jobId = sanitizeSafePresenceId(input.jobId, 'swordsman', 32)
-  if (jobId === 'gm') jobId = 'swordsman'
+  const rawJob = typeof input.jobId === 'string' ? input.jobId.trim() : ''
+  const jobId = !rawJob || rawJob === 'gm' ? 'swordsman' : sanitizeSafePresenceId(normalizeJobId(rawJob), 'swordsman', 32)
   const mapId = sanitizeSafePresenceId(input.mapId, 'town', 32)
   const facing: PresenceFacing = VALID_FACING.has(input.facing as PresenceFacing)
     ? (input.facing as PresenceFacing)
@@ -352,7 +353,8 @@ export function parseWorldPresenceToRemotePlayer(
   const facing: PresenceFacing = VALID_FACING.has(docData.facing as PresenceFacing)
     ? (docData.facing as PresenceFacing)
     : 'down'
-  const jobId = sanitizeSafePresenceId(docData.jobId, 'swordsman', 32)
+  const rawRemoteJob = typeof docData.jobId === 'string' ? docData.jobId.trim() : ''
+  const jobId = !rawRemoteJob ? 'swordsman' : sanitizeSafePresenceId(normalizeJobId(rawRemoteJob), 'swordsman', 32)
   const displayName =
     (typeof docData.displayName === 'string' ? docData.displayName.trim() : '').slice(0, 24) || 'นักผจญภัย'
   const gameUid = normalizeGameUidInput(docData.gameUid as string | undefined) ?? undefined

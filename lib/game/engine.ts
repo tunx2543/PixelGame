@@ -9,7 +9,10 @@ import {
   enhanceCost,
   enhanceRate,
   expToNext,
+  getJobSlug,
   normalizeJobId,
+  normalizeSkillId,
+  resolveJobId,
   type ItemDef,
   type JobDef,
   type SkillDef,
@@ -300,8 +303,9 @@ function claimLegacySave(userId: string): SaveData | null {
     if (!raw) return null
     const legacySave = JSON.parse(raw) as SaveData
     if (!legacySave || legacySave.version !== 1 || typeof legacySave.name !== 'string') return null
+    legacySave.jobId = normalizeJobId(typeof legacySave.jobId === 'string' ? legacySave.jobId : 'novice')
 
-    localStorage.setItem(accountKey, raw)
+    localStorage.setItem(accountKey, JSON.stringify(legacySave))
     localStorage.setItem(claimedByKey, userId)
     return legacySave
   } catch {
@@ -2403,7 +2407,8 @@ export function basicAttack() {
 }
 
 export function skillCooldown(skill: SkillDef) {
-  return Math.max(0, game.skillCd[skill.id] ?? 0)
+  const canonicalId = normalizeSkillId(skill.id)
+  return Math.max(0, game.skillCd[canonicalId] ?? game.skillCd[skill.id] ?? 0)
 }
 
 export function castSkill(index: number) {
@@ -2412,9 +2417,10 @@ export function castSkill(index: number) {
   const job = currentJob()
   const skill = job.skills[index]
   if (!skill) return
-  const skillLevel = p.skillLevels?.[skill.id] ?? 1
+  const canonicalSkillId = normalizeSkillId(skill.id)
+  const skillLevel = p.skillLevels?.[canonicalSkillId] ?? p.skillLevels?.[skill.id] ?? 1
   const skillMult = skill.mult * (1 + (skillLevel - 1) * 0.08)
-  const vfx = getSkillVfxSpec(skill.id, skill.color, skill.kind, job.weaponTypes[0])
+  const vfx = getSkillVfxSpec(canonicalSkillId, skill.color, skill.kind, job.weaponTypes[0])
   if (skillCooldown(skill) > 0) return
   if (p.mp < skill.mp) {
     warn('MP ไม่พอ!')
@@ -2765,7 +2771,7 @@ export function rebirth() {
     max: 1.4,
   })
   addFloat(p.x, p.y - 42, `REBIRTH ${p.rebirthCount}`, rebirthAura.primaryColor, 15)
-  say('system', `จุติครั้งที่ ${p.rebirthCount} (${rebirthAura.title}) สำเร็จ! กลับสู่ผู้ฝึกหัด (Novice) เลเวล 1 และคงค่าสเตตัสเดิมไว้`)
+  say('system', `จุติครั้งที่ ${p.rebirthCount} (${rebirthAura.title}) สำเร็จ! กลับสู่ ${JOBS.novice.name} (ผู้ฝึกหัด) เลเวล 1 และคงค่าสเตตัสเดิมไว้`)
   saveGame()
   closePanel('rebirth')
   notify()
@@ -2982,9 +2988,10 @@ export function devHealFull() {
 
 export function devChangeJob(jobId: string) {
   const p = player()
-  if (!p.gm || !isCurrentAccountGm() || !JOBS[jobId]) return
-  applyJob(jobId)
-  say('gm', `[DEV] เปลี่ยนอาชีพเป็น ${JOBS[jobId].name} (${jobId})`)
+  const resolvedJobId = resolveJobId(jobId)
+  if (!p.gm || !isCurrentAccountGm() || !resolvedJobId || !JOBS[resolvedJobId]) return
+  applyJob(resolvedJobId)
+  say('gm', `[DEV] เปลี่ยนอาชีพเป็น ${JOBS[resolvedJobId].name} (${getJobSlug(resolvedJobId)})`)
   saveGame()
   notify()
 }
@@ -3742,7 +3749,8 @@ export function availableJobs() {
 export function changeJob(jobId: string) {
   const p = player()
   const current = currentJob()
-  const job = JOBS[jobId]
+  const resolvedJobId = resolveJobId(jobId)
+  const job = resolvedJobId ? JOBS[resolvedJobId] : undefined
   const canPromote = Boolean(
     job &&
       (job.from === current.id ||
@@ -3750,7 +3758,7 @@ export function changeJob(jobId: string) {
         (current.tier === 0 && job.tier === 1) ||
         (current.tier === 1 && job.tier === 1 && job.id !== current.id)),
   )
-  if (!job || !canPromote) return say('error', 'ไม่สามารถเปลี่ยนเป็นอาชีพนี้ได้'), notify()
+  if (!resolvedJobId || !job || !canPromote) return say('error', 'ไม่สามารถเปลี่ยนเป็นอาชีพนี้ได้'), notify()
   if (p.level < job.reqLevel) return say('error', `ต้องการเลเวล ${job.reqLevel}`), notify()
   if (p.gold < job.cost) return say('error', 'เงินไม่พอ'), notify()
   const w = p.equipment.weapon
@@ -3760,7 +3768,7 @@ export function changeJob(jobId: string) {
     return say('error', 'กระเป๋าและคลังเต็ม ไม่สามารถถอดอาวุธเดิมได้'), notify()
   }
   p.gold -= job.cost
-  applyJob(jobId)
+  applyJob(resolvedJobId)
   say('system', `เปลี่ยนอาชีพเป็น ${job.name} สำเร็จ!`)
   saveGame()
   notify()
@@ -3768,7 +3776,7 @@ export function changeJob(jobId: string) {
 
 function applyJob(jobId: string) {
   const p = player()
-  p.jobId = jobId
+  p.jobId = normalizeJobId(jobId)
   const w = p.equipment.weapon
   const wDef = w ? ITEMS[w.itemId] : null
   if (w && (!wDef || !wDef.weaponType || !currentJob().weaponTypes.includes(wDef.weaponType))) {
@@ -4285,17 +4293,18 @@ export function cookFoodAction(itemId: string): { ok: boolean; message: string }
 
 export function upgradeSkillAction(skillId: string): { ok: boolean; message: string } {
   const p = player()
-  const skill = currentJob().skills.find((s) => s.id === skillId)
+  const canonicalSkillId = normalizeSkillId(skillId)
+  const skill = currentJob().skills.find((s) => s.id === canonicalSkillId || s.id === skillId)
   if (!skill) return { ok: false, message: 'ไม่พบสกิลของอาชีพปัจจุบัน' }
   p.skillLevels ??= {}
-  const curLv = p.skillLevels[skillId] ?? 1
+  const curLv = p.skillLevels[skill.id] ?? p.skillLevels[skillId] ?? 1
   if (curLv >= MAX_SKILL_UPGRADE) return { ok: false, message: `สกิล ${skill.name} ถึงระดับสูงสุด (Lv.${MAX_SKILL_UPGRADE}) แล้ว` }
   const cost = skillUpgradeCost(curLv)
   if ((p.skillPoints ?? 0) < cost.skillPoints) return { ok: false, message: 'แต้มสกิล (Skill Points) ไม่พอ — ได้รับเมื่อเลเวลอัป' }
   if (p.gold < cost.gold) return { ok: false, message: `ทองไม่พอ (ต้องการ ${cost.gold.toLocaleString()} G)` }
   p.skillPoints = Math.max(0, (p.skillPoints ?? 0) - cost.skillPoints)
   p.gold -= cost.gold
-  p.skillLevels[skillId] = curLv + 1
+  p.skillLevels[skill.id] = curLv + 1
   say('system', `อัปเกรดสกิล ${skill.name} เป็น Lv.${curLv + 1}!`)
   saveGame()
   notify()
@@ -6701,12 +6710,15 @@ function runCommand(text: string) {
       for (let i = 0; i < ids.length; i += 7) say('gm', ids.slice(i, i + 7).join(', '))
     },
     '/job': () => {
-      const id = args[0]
-      if (!id || !JOBS[id]) return say('error', `อาชีพที่มี: ${Object.keys(JOBS).join(', ')}`)
-      applyJob(id)
-      say('gm', `เปลี่ยนอาชีพเป็น ${JOBS[id].name}`)
+      const rawQuery = args.join(' ').trim()
+      const resolved = resolveJobId(rawQuery)
+      if (!resolved || !JOBS[resolved]) {
+        return say('error', `อาชีพที่มี: ${Object.values(JOBS).map((j) => `${getJobSlug(j.id)} (${j.name})`).join(', ')}`)
+      }
+      applyJob(resolved)
+      say('gm', `เปลี่ยนอาชีพเป็น ${JOBS[resolved].name} (${getJobSlug(resolved)})`)
     },
-    '/jobs': () => say('gm', Object.keys(JOBS).join(', ')),
+    '/jobs': () => say('gm', Object.values(JOBS).map((j) => `${getJobSlug(j.id)} (${j.name})`).join(', ')),
     '/ban': () => {
       const input = args.join(' ').trim()
       const parts = input.split('_').map((part) => part.trim())
@@ -7146,7 +7158,9 @@ export function loadGame(d: SaveData) {
     const out: Record<string, number> = {}
     for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
       if (typeof k === 'string' && k.length > 0 && k.length <= 64 && typeof v === 'number' && Number.isFinite(v)) {
-        out[k] = Math.max(1, Math.min(99, Math.floor(v)))
+        const canonicalSkillKey = normalizeSkillId(k) || k
+        const levelVal = Math.max(1, Math.min(99, Math.floor(v)))
+        out[canonicalSkillKey] = Math.max(out[canonicalSkillKey] ?? 0, levelVal)
       }
     }
     return out
@@ -7229,8 +7243,9 @@ export function newGame(name: string, starterJobId = 'novice') {
   const gmAllowed = isCurrentAccountGm()
   const resolvedGameUid = gmAllowed ? PERMANENT_GM_GAME_UID : activeAccountGameUid
   const resolvedNumericUid = gmAllowed ? PERMANENT_GM_UID : activeAccountUid
-  const resolvedStarterJob = (STARTER_JOB_IDS as readonly string[]).includes(starterJobId)
-    ? starterJobId
+  const resolvedInputStarter = resolveJobId(starterJobId) ?? 'novice'
+  const resolvedStarterJob = (STARTER_JOB_IDS as readonly string[]).includes(resolvedInputStarter)
+    ? resolvedInputStarter
     : 'novice'
   const p: SaveData = {
     version: 1,

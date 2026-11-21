@@ -6,7 +6,7 @@ import { auth as firebaseAuth } from '@/lib/firebase/client'
 import { sendFriendRequestByGameUid } from '@/lib/firebase/friends'
 import { invitePlayerToPartyAutoCreate } from '@/lib/firebase/parties'
 import { formatPresenceStatusLabel, type PresenceStatus } from '@/lib/firebase/presence-helpers'
-import { JOBS } from '@/lib/game/data'
+import { JOBS, normalizeJobId } from '@/lib/game/data'
 import { currentMap, game, getStats, gmKickPlayer, gmMutePlayer, gmSummonPlayer, gmWarpToPlayer, isCurrentAccountGm, notify } from '@/lib/game/engine'
 import { MAPS, TILE } from '@/lib/game/maps'
 import { formatGameUid } from '@/lib/game/permissions'
@@ -213,7 +213,7 @@ export function OnlinePlayersPopover() {
             const mapName = MAPS[other.mapId]?.name ?? other.mapId
             const tx = Math.floor(other.x / TILE)
             const ty = Math.floor(other.y / TILE)
-            const jobName = JOBS[other.jobId]?.name ?? 'ผู้ฝึกหัด'
+            const jobName = JOBS[normalizeJobId(other.jobId)]?.name ?? JOBS.novice.name
             const gameUid = other.gameUid ?? formatGameUid(other.uid)
             const statusLabel = formatPresenceStatusLabel(other.status, other.mapId)
 

@@ -19,7 +19,7 @@ import {
   type FriendSocialSnapshot,
   type PlayerUidProfile,
 } from '@/lib/firebase/friends'
-import { JOBS } from '@/lib/game/data'
+import { JOBS, normalizeJobId } from '@/lib/game/data'
 import { MAPS, TILE } from '@/lib/game/maps'
 import { formatPresenceStatusLabel } from '@/lib/firebase/presence-helpers'
 import { closePanel, game as gameState, notify, saveGame, setGameAccountIdentity } from '@/lib/game/engine'
@@ -288,7 +288,7 @@ export function FriendsPanel({ game }: { game: typeof gameState }) {
                     <span className="truncate">{preview.characterName}</span>
                   </p>
                   <p className="text-[10px] text-muted-foreground">
-                    UID {preview.gameUid} • Lv.{preview.level} {JOBS[preview.jobId]?.name ?? 'ผู้ฝึกหัด'}
+                    UID {preview.gameUid} • Lv.{preview.level} {JOBS[normalizeJobId(preview.jobId)]?.name ?? JOBS.novice.name}
                   </p>
                 </div>
                 <button

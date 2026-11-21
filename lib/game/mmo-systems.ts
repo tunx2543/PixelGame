@@ -1,4 +1,4 @@
-import type { EquipmentSlot, ItemDef } from './data'
+import { normalizeJobId, type EquipmentSlot, type ItemDef } from './data'
 import type { PartyRecord } from '../firebase/party-helpers'
 import type { RemotePlayerSnapshot } from '../firebase/presence-helpers'
 import { getActiveWorldBoss, type ElementType, type WorldBossScheduleSpec } from './rpg-systems'
@@ -263,8 +263,9 @@ export interface PartyRoleSynergyResult {
 }
 
 export function getJobRole(jobId: string): PartyRole {
-  if (jobId === 'cleric' || jobId === 'nekobaku') return 'healer'
-  if (jobId === 'swordsman' || jobId === 'templar' || jobId === 'the_king' || jobId === 'iron_fist') {
+  const canonical = normalizeJobId(jobId)
+  if (canonical === 'cleric' || canonical === 'nekobaku') return 'healer'
+  if (canonical === 'swordsman' || canonical === 'templar' || canonical === 'the_king' || canonical === 'iron_fist') {
     return 'tank'
   }
   return 'dps'
@@ -531,7 +532,7 @@ export function createDuelFighter(input: {
   return {
     uid: input.uid,
     name: input.name.slice(0, 24) || 'ผู้กล้า',
-    jobId: input.jobId || 'novice',
+    jobId: normalizeJobId(input.jobId),
     level: Math.max(1, Math.floor(input.level || 1)),
     maxHp,
     hp: maxHp,

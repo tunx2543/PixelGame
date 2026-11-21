@@ -16,6 +16,7 @@ import {
   where,
 } from 'firebase/firestore'
 import type { SaveData } from '@/lib/game/engine'
+import { normalizeJobId } from '@/lib/game/data'
 import { sanitizeRpgExt } from '@/lib/game/rpg-systems'
 import {
   PERMANENT_GM_GAME_UID,
@@ -158,7 +159,8 @@ function sanitizeCharacterPayload(userId: string, characterId: string, save: Sav
   const safeId = sanitizeSafeId(characterId, 'slot_1', 64)
   const rawName = typeof save.name === 'string' ? save.name : 'นักผจญภัย'
   const safeName = rawName.trim().slice(0, 24) || 'นักผจญภัย'
-  const safeJobId = sanitizeSafeId(typeof save.jobId === 'string' ? save.jobId : 'swordsman', 'swordsman', 32)
+  const rawJobId = typeof save.jobId === 'string' && save.jobId.trim() ? normalizeJobId(save.jobId) : 'swordsman'
+  const safeJobId = sanitizeSafeId(rawJobId, 'swordsman', 32)
   const safeMapId = sanitizeSafeId(typeof save.mapId === 'string' ? save.mapId : 'town', 'town', 32)
   const safeLevel = toSafeInt(save.level, 1, 999, 1)
   const safeExp = toSafeInt(save.exp, 0, Number.MAX_SAFE_INTEGER, 0)
@@ -321,7 +323,7 @@ export async function ensureUserProfile(user: User): Promise<UserAccountIdentity
             displayName,
             characterName: String(uidData.characterName || displayName).slice(0, 24) || 'นักผจญภัย',
             level: Math.max(1, Math.min(999, Math.floor(Number(uidData.level) || 1))),
-            jobId: sanitizeSafeId(String(uidData.jobId || 'swordsman'), 'swordsman', 32),
+            jobId: sanitizeSafeId(uidData.jobId ? normalizeJobId(String(uidData.jobId)) : 'swordsman', 'swordsman', 32),
             updatedAt: serverTimestamp(),
           })
         } catch (error) {
@@ -362,7 +364,11 @@ export async function syncPlayerDirectorySummary(
   const uidRef = doc(db, 'playerUids', identity.gameUid)
   const safeCharName = (typeof summary.characterName === 'string' ? summary.characterName : 'นักผจญภัย').trim().slice(0, 24) || 'นักผจญภัย'
   const safeLevel = toSafeInt(summary.level, 1, 999, 1)
-  const safeJobId = sanitizeSafeId(typeof summary.jobId === 'string' ? summary.jobId : 'swordsman', 'swordsman', 32)
+  const safeJobId = sanitizeSafeId(
+    typeof summary.jobId === 'string' && summary.jobId.trim() ? normalizeJobId(summary.jobId) : 'swordsman',
+    'swordsman',
+    32,
+  )
 
   try {
     const snap = await getDoc(uidRef)
@@ -400,15 +406,17 @@ export async function listUserCharacters(userId: string): Promise<CloudCharacter
       const d = docSnap.data()
       if (d && typeof d.saveData === 'object' && d.saveData !== null) {
         const rawSave = d.saveData as SaveData
+        const rawSaveJobId = typeof rawSave.jobId === 'string' && rawSave.jobId.trim() ? normalizeJobId(rawSave.jobId) : 'novice'
         const normalizedSave: SaveData = {
           ...rawSave,
+          jobId: rawSaveJobId,
           rpgExt: sanitizeRpgExt(rawSave.rpgExt),
         }
         records.push({
           id: docSnap.id,
           ownerId: String(d.ownerId ?? userId),
           name: String(d.name ?? normalizedSave.name ?? 'นักผจญภัย'),
-          jobId: String(d.jobId ?? normalizedSave.jobId ?? 'swordsman'),
+          jobId: d.jobId ? normalizeJobId(String(d.jobId)) : rawSaveJobId,
           level: toSafeInt(d.level ?? normalizedSave.level, 1, 999, 1),
           exp: toSafeInt(d.exp ?? normalizedSave.exp, 0, Number.MAX_SAFE_INTEGER, 0),
           hp: toSafeInt(d.hp ?? normalizedSave.hp, 0, Number.MAX_SAFE_INTEGER, 1),

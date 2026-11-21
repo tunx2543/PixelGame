@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Sparkles } from 'lucide-react'
+import { JOBS } from '@/lib/game/data'
 import { rebirth, resolvePlayerFashionLoadout } from '@/lib/game/engine'
 import { useGame } from '@/lib/game/use-game'
 import { resolveRebirthAuraSpec } from '@/lib/game/vfx-specs'
@@ -68,7 +69,7 @@ export function RebirthPanel() {
                 เริ่มต้นใหม่ด้วยพลังเดิมที่เหนือกว่า
               </h3>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                ต้องมีเลเวล 70 จึงจะจุติได้ (สูงสุด 6 ครั้ง) กลับสู่ผู้ฝึกหัด (Novice) เลเวล 1 โดยคงค่าสเตตัสและอุปกรณ์เดิมทั้งหมด พร้อมปลดล็อกเอฟเฟคออร่าใหม่ทุกระดับ
+                ต้องมีเลเวล 70 จึงจะจุติได้ (สูงสุด 6 ครั้ง) กลับสู่ {JOBS.novice.name} (ผู้ฝึกหัด) เลเวล 1 โดยคงค่าสเตตัสและอุปกรณ์เดิมทั้งหมด พร้อมปลดล็อกเอฟเฟคออร่าใหม่ทุกระดับ
               </p>
               <p className="mt-1.5 text-xs text-foreground/90">
                 <span className="font-semibold" style={{ color: previewSpec.primaryColor }}>

@@ -589,7 +589,7 @@ export function TitleScreen() {
                         dir={noviceDir}
                         size={86}
                         showAura={false}
-                        label="โมเดลตัวละคร Novice"
+                        label={`โมเดลตัวละคร ${JOBS.novice.name}`}
                       />
                     </div>
                     <button
@@ -607,10 +607,10 @@ export function TitleScreen() {
 
                   <div className="min-w-0 flex-1 space-y-2">
                     <p className="text-[11px] leading-relaxed text-foreground/90">
-                      เริ่มต้นการผจญภัยด้วยตัวละคร <span className="font-semibold text-amber-200">Novice</span>{' '}
+                      เริ่มต้นการผจญภัยด้วยตัวละคร <span className="font-semibold text-amber-200">{JOBS.novice.name}</span>{' '}
                       ผ้าพันคอแดง เสื้อคลุมขาวสายสะพายหนัง กระเป๋าคาดเอว และไม้พลอง พร้อมสกิล{' '}
-                      <span className="text-sky-300">ฟาดพลังมือใหม่</span> &amp;{' '}
-                      <span className="text-pink-300">ปฐมพยาบาล</span>
+                      <span className="text-sky-300">{JOBS.novice.skills[0]?.name ?? 'ฟาดพลัง Wayfarer'}</span> &amp;{' '}
+                      <span className="text-pink-300">{JOBS.novice.skills[1]?.name ?? 'ปฐมพยาบาล'}</span>
                     </p>
                     <p className="flex items-center gap-1 text-[10px] text-muted-foreground">
                       <Sparkles className="size-3 shrink-0 text-amber-300" aria-hidden />

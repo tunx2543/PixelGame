@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Crown, Eye, Flame, Footprints, Pause, PawPrint, Play, RotateCw, Shield, Sparkles, Swords, Wind } from 'lucide-react'
 import { syncLatestMonsterAssetsAndFirestore } from '@/lib/firebase/monster-sync'
 import { BIOME_CATALOG_SPECS, MONSTER_BIOME_MAP, MONSTER_CATALOG_META } from '@/lib/game/biome-monsters'
-import { ITEMS } from '@/lib/game/data'
+import { ITEMS, getJobSlug } from '@/lib/game/data'
 import {
   getAllJobModels,
   getAllMonsterModels,
@@ -52,20 +52,20 @@ const ACTION_THAI: Record<SpriteAction, string> = {
 
 function getJobTraitTags(jobId: string): string[] {
   const map: Record<string, string[]> = {
-    novice: ['ผมน้ำตาลฟู + ผ้าพันคอแดง + เสื้อคลุมสีขาว', 'สายสะพายหนังคาดเฉียง + กระเป๋าคาดเอว', 'รองเท้าบูทหนังพับขอบ + ไม้พลอง & สกิลฟาดพลังมือใหม่'],
-    swordsman: ['นักดาบผมแดง + ผ้าคลุมเพลิง', 'เกราะเหล็กอัศวิน', 'ดาบ + ทักษะฟันกระแทก'],
+    novice: ['ผมน้ำตาลฟู + ผ้าพันคอแดง + เสื้อคลุมสีขาว', 'สายสะพายหนังคาดเฉียง + กระเป๋าคาดเอว', 'รองเท้าบูทหนังพับขอบ + ไม้พลอง & สกิลฟาดพลัง Wayfarer'],
+    swordsman: ['นักดาบผมแดง + ผ้าคลุมเพลิง', 'เกราะเหล็ก Vanguard', 'ดาบ + ทักษะฟันกระแทก'],
     mage: ['หมวกจอมเวทปลายแหลม', 'อาภรณ์ม่วงดารา', 'คทาผลึกอัญมณีฟ้า'],
     archer: ['หมวกพรานขนนกมรกต', 'ซองธนูสะพายหลัง', 'คันธนู + ทักษะฝนธนู'],
     cleric: ['หมวกมิเตอร์กางเขนทอง', 'อาภรณ์นักบวชสีขาว-ทอง', 'คทาศักดิ์สิทธิ์ + ฮีลทีม'],
     merchant: ['แว่นกอกเกิล + หมวกนักประดิษฐ์', 'เป้ขวดยา + โบนัส +15% Gold', 'ฟาดเหรียญทอง + รถเข็นพุ่งชน'],
-    thief: ['ผ้าพันคอแดง + หน้ากากโจร', 'มีดคู่ (ซ้าย-ขวา)', 'แทงสองครั้ง + แทงข้างหลัง'],
-    kensei: ['หางม้าซามูไร + กิโมโนขาว-คราม', 'ดาบคาตานะสายฟ้า', 'อิไอจุตสึ + พายุเคนเซย์'],
-    iron_fist: ['ลูกประคำทอง + กางเกงนักสู้ส้ม', 'หมัดเพลิงออร่าทองคำ', 'พุ่งซัดหมัดเหล็ก & ทุบพสุธา'],
+    thief: ['ผ้าพันคอแดง + หน้ากาก Nightveil', 'มีดคู่ (ซ้าย-ขวา)', 'แทงสองครั้ง + แทงข้างหลัง'],
+    kensei: ['หางม้าซามูไร + กิโมโนขาว-คราม', 'ดาบคาตานะสายฟ้า', 'อิไอจุตสึ + พายุ Shinkage'],
+    iron_fist: ['ลูกประคำทอง + กางเกงนักสู้ส้ม', 'หมัดเพลิงออร่าทองคำ', 'พุ่งซัด Titanfist & ทุบพสุธา'],
     wicked_necromancer: ['เขาทมิฬ + ผมเงินต้องสาป', 'อาภรณ์อเวจีม่วง-ดำ', 'มนต์แมวดำ + เสียงเพรียกอเวจี'],
-    the_king: ['มงกุฎทองคำ + ผ้าคลุมราชันย์', 'โบนัส +25% Gold', 'พายุแท่งเทียน + ตัดขาดทุนพิฆาต'],
-    sinister: ['ปีกเงาโลหิต + นัยน์ตาสีชาด', 'ออร่าเพลิงอเวจี', 'กากบาททมิฬ + จันทราโลหิต'],
-    templar: ['หมวกเกราะอัศวินวิหาร', 'โล่กางเขนทอง + เกราะขาว-น้ำเงิน', 'ฟันศักดิ์สิทธิ์ + โล่เทมพลาร์'],
-    nekobaku: ['หูแมว + หางปุกปุย + โบว์ชมพู', 'ออร่าพลังระเบิดสีชมพู', 'ขวดระเบิด Fizz Flask & ฝนระเบิดเนโกะ'],
+    the_king: ['มงกุฎทองคำ + ผ้าคลุม High Sovereign', 'โบนัส +25% Gold', 'พายุแท่งเทียน + ตัดขาดทุนพิฆาต'],
+    sinister: ['ปีกเงาโลหิต + นัยน์ตาสีชาด', 'ออร่าเพลิงอเวจี', 'กากบาท Dreadfang + จันทราโลหิต'],
+    templar: ['หมวกเกราะ Aegis Knight', 'โล่กางเขนทอง + เกราะขาว-น้ำเงิน', 'ฟันศักดิ์สิทธิ์ + โล่ Aegis Knight'],
+    nekobaku: ['หูแมว + หางปุกปุย + โบว์ชมพู', 'ออร่าพลังระเบิดสีชมพู', 'ขวดระเบิด Fizz Flask & ฝนระเบิด Pawchemist'],
     mamushi: ['ผ้าคาดหัวอสรพิษ + หางมังกรเขียว', 'เขี้ยวพิษ + วงแหวนมรกต', 'เขี้ยวอสรพิษ + ดาวกระจายสะท้อน'],
   }
   return map[jobId] ?? []
@@ -368,7 +368,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                   <h3 className="text-lg font-bold text-primary">
                     {selectedJobEntry.job.name}
                     <span className="ml-2 font-mono text-xs font-normal text-muted-foreground">
-                      ({selectedJobEntry.job.id})
+                      ({getJobSlug(selectedJobEntry.job.id)})
                     </span>
                   </h3>
                   <p className="text-xs text-muted-foreground">{selectedJobEntry.job.description}</p>

@@ -321,7 +321,7 @@ export function ArenaPanel() {
                           {fighter.name} {uid === myUid ? '(คุณ)' : ''}
                         </p>
                         <span className="text-[10px] text-primary">
-                          Lv.{fighter.level} {JOBS[fighter.jobId]?.name ?? fighter.jobId}
+                          Lv.{fighter.level} {JOBS[normalizeJobId(fighter.jobId)]?.name ?? fighter.jobId}
                         </span>
                       </div>
                       <div className="mt-1.5 flex justify-between text-[11px] tabular-nums">
@@ -419,7 +419,7 @@ export function ArenaPanel() {
                           {player.displayName} <span className="text-muted-foreground">#{player.gameUid}</span>
                         </p>
                         <p className="text-[11px] text-muted-foreground">
-                          Lv.{player.level} {JOBS[player.jobId]?.name ?? player.jobId}
+                          Lv.{player.level} {JOBS[normalizeJobId(player.jobId)]?.name ?? player.jobId}
                         </p>
                       </div>
                       <div className="flex shrink-0 items-center gap-1">

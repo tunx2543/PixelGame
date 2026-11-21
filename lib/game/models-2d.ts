@@ -1,6 +1,6 @@
 import { MONSTER_CATALOG_META, normalizeMonsterId } from './biome-monsters'
 import { getCatalogMonsterAtlas } from './catalog-sprites'
-import { JOBS, MONSTERS, type JobDef, type MonsterDef, type MonsterSprite, type WeaponType } from './data'
+import { JOBS, MONSTERS, normalizeJobId, type JobDef, type MonsterDef, type MonsterSprite, type WeaponType } from './data'
 import { MOUNT_DEFS, resolveMountId, type MountArchetype, type MountDef } from './mounts'
 import { COMBAT_PETS, type CombatPetDef } from './systems'
 
@@ -421,7 +421,8 @@ export const MONSTER_MODEL_SPECS: Record<string, MonsterModelSpec> = Object.from
 )
 
 export function getJobModelSpec(jobId: string): JobModelSpec {
-  return JOB_MODEL_SPECS[jobId] ?? JOB_MODEL_SPECS.novice
+  const canonical = normalizeJobId(jobId)
+  return JOB_MODEL_SPECS[canonical] ?? JOB_MODEL_SPECS.novice
 }
 
 export function getMonsterModelSpec(defId?: string, sprite?: MonsterSprite, color?: string): MonsterModelSpec {

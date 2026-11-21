@@ -18,8 +18,8 @@ export interface CharacterStatusState {
 }
 
 const INITIAL_CHARACTER_STATE: CharacterStatusState = {
-  name: 'นักผจญภัยฝึกหัด',
-  jobName: 'นักรบพิกเซล',
+  name: 'นักผจญภัย',
+  jobName: 'Vanguard (นักดาบ)',
   level: 12,
   hp: 240,
   maxHp: 320,

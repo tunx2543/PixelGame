@@ -270,6 +270,29 @@ export const JOB_TO_HERO_SHEET: Record<string, HeroSheetId> = {
   templar: 'templar',
   nekobaku: 'nekobaku',
   mamushi: 'mamushi',
+  // New primary class slugs & normalized names
+  wayfarer: 'novice',
+  vanguard: 'swordsman',
+  arcanist: 'mage',
+  windstalker: 'archer',
+  luminary: 'cleric',
+  goldweaver: 'merchant',
+  nightveil: 'thief',
+  shinkage: 'kensei',
+  titanfist: 'iron_fist',
+  titan_fist: 'iron_fist',
+  grimcaller: 'wicked_necromancer',
+  high_sovereign: 'the_king',
+  highsovereign: 'the_king',
+  sovereign: 'the_king',
+  dreadfang: 'sinister',
+  aegis_knight: 'templar',
+  aegisknight: 'templar',
+  pawchemist: 'nekobaku',
+  venomblade: 'mamushi',
+  ironfist: 'iron_fist',
+  wickednecromancer: 'wicked_necromancer',
+  theking: 'the_king',
   // Legacy aliases fallback cleanly
   priest: 'cleric',
   high_priest: 'cleric',
@@ -284,7 +307,9 @@ export const JOB_TO_HERO_SHEET: Record<string, HeroSheetId> = {
 
 export function resolveHeroSheetSpec(jobId?: string | null): SpriteSheetSpec | null {
   if (!jobId) return null
-  const sheetId = JOB_TO_HERO_SHEET[jobId]
+  const normalized = jobId.trim().toLowerCase().replace(/[\s-]+/g, '_')
+  const compact = normalized.replace(/_/g, '')
+  const sheetId = JOB_TO_HERO_SHEET[jobId] ?? JOB_TO_HERO_SHEET[normalized] ?? JOB_TO_HERO_SHEET[compact]
   return sheetId ? HERO_SPRITE_SHEETS[sheetId] : null
 }
 

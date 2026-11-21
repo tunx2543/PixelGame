@@ -18,7 +18,7 @@ import {
   Swords,
   Wind,
 } from 'lucide-react'
-import { ITEMS, JOBS, type EquipmentSlot, type ItemDef } from '@/lib/game/data'
+import { ITEMS, JOBS, normalizeJobId, type EquipmentSlot, type ItemDef } from '@/lib/game/data'
 import {
   canEquip,
   closePanel,
@@ -272,7 +272,7 @@ export function InventoryPanel() {
               .join(', ')
           : 'ทุกอาชีพ'
         : def.allowedJobs?.length
-          ? def.allowedJobs.map((id) => JOBS[id]?.name ?? id).join(', ')
+          ? def.allowedJobs.map((id) => JOBS[normalizeJobId(id)]?.name ?? id).join(', ')
           : 'ทุกอาชีพ',
     level: def.reqLevel ?? 1,
     slot:

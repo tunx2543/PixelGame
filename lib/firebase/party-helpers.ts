@@ -1,3 +1,4 @@
+import { normalizeJobId } from '@/lib/game/data'
 import { normalizeGameUidInput } from '@/lib/game/permissions'
 import { sanitizeSafePresenceId } from './presence-helpers'
 
@@ -100,8 +101,8 @@ export function buildPartyMemberSnapshot(input: BuildPartyMemberInput): PartyMem
 
   const rawName = typeof input.name === 'string' ? input.name.trim() : ''
   const name = rawName.slice(0, 24) || 'นักผจญภัย'
-  let jobId = sanitizeSafePresenceId(input.jobId, 'swordsman', 32)
-  if (jobId === 'gm') jobId = 'swordsman'
+  const rawJob = typeof input.jobId === 'string' ? input.jobId.trim() : ''
+  const jobId = !rawJob || rawJob === 'gm' ? 'swordsman' : sanitizeSafePresenceId(normalizeJobId(rawJob), 'swordsman', 32)
   const mapId = sanitizeSafePresenceId(input.mapId, 'town', 32)
   const level = clampInt(input.level, 1, 999, 1)
   const maxHp = clampInt(input.maxHp, 1, 100_000_000, 100)
@@ -139,7 +140,7 @@ export function parsePartyMemberSnapshot(
     uid,
     gameUid,
     name: (typeof r.name === 'string' ? r.name.trim() : '').slice(0, 24) || 'นักผจญภัย',
-    jobId: sanitizeSafePresenceId(r.jobId, 'swordsman', 32),
+    jobId: typeof r.jobId === 'string' && r.jobId.trim() ? sanitizeSafePresenceId(normalizeJobId(r.jobId), 'swordsman', 32) : 'swordsman',
     level: clampInt(r.level, 1, 999, 1),
     hp,
     maxHp,

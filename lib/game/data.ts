@@ -41,10 +41,54 @@ export interface JobDef {
   skills: SkillDef[]
 }
 
+export type JobId =
+  | 'novice'
+  | 'swordsman'
+  | 'mage'
+  | 'archer'
+  | 'cleric'
+  | 'merchant'
+  | 'thief'
+  | 'kensei'
+  | 'iron_fist'
+  | 'wicked_necromancer'
+  | 'the_king'
+  | 'sinister'
+  | 'templar'
+  | 'nekobaku'
+  | 'mamushi'
+
+export interface JobClassMeta {
+  id: JobId
+  slug: string
+  primaryName: string
+  thaiRoleLabel: string
+  legacyNames: readonly string[]
+}
+
+export const JOB_CLASS_META: Record<JobId, JobClassMeta> = {
+  novice: { id: 'novice', slug: 'wayfarer', primaryName: 'Wayfarer', thaiRoleLabel: 'ผู้ฝึกหัด', legacyNames: ['Novice', 'ผู้ฝึกหัด'] },
+  swordsman: { id: 'swordsman', slug: 'vanguard', primaryName: 'Vanguard', thaiRoleLabel: 'นักดาบ', legacyNames: ['Swordsman', 'นักดาบ'] },
+  mage: { id: 'mage', slug: 'arcanist', primaryName: 'Arcanist', thaiRoleLabel: 'นักเวท', legacyNames: ['Mage', 'Wizard', 'นักเวท'] },
+  archer: { id: 'archer', slug: 'windstalker', primaryName: 'Windstalker', thaiRoleLabel: 'นักธนู', legacyNames: ['Archer', 'Hunter', 'นักธนู'] },
+  cleric: { id: 'cleric', slug: 'luminary', primaryName: 'Luminary', thaiRoleLabel: 'นักบวช', legacyNames: ['Cleric', 'Priest', 'High Priest', 'นักบวช'] },
+  merchant: { id: 'merchant', slug: 'goldweaver', primaryName: 'Goldweaver', thaiRoleLabel: 'พ่อค้า', legacyNames: ['Merchant', 'พ่อค้า'] },
+  thief: { id: 'thief', slug: 'nightveil', primaryName: 'Nightveil', thaiRoleLabel: 'โจร', legacyNames: ['Thief', 'โจร'] },
+  kensei: { id: 'kensei', slug: 'shinkage', primaryName: 'Shinkage', thaiRoleLabel: 'ปรมาจารย์ดาบเงา', legacyNames: ['Kensei', 'Berserker', 'เคนเซย์'] },
+  iron_fist: { id: 'iron_fist', slug: 'titanfist', primaryName: 'Titanfist', thaiRoleLabel: 'จอมหมัดทลายปฐพี', legacyNames: ['Iron Fist', 'หมัดเหล็ก'] },
+  wicked_necromancer: { id: 'wicked_necromancer', slug: 'grimcaller', primaryName: 'Grimcaller', thaiRoleLabel: 'จอมเวทคำสาปอเวจี', legacyNames: ['Wicked Necromancer', 'เนโครแมนเซอร์ทมิฬ'] },
+  the_king: { id: 'the_king', slug: 'high_sovereign', primaryName: 'High Sovereign', thaiRoleLabel: 'จอมราชันย์แห่งความมั่งคั่ง', legacyNames: ['The King', 'เดอะคิง'] },
+  sinister: { id: 'sinister', slug: 'dreadfang', primaryName: 'Dreadfang', thaiRoleLabel: 'เพชฌฆาตเงาโลหิต', legacyNames: ['Sinister', 'Assassin', 'ซินิสเตอร์'] },
+  templar: { id: 'templar', slug: 'aegis_knight', primaryName: 'Aegis Knight', thaiRoleLabel: 'อัศวินโล่ศักดิ์สิทธิ์', legacyNames: ['Templar', 'Knight', 'Paladin', 'เทมพลาร์'] },
+  nekobaku: { id: 'nekobaku', slug: 'pawchemist', primaryName: 'Pawchemist', thaiRoleLabel: 'นักเล่นแร่ระเบิดหูแมว', legacyNames: ['Nekobaku', 'เนโกะบาคุ'] },
+  mamushi: { id: 'mamushi', slug: 'venomblade', primaryName: 'Venomblade', thaiRoleLabel: 'นินจาเขี้ยวพิษ', legacyNames: ['Mamushi', 'มามูชิ'] },
+}
+
 export const STARTER_JOB_IDS = ['novice'] as const
 export const TIER1_JOB_IDS = ['swordsman', 'mage', 'archer', 'cleric', 'merchant', 'thief'] as const
 
-const LEGACY_JOB_ALIASES: Record<string, string> = {
+const LEGACY_JOB_ALIASES: Record<string, JobId> = {
+  // Legacy class IDs / aliases
   priest: 'cleric',
   high_priest: 'cleric',
   knight: 'templar',
@@ -54,17 +98,88 @@ const LEGACY_JOB_ALIASES: Record<string, string> = {
   hunter: 'archer',
   assassin: 'sinister',
   gm: 'the_king',
+  // New primary class slugs & normalized names -> canonical internal IDs
+  wayfarer: 'novice',
+  vanguard: 'swordsman',
+  arcanist: 'mage',
+  windstalker: 'archer',
+  luminary: 'cleric',
+  goldweaver: 'merchant',
+  nightveil: 'thief',
+  shinkage: 'kensei',
+  titanfist: 'iron_fist',
+  titan_fist: 'iron_fist',
+  grimcaller: 'wicked_necromancer',
+  high_sovereign: 'the_king',
+  highsovereign: 'the_king',
+  sovereign: 'the_king',
+  dreadfang: 'sinister',
+  aegis_knight: 'templar',
+  aegisknight: 'templar',
+  pawchemist: 'nekobaku',
+  venomblade: 'mamushi',
+  ironfist: 'iron_fist',
+  wickednecromancer: 'wicked_necromancer',
+  theking: 'the_king',
+}
+
+export const SKILL_ID_ALIASES: Record<string, string> = {
+  'wayfarer-power': 'power',
+  'wayfarer-first-aid': 'first-aid',
+  'vanguard-bash': 'bash',
+  'vanguard-whirl': 'whirl',
+  'arcanist-firebolt': 'firebolt',
+  'arcanist-meteor': 'meteor',
+  'windstalker-double': 'double',
+  'windstalker-rain': 'rain',
+  'luminary-grace-heal': 'grace-heal',
+  'luminary-holy-bolt': 'holy-bolt',
+  'luminary-sanctuary': 'sanctuary',
+  'goldweaver-gold-strike': 'gold-strike',
+  'goldweaver-cart-strike': 'cart-strike',
+  'nightveil-dblatk': 'dblatk',
+  'nightveil-backstab': 'backstab',
+  'shinkage-flash': 'kensei-flash',
+  'shinkage-iaijutsu': 'iaijutsu',
+  'shinkage-bladestorm': 'bladestorm',
+  'titanfist-smash': 'flash-smash',
+  'titanfist-quake': 'quake-hammer',
+  'titanfist-will': 'iron-will',
+  'grimcaller-hex': 'black-cat-hex',
+  'grimcaller-resist': 'lower-resist',
+  'grimcaller-requiem': 'abyss-requiem',
+  'sovereign-dividend': 'dividend-yield',
+  'sovereign-candle-storm': 'candle-storm',
+  'sovereign-stop-loss': 'stop-loss',
+  'dreadfang-cross': 'sinister-cross',
+  'dreadfang-ambush': 'reaper-ambush',
+  'dreadfang-eclipse': 'crimson-eclipse',
+  'aegis-holy-strike': 'holy-strike',
+  'aegis-sanctuary': 'sanctuary',
+  'aegis-bastion': 'templar-bastion',
+  'pawchemist-fizz': 'fizz-flask',
+  'pawchemist-tar': 'tar-flask',
+  'pawchemist-barrage': 'neko-barrage',
+  'venomblade-fang': 'viper-fang',
+  'venomblade-shuriken': 'bouncing-shuriken',
+  'venomblade-overload': 'venom-overload',
+}
+
+export function normalizeSkillId(skillId?: string | null): string {
+  if (!skillId || typeof skillId !== 'string') return ''
+  const trimmed = skillId.trim()
+  return SKILL_ID_ALIASES[trimmed] ?? SKILL_ID_ALIASES[trimmed.toLowerCase()] ?? trimmed
 }
 
 export const JOBS: Record<string, JobDef> = {
   novice: {
     id: 'novice',
-    name: 'ผู้ฝึกหัด (Novice)',
+    name: 'Wayfarer',
     tier: 0,
     from: null,
     reqLevel: 1,
     cost: 0,
-    description: 'นักผจญภัยมือใหม่ผู้เริ่มต้นการเดินทาง ผมน้ำตาลฟู ผ้าพันคอแดง เสื้อคลุมสีขาวสายสะพายหนัง กระเป๋าคาดเอว และไม้พลอง สามารถเปลี่ยนเป็น 6 อาชีพหลักได้ที่หอปรมาจารย์อาร์ค',
+    description: 'Wayfarer นักผจญภัยมือใหม่ผู้เริ่มต้นการเดินทาง ผมน้ำตาลฟู ผ้าพันคอแดง เสื้อคลุมสีขาวสายสะพายหนัง กระเป๋าคาดเอว และไม้พลอง สามารถเปลี่ยนเป็น 6 อาชีพหลักได้ที่หอปรมาจารย์อาร์ค',
     hpMul: 1.0,
     mpMul: 1.0,
     atkMul: 1.0,
@@ -77,18 +192,18 @@ export const JOBS: Record<string, JobDef> = {
     weaponTypes: ['stick', 'sword', 'dagger'],
     colors: { hair: '#7f5338', body: '#f6f2ea', legs: '#3b3332', accent: '#dc2626', hat: '#7f5338' },
     skills: [
-      { id: 'power', name: 'ฟาดพลังมือใหม่', mp: 5, mult: 2.1, cooldown: 1.8, kind: 'single', color: '#38bdf8' },
+      { id: 'power', name: 'ฟาดพลัง Wayfarer', mp: 5, mult: 2.1, cooldown: 1.8, kind: 'single', color: '#38bdf8' },
       { id: 'first-aid', name: 'ปฐมพยาบาล', mp: 10, mult: 0.28, cooldown: 5, kind: 'heal', color: '#f472b6' },
     ],
   },
   swordsman: {
     id: 'swordsman',
-    name: 'นักดาบ (Swordsman)',
+    name: 'Vanguard',
     tier: 1,
     from: 'novice',
     reqLevel: 1,
     cost: 500,
-    description: 'นักสู้ระยะประชิด พลังชีวิตและพลังป้องกันสูง',
+    description: 'Vanguard นักรบแนวหน้าระยะประชิด พลังชีวิตและพลังป้องกันสูง',
     hpMul: 1.45,
     mpMul: 0.85,
     atkMul: 1.25,
@@ -107,12 +222,12 @@ export const JOBS: Record<string, JobDef> = {
   },
   mage: {
     id: 'mage',
-    name: 'นักเวท (Mage)',
+    name: 'Arcanist',
     tier: 1,
     from: 'novice',
     reqLevel: 1,
     cost: 500,
-    description: 'ผู้ใช้เวทมนตร์ระยะไกล พลังโจมตีเวทรุนแรง',
+    description: 'Arcanist ผู้ใช้เวทมนตร์ระยะไกล พลังโจมตีเวทรุนแรง',
     hpMul: 0.9,
     mpMul: 1.9,
     atkMul: 1.5,
@@ -131,12 +246,12 @@ export const JOBS: Record<string, JobDef> = {
   },
   archer: {
     id: 'archer',
-    name: 'นักธนู (Archer)',
+    name: 'Windstalker',
     tier: 1,
     from: 'novice',
     reqLevel: 1,
     cost: 500,
-    description: 'นักแม่นธนู โจมตีไกลและรวดเร็ว',
+    description: 'Windstalker นักแม่นธนูแห่งสายลม โจมตีไกลและรวดเร็ว',
     hpMul: 1.05,
     mpMul: 1,
     atkMul: 1.3,
@@ -155,12 +270,12 @@ export const JOBS: Record<string, JobDef> = {
   },
   cleric: {
     id: 'cleric',
-    name: 'นักบวช (Cleric)',
+    name: 'Luminary',
     tier: 1,
     from: 'novice',
     reqLevel: 1,
     cost: 500,
-    description: 'นักบวชแห่งแสง ใช้เวทฟื้นฟูพลังชีวิตและศรศักดิ์สิทธิ์',
+    description: 'Luminary นักบวชแห่งแสง ใช้เวทฟื้นฟูพลังชีวิตและศรศักดิ์สิทธิ์',
     hpMul: 1.2,
     mpMul: 1.85,
     atkMul: 1.22,
@@ -180,13 +295,13 @@ export const JOBS: Record<string, JobDef> = {
   },
   merchant: {
     id: 'merchant',
-    name: 'พ่อค้า (Merchant)',
+    name: 'Goldweaver',
     tier: 1,
     from: 'novice',
     goldBonus: 0.15,
     reqLevel: 1,
     cost: 500,
-    description: 'เชี่ยวชาญการค้า เพิ่มทองดรอป +15% และฟาดฟันด้วยพลังเหรียญทอง',
+    description: 'Goldweaver ผู้เชี่ยวชาญการค้า เพิ่มทองดรอป +15% และฟาดฟันด้วยพลังเหรียญทอง',
     hpMul: 1.3,
     mpMul: 1.1,
     atkMul: 1.18,
@@ -205,12 +320,12 @@ export const JOBS: Record<string, JobDef> = {
   },
   thief: {
     id: 'thief',
-    name: 'โจร (Thief)',
+    name: 'Nightveil',
     tier: 1,
     from: 'novice',
     reqLevel: 1,
     cost: 500,
-    description: 'ว่องไว คริติคอลสูง เคลื่อนที่เร็ว',
+    description: 'Nightveil นักรบเงาว่องไว คริติคอลสูง เคลื่อนที่เร็ว',
     hpMul: 1.1,
     mpMul: 0.95,
     atkMul: 1.24,
@@ -229,13 +344,13 @@ export const JOBS: Record<string, JobDef> = {
   },
   kensei: {
     id: 'kensei',
-    name: 'เคนเซย์ (Kensei)',
+    name: 'Shinkage',
     tier: 2,
     from: 'swordsman',
     alsoFrom: ['thief'],
     reqLevel: 30,
     cost: 12000,
-    description: 'ปรมาจารย์ดาบผสานพลังนักดาบและโจร ฟันคลื่นดาบสีครามรวดเร็วดุจสายฟ้า',
+    description: 'Shinkage ปรมาจารย์ดาบผสานพลัง Vanguard และ Nightveil ฟันคลื่นดาบสีครามรวดเร็วดุจสายฟ้า',
     hpMul: 1.65,
     mpMul: 1.15,
     atkMul: 1.95,
@@ -250,19 +365,19 @@ export const JOBS: Record<string, JobDef> = {
     skills: [
       { id: 'kensei-flash', name: 'ดาบวาบพริบตา', mp: 10, mult: 1.45, cooldown: 1.6, kind: 'multi', hits: 3, color: '#38bdf8' },
       { id: 'iaijutsu', name: 'อิไอจุตสึ', mp: 22, mult: 4.2, cooldown: 4.5, kind: 'single', color: '#60a5fa' },
-      { id: 'bladestorm', name: 'พายุเคนเซย์', mp: 42, mult: 2.6, cooldown: 7.5, kind: 'aoe-self', radius: 64, color: '#93c5fd' },
+      { id: 'bladestorm', name: 'พายุ Shinkage', mp: 42, mult: 2.6, cooldown: 7.5, kind: 'aoe-self', radius: 64, color: '#93c5fd' },
     ],
   },
   iron_fist: {
     id: 'iron_fist',
-    name: 'หมัดเหล็ก (Iron Fist)',
+    name: 'Titanfist',
     tier: 2,
     from: 'merchant',
     alsoFrom: ['swordsman'],
     goldBonus: 0.1,
     reqLevel: 30,
     cost: 12000,
-    description: 'นักสู้หมัดหนัก พุ่งซัด Flash Smash และทุบปฐพีสั่นสะเทือนด้วยเพลิงทองคำ',
+    description: 'Titanfist นักสู้หมัดยักษ์ พุ่งซัด Flash Smash และทุบปฐพีสั่นสะเทือนด้วยเพลิงทองคำ',
     hpMul: 1.95,
     mpMul: 1.0,
     atkMul: 1.85,
@@ -275,20 +390,20 @@ export const JOBS: Record<string, JobDef> = {
     weaponTypes: ['sword', 'stick'],
     colors: { hair: '#e2e8f0', body: '#d97706', legs: '#78350f', accent: '#fb923c' },
     skills: [
-      { id: 'flash-smash', name: 'พุ่งซัดหมัดเหล็ก', mp: 12, mult: 3.3, cooldown: 2.4, kind: 'single', color: '#fb923c' },
+      { id: 'flash-smash', name: 'พุ่งซัด Titanfist', mp: 12, mult: 3.3, cooldown: 2.4, kind: 'single', color: '#fb923c' },
       { id: 'quake-hammer', name: 'ทุบพสุธา', mp: 26, mult: 2.3, cooldown: 5.5, kind: 'aoe-self', radius: 58, color: '#f59e0b' },
-      { id: 'iron-will', name: 'จิตวิญญาณเหล็ก', mp: 24, mult: 0.32, cooldown: 6.5, kind: 'heal', color: '#fed7aa' },
+      { id: 'iron-will', name: 'จิตวิญญาณ Titanfist', mp: 24, mult: 0.32, cooldown: 6.5, kind: 'heal', color: '#fed7aa' },
     ],
   },
   wicked_necromancer: {
     id: 'wicked_necromancer',
-    name: 'เนโครแมนเซอร์ทมิฬ (Wicked Necromancer)',
+    name: 'Grimcaller',
     tier: 2,
     from: 'mage',
     alsoFrom: ['cleric'],
     reqLevel: 30,
     cost: 12000,
-    description: 'จอมเวทคำสาปปลุกอาคมแมวดำและคำสาปอเวจี ทลายเกราะศัตรูเป็นวงกว้าง',
+    description: 'Grimcaller จอมเวทคำสาปปลุกอาคมแมวดำและคำสาปอเวจี ทลายเกราะศัตรูเป็นวงกว้าง',
     hpMul: 1.25,
     mpMul: 2.75,
     atkMul: 2.15,
@@ -308,14 +423,14 @@ export const JOBS: Record<string, JobDef> = {
   },
   the_king: {
     id: 'the_king',
-    name: 'เดอะคิง (The King)',
+    name: 'High Sovereign',
     tier: 2,
     from: 'merchant',
     alsoFrom: ['mage'],
     goldBonus: 0.25,
     reqLevel: 35,
     cost: 15000,
-    description: 'ราชาแห่งตลาดและการเงิน เพิ่มทองดรอป +25% พร้อมเวท Candle Storm & Stop-Loss',
+    description: 'High Sovereign จอมราชันย์แห่งตลาดและการเงิน เพิ่มทองดรอป +25% พร้อมเวท Candle Storm & Stop-Loss',
     hpMul: 1.5,
     mpMul: 2.5,
     atkMul: 2.1,
@@ -335,13 +450,13 @@ export const JOBS: Record<string, JobDef> = {
   },
   sinister: {
     id: 'sinister',
-    name: 'ซินิสเตอร์ (Sinister)',
+    name: 'Dreadfang',
     tier: 2,
     from: 'thief',
     alsoFrom: ['archer'],
     reqLevel: 35,
     cost: 15000,
-    description: 'มัจจุราชเงา อัตราคริติคอลสูงสุด สังหารฉับพลันด้วยเงาจันทราโลหิต',
+    description: 'Dreadfang เพชฌฆาตเงาโลหิต อัตราคริติคอลสูงสุด สังหารฉับพลันด้วยเงาจันทราโลหิต',
     hpMul: 1.45,
     mpMul: 1.25,
     atkMul: 1.9,
@@ -354,20 +469,20 @@ export const JOBS: Record<string, JobDef> = {
     weaponTypes: ['dagger', 'bow'],
     colors: { hair: '#09090b', body: '#27090d', legs: '#18181b', accent: '#e11d48' },
     skills: [
-      { id: 'sinister-cross', name: 'กากบาททมิฬ', mp: 10, mult: 1.45, cooldown: 1.5, kind: 'multi', hits: 3, color: '#fb7185' },
+      { id: 'sinister-cross', name: 'กากบาท Dreadfang', mp: 10, mult: 1.45, cooldown: 1.5, kind: 'multi', hits: 3, color: '#fb7185' },
       { id: 'reaper-ambush', name: 'ลอบสังหารมรณะ', mp: 22, mult: 4.4, cooldown: 4.2, kind: 'single', color: '#e11d48' },
       { id: 'crimson-eclipse', name: 'จันทราโลหิต', mp: 46, mult: 3.2, cooldown: 8, kind: 'aoe-self', radius: 68, color: '#f43f5e' },
     ],
   },
   templar: {
     id: 'templar',
-    name: 'เทมพลาร์ (Templar)',
+    name: 'Aegis Knight',
     tier: 2,
     from: 'swordsman',
     alsoFrom: ['cleric'],
     reqLevel: 30,
     cost: 12000,
-    description: 'อัศวินวิหารผสานดาบและมนตร์ศักดิ์สิทธิ์ ป้องกันแข็งแกร่งดุจป้อมปราการ',
+    description: 'Aegis Knight อัศวินโล่ศักดิ์สิทธิ์ผสานดาบและมนตร์ศักดิ์สิทธิ์ ป้องกันแข็งแกร่งดุจป้อมปราการ',
     hpMul: 2.15,
     mpMul: 1.25,
     atkMul: 1.5,
@@ -382,18 +497,18 @@ export const JOBS: Record<string, JobDef> = {
     skills: [
       { id: 'holy-strike', name: 'ฟันศักดิ์สิทธิ์', mp: 12, mult: 2.8, cooldown: 2, kind: 'single', color: '#ffe08a' },
       { id: 'sanctuary', name: 'เขตศักดิ์สิทธิ์', mp: 30, mult: 2.1, cooldown: 6, kind: 'aoe-self', radius: 64, color: '#fef08a' },
-      { id: 'templar-bastion', name: 'โล่เทมพลาร์', mp: 28, mult: 0.4, cooldown: 7, kind: 'heal', color: '#fde047' },
+      { id: 'templar-bastion', name: 'โล่ Aegis Knight', mp: 28, mult: 0.4, cooldown: 7, kind: 'heal', color: '#fde047' },
     ],
   },
   nekobaku: {
     id: 'nekobaku',
-    name: 'เนโกะบาคุ (Nekobaku)',
+    name: 'Pawchemist',
     tier: 2,
     from: 'archer',
     alsoFrom: ['mage'],
     reqLevel: 30,
     cost: 12000,
-    description: 'นักเล่นแร่ระเบิดหูแมว โจมตีด้วยขวดระเบิดพลังชมพู Fizz Flask & Neko Barrage',
+    description: 'Pawchemist นักเล่นแร่ระเบิดหูแมว โจมตีด้วยขวดระเบิดพลังชมพู Fizz Flask & Pawchemist Barrage',
     hpMul: 1.3,
     mpMul: 1.9,
     atkMul: 1.95,
@@ -408,18 +523,18 @@ export const JOBS: Record<string, JobDef> = {
     skills: [
       { id: 'fizz-flask', name: 'ขวดระเบิดซ่า', mp: 18, mult: 2.3, cooldown: 3.2, kind: 'aoe-target', radius: 58, color: '#f472b6' },
       { id: 'tar-flask', name: 'ขวดน้ำมันดิน', mp: 20, mult: 3.6, cooldown: 3.5, kind: 'single', color: '#fb7185' },
-      { id: 'neko-barrage', name: 'ฝนระเบิดเนโกะ', mp: 32, mult: 1.45, cooldown: 5, kind: 'multi', hits: 3, color: '#fbcfe8' },
+      { id: 'neko-barrage', name: 'ฝนระเบิด Pawchemist', mp: 32, mult: 1.45, cooldown: 5, kind: 'multi', hits: 3, color: '#fbcfe8' },
     ],
   },
   mamushi: {
     id: 'mamushi',
-    name: 'มามูชิ (Mamushi)',
+    name: 'Venomblade',
     tier: 2,
     from: 'archer',
     alsoFrom: ['thief'],
     reqLevel: 30,
     cost: 12000,
-    description: 'นินจาพิษใช้เขี้ยวอสรพิษ Viper Fang และดาวกระจายสะท้อนสังหาร',
+    description: 'Venomblade นินจาเขี้ยวพิษใช้ Viper Fang และดาวกระจายสะท้อนสังหาร',
     hpMul: 1.35,
     mpMul: 1.35,
     atkMul: 1.85,
@@ -439,11 +554,71 @@ export const JOBS: Record<string, JobDef> = {
   },
 }
 
-export function normalizeJobId(jobId?: string | null): string {
-  if (!jobId || typeof jobId !== 'string') return 'novice'
-  if (JOBS[jobId]) return jobId
-  const mapped = LEGACY_JOB_ALIASES[jobId]
-  return mapped && JOBS[mapped] ? mapped : 'novice'
+export interface JobSkillTreeNode {
+  jobId: JobId
+  slug: string
+  className: string
+  tier: 0 | 1 | 2
+  parents: JobId[]
+  branches: JobId[]
+  skillIds: string[]
+}
+
+export const JOB_SKILL_TREES: Record<JobId, JobSkillTreeNode> = Object.fromEntries(
+  (Object.keys(JOBS) as JobId[]).map((jobId) => {
+    const def = JOBS[jobId]
+    const parents: JobId[] = []
+    if (def.from && JOBS[def.from]) parents.push(def.from as JobId)
+    for (const extra of def.alsoFrom ?? []) {
+      if (JOBS[extra] && !parents.includes(extra as JobId)) parents.push(extra as JobId)
+    }
+    const branches = (Object.keys(JOBS) as JobId[]).filter((otherId) => {
+      const other = JOBS[otherId]
+      return other.from === jobId || Boolean(other.alsoFrom?.includes(jobId))
+    })
+    return [
+      jobId,
+      {
+        jobId,
+        slug: JOB_CLASS_META[jobId].slug,
+        className: def.name,
+        tier: def.tier,
+        parents,
+        branches,
+        skillIds: def.skills.map((s) => s.id),
+      },
+    ]
+  }),
+) as Record<JobId, JobSkillTreeNode>
+
+export function resolveJobId(jobId?: string | null): JobId | null {
+  if (!jobId || typeof jobId !== 'string') return null
+  const trimmed = jobId.trim()
+  if (!trimmed) return null
+  if (JOBS[trimmed]) return trimmed as JobId
+  const normalizedKey = trimmed.toLowerCase().replace(/[\s-]+/g, '_')
+  if (JOBS[normalizedKey]) return normalizedKey as JobId
+  const compactKey = trimmed.toLowerCase().replace(/[\s_-]+/g, '')
+  const mapped = LEGACY_JOB_ALIASES[normalizedKey] ?? LEGACY_JOB_ALIASES[compactKey]
+  return mapped && JOBS[mapped] ? mapped : null
+}
+
+export function normalizeJobId(jobId?: string | null): JobId {
+  return resolveJobId(jobId) ?? 'novice'
+}
+
+export function getJobSlug(jobId?: string | null): string {
+  const canonical = normalizeJobId(jobId)
+  return JOB_CLASS_META[canonical].slug
+}
+
+export function getJobDisplayName(jobId?: string | null): string {
+  const canonical = normalizeJobId(jobId)
+  return JOBS[canonical]?.name ?? 'Wayfarer'
+}
+
+export function getJobSkillTree(jobId?: string | null): JobSkillTreeNode {
+  return JOB_SKILL_TREES[normalizeJobId(jobId)]
 }
 
 export type ItemKind = 'consumable' | 'weapon' | 'armor' | 'material'
@@ -543,7 +718,7 @@ const catalogItems = Object.fromEntries(CATALOG_ASSETS.map((asset, index) => {
   const isEffect = index >= 50
   const forcedMage = MAGE_NAMED_ITEMS.has(baseName)
   const weaponType = forcedMage ? 'staff' : VISUAL_CLASSIFICATION[asset] ?? (isEffect ? 'staff' : 'sword')
-  const weaponLabel = weaponType === 'dagger' ? 'มีด Assassin' : weaponType === 'staff' ? 'คฑา Mage' : weaponType === 'bow' ? 'ธนู Archer' : 'ดาบ Swordsman'
+  const weaponLabel = weaponType === 'dagger' ? 'มีด Nightveil' : weaponType === 'staff' ? 'คฑา Arcanist' : weaponType === 'bow' ? 'ธนู Windstalker' : 'ดาบ Vanguard'
   const tier = isEffect ? 4 : index % 3 + 1
   const atk = 18 + tier * 16 + (index % 5) * 3
   const id = `catalog_${asset.replace('.png', '').replaceAll('-', '_')}`

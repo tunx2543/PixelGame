@@ -24,7 +24,7 @@ export default function ClassSelectorPage() {
         <div>
           <h1 className="text-lg font-bold text-primary">Character Class & Base Stats</h1>
           <p className="text-xs text-muted-foreground">
-            ทดลองสลับสายอาชีพ Novice / Swordsman / Mage / Archer / Cleric / Merchant / Thief เพื่อดูโมเดล 2D และค่าสถานะแบบเรียลไทม์
+            ทดลองสลับสายอาชีพ Wayfarer / Vanguard / Arcanist / Windstalker / Luminary / Goldweaver / Nightveil เพื่อดูโมเดล 2D และค่าสถานะแบบเรียลไทม์
           </p>
         </div>
 

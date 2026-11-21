@@ -1,4 +1,4 @@
-import type { SkillKind, WeaponType } from './data'
+import { normalizeJobId, normalizeSkillId, type JobId, type SkillKind, type WeaponType } from './data'
 
 export type RebirthVisualStyle =
   | 'none'
@@ -397,14 +397,14 @@ const SKILL_VFX_TABLE: Record<string, Omit<SkillVfxSpec, 'skillId'>> = {
   },
   bladestorm: {
     style: 'whirl_blades',
-    effectLabel: 'พายุคมดาบเคนเซย์รอบทิศ',
+    effectLabel: 'พายุคมดาบ Shinkage รอบทิศ',
     primaryColor: '#fb7185',
     secondaryColor: '#ffe4e6',
     iconPath: '/images/skills/whirl.png',
   },
   'flash-smash': {
     style: 'heavy_cleave',
-    effectLabel: 'พุ่งทะยานซัดหมัดเหล็ก',
+    effectLabel: 'พุ่งทะยานซัดหมัด Titanfist',
     primaryColor: '#fb923c',
     secondaryColor: '#ffedd5',
     iconPath: '/images/skills/whirl.png',
@@ -502,14 +502,14 @@ const SKILL_VFX_TABLE: Record<string, Omit<SkillVfxSpec, 'skillId'>> = {
   },
   'neko-barrage': {
     style: 'arrow_rain',
-    effectLabel: 'กระหน่ำขวดเคมีเนโกะต่อเนื่อง',
+    effectLabel: 'กระหน่ำขวดเคมี Pawchemist ต่อเนื่อง',
     primaryColor: '#fde047',
     secondaryColor: '#fb923c',
     iconPath: '/images/skills/rain.png',
   },
   'sinister-cross': {
     style: 'twin_slash',
-    effectLabel: 'คมมีดกากบาททมิฬสามจังหวะ',
+    effectLabel: 'คมมีดกากบาท Dreadfang สามจังหวะ',
     primaryColor: '#fb7185',
     secondaryColor: '#fecdd3',
     iconPath: '/images/skills/shadow.png',
@@ -530,13 +530,67 @@ const SKILL_VFX_TABLE: Record<string, Omit<SkillVfxSpec, 'skillId'>> = {
   },
 }
 
+export const JOB_SKILL_VFX_OWNER: Record<string, JobId> = {
+  power: 'novice',
+  'first-aid': 'novice',
+  bash: 'swordsman',
+  whirl: 'swordsman',
+  firebolt: 'mage',
+  meteor: 'mage',
+  double: 'archer',
+  rain: 'archer',
+  'grace-heal': 'cleric',
+  'holy-bolt': 'cleric',
+  sanctuary: 'cleric',
+  'gold-strike': 'merchant',
+  'cart-strike': 'merchant',
+  dblatk: 'thief',
+  backstab: 'thief',
+  'kensei-flash': 'kensei',
+  iaijutsu: 'kensei',
+  bladestorm: 'kensei',
+  'flash-smash': 'iron_fist',
+  'quake-hammer': 'iron_fist',
+  'iron-will': 'iron_fist',
+  'black-cat-hex': 'wicked_necromancer',
+  'lower-resist': 'wicked_necromancer',
+  'abyss-requiem': 'wicked_necromancer',
+  'dividend-yield': 'the_king',
+  'candle-storm': 'the_king',
+  'stop-loss': 'the_king',
+  'sinister-cross': 'sinister',
+  'reaper-ambush': 'sinister',
+  'crimson-eclipse': 'sinister',
+  'holy-strike': 'templar',
+  'templar-bastion': 'templar',
+  'fizz-flask': 'nekobaku',
+  'tar-flask': 'nekobaku',
+  'neko-barrage': 'nekobaku',
+  'viper-fang': 'mamushi',
+  'bouncing-shuriken': 'mamushi',
+  'venom-overload': 'mamushi',
+}
+
+export function getSkillVfxOwnerJobId(skillId: string): JobId {
+  const canonicalSkillId = normalizeSkillId(skillId)
+  return JOB_SKILL_VFX_OWNER[canonicalSkillId] ?? 'novice'
+}
+
+export function getJobSkillVfxSpecs(jobId: string): SkillVfxSpec[] {
+  const canonicalJob = normalizeJobId(jobId)
+  return Object.entries(JOB_SKILL_VFX_OWNER)
+    .filter(([, owner]) => owner === canonicalJob)
+    .map(([skillId]) => getSkillVfxSpec(skillId))
+}
+
 export function getSkillVfxSpec(
   skillId: string,
   fallbackColor = '#ffd60a',
   fallbackKind?: SkillKind,
   fallbackWeapon?: WeaponType,
 ): SkillVfxSpec {
-  const entry = SKILL_VFX_TABLE[skillId]
+  const canonicalSkillId = normalizeSkillId(skillId)
+  const entry = SKILL_VFX_TABLE[canonicalSkillId] ?? SKILL_VFX_TABLE[skillId]
   if (entry) {
     return { skillId, ...entry }
   }
@@ -565,5 +619,6 @@ export function getSkillVfxSpec(
 }
 
 export function getSkillIconPath(skillId: string): string {
-  return SKILL_VFX_TABLE[skillId]?.iconPath ?? '/images/skills/whirl.png'
+  const canonicalSkillId = normalizeSkillId(skillId)
+  return (SKILL_VFX_TABLE[canonicalSkillId] ?? SKILL_VFX_TABLE[skillId])?.iconPath ?? '/images/skills/whirl.png'
 }

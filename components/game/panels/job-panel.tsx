@@ -217,7 +217,7 @@ export function JobPanel() {
       )}
 
       <div className="mt-4">
-        <p className="mb-1.5 text-xs text-muted-foreground">สายอาชีพทั้งหมด (ผู้ฝึกหัด Novice → 6 คลาสหลัก → 8 คลาส 2)</p>
+        <p className="mb-1.5 text-xs text-muted-foreground">สายอาชีพทั้งหมด ({JOBS.novice.name} → 6 คลาสหลัก → 8 คลาส 2)</p>
         <JobTree currentJobId={p.jobId} />
       </div>
     </PanelFrame>
