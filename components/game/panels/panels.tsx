@@ -8,18 +8,14 @@ import { cn } from '@/lib/utils'
 import { formatNum } from '../format'
 import { WindowManager } from '../window-manager'
 import { useWindowContext } from '../window-context'
-import { CharacterPanel } from './character-panel'
 import { EnhancePanel } from './enhance-panel'
-import { EquipmentPanel } from './equipment-panel'
 import { GachaPanel } from './gacha-panel'
 import { GemShopPanel } from './gem-shop-panel'
 import { FriendsPanel } from './friends-panel'
 import { GmSummonPanel } from './gm-summon-panel'
 import { DevToolsPanel } from './dev-tools-panel'
-import { InventoryPanel } from './inventory-panel'
 import { PartyPanel } from './party-panel'
 import { RebirthPanel } from './rebirth-panel'
-import { JobPanel } from './job-panel'
 import { SettingsPanel } from './settings-panel'
 import { ShopPanel } from './shop-panel'
 import { StoragePanel } from './storage-panel'
@@ -35,10 +31,10 @@ import { MarketPanel } from './market-panel'
 import { MailPanel } from './mail-panel'
 import { PassPanel } from './pass-panel'
 import { LifeSkillsPanel } from './lifeskills-panel'
-import { TalentsPanel } from './talents-panel'
 import { WardrobePanel } from './wardrobe-panel'
 import { GuidePanel } from './guide-panel'
 import { ModelGalleryView } from '../model-gallery-view'
+import { AsuraCharacterHub } from './asura-character-hub'
 
 export function renderPanelById(id: PanelId, g: ReturnType<typeof useGame>): ReactNode {
   switch (id) {
@@ -65,19 +61,19 @@ export function renderPanelById(id: PanelId, g: ReturnType<typeof useGame>): Rea
     case 'dev-tools':
       return <DevToolsPanel />
     case 'inventory':
-      return <InventoryPanel />
+      return <AsuraCharacterHub key="hub-inventory" initialTab="inventory" />
     case 'equipment':
-      return <EquipmentPanel />
+      return <AsuraCharacterHub key="hub-equipment" initialTab="inventory" />
     case 'settings':
       return <SettingsPanel />
     case 'rebirth':
       return <RebirthPanel />
     case 'job':
-      return <JobPanel />
+      return <AsuraCharacterHub key="hub-job" initialTab="job" />
     case 'storage':
       return <StoragePanel />
     case 'character':
-      return <CharacterPanel />
+      return <AsuraCharacterHub key="hub-character" initialTab="status" />
     case 'pets':
       return <PetsPanel />
     case 'quests':
@@ -101,7 +97,7 @@ export function renderPanelById(id: PanelId, g: ReturnType<typeof useGame>): Rea
     case 'lifeskills':
       return <LifeSkillsPanel />
     case 'talents':
-      return <TalentsPanel />
+      return <AsuraCharacterHub key="hub-talents" initialTab="skills" />
     case 'wardrobe':
       return <WardrobePanel />
     case 'guide':

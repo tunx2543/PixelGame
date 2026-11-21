@@ -103,47 +103,47 @@ const DEFAULT_PREFERENCES: UiPreferences = {
 }
 
 export const WINDOW_META: Record<PanelId, { title: string; defaultW: number; defaultH: number }> = {
-  inventory: { title: 'กระเป๋า & ไอเทม', defaultW: 680, defaultH: 520 },
-  equipment: { title: 'อุปกรณ์สวมใส่ & สเตตัส', defaultW: 600, defaultH: 510 },
-  character: { title: 'ตัวละคร & ค่าสถานะ', defaultW: 660, defaultH: 520 },
-  shop: { title: 'ร้านค้าทั่วไป', defaultW: 640, defaultH: 500 },
-  'gem-shop': { title: 'ร้านค้าพรีเมียม & เพชร', defaultW: 780, defaultH: 560 },
-  quests: { title: 'ภารกิจ & เควสต์', defaultW: 640, defaultH: 520 },
-  friends: { title: 'เพื่อน & UID', defaultW: 450, defaultH: 500 },
-  party: { title: 'ระบบปาร์ตี้', defaultW: 460, defaultH: 520 },
-  settings: { title: 'ตั้งค่าระบบ & ปุ่มลัด', defaultW: 540, defaultH: 500 },
-  enhance: { title: 'ตีบวกอุปกรณ์', defaultW: 620, defaultH: 500 },
-  job: { title: 'เปลี่ยนอาชีพ', defaultW: 680, defaultH: 540 },
-  storage: { title: 'คลังเก็บของ', defaultW: 640, defaultH: 500 },
-  gacha: { title: 'สุ่มกาชา', defaultW: 640, defaultH: 520 },
-  rebirth: { title: 'จุติ (Rebirth)', defaultW: 680, defaultH: 560 },
-  trade: { title: 'แลกเปลี่ยนผู้เล่น', defaultW: 620, defaultH: 500 },
-  'gm-summon': { title: 'เสกไอเทม GM', defaultW: 640, defaultH: 500 },
-  'dev-tools': { title: 'Dev Console', defaultW: 680, defaultH: 540 },
-  pets: { title: 'สัตว์เลี้ยง & สัตว์ขี่', defaultW: 660, defaultH: 520 },
-  models: { title: 'คลังโมเดล 2D', defaultW: 720, defaultH: 540 },
-  craft: { title: 'คราฟต์ & รูน', defaultW: 660, defaultH: 520 },
-  codex: { title: 'สมุดภาพ & ฉายา', defaultW: 660, defaultH: 520 },
-  guild: { title: 'กิลด์ & บอสโลก', defaultW: 660, defaultH: 520 },
-  arena: { title: 'ลานประลอง & อันดับ', defaultW: 640, defaultH: 520 },
-  dungeon: { title: 'ดันเจี้ยนรายวัน', defaultW: 640, defaultH: 500 },
-  market: { title: 'ตลาดประมูล', defaultW: 680, defaultH: 520 },
-  mail: { title: 'จดหมาย & ของขวัญ', defaultW: 620, defaultH: 500 },
-  pass: { title: 'Battle Pass', defaultW: 660, defaultH: 520 },
-  lifeskills: { title: 'ทักษะชีวิต & ทำอาหาร', defaultW: 640, defaultH: 520 },
-  talents: { title: 'Talent & พรีเซ็ต', defaultW: 660, defaultH: 520 },
-  wardrobe: { title: 'แฟชั่น & ปีก', defaultW: 640, defaultH: 520 },
-  guide: { title: 'คู่มือ & ป้องกันเมือง', defaultW: 620, defaultH: 500 },
+  inventory: { title: 'สัมภาระ & ตัวละคร', defaultW: 840, defaultH: 540 },
+  equipment: { title: 'อุปกรณ์สวมใส่ & สเตตัส', defaultW: 840, defaultH: 540 },
+  character: { title: 'ตัวละคร & ค่าสถานะ', defaultW: 840, defaultH: 540 },
+  shop: { title: 'ร้านค้าทั่วไป', defaultW: 660, defaultH: 510 },
+  'gem-shop': { title: 'ร้านค้าโซล & เติมเงิน', defaultW: 840, defaultH: 560 },
+  quests: { title: 'ภารกิจ & เควสต์', defaultW: 660, defaultH: 520 },
+  friends: { title: 'เพื่อน & UID', defaultW: 480, defaultH: 510 },
+  party: { title: 'ระบบปาร์ตี้', defaultW: 480, defaultH: 520 },
+  settings: { title: 'ตั้งค่าระบบ & ปุ่มลัด', defaultW: 560, defaultH: 510 },
+  enhance: { title: 'อัพเกรด & ตีบวก', defaultW: 640, defaultH: 510 },
+  job: { title: 'สายอาชีพ & เลื่อนขั้น', defaultW: 840, defaultH: 540 },
+  storage: { title: 'คลังเก็บของ', defaultW: 660, defaultH: 510 },
+  gacha: { title: 'สุ่มกาชา', defaultW: 660, defaultH: 520 },
+  rebirth: { title: 'จุติ (Rebirth)', defaultW: 700, defaultH: 560 },
+  trade: { title: 'แลกเปลี่ยนผู้เล่น', defaultW: 640, defaultH: 510 },
+  'gm-summon': { title: 'เสกไอเทม GM', defaultW: 660, defaultH: 510 },
+  'dev-tools': { title: 'Dev Console', defaultW: 700, defaultH: 540 },
+  pets: { title: 'สัตว์เลี้ยง & คู่หู', defaultW: 680, defaultH: 520 },
+  models: { title: 'คลังโมเดล 2D', defaultW: 760, defaultH: 550 },
+  craft: { title: 'คราฟต์ & ย่อยสลาย', defaultW: 680, defaultH: 520 },
+  codex: { title: 'สมุดภาพ & ฉายา', defaultW: 680, defaultH: 520 },
+  guild: { title: 'กิลด์ & บอสโลก', defaultW: 680, defaultH: 520 },
+  arena: { title: 'ลานประลอง & อันดับ', defaultW: 660, defaultH: 520 },
+  dungeon: { title: 'ดันเจี้ยนรายวัน', defaultW: 660, defaultH: 510 },
+  market: { title: 'ตลาดประมูล', defaultW: 700, defaultH: 520 },
+  mail: { title: 'จดหมาย & ของขวัญ', defaultW: 640, defaultH: 510 },
+  pass: { title: 'Battle Pass', defaultW: 680, defaultH: 520 },
+  lifeskills: { title: 'ทักษะชีวิต & ฝึกฝน', defaultW: 660, defaultH: 520 },
+  talents: { title: 'ทักษะ & ฝึกฝน', defaultW: 840, defaultH: 540 },
+  wardrobe: { title: 'แฟชั่น & ปีก', defaultW: 660, defaultH: 520 },
+  guide: { title: 'คู่มือ & แจ้งข้อมูล', defaultW: 640, defaultH: 510 },
 }
 
 export function getSafeZoneBounds(vw: number, vh: number) {
   if (vw < 768) {
-    return { left: 8, top: 48, right: 8, bottom: 92 }
+    return { left: 8, top: 44, right: 8, bottom: 72 }
   }
   if (vw < 1024) {
-    return { left: 196, top: 56, right: 184, bottom: 112 }
+    return { left: 16, top: 52, right: 120, bottom: 56 }
   }
-  return { left: 244, top: 58, right: 204, bottom: 118 }
+  return { left: 24, top: 56, right: 136, bottom: 62 }
 }
 
 const listeners = new Set<() => void>()

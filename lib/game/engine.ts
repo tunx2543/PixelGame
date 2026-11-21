@@ -394,12 +394,40 @@ export interface InvItem {
   bound?: boolean
 }
 
+export interface PlayerAttributes {
+  str: number
+  vit: number
+  dex: number
+  agi: number
+  int: number
+  luk: number
+}
+
+export const DEFAULT_PLAYER_ATTRIBUTES: PlayerAttributes = {
+  str: 1,
+  vit: 1,
+  dex: 1,
+  agi: 1,
+  int: 1,
+  luk: 1,
+}
+
+export const MAX_JOB_LEVEL = 99
+
+export function jobExpToNext(jLv: number): number {
+  const safeLv = Math.max(1, Math.floor(jLv))
+  return Math.floor(35 + safeLv * 24 + safeLv * safeLv * 7)
+}
+
 export interface SaveData {
   version: 1
   name: string
+  alias?: string
   jobId: string
   level: number
   exp: number
+  jobLevel?: number
+  jobExp?: number
   hp: number
   mp: number
   gold: number
@@ -426,6 +454,7 @@ export interface SaveData {
   kills: number
   savedAt: number
   statPoints?: number
+  stats?: PlayerAttributes
   skillPoints?: number
   skillLevels?: Record<string, number>
   rebirthCount?: number
@@ -901,9 +930,81 @@ export function itemPower(it: InvItem | null) {
   return Math.floor(base * (1 + it.plus * 0.12) + it.plus * 2)
 }
 
+export function sanitizePlayerAttributes(raw?: Partial<PlayerAttributes> | null): PlayerAttributes {
+  return {
+    str: Math.max(1, Math.min(999, Math.floor(Number(raw?.str) || 1))),
+    vit: Math.max(1, Math.min(999, Math.floor(Number(raw?.vit) || 1))),
+    dex: Math.max(1, Math.min(999, Math.floor(Number(raw?.dex) || 1))),
+    agi: Math.max(1, Math.min(999, Math.floor(Number(raw?.agi) || 1))),
+    int: Math.max(1, Math.min(999, Math.floor(Number(raw?.int) || 1))),
+    luk: Math.max(1, Math.min(999, Math.floor(Number(raw?.luk) || 1))),
+  }
+}
+
+export function getPlayerAttributeBreakdown(p: SaveData = game.p!) {
+  const base = sanitizePlayerAttributes(p?.stats)
+  const job = JOBS[normalizeJobId(p?.jobId ?? 'novice')]
+  const tierBonus = job.tier === 2 ? 4 : job.tier === 1 ? 2 : 0
+  const rebirthBonus = (p?.rebirthCount ?? 0) * 3
+  const eqPlus = (['weapon', 'armor', 'shoes', 'cloak', 'accessory'] as const).reduce(
+    (sum, s) => sum + (p?.equipment?.[s]?.plus ?? 0),
+    0,
+  )
+  const flatBonus = tierBonus + rebirthBonus + Math.floor(eqPlus / 4)
+  const bonus: PlayerAttributes = {
+    str: flatBonus + (job.weaponTypes.includes('sword') || job.weaponTypes.includes('axe') ? 2 : 0),
+    vit: flatBonus + (job.defMul >= 1.15 ? 2 : 0),
+    dex: flatBonus + (job.weaponTypes.includes('bow') || job.weaponTypes.includes('dagger') ? 2 : 0),
+    agi: flatBonus + (job.speedMul >= 1.08 ? 2 : 0),
+    int: flatBonus + (job.weaponTypes.includes('staff') ? 2 : 0),
+    luk: flatBonus + (job.crit >= 0.14 ? 2 : 0),
+  }
+  return {
+    base,
+    bonus,
+    total: {
+      str: base.str + bonus.str,
+      vit: base.vit + bonus.vit,
+      dex: base.dex + bonus.dex,
+      agi: base.agi + bonus.agi,
+      int: base.int + bonus.int,
+      luk: base.luk + bonus.luk,
+    },
+  }
+}
+
+export function getInventoryWeightSummary(p: SaveData = game.p!) {
+  const cap = getInventoryCapacity(p)
+  const attrs = getPlayerAttributeBreakdown(p).total
+  const maxWeight = Math.round((950 + p.level * 45 + attrs.str * 18) * 10) / 10
+  let usedWeight = 0
+  for (const it of p.inventory) {
+    const def = ITEMS[it.itemId]
+    const perUnit =
+      def?.type === 'weapon' || def?.type === 'armor'
+        ? 48
+        : def?.type === 'material'
+          ? 12
+          : def?.type === 'consumable'
+            ? 8
+            : 15
+    usedWeight += perUnit * Math.max(1, it.qty || 1)
+  }
+  usedWeight = Math.round(usedWeight * 10) / 10
+  const pct = maxWeight > 0 ? Math.min(100, Math.round((usedWeight / maxWeight) * 1000) / 10) : 0
+  return {
+    usedWeight,
+    maxWeight,
+    pct,
+    slotsUsed: p.inventory.length,
+    slotsMax: cap,
+  }
+}
+
 export function getStats(p: SaveData = game.p!) {
   const job = JOBS[normalizeJobId(p.jobId)]
   const L = p.level
+  const attr = getPlayerAttributeBreakdown(p).total
   const wAtk = itemPower(p.equipment.weapon)
   const aDef = (['armor', 'shoes', 'cloak', 'accessory'] as const).reduce((total, slot) => total + itemPower(p.equipment[slot]), 0)
   const petBonus = getActivePetBonuses(p.petState, p.equippedGemCompanion, p.ownedGemItems)
@@ -919,8 +1020,18 @@ export function getStats(p: SaveData = game.p!) {
   const foodBuff = getActiveFoodBuffBonuses(extV2.activeFoodBuff)
   const roleSynergy = p === game.p ? game.partyRoleBuffs : { atkPct: 0, defPct: 0, critBonus: 0 }
 
+  const strAtkBonus = Math.floor(Math.max(0, attr.str - 1) * 1.45)
+  const dexAtkBonus = Math.floor(Math.max(0, attr.dex - 1) * 0.9)
+  const intAtkBonus = job.weaponTypes.includes('staff') ? Math.floor(Math.max(0, attr.int - 1) * 1.6) : Math.floor(Math.max(0, attr.int - 1) * 0.4)
+  const vitHpBonus = Math.floor(Math.max(0, attr.vit - 1) * 18)
+  const vitDefBonus = Math.floor(Math.max(0, attr.vit - 1) * 0.85)
+  const intMpBonus = Math.floor(Math.max(0, attr.int - 1) * 6)
+  const agiSpeedMul = 1 + Math.min(0.45, Math.max(0, attr.agi - 1) * 0.004)
+  const lukCritBonus = Math.min(0.22, Math.max(0, attr.luk - 1) * 0.0018 + Math.max(0, attr.dex - 1) * 0.0008)
+
   const baseHp =
     Math.floor((80 + L * 22) * job.hpMul + aDef * 2) +
+    vitHpBonus +
     (p.rebirthBonus?.maxHp ?? 0) +
     (petBonus?.hpBonus ?? 0) +
     (mountBonus?.hpBonus ?? 0) +
@@ -930,6 +1041,9 @@ export function getStats(p: SaveData = game.p!) {
     affixBonus.hpFlat
   const baseAtk =
     Math.floor((8 + L * 2.6 + wAtk) * job.atkMul) +
+    strAtkBonus +
+    dexAtkBonus +
+    intAtkBonus +
     (p.rebirthBonus?.atk ?? 0) +
     (petBonus?.atkBonus ?? 0) +
     (mountBonus?.atkBonus ?? 0) +
@@ -939,6 +1053,7 @@ export function getStats(p: SaveData = game.p!) {
     affixBonus.atkFlat
   const baseDef =
     Math.floor((3 + L * 1.4) * job.defMul + aDef) +
+    vitDefBonus +
     (p.rebirthBonus?.def ?? 0) +
     (petBonus?.defBonus ?? 0) +
     (mountBonus?.defBonus ?? 0) +
@@ -958,7 +1073,7 @@ export function getStats(p: SaveData = game.p!) {
 
   return {
     maxHp: rawHp,
-    maxMp: Math.floor((30 + L * 7) * job.mpMul) + (p.rebirthBonus?.maxMp ?? 0) + (petBonus?.mpBonus ?? 0),
+    maxMp: Math.floor((30 + L * 7) * job.mpMul) + intMpBonus + (p.rebirthBonus?.maxMp ?? 0) + (petBonus?.mpBonus ?? 0),
     atk: guildBuff ? Math.round(rawAtk * (1 + guildBuff.atkPct / 100)) : rawAtk,
     def: guildBuff ? Math.round(rawDef * (1 + guildBuff.defPct / 100)) : rawDef,
     speed:
@@ -966,10 +1081,12 @@ export function getStats(p: SaveData = game.p!) {
       job.speedMul *
       (p.speed || 1) *
       mountSpeedMul *
+      agiSpeedMul *
       (1 + talentBonus.speedPct / 100),
     crit: Math.min(
       0.85,
       job.crit +
+        lukCritBonus +
         codexBonus.critBonus +
         runeBonus.critBonus +
         setBonus.critBonus +
@@ -978,10 +1095,10 @@ export function getStats(p: SaveData = game.p!) {
         affixBonus.critBonus +
         roleSynergy.critBonus,
     ),
-    attackSpeed: job.attackSpeed,
+    attackSpeed: Math.max(0.24, job.attackSpeed * (1 - Math.min(0.32, Math.max(0, attr.agi - 1) * 0.0025))),
     lifestealPct: runeBonus.lifestealPct + talentBonus.lifestealPct + affixBonus.lifestealPct,
     cdReducePct: affixBonus.cdReducePct,
-    affixGoldPct: affixBonus.goldPct,
+    affixGoldPct: affixBonus.goldPct + Math.min(35, Math.floor(Math.max(0, attr.luk - 1) * 0.25)),
     affixExpPct: affixBonus.expPct,
   }
 }
@@ -2341,9 +2458,29 @@ function killMonster(m: Monster) {
 export function gainExp(n: number) {
   const p = player()
   if (!Number.isFinite(n) || n <= 0) return
-  if (p.level >= MAX_LEVEL) return
   const add = Math.floor(n)
   if (add <= 0) return
+
+  // Job EXP progression
+  p.jobLevel = Math.max(1, p.jobLevel ?? 1)
+  p.jobExp = Math.max(0, p.jobExp ?? 0)
+  if (p.jobLevel < MAX_JOB_LEVEL) {
+    p.jobExp += Math.max(1, Math.floor(add * 0.72))
+    let jobLeveled = false
+    while (p.jobLevel < MAX_JOB_LEVEL && p.jobExp >= jobExpToNext(p.jobLevel)) {
+      p.jobExp -= jobExpToNext(p.jobLevel)
+      p.jobLevel++
+      p.skillPoints = (p.skillPoints ?? 0) + 1
+      jobLeveled = true
+    }
+    if (p.jobLevel >= MAX_JOB_LEVEL) p.jobExp = 0
+    if (jobLeveled) {
+      addFloat(p.x, p.y - 48, `JLV ${p.jobLevel}!`, '#38bdf8', 11)
+      say('system', `ระดับอาชีพเพิ่มเป็น JLv.${p.jobLevel} (+1 แต้มทักษะ)`)
+    }
+  }
+
+  if (p.level >= MAX_LEVEL) return
   p.exp += add
   addFloat(p.x, p.y - 34, `+${add} EXP`, '#c77dff', 9)
   const beforeStats = getStats()
@@ -2744,6 +2881,8 @@ export function rebirth() {
   p.jobId = 'novice'
   p.level = 1
   p.exp = 0
+  p.jobLevel = 1
+  p.jobExp = 0
   p.hp = baseHp + p.rebirthBonus.maxHp
   p.mp = baseMp + p.rebirthBonus.maxMp
   const spawn = MAPS.town.spawn
@@ -3777,6 +3916,8 @@ export function changeJob(jobId: string) {
 function applyJob(jobId: string) {
   const p = player()
   p.jobId = normalizeJobId(jobId)
+  p.jobLevel = 1
+  p.jobExp = 0
   const w = p.equipment.weapon
   const wDef = w ? ITEMS[w.itemId] : null
   if (w && (!wDef || !wDef.weaponType || !currentJob().weaponTypes.includes(wDef.weaponType))) {
@@ -4330,6 +4471,91 @@ export function upgradeTalentAction(talentId: string): { ok: boolean; message: s
   saveGame()
   notify()
   return { ok: true, message: `อัปเกรด ${node.name} เป็น ${curRank + 1}/${node.maxRank} สำเร็จ!` }
+}
+
+export function allocateStatPointsAction(
+  delta: Partial<Record<keyof PlayerAttributes, number>>,
+): { ok: boolean; message: string } {
+  const p = player()
+  const keys: (keyof PlayerAttributes)[] = ['str', 'vit', 'dex', 'agi', 'int', 'luk']
+  const cleanDelta: Record<keyof PlayerAttributes, number> = { str: 0, vit: 0, dex: 0, agi: 0, int: 0, luk: 0 }
+  let totalCost = 0
+  for (const k of keys) {
+    const val = Math.max(0, Math.floor(Number(delta[k] ?? 0)))
+    cleanDelta[k] = val
+    totalCost += val
+  }
+  if (totalCost <= 0) return { ok: false, message: 'กรุณาเลือกแต้มสเตตัสที่ต้องการอัปก่อนยืนยัน' }
+  if ((p.statPoints ?? 0) < totalCost) {
+    return { ok: false, message: `แต้มโบนัสไม่พอ (มี ${p.statPoints ?? 0} แต่ต้องการ ${totalCost})` }
+  }
+  const attrs = sanitizePlayerAttributes(p.stats)
+  for (const k of keys) {
+    attrs[k] = Math.min(999, attrs[k] + cleanDelta[k])
+  }
+  p.stats = attrs
+  p.statPoints = Math.max(0, (p.statPoints ?? 0) - totalCost)
+  clampVitals()
+  say('system', `อัปค่าสถานะสำเร็จ (-${totalCost} แต้มโบนัส)`)
+  saveGame()
+  notify()
+  return { ok: true, message: `อัปค่าสถานะ +${totalCost} แต้มเรียบร้อยแล้ว!` }
+}
+
+export function resetStatPointsAction(): { ok: boolean; message: string } {
+  const p = player()
+  const attrs = sanitizePlayerAttributes(p.stats)
+  const spent =
+    (attrs.str - 1) +
+    (attrs.vit - 1) +
+    (attrs.dex - 1) +
+    (attrs.agi - 1) +
+    (attrs.int - 1) +
+    (attrs.luk - 1)
+  if (spent <= 0) return { ok: false, message: 'ยังไม่มีแต้มสเตตัสที่อัปไว้' }
+  const cost = 500
+  if (p.gold < cost) return { ok: false, message: `ต้องใช้ ${cost.toLocaleString()} G เพื่อรีเซ็ตค่าสถานะ` }
+  p.gold -= cost
+  p.stats = { ...DEFAULT_PLAYER_ATTRIBUTES }
+  p.statPoints = (p.statPoints ?? 0) + spent
+  clampVitals()
+  say('system', `รีเซ็ตสเตตัสสำเร็จ คืนแต้มโบนัส +${spent}`)
+  saveGame()
+  notify()
+  return { ok: true, message: `รีเซ็ตค่าสถานะสำเร็จ คืน ${spent} แต้มโบนัส` }
+}
+
+export function updatePlayerAliasAction(alias: string): { ok: boolean; message: string } {
+  const p = player()
+  const clean = alias.trim().slice(0, 24)
+  p.alias = clean
+  say('system', clean ? `ตั้งนามแฝงเป็น "${clean}" แล้ว` : 'ล้างนามแฝงเรียบร้อยแล้ว')
+  saveGame()
+  notify()
+  return { ok: true, message: clean ? `อัปเดตนามแฝง "${clean}" สำเร็จ` : 'ล้างนามแฝงเรียบร้อย' }
+}
+
+export function resetSkillsAction(): { ok: boolean; message: string } {
+  const p = player()
+  const levels = p.skillLevels ?? {}
+  let refunded = 0
+  for (const k of Object.keys(levels)) {
+    const lv = levels[k] ?? 1
+    if (lv > 1) {
+      refunded += lv - 1
+      levels[k] = 1
+    }
+  }
+  if (refunded <= 0) return { ok: false, message: 'ยังไม่มีทักษะที่อัปเกรดเกิน Lv.1' }
+  const cost = 500
+  if (p.gold < cost) return { ok: false, message: `ต้องใช้ ${cost.toLocaleString()} G เพื่อล้างทักษะ` }
+  p.gold -= cost
+  p.skillLevels = levels
+  p.skillPoints = (p.skillPoints ?? 0) + refunded
+  say('system', `ล้างทักษะสำเร็จ คืน ${refunded} แต้มทักษะ`)
+  saveGame()
+  notify()
+  return { ok: true, message: `ล้างทักษะสำเร็จ คืน ${refunded} SP` }
 }
 
 export function resetTalentsAction(): { ok: boolean; message: string } {
@@ -7168,9 +7394,12 @@ export function loadGame(d: SaveData) {
   const p: SaveData = {
     version: 1,
     name: (typeof d.name === 'string' ? d.name.trim().slice(0, 16) : '') || 'นักผจญภัย',
+    alias: typeof d.alias === 'string' ? d.alias.trim().slice(0, 24) : '',
     jobId: normalizeJobId(typeof d.jobId === 'string' ? d.jobId : 'novice'),
     level: finiteInt(d.level, 1, MAX_LEVEL, 1),
     exp: finiteInt(d.exp, 0, Number.MAX_SAFE_INTEGER, 0),
+    jobLevel: finiteInt(d.jobLevel, 1, MAX_JOB_LEVEL, Math.max(1, Math.min(MAX_JOB_LEVEL, finiteInt(d.level, 1, MAX_LEVEL, 1)))),
+    jobExp: finiteInt(d.jobExp, 0, Number.MAX_SAFE_INTEGER, 0),
     hp: finiteInt(d.hp, 0, Number.MAX_SAFE_INTEGER, 1),
     mp: finiteInt(d.mp, 0, Number.MAX_SAFE_INTEGER, 0),
     gold: finiteInt(d.gold, 0, Number.MAX_SAFE_INTEGER, 0),
@@ -7199,6 +7428,7 @@ export function loadGame(d: SaveData) {
     kills: finiteInt(d.kills, 0, Number.MAX_SAFE_INTEGER, 0),
     savedAt: typeof d.savedAt === 'number' && Number.isFinite(d.savedAt) ? d.savedAt : Date.now(),
     statPoints: finiteInt(d.statPoints, 0, 100000, 0),
+    stats: sanitizePlayerAttributes(d.stats),
     skillPoints: finiteInt(d.skillPoints, 0, 100000, 0),
     skillLevels: sanitizeSkillLevels(d.skillLevels),
     rebirthCount: finiteInt(d.rebirthCount, 0, 6, 0),
@@ -7250,9 +7480,12 @@ export function newGame(name: string, starterJobId = 'novice') {
   const p: SaveData = {
     version: 1,
     name: name.trim().slice(0, 16) || 'นักผจญภัย',
+    alias: '',
     jobId: resolvedStarterJob,
     level: 1,
     exp: 0,
+    jobLevel: 1,
+    jobExp: 0,
     hp: 1,
     mp: 1,
     gold: 300,
@@ -7284,6 +7517,9 @@ export function newGame(name: string, starterJobId = 'novice') {
     playTime: 0,
     kills: 0,
     savedAt: Date.now(),
+    statPoints: 3,
+    stats: { ...DEFAULT_PLAYER_ATTRIBUTES },
+    skillPoints: 2,
     petState: createDefaultPetState(),
     mountState: createDefaultMountState(),
     questState: createDefaultQuestState(0),
