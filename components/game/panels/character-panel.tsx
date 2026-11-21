@@ -61,7 +61,7 @@ export function CharacterPanel() {
     ['พลังโจมตี', formatNum(s.atk)],
     ['พลังป้องกัน', formatNum(s.def)],
     ['คริติคอล', `${Math.round(s.crit * 100)}%`],
-    ['ระยะโจมตี', job.ranged ? 'ไกล' : 'ประชิด'],
+    ['ระยะโจมตี', job.ranged ? `ตีไกล (${job.range}px)` : `ตีใกล้ (${job.range}px)`],
     ['ปราบมอนสเตอร์', formatNum(p.kills)],
     ['เวลาเล่น', formatPlayTime(p.playTime)],
   ]
@@ -256,8 +256,10 @@ export function CharacterPanel() {
               {def.kind === 'consumable' && (
                 <PxButton
                   onClick={() => {
-                    const res = consumeItemWithFeedback(item.uid)
+                    const uid = item.uid
+                    const res = consumeItemWithFeedback(uid)
                     setFeedback({ ok: res.ok, text: res.message })
+                    if (!p.inventory.some((i) => i.uid === uid)) setSelected(null)
                   }}
                 >
                   ใช้

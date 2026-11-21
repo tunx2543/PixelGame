@@ -526,7 +526,7 @@ export function CharacterClassSelector({
                   <p className="mt-0.5 font-mono text-[10px] text-sky-300 tabular-nums">
                     {activeSkill.mp} MP · CD {activeSkill.cooldown}s ·{' '}
                     {activeSkill.mult > 0 ? `${activeSkill.mult}x` : 'ฟื้นฟู/บัฟ'}
-                    {activeSkill.radius > 0 ? ` · รัศมี ${activeSkill.radius}px` : ''}
+                    {(activeSkill.radius ?? 0) > 0 ? ` · รัศมี ${activeSkill.radius}px` : ''}
                     {(activeSkill.hits ?? 1) > 1 ? ` · ${activeSkill.hits} ฮิต` : ''}
                   </p>
                 )}

@@ -590,7 +590,522 @@ export const PREMIUM_CATALOG: PremiumProduct[] = [
       bundleItems: [{ itemId: 'pet_essence', qty: 6 }],
     },
   },
+
+  // ---- 9. Asura Online Soul Shop: สนับสนุน (Boosters & Support) ----
+  {
+    productId: 'prod_asura_exp_50',
+    itemId: 'asura_exp_50',
+    name: 'EXP Boost Up 50% (x2)',
+    description: 'เพิ่ม EXP ที่ได้รับจากมอนสเตอร์ +50% นาน 20 นาที (กดใช้ได้จากสัมภาระ)',
+    icon: 'asura_exp_50',
+    diamondPrice: 45,
+    category: 'consumables',
+    rarity: 'หายาก',
+    stock: null,
+    purchaseLimit: null,
+    enabled: true,
+    expiration: null,
+    rewardKind: 'item',
+    qty: 2,
+    vipExpGrant: 10,
+  },
+  {
+    productId: 'prod_asura_exp_100',
+    itemId: 'asura_exp_100',
+    name: 'EXP Boost Up 100% (x2)',
+    description: 'เพิ่ม EXP ที่ได้รับจากมอนสเตอร์ +100% (x2) นาน 20 นาที',
+    icon: 'asura_exp_100',
+    diamondPrice: 85,
+    category: 'consumables',
+    rarity: 'อีปิก',
+    stock: null,
+    purchaseLimit: null,
+    enabled: true,
+    expiration: null,
+    rewardKind: 'item',
+    qty: 2,
+    vipExpGrant: 20,
+  },
+  {
+    productId: 'prod_asura_jp_50',
+    itemId: 'asura_jp_50',
+    name: 'การงาน Boost Up 50% (x2)',
+    description: 'เพิ่มค่าประสบการณ์อาชีพ (JP) +50% นาน 20 นาที เก็บแต้มทักษะไวขึ้น',
+    icon: 'asura_jp_50',
+    diamondPrice: 45,
+    category: 'consumables',
+    rarity: 'หายาก',
+    stock: null,
+    purchaseLimit: null,
+    enabled: true,
+    expiration: null,
+    rewardKind: 'item',
+    qty: 2,
+    vipExpGrant: 10,
+  },
+  {
+    productId: 'prod_asura_jp_100',
+    itemId: 'asura_jp_100',
+    name: 'การงาน Boost Up 100% (x2)',
+    description: 'เพิ่มค่าประสบการณ์อาชีพ (JP) +100% (x2) นาน 20 นาที',
+    icon: 'asura_jp_100',
+    diamondPrice: 85,
+    category: 'consumables',
+    rarity: 'อีปิก',
+    stock: null,
+    purchaseLimit: null,
+    enabled: true,
+    expiration: null,
+    rewardKind: 'item',
+    qty: 2,
+    vipExpGrant: 20,
+  },
+  {
+    productId: 'prod_asura_lifeskill_50',
+    itemId: 'asura_lifeskill_50',
+    name: 'ทักษะฝึกฝน Boost Up 50% (x2)',
+    description: 'เพิ่ม EXP ตกปลา/ขุดแร่/เก็บสมุนไพร +50% และโอกาสดรอปแรร์ 20 นาที',
+    icon: 'asura_lifeskill_50',
+    diamondPrice: 50,
+    category: 'consumables',
+    rarity: 'หายาก',
+    stock: null,
+    purchaseLimit: null,
+    enabled: true,
+    expiration: null,
+    rewardKind: 'item',
+    qty: 2,
+    vipExpGrant: 12,
+  },
+  {
+    productId: 'prod_asura_leg_muscle',
+    itemId: 'asura_leg_muscle',
+    name: 'ยาเพิ่มกล้ามเนื้อขา (x3)',
+    description: 'เพิ่มความเร็วการเคลื่อนที่ +25% ต่อเนื่อง 20 นาที (สะสมเวลาใช้งานได้)',
+    icon: 'asura_leg_muscle',
+    diamondPrice: 60,
+    category: 'consumables',
+    rarity: 'หายาก',
+    stock: null,
+    purchaseLimit: null,
+    enabled: true,
+    expiration: null,
+    rewardKind: 'item',
+    qty: 3,
+    vipExpGrant: 15,
+  },
+  {
+    productId: 'prod_asura_weight_potion',
+    itemId: 'asura_weight_potion',
+    name: 'ยาเพิ่มพลังแบกของ (x3)',
+    description: 'เพิ่มขีดจำกัดน้ำหนักกระเป๋า +650 หน่วย นาน 30 นาทีต่อขวด',
+    icon: 'asura_weight_potion',
+    diamondPrice: 55,
+    category: 'consumables',
+    rarity: 'ทั่วไป',
+    stock: null,
+    purchaseLimit: null,
+    enabled: true,
+    expiration: null,
+    rewardKind: 'item',
+    qty: 3,
+    vipExpGrant: 12,
+  },
+  {
+    productId: 'prod_asura_stat_s',
+    itemId: 'asura_stat_potion_s',
+    name: 'ยาเพิ่มสเตตัสขนาดเล็ก (x3)',
+    description: 'เพิ่ม ATK / DEF / MaxHP +5% นาน 20 นาที',
+    icon: 'asura_stat_potion_s',
+    diamondPrice: 70,
+    category: 'consumables',
+    rarity: 'หายาก',
+    stock: null,
+    purchaseLimit: null,
+    enabled: true,
+    expiration: null,
+    rewardKind: 'item',
+    qty: 3,
+    vipExpGrant: 15,
+  },
+  {
+    productId: 'prod_asura_stat_m',
+    itemId: 'asura_stat_potion_m',
+    name: 'ยาเพิ่มสเตตัสขนาดกลาง (x2)',
+    description: 'เพิ่ม ATK / DEF / MaxHP +10% และ CRIT +5% นาน 20 นาที',
+    icon: 'asura_stat_potion_m',
+    diamondPrice: 120,
+    category: 'consumables',
+    rarity: 'อีปิก',
+    stock: null,
+    purchaseLimit: null,
+    enabled: true,
+    expiration: null,
+    rewardKind: 'item',
+    qty: 2,
+    vipExpGrant: 25,
+  },
+  {
+    productId: 'prod_asura_fast_learn_7d',
+    itemId: 'bundle_fast_learn_7d',
+    name: 'ชุดเรียนรู้เร็วสุดคุ้ม (VIP 7 วัน + บัฟ)',
+    description: 'แพ็กสุดคุ้ม: VIP 7 วัน + EXP 100% x3 + การงาน 100% x3 + ยากล้ามเนื้อขา x3',
+    icon: 'bundle_fast_learn_7d',
+    diamondPrice: 360,
+    category: 'special-collection',
+    rarity: 'ตำนาน',
+    stock: null,
+    purchaseLimit: 5,
+    enabled: true,
+    expiration: null,
+    rewardKind: 'bundle',
+    vipExpGrant: 180,
+    payload: {
+      bundleVipDays: 7,
+      vipTierFloor: 1,
+      bundleItems: [
+        { itemId: 'asura_exp_100', qty: 3 },
+        { itemId: 'asura_jp_100', qty: 3 },
+        { itemId: 'asura_leg_muscle', qty: 3 },
+      ],
+    },
+  },
+
+  // ---- 10. Asura Online Soul Shop: อัพเกรด (Upgrade & Insurance Scrolls) ----
+  {
+    productId: 'prod_asura_enhance_stone_10',
+    itemId: 'enhance_stone',
+    name: 'ชุดหินตีบวก x10',
+    description: 'หินตีบวกบริสุทธิ์ 10 ก้อน สำหรับตีบวกอาวุธและเกราะ (+1 ถึง +15)',
+    icon: 'enhance_stone',
+    diamondPrice: 90,
+    category: 'consumables',
+    rarity: 'ทั่วไป',
+    stock: null,
+    purchaseLimit: null,
+    enabled: true,
+    expiration: null,
+    rewardKind: 'item',
+    qty: 10,
+    vipExpGrant: 20,
+  },
+  {
+    productId: 'prod_asura_chance_scroll_1',
+    itemId: 'enhance_chance_scroll_1',
+    name: 'ใบเพิ่มโอกาส (+10%) x3',
+    description: 'เพิ่มโอกาสตีบวกสำเร็จ +10% ในโรงตีเหล็ก',
+    icon: 'enhance_chance_scroll_1',
+    diamondPrice: 60,
+    category: 'consumables',
+    rarity: 'ทั่วไป',
+    stock: null,
+    purchaseLimit: null,
+    enabled: true,
+    expiration: null,
+    rewardKind: 'item',
+    qty: 3,
+    vipExpGrant: 15,
+  },
+  {
+    productId: 'prod_asura_chance_scroll_2',
+    itemId: 'enhance_chance_scroll_2',
+    name: 'ใบเพิ่มโอกาสชั้นดี (+20%) x2',
+    description: 'เพิ่มโอกาสตีบวกสำเร็จ +20% เหมาะสำหรับ +6 ถึง +10',
+    icon: 'enhance_chance_scroll_2',
+    diamondPrice: 110,
+    category: 'consumables',
+    rarity: 'หายาก',
+    stock: null,
+    purchaseLimit: null,
+    enabled: true,
+    expiration: null,
+    rewardKind: 'item',
+    qty: 2,
+    vipExpGrant: 25,
+  },
+  {
+    productId: 'prod_asura_chance_scroll_3',
+    itemId: 'enhance_chance_scroll_3',
+    name: 'ใบเพิ่มโอกาสชั้นเยี่ยม (+35%) x2',
+    description: 'เพิ่มโอกาสตีบวกสำเร็จ +35% สำหรับสายลุยระดับสูง',
+    icon: 'enhance_chance_scroll_3',
+    diamondPrice: 220,
+    category: 'consumables',
+    rarity: 'อีปิก',
+    stock: null,
+    purchaseLimit: null,
+    enabled: true,
+    expiration: null,
+    rewardKind: 'item',
+    qty: 2,
+    vipExpGrant: 45,
+  },
+  {
+    productId: 'prod_asura_chance_scroll_4',
+    itemId: 'enhance_chance_scroll_4',
+    name: 'ใบเพิ่มโอกาสของคหบดี (+50%)',
+    description: 'ใบเสริมระดับตำนาน เพิ่มโอกาสสำเร็จ +50% ทันที',
+    icon: 'enhance_chance_scroll_4',
+    diamondPrice: 320,
+    category: 'consumables',
+    rarity: 'ตำนาน',
+    stock: null,
+    purchaseLimit: null,
+    enabled: true,
+    expiration: null,
+    rewardKind: 'item',
+    qty: 1,
+    vipExpGrant: 65,
+  },
+  {
+    productId: 'prod_asura_protect_scroll_1',
+    itemId: 'enhance_protect_scroll_1',
+    name: 'ใบประกันความเสียหาย x2',
+    description: 'ป้องกันระดับไอเทมลดลง (-1) เมื่อตีบวกล้มเหลวที่ +6 ขึ้นไป',
+    icon: 'enhance_protect_scroll_1',
+    diamondPrice: 140,
+    category: 'consumables',
+    rarity: 'หายาก',
+    stock: null,
+    purchaseLimit: null,
+    enabled: true,
+    expiration: null,
+    rewardKind: 'item',
+    qty: 2,
+    vipExpGrant: 30,
+  },
+  {
+    productId: 'prod_asura_protect_scroll_2',
+    itemId: 'enhance_protect_scroll_2',
+    name: 'ใบประกันความเสียหายชั้นดี x2',
+    description: 'ป้องกันระดับลดลง + คืนหินตีบวก 50% เมื่อตีบวกล้มเหลว',
+    icon: 'enhance_protect_scroll_2',
+    diamondPrice: 260,
+    category: 'consumables',
+    rarity: 'อีปิก',
+    stock: null,
+    purchaseLimit: null,
+    enabled: true,
+    expiration: null,
+    rewardKind: 'item',
+    qty: 2,
+    vipExpGrant: 55,
+  },
+
+  // ---- 11. Asura Online Soul Shop: คู่หู & เปิดเคล็ด ----
+  {
+    productId: 'prod_asura_companion_gacha',
+    itemId: 'companion_gacha_box',
+    name: 'กล่องสุ่มคู่หูอสุรา',
+    description: 'เปิดเพื่อสุ่มรับคู่หู (ผอบ) หรือผลึกวิวัฒนาการคู่หู x5 พร้อม EXP สัตว์เลี้ยง',
+    icon: 'companion_gacha_box',
+    diamondPrice: 220,
+    category: 'pet',
+    rarity: 'อีปิก',
+    stock: null,
+    purchaseLimit: null,
+    enabled: true,
+    expiration: null,
+    rewardKind: 'item',
+    qty: 1,
+    vipExpGrant: 45,
+  },
+  {
+    productId: 'prod_asura_stat_reset',
+    itemId: 'stat_reset_potion',
+    name: 'น้ำยาหวนกลับ (รีเซ็ตสเตตัส)',
+    description: 'ล้างแต้มสเตตัส STR/VIT/DEX/AGI/INT/LUK ทั้งหมดคืนฟรีทันที',
+    icon: 'stat_reset_potion',
+    diamondPrice: 80,
+    category: 'diamond-items',
+    rarity: 'หายาก',
+    stock: null,
+    purchaseLimit: null,
+    enabled: true,
+    expiration: null,
+    rewardKind: 'item',
+    qty: 1,
+    vipExpGrant: 15,
+  },
+  {
+    productId: 'prod_asura_skill_reset',
+    itemId: 'skill_reset_potion',
+    name: 'น้ำยาลืมทักษะ (รีเซ็ตสกิล)',
+    description: 'ล้างแต้มทักษะ (SP) ที่อัปไว้ทั้งหมดคืนฟรี เพื่อจัดสายใหม่',
+    icon: 'skill_reset_potion',
+    diamondPrice: 80,
+    category: 'diamond-items',
+    rarity: 'หายาก',
+    stock: null,
+    purchaseLimit: null,
+    enabled: true,
+    expiration: null,
+    rewardKind: 'item',
+    qty: 1,
+    vipExpGrant: 15,
+  },
+  {
+    productId: 'prod_asura_job_reset',
+    itemId: 'job_reset_potion',
+    name: 'น้ำยาเปลี่ยนอาชีพ (รีสายอาชีพ)',
+    description: 'รีเซ็ตสายอาชีพกลับสู่ผู้ฝึกหัด (คงเลเวลและของ) เพื่อเลือกสายอาชีพใหม่',
+    icon: 'job_reset_potion',
+    diamondPrice: 240,
+    category: 'diamond-items',
+    rarity: 'อีปิก',
+    stock: null,
+    purchaseLimit: null,
+    enabled: true,
+    expiration: null,
+    rewardKind: 'item',
+    qty: 1,
+    vipExpGrant: 50,
+  },
+  {
+    productId: 'prod_asura_title_clear',
+    itemId: 'title_clear_scroll',
+    name: 'ใบแจ้งลบฉายา',
+    description: 'ล้างนามแฝงและฉายาที่แสดงอยู่บนตัวละครออกทั้งหมด',
+    icon: 'title_clear_scroll',
+    diamondPrice: 40,
+    category: 'diamond-items',
+    rarity: 'ทั่วไป',
+    stock: null,
+    purchaseLimit: null,
+    enabled: true,
+    expiration: null,
+    rewardKind: 'item',
+    qty: 1,
+    vipExpGrant: 10,
+  },
 ]
+
+export type AsuraShopCategoryId = 'recommend' | 'support' | 'upgrade' | 'fashion' | 'companion' | 'scrolls'
+
+export interface AsuraShopCategoryMeta {
+  id: AsuraShopCategoryId
+  label: string
+  subTabs: Array<{ id: string; label: string }>
+}
+
+export const ASURA_SOUL_CATEGORIES: AsuraShopCategoryMeta[] = [
+  {
+    id: 'recommend',
+    label: 'แนะนำ',
+    subTabs: [
+      { id: 'all', label: 'ทั้งหมด' },
+      { id: 'bundle', label: 'แพ็กสุดคุ้ม' },
+      { id: 'vip', label: 'บัตร VIP' },
+    ],
+  },
+  {
+    id: 'support',
+    label: 'สนับสนุน',
+    subTabs: [
+      { id: 'all', label: 'ทั้งหมด' },
+      { id: 'growth', label: 'การเติบโต' },
+      { id: 'harvest', label: 'เก็บเกี่ยว' },
+      { id: 'special', label: 'พิเศษ' },
+    ],
+  },
+  {
+    id: 'upgrade',
+    label: 'อัพเกรด',
+    subTabs: [
+      { id: 'all', label: 'ทั้งหมด' },
+      { id: 'materials', label: 'วัตถุดิบ' },
+      { id: 'boosters', label: 'ไอเท็มเสริม' },
+    ],
+  },
+  {
+    id: 'fashion',
+    label: 'แฟชั่น',
+    subTabs: [
+      { id: 'all', label: 'ทั้งหมด' },
+      { id: 'costume', label: 'ชุด/คอสตูม' },
+      { id: 'hair_aura', label: 'ทรงผม/ออร่า/ปีก' },
+    ],
+  },
+  {
+    id: 'companion',
+    label: 'คู่หู',
+    subTabs: [
+      { id: 'all', label: 'ทั้งหมด' },
+      { id: 'pets', label: 'ผอบ / คู่หู' },
+      { id: 'mounts', label: 'สัตว์ขี่' },
+      { id: 'tune', label: 'ปรับแต่ง / กล่องสุ่ม' },
+    ],
+  },
+  {
+    id: 'scrolls',
+    label: 'เปิดเคล็ด',
+    subTabs: [
+      { id: 'all', label: 'ทั้งหมด' },
+      { id: 'character', label: 'ตัวละคร' },
+      { id: 'privilege', label: 'สิทธิพิเศษ / ขยายช่อง' },
+    ],
+  },
+]
+
+export function resolveAsuraShopBucket(prod: PremiumProduct): {
+  category: AsuraShopCategoryId
+  subTab: string
+  featured?: boolean
+} {
+  const id = prod.productId
+  if (prod.category === 'special-collection' || prod.rewardKind === 'bundle') {
+    return { category: 'recommend', subTab: 'bundle', featured: true }
+  }
+  if (prod.rewardKind === 'vip_pass' || prod.rewardKind === 'vip_exp') {
+    return { category: 'recommend', subTab: 'vip', featured: true }
+  }
+  if (
+    id.includes('asura_exp') ||
+    id.includes('asura_jp') ||
+    id.includes('asura_lifeskill') ||
+    id === 'prod_double_exp_scroll'
+  ) {
+    return { category: 'support', subTab: 'growth' }
+  }
+  if (id === 'prod_starlight_loot_magnet' || id === 'prod_town_warp_tome' || id === 'prod_supreme_hp_elixir') {
+    return { category: 'support', subTab: 'harvest' }
+  }
+  if (id.includes('asura_leg') || id.includes('asura_weight') || id.includes('asura_stat')) {
+    return { category: 'support', subTab: 'special' }
+  }
+  if (id === 'prod_asura_enhance_stone_10') {
+    return { category: 'upgrade', subTab: 'materials' }
+  }
+  if (id.includes('chance_scroll') || id.includes('protect_scroll')) {
+    return { category: 'upgrade', subTab: 'boosters' }
+  }
+  if (prod.category === 'costume') {
+    return { category: 'fashion', subTab: 'costume' }
+  }
+  if (prod.category === 'fashion') {
+    return { category: 'fashion', subTab: 'hair_aura' }
+  }
+  if (prod.category === 'mount') {
+    return { category: 'companion', subTab: 'mounts' }
+  }
+  if (id === 'prod_pet_exp_elixir_pack' || id === 'prod_pet_essence_pack' || id === 'prod_asura_companion_gacha') {
+    return { category: 'companion', subTab: 'tune' }
+  }
+  if (prod.category === 'pet') {
+    return { category: 'companion', subTab: 'pets' }
+  }
+  if (
+    id.includes('reset') ||
+    id.includes('name_ticket') ||
+    id.includes('title_clear')
+  ) {
+    return { category: 'scrolls', subTab: 'character' }
+  }
+  if (prod.category === 'storage-expansion') {
+    return { category: 'scrolls', subTab: 'privilege' }
+  }
+  return { category: 'recommend', subTab: 'bundle' }
+}
 
 export function getPremiumProduct(productId: string): PremiumProduct | null {
   return PREMIUM_CATALOG.find((p) => p.productId === productId) ?? null

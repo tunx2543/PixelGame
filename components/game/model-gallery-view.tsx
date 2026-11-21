@@ -511,7 +511,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                       <p className="font-mono text-[10px] text-sky-300 tabular-nums">
                         {activeJobSkill.mp} MP · CD {activeJobSkill.cooldown}s ·{' '}
                         {activeJobSkill.mult > 0 ? `${activeJobSkill.mult}x` : 'ฟื้นฟู/บัฟ'}
-                        {activeJobSkill.radius > 0 ? ` · รัศมี ${activeJobSkill.radius}px` : ' · เป้าหมายเดี่ยว'}
+                        {(activeJobSkill.radius ?? 0) > 0 ? ` · รัศมี ${activeJobSkill.radius}px` : ' · เป้าหมายเดี่ยว'}
                         {(activeJobSkill.hits ?? 1) > 1 ? ` · ${activeJobSkill.hits} ฮิต` : ''}
                       </p>
                       {activeJobSkill.effectSummary && (

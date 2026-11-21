@@ -23,7 +23,7 @@ import { ChatBox } from './chat-box'
 import { CheckinModal } from './checkin-modal'
 import { GameCanvas } from './game-canvas'
 import { GmToolsWidget } from './gm-tools-widget'
-import { Hud } from './hud'
+import { AsuraBuffAndToggleStrip, AsuraExpStrip, Hud } from './hud'
 import { ItemIcon } from './item-icon'
 import { KillRewardToast } from './kill-reward-toast'
 import { MenuDock } from './menu-dock'
@@ -34,13 +34,12 @@ import { PlayerActionMenu } from './player-action-menu'
 import { PlayerInspectModal } from './player-inspect-modal'
 import { PresenceSync } from './presence-sync'
 import { QuestTrackerWidget } from './quest-tracker-widget'
-import { QuickItemBar } from './quick-item-bar'
-import { CharacterControlBar, SkillBar } from './skill-bar'
+import { SkillBar } from './skill-bar'
 import { SocialNotifications } from './social-notifications'
 import { SocialPopover } from './social-popover'
 import { TitleScreen } from './title-screen'
 import { TouchControls } from './touch-controls'
-import { WorldBanner } from './world-banner'
+import { TopAnnouncementTicker, WorldBanner } from './world-banner'
 
 function LootToast() {
   const loot = game.lootToast
@@ -49,7 +48,7 @@ function LootToast() {
   return (
     <div
       data-testid="rare-loot-toast"
-      className="pointer-events-auto pixel-panel absolute left-1/2 top-2 z-50 flex max-w-[min(16rem,72vw)] -translate-x-1/2 items-center gap-2 px-2.5 py-1 shadow-xl sm:top-3"
+      className="pointer-events-auto pixel-panel absolute left-1/2 top-9 z-50 flex max-w-[min(16rem,72vw)] -translate-x-1/2 items-center gap-2 px-2.5 py-1 shadow-xl"
       role="status"
     >
       <ItemIcon itemId={item.id} size={22} />
@@ -156,7 +155,6 @@ export function Game() {
   const isCompactHud = g.zenHud || uiLayout.preferences.compactHud
   const isMobileViewport = uiLayout.viewport.width < 768
   const isShortViewport = uiLayout.viewport.height < 560
-  const isNarrowTouch = showTouch && uiLayout.viewport.width < 620
   const isCombatActive = g.combatT < 4 || g.autoFarm
   const isMobileCleanCombat =
     (showTouch || isMobileViewport || isShortViewport) &&
@@ -171,30 +169,41 @@ export function Game() {
       <div className="game-ui pointer-events-none absolute inset-0">
         {showTouch && <TouchControls />}
 
-        {/* ZONE 1 & 3: มุมซ้ายบน (Profile, HP/MP/EXP, Gold/Diamond/CP) + ด้านซ้าย (Quest Tracker) */}
-        <div className="pointer-events-none absolute left-1.5 top-1.5 z-20 flex w-[11.75rem] flex-col gap-0.5 sm:left-2 sm:top-2 sm:w-[13rem] sm:gap-1 lg:w-[15.25rem]">
-          <CharacterBar compact={isCompactHud || isMobileCleanCombat} />
-          <Hud compact={isCompactHud || isMobileCleanCombat} slim={isShortViewport || isMobileCleanCombat} />
-          {!g.zenHud && !hideLeftSecondaryHud && (
-            <>
-              <QuestTrackerWidget compactViewport={isShortViewport} />
-              <GmToolsWidget />
-            </>
-          )}
-          {!g.zenHud && isMobileCleanCombat && (
-            <button
-              type="button"
-              onClick={() => setMobileCombatReveal((v) => !v)}
-              className="pointer-events-auto pixel-panel flex w-fit items-center gap-1 px-2 py-0.5 text-[9px] font-semibold text-amber-200/90 shadow hover:text-foreground"
-            >
-              <Eye className="size-2.5" aria-hidden />
-              {hideLeftSecondaryHud ? 'แสดงภารกิจ' : 'ย่อหน้าจอสู้'}
-            </button>
+        {/* Top Announcement Ticker */}
+        {!g.zenHud && <TopAnnouncementTicker />}
+
+        {/* ZONE 1: มุมซ้ายบน — Unit Frame + Quest/Party Strip + Buff Timer Strip + PK/Auto/Mount Toggles */}
+        <div className="pointer-events-none absolute left-1.5 top-1.5 z-20 flex items-start gap-2 sm:left-2 sm:top-2">
+          <div className="flex w-[11.25rem] flex-col gap-1 sm:w-[13.5rem]">
+            <CharacterBar compact={isCompactHud || isMobileCleanCombat} />
+            <Hud compact={isCompactHud || isMobileCleanCombat} slim={isShortViewport || isMobileCleanCombat} />
+            {!g.zenHud && !hideLeftSecondaryHud && (
+              <>
+                <QuestTrackerWidget compactViewport={isShortViewport} />
+                <GmToolsWidget />
+              </>
+            )}
+            {!g.zenHud && isMobileCleanCombat && (
+              <button
+                type="button"
+                onClick={() => setMobileCombatReveal((v) => !v)}
+                className="pointer-events-auto pixel-panel flex w-fit items-center gap-1 px-2 py-0.5 text-[9px] font-semibold text-amber-200/90 shadow hover:text-foreground"
+              >
+                <Eye className="size-2.5" aria-hidden />
+                {hideLeftSecondaryHud ? 'แสดงภารกิจ' : 'ย่อหน้าจอสู้'}
+              </button>
+            )}
+          </div>
+
+          {!g.zenHud && (
+            <div className="hidden pt-1 sm:block">
+              <AsuraBuffAndToggleStrip />
+            </div>
           )}
         </div>
 
-        {/* ZONE 2 & 4: มุมบนขวา (เมนูไอคอนลอยเรียงซ้ายของ Minimap + Minimap/World Info ขวาสุด) */}
-        <div className="pointer-events-none absolute right-2 top-1.5 z-20 flex flex-col items-end gap-1 sm:top-2 sm:flex-row sm:items-start sm:justify-end sm:gap-2.5">
+        {/* ZONE 2: มุมบนขวา — 3 Circular Asura Buttons (ตัวช่วย, ร้าน, เมนู) + Translucent Square Minimap + 4 Shortcut Circles */}
+        <div className="pointer-events-none absolute right-1.5 top-1.5 z-20 flex items-start justify-end gap-1.5 sm:right-2 sm:top-2 sm:gap-2.5">
           {g.zenHud ? (
             <button
               type="button"
@@ -216,33 +225,24 @@ export function Game() {
           )}
         </div>
 
-        {/* ZONE 5: ด้านล่าง (Chat ซ้าย, Skill Bar + Quick Item Bar กลาง, Character Controls ขวา) */}
+        {/* ZONE 3: ล่างซ้าย (XP% / JP%), ล่างกลาง (Chat ▲), ขวาล่าง (2-Column Vertical Skill/Item Hotbar) */}
         {!g.zenHud && (
           <>
+            <div
+              className={`pointer-events-none fixed left-1.5 z-20 sm:left-2 ${
+                showTouch ? 'bottom-[9.5rem] sm:bottom-[10.5rem]' : 'bottom-1.5'
+              }`}
+            >
+              <AsuraExpStrip />
+            </div>
+
             <ChatBox offsetTouch={showTouch} />
 
-            {/* Bottom Center: Separated Skill Bar & 10-Slot Quick Item Bar */}
-            <div
-              className={`pointer-events-none absolute left-1/2 z-20 flex -translate-x-1/2 flex-col items-center gap-1 ${
-                isNarrowTouch ? 'bottom-[9.25rem]' : 'bottom-1.5 sm:bottom-2'
-              }`}
-            >
-              {!showTouch && <SkillBar compactTouchMode={isMobileViewport} />}
-              <QuickItemBar compact={isMobileViewport || showTouch || isShortViewport} />
-            </div>
-
-            {/* Bottom Right: Character Controls (Auto-Farm, Mount, Gather, Combo) */}
-            <div
-              className={`pointer-events-none absolute right-1.5 z-20 sm:right-2 ${
-                showTouch
-                  ? uiLayout.viewport.width < 1024
-                    ? 'bottom-[5.75rem]'
-                    : 'bottom-[7.25rem]'
-                  : 'bottom-2'
-              }`}
-            >
-              <CharacterControlBar compactTouchMode={showTouch || isMobileViewport || isShortViewport} />
-            </div>
+            {!showTouch && (
+              <div className="pointer-events-none fixed bottom-1.5 right-1.5 z-20 sm:bottom-2 sm:right-2">
+                <SkillBar compactTouchMode={isMobileViewport || isShortViewport} />
+              </div>
+            )}
           </>
         )}
 

@@ -144,6 +144,7 @@ import {
   computeTalentBonuses,
   createDefaultExtV2,
   findNearbyGatheringNode,
+  getActiveAsuraBoostSummary,
   getActiveFoodBuffBonuses,
   getCosmeticDef,
   getFoodBuffForItem,
@@ -151,10 +152,12 @@ import {
   grantBattlePassExpToState,
   isItemListableOnMarket,
   lifeSkillExpToNext,
+  pruneDepletedQuickSlotsInExtV2,
   rollGatheringDrops,
   sanitizeExtV2,
   sanitizeQuickSlots,
   skillUpgradeCost,
+  type ActiveBoostBuff,
   type CosmeticSlot,
   type OfflineAfkSummary,
   type PlayerExtensionV2,
@@ -696,6 +699,10 @@ interface Projectile {
   delay: number
   flatDmg?: number
   skillId?: string
+  tx?: number
+  ty?: number
+  vfxStyle?: SkillVfxStyle
+  secondaryColor?: string
 }
 
 export type PanelId =
@@ -848,7 +855,29 @@ export const game = {
   pendingNameChangeUid: null as string | null,
   lastItemFeedback: null as null | { ok: boolean; message: string; at: number },
   zenHud: false,
+  cameraZoomScale: 1,
   version: 0,
+}
+
+export function adjustCameraZoomAction(delta: number) {
+  const next = Math.round(Math.max(0.7, Math.min(1.5, (game.cameraZoomScale || 1) + delta)) * 10) / 10
+  if (next === game.cameraZoomScale) return
+  game.cameraZoomScale = next
+  notify()
+}
+
+export function togglePkModeAction(): { ok: boolean; pkEnabled: boolean; message: string } {
+  const p = player()
+  const extV2 = sanitizeExtV2(p.extV2)
+  extV2.pkEnabled = !extV2.pkEnabled
+  p.extV2 = extV2
+  const msg = extV2.pkEnabled
+    ? 'เปิดโหมด PK (พร้อมดวลผู้เล่นอื่นในลานประลองและแมพต่อสู้)'
+    : 'ปิดโหมด PK (โหมดปลอดภัย)'
+  say('system', msg)
+  saveGame()
+  notify()
+  return { ok: true, pkEnabled: extV2.pkEnabled, message: msg }
 }
 
 export function setTopupBadgeCounts(approvedUnclaimed: number, gmPending: number) {
@@ -952,7 +981,7 @@ export function getPlayerAttributeBreakdown(p: SaveData = game.p!) {
   )
   const flatBonus = tierBonus + rebirthBonus + Math.floor(eqPlus / 4)
   const bonus: PlayerAttributes = {
-    str: flatBonus + (job.weaponTypes.includes('sword') || job.weaponTypes.includes('axe') ? 2 : 0),
+    str: flatBonus + (job.weaponTypes.includes('sword') || (job.weaponTypes as readonly string[]).includes('axe') ? 2 : 0),
     vit: flatBonus + (job.defMul >= 1.15 ? 2 : 0),
     dex: flatBonus + (job.weaponTypes.includes('bow') || job.weaponTypes.includes('dagger') ? 2 : 0),
     agi: flatBonus + (job.speedMul >= 1.08 ? 2 : 0),
@@ -976,16 +1005,18 @@ export function getPlayerAttributeBreakdown(p: SaveData = game.p!) {
 export function getInventoryWeightSummary(p: SaveData = game.p!) {
   const cap = getInventoryCapacity(p)
   const attrs = getPlayerAttributeBreakdown(p).total
-  const maxWeight = Math.round((950 + p.level * 45 + attrs.str * 18) * 10) / 10
+  const extV2 = sanitizeExtV2(p.extV2)
+  const asuraBoosts = getActiveAsuraBoostSummary(extV2)
+  const maxWeight = Math.round((950 + p.level * 45 + attrs.str * 18 + asuraBoosts.weightBonusFlat) * 10) / 10
   let usedWeight = 0
   for (const it of p.inventory) {
     const def = ITEMS[it.itemId]
     const perUnit =
-      def?.type === 'weapon' || def?.type === 'armor'
+      def?.kind === 'weapon' || def?.kind === 'armor'
         ? 48
-        : def?.type === 'material'
+        : def?.kind === 'material'
           ? 12
-          : def?.type === 'consumable'
+          : def?.kind === 'consumable'
             ? 8
             : 15
     usedWeight += perUnit * Math.max(1, it.qty || 1)
@@ -1016,6 +1047,7 @@ export function getStats(p: SaveData = game.p!) {
   const affixBonus = aggregateEquipmentAffixes(p.equipment)
   const guildBuff = ext.guildId ? getGuildBuffs(ext.guildLevel) : null
   const extV2 = sanitizeExtV2(p.extV2)
+  const asuraBoosts = getActiveAsuraBoostSummary(extV2)
   const talentBonus = computeTalentBonuses(extV2.talents)
   const foodBuff = getActiveFoodBuffBonuses(extV2.activeFoodBuff)
   const roleSynergy = p === game.p ? game.partyRoleBuffs : { atkPct: 0, defPct: 0, critBonus: 0 }
@@ -1062,9 +1094,9 @@ export function getStats(p: SaveData = game.p!) {
     setBonus.defBonus +
     affixBonus.defFlat
 
-  const rawHp = Math.round(baseHp * (1 + talentBonus.hpPct / 100))
-  const rawAtk = Math.round(baseAtk * (1 + (talentBonus.atkPct + foodBuff.atkPct + roleSynergy.atkPct) / 100))
-  const rawDef = Math.round(baseDef * (1 + (talentBonus.defPct + foodBuff.defPct + roleSynergy.defPct) / 100))
+  const rawHp = Math.round(baseHp * (1 + (talentBonus.hpPct + asuraBoosts.statBonusPct) / 100))
+  const rawAtk = Math.round(baseAtk * (1 + (talentBonus.atkPct + foodBuff.atkPct + roleSynergy.atkPct + asuraBoosts.statBonusPct) / 100))
+  const rawDef = Math.round(baseDef * (1 + (talentBonus.defPct + foodBuff.defPct + roleSynergy.defPct + asuraBoosts.statBonusPct) / 100))
   const mountSpeedMul = mountBonus?.mounted
     ? mountBonus.speedMul
     : p.equippedGemCompanion === 'aurora_cloud_dragon'
@@ -1082,7 +1114,7 @@ export function getStats(p: SaveData = game.p!) {
       (p.speed || 1) *
       mountSpeedMul *
       agiSpeedMul *
-      (1 + talentBonus.speedPct / 100),
+      (1 + (talentBonus.speedPct + asuraBoosts.speedBonusPct) / 100),
     crit: Math.min(
       0.85,
       job.crit +
@@ -1093,7 +1125,8 @@ export function getStats(p: SaveData = game.p!) {
         talentBonus.critBonus +
         foodBuff.critBonus +
         affixBonus.critBonus +
-        roleSynergy.critBonus,
+        roleSynergy.critBonus +
+        asuraBoosts.critBonus,
     ),
     attackSpeed: Math.max(0.24, job.attackSpeed * (1 - Math.min(0.32, Math.max(0, attr.agi - 1) * 0.0025))),
     lifestealPct: runeBonus.lifestealPct + talentBonus.lifestealPct + affixBonus.lifestealPct,
@@ -1215,14 +1248,27 @@ export function addItem(
   return true
 }
 
+function pruneDepletedQuickSlots(save: SaveData | null = game.p): boolean {
+  if (!save) return false
+  save.inventory = save.inventory.filter((item) => item.qty > 0)
+  const extV2 = sanitizeExtV2(save.extV2)
+  const res = pruneDepletedQuickSlotsInExtV2(extV2, save.inventory)
+  if (res.changed) {
+    save.extV2 = res.nextExtV2
+    return true
+  }
+  return false
+}
+
 export function countItem(itemId: string) {
   return player()
-    .inventory.filter((i) => i.itemId === itemId)
+    .inventory.filter((i) => i.itemId === itemId && i.qty > 0)
     .reduce((s, i) => s + i.qty, 0)
 }
 
 function removeItemId(itemId: string, qty: number) {
-  const inv = player().inventory
+  const p = player()
+  const inv = p.inventory
   let left = qty
   for (let i = inv.length - 1; i >= 0 && left > 0; i--) {
     if (inv[i].itemId !== itemId) continue
@@ -1231,6 +1277,7 @@ function removeItemId(itemId: string, qty: number) {
     left -= take
     if (inv[i].qty <= 0) inv.splice(i, 1)
   }
+  pruneDepletedQuickSlots(p)
   return left === 0
 }
 
@@ -1241,6 +1288,9 @@ function removeUid(list: InvItem[], id: string, qty: number) {
   const take = Math.min(qty, it.qty)
   it.qty -= take
   if (it.qty <= 0) list.splice(idx, 1)
+  if (game.p && list === game.p.inventory) {
+    pruneDepletedQuickSlots(game.p)
+  }
   return { ...it, qty: take }
 }
 
@@ -1461,6 +1511,89 @@ export function consumeItem(id: string): boolean {
     return succeedConsume('เปิดใช้งานคัมภีร์คูณค่าประสบการณ์ +35% · ATK/DEF +15% นาน 10 นาที', 'loot')
   }
 
+  const ASURA_BOOST_MAP: Record<string, Omit<ActiveBoostBuff, 'expiresAtMs'> & { durationMs: number }> = {
+    asura_exp_50: { id: 'asura_exp_boost', kind: 'exp', label: 'EXP Boost Up 50%', shortTag: 'EXP+', value: 50, durationMs: 20 * 60 * 1000, color: '#f59e0b' },
+    asura_exp_100: { id: 'asura_exp_boost', kind: 'exp', label: 'EXP Boost Up 100%', shortTag: 'EXPx2', value: 100, durationMs: 20 * 60 * 1000, color: '#facc15' },
+    asura_jp_50: { id: 'asura_jp_boost', kind: 'jp', label: 'การงาน Boost Up 50%', shortTag: 'JP+', value: 50, durationMs: 20 * 60 * 1000, color: '#fb923c' },
+    asura_jp_100: { id: 'asura_jp_boost', kind: 'jp', label: 'การงาน Boost Up 100%', shortTag: 'JPx2', value: 100, durationMs: 20 * 60 * 1000, color: '#f97316' },
+    asura_lifeskill_50: { id: 'asura_life_boost', kind: 'lifeskill', label: 'ทักษะฝึกฝน Boost 50%', shortTag: 'LIFE', value: 50, durationMs: 20 * 60 * 1000, color: '#4ade80' },
+    asura_leg_muscle: { id: 'asura_speed_boost', kind: 'speed', label: 'กล้ามเนื้อขา +25% SPD', shortTag: 'SPD+', value: 25, durationMs: 20 * 60 * 1000, color: '#38bdf8' },
+    asura_weight_potion: { id: 'asura_weight_boost', kind: 'weight', label: 'พลังแบกของ +650', shortTag: 'WGT+', value: 650, durationMs: 30 * 60 * 1000, color: '#a78bfa' },
+    asura_stat_potion_s: { id: 'asura_stat_boost', kind: 'stat', label: 'พลังกายเล็ก +5%', shortTag: 'ST+5', value: 5, durationMs: 20 * 60 * 1000, color: '#34d399' },
+    asura_stat_potion_m: { id: 'asura_stat_boost', kind: 'stat', label: 'พลังกายกลาง +10%', shortTag: 'ST+10', value: 10, durationMs: 20 * 60 * 1000, color: '#22d3ee' },
+  }
+  const boostCfg = ASURA_BOOST_MAP[def.id]
+  if (boostCfg) {
+    const extV2 = sanitizeExtV2(p.extV2)
+    const now = Date.now()
+    const existing = extV2.activeBoosts.find((b) => b.id === boostCfg.id && b.expiresAtMs > now)
+    const baseMs = existing && existing.value === boostCfg.value ? existing.expiresAtMs : now
+    const nextBoost: ActiveBoostBuff = {
+      id: boostCfg.id,
+      kind: boostCfg.kind,
+      label: boostCfg.label,
+      shortTag: boostCfg.shortTag,
+      value: boostCfg.value,
+      expiresAtMs: baseMs + boostCfg.durationMs,
+      color: boostCfg.color,
+    }
+    extV2.activeBoosts = [...extV2.activeBoosts.filter((b) => b.id !== boostCfg.id && b.expiresAtMs > now), nextBoost]
+    p.extV2 = extV2
+    removeUid(p.inventory, id, 1)
+    clampVitals()
+    if (cdDur > 0) game.itemCd[def.id] = cdDur
+    addFloat(p.x, p.y - 28, boostCfg.label, boostCfg.color, 10)
+    return succeedConsume(`เปิดใช้ ${def.name} สำเร็จ!`, 'loot')
+  }
+
+  if (def.id === 'stat_reset_potion') {
+    const res = resetStatPointsAction()
+    if (!res.ok) return failConsume(res.message)
+    return succeedConsume(res.message)
+  }
+
+  if (def.id === 'skill_reset_potion') {
+    const res = resetSkillsAction()
+    if (!res.ok) return failConsume(res.message)
+    return succeedConsume(res.message)
+  }
+
+  if (def.id === 'job_reset_potion') {
+    const res = resetJobClassAction()
+    if (!res.ok) return failConsume(res.message)
+    return succeedConsume(res.message)
+  }
+
+  if (def.id === 'title_clear_scroll') {
+    removeUid(p.inventory, id, 1)
+    p.alias = ''
+    if (p.rpgExt) p.rpgExt.activeTitle = null
+    if (cdDur > 0) game.itemCd[def.id] = cdDur
+    return succeedConsume('ใช้ใบแจ้งลบฉายา ล้างนามแฝงและฉายาทั้งหมดออกเรียบร้อยแล้ว')
+  }
+
+  if (def.id === 'companion_gacha_box') {
+    const petState = sanitizePetState(p.petState, p.ownedGemItems, p.equippedGemCompanion)
+    p.petState = petState
+    const candidates = COMBAT_PETS.filter((pet) => !pet.linkedGemItemId)
+    const unowned = candidates.filter((pet) => !petState.ownedPets[pet.id])
+    removeUid(p.inventory, id, 1)
+    if (unowned.length > 0) {
+      const picked = unowned[Math.floor(Math.random() * unowned.length)]
+      petState.ownedPets[picked.id] = { level: 1, exp: 0, stars: 1 }
+      petState.activePetId = picked.id
+      p.equippedGemCompanion = null
+      syncPetFollowToPlayer(true)
+      clampVitals()
+      addFloat(p.x, p.y - 30, `ได้คู่หู ${picked.name}!`, '#f472b6', 11)
+      return succeedConsume(`★ เปิดกล่องสุ่มคู่หูได้รับ "${picked.name}" เข้าร่วมทีมทันที!`, 'loot')
+    }
+    addItem('pet_essence', 5)
+    addItem('pet_exp_elixir', 2)
+    addFloat(p.x, p.y - 30, 'ผลึกคู่หู x5!', '#f472b6', 10)
+    return succeedConsume('คุณมีคู่หูครบทุกตัวแล้ว! ได้รับผลึกวิวัฒนาการคู่หู x5 และน้ำทิพย์คู่หู x2 แทน', 'loot')
+  }
+
   const foodDef = getFoodBuffForItem(def.id)
   if (foodDef) {
     const s = getStats()
@@ -1595,11 +1728,17 @@ export function setQuickSlot(slotIndex: number, itemId: string | null): { ok: bo
     warn('ใส่ได้เฉพาะไอเทมใช้งานได้ (ยา, อาหาร, คัมภีร์) เท่านั้น')
     return { ok: false, message: 'ใส่ได้เฉพาะไอเทมใช้งานได้เท่านั้น' }
   }
+  if (itemId !== null && countItem(itemId) <= 0) {
+    const itemName = ITEMS[itemId]?.name ?? itemId
+    warn(`ไม่มี ${itemName} คงเหลือในกระเป๋า`)
+    return { ok: false, message: `ไม่มี ${itemName} คงเหลือในกระเป๋า` }
+  }
   const extV2 = sanitizeExtV2(game.p.extV2)
   const nextSlots = [...extV2.quickSlots]
   nextSlots[slotIndex] = itemId
   extV2.quickSlots = sanitizeQuickSlots(nextSlots)
   game.p.extV2 = extV2
+  pruneDepletedQuickSlots(game.p)
   saveGame()
   notify()
   return { ok: true }
@@ -1637,7 +1776,14 @@ export function useQuickSlot(slotIndex: number): boolean {
   if (!def || def.kind !== 'consumable') return false
   const target = game.p.inventory.find((it) => it.itemId === itemId && it.qty > 0)
   if (!target) {
-    warn(`${def.name} หมดแล้ว`)
+    const extV2 = sanitizeExtV2(game.p.extV2)
+    const nextSlots = [...extV2.quickSlots]
+    nextSlots[slotIndex] = null
+    extV2.quickSlots = sanitizeQuickSlots(nextSlots)
+    game.p.extV2 = extV2
+    saveGame()
+    notify()
+    warn(`${def.name} ใช้หมดแล้ว และถูกนำออกจากช่องลัด`)
     return false
   }
   return consumeItem(target.uid)
@@ -2373,6 +2519,7 @@ function killMonster(m: Monster) {
       (1 + (getStats(p).affixGoldPct ?? 0) / 100),
   )
   const vipBonus = getEffectiveVipBonuses(ensurePremiumState(p).vip)
+  const asuraKillBoosts = getActiveAsuraBoostSummary(extV2)
   const expGain = Math.round(
     def.exp *
       (petBonus?.expMul ?? 1) *
@@ -2382,7 +2529,7 @@ function killMonster(m: Monster) {
       foodBuff.expMul *
       vipBonus.expMul *
       timeExpMul *
-      (1 + (getStats(p).affixExpPct ?? 0) / 100),
+      (1 + ((getStats(p).affixExpPct ?? 0) + asuraKillBoosts.expBonusPct) / 100),
   )
   p.gold += gold
   if (m.isWorldBoss) {
@@ -2464,8 +2611,10 @@ export function gainExp(n: number) {
   // Job EXP progression
   p.jobLevel = Math.max(1, p.jobLevel ?? 1)
   p.jobExp = Math.max(0, p.jobExp ?? 0)
+  const asuraJpSummary = getActiveAsuraBoostSummary(sanitizeExtV2(p.extV2))
   if (p.jobLevel < MAX_JOB_LEVEL) {
-    p.jobExp += Math.max(1, Math.floor(add * 0.72))
+    const jpAdd = Math.max(1, Math.floor(add * 0.72 * (1 + asuraJpSummary.jpBonusPct / 100)))
+    p.jobExp += jpAdd
     let jobLeveled = false
     while (p.jobLevel < MAX_JOB_LEVEL && p.jobExp >= jobExpToNext(p.jobLevel)) {
       p.jobExp -= jobExpToNext(p.jobLevel)
@@ -2517,29 +2666,94 @@ function onLevelUp(beforeStats: ReturnType<typeof getStats>) {
   saveGame()
 }
 
+export function isJobRanged(job: JobDef): boolean {
+  return Boolean(job.ranged)
+}
+
+export function getJobBasicAttackRange(job: JobDef): number {
+  return job.ranged ? Math.max(96, job.range + 8) : Math.min(30, job.range + 4)
+}
+
+export function getSkillCastRange(job: JobDef, skill: SkillDef): number {
+  if (skill.kind === 'heal' || skill.kind === 'aoe-self') {
+    return skill.radius ?? getJobBasicAttackRange(job)
+  }
+  if (job.ranged) {
+    return Math.max(96, job.range + 14)
+  }
+  return Math.min(36, job.range + 8)
+}
+
 function projectileColor(job: JobDef) {
+  if (job.id === 'mage') return '#c084fc'
+  if (job.id === 'archer') return '#86efac'
+  if (job.id === 'cleric') return '#fde047'
+  if (job.id === 'wicked_necromancer') return '#a855f7'
+  if (job.id === 'the_king') return '#fbbf24'
+  if (job.id === 'nekobaku') return '#f472b6'
+  if (job.id === 'mamushi') return '#4ade80'
   if (job.weaponTypes.includes('staff')) return '#ff9f1c'
   return '#f1faee'
 }
 
-function shoot(t: Monster, mults: number[], color: string, size: number, aoe = 0, delay = 0, skillId?: string) {
+function shoot(
+  t: Monster,
+  mults: number[],
+  color: string,
+  size: number,
+  aoe = 0,
+  delay = 0,
+  skillId?: string,
+  vfxStyle?: SkillVfxStyle,
+  secondaryColor?: string,
+) {
   const p = player()
-  game.projectiles.push({ x: p.x, y: p.y - 10, targetUid: t.uid, speed: 240, color, size, mults, aoe, delay, skillId })
+  game.projectiles.push({
+    x: p.x,
+    y: p.y - 10,
+    targetUid: t.uid,
+    speed: 265,
+    color,
+    size,
+    mults,
+    aoe,
+    delay,
+    skillId,
+    tx: t.x,
+    ty: t.y - 8,
+    vfxStyle,
+    secondaryColor,
+  })
 }
 
 export function basicAttack() {
   const p = game.p
   if (!p || game.attackCd > 0 || game.panel) return
   const job = currentJob()
-  const t = nearestMonster(job.range + 6)
+  const atkRange = getJobBasicAttackRange(job)
+  const t = nearestMonster(atkRange)
   game.attackCd = job.attackSpeed
   game.attackAnim = 0.28
-  if (!t) return
+  if (!t) {
+    if (!job.ranged) {
+      const fxOffset =
+        game.facing === 'left'
+          ? { x: -14, y: -8, angle: Math.PI * 0.55 }
+          : game.facing === 'right'
+            ? { x: 14, y: -8, angle: -Math.PI * 0.45 }
+            : game.facing === 'up'
+              ? { x: 0, y: -18, angle: Math.PI * 1.05 }
+              : { x: 0, y: 4, angle: Math.PI * 0.05 }
+      addEffect({ type: 'slash', x: p.x + fxOffset.x, y: p.y + fxOffset.y, r: 9, color: '#cbd5e1', max: 0.14, angle: fxOffset.angle })
+    }
+    return
+  }
   faceToward(t.x, t.y)
-  if (job.ranged) shoot(t, [1], projectileColor(job), 2)
-  else {
+  if (job.ranged) {
+    shoot(t, [1], projectileColor(job), 2.2)
+  } else {
     damageMonster(t, 1)
-    addEffect({ type: 'slash', x: t.x, y: t.y - 8, r: 10, color: '#ffffff', max: 0.18, angle: Math.random() * Math.PI })
+    addEffect({ type: 'slash', x: t.x, y: t.y - 8, r: 11, color: '#ffffff', max: 0.18, angle: Math.random() * Math.PI })
   }
 }
 
@@ -2548,26 +2762,26 @@ export function skillCooldown(skill: SkillDef) {
   return Math.max(0, game.skillCd[canonicalId] ?? game.skillCd[skill.id] ?? 0)
 }
 
-export function castSkill(index: number) {
+export function castSkill(index: number, silent = false): boolean {
   const p = game.p
-  if (!p || game.panel) return
+  if (!p || game.panel) return false
   const job = currentJob()
   const skill = job.skills[index]
-  if (!skill) return
+  if (!skill) return false
   const canonicalSkillId = normalizeSkillId(skill.id)
   const skillLevel = p.skillLevels?.[canonicalSkillId] ?? p.skillLevels?.[skill.id] ?? 1
   const skillMult = skill.mult * (1 + (skillLevel - 1) * 0.08)
   const vfx = getSkillVfxSpec(canonicalSkillId, skill.color, skill.kind, job.weaponTypes[0])
-  if (skillCooldown(skill) > 0) return
+  if (skillCooldown(skill) > 0) return false
   if (p.mp < skill.mp) {
-    warn('MP ไม่พอ!')
-    return
+    if (!silent) warn('MP ไม่พอ!')
+    return false
   }
   if (skill.kind === 'heal') {
     const stats = getStats(p)
     if (p.hp >= stats.maxHp) {
-      warn('HP เต็มแล้ว!')
-      return
+      if (!silent) warn('HP เต็มแล้ว!')
+      return false
     }
     const recovered = Math.min(Math.floor(stats.maxHp * skillMult), stats.maxHp - p.hp)
     p.hp += recovered
@@ -2592,9 +2806,9 @@ export function castSkill(index: number) {
     say('system', `${skill.name} ฟื้นฟู HP ${recovered}`)
     recordDailyMissionProgress({ skillsUsed: 1 })
     notify()
-    return
+    return true
   }
-  const range = job.ranged ? job.range + 12 : skill.kind === 'aoe-target' ? 90 : job.range + 12
+  const range = getSkillCastRange(job, skill)
   if (skill.kind === 'aoe-self') {
     const r = skill.radius ?? 40
     addEffect({
@@ -2609,17 +2823,23 @@ export function castSkill(index: number) {
       max: 0.55,
       vfxStyle: vfx.style,
     })
-      for (const m of game.monsters) if (!m.dead && Math.hypot(m.x - p.x, m.y - p.y) <= r) damageMonster(m, skillMult, skill.id)
+    for (const m of game.monsters) if (!m.dead && Math.hypot(m.x - p.x, m.y - p.y) <= r) damageMonster(m, skillMult, skill.id)
   } else {
     const t = nearestMonster(range)
     if (!t) {
-      warn('ไม่มีเป้าหมายในระยะ')
-      return
+      if (!silent) {
+        warn(
+          job.ranged
+            ? `ไม่มีเป้าหมายในระยะโจมตีไกล (${Math.round(range)}px)`
+            : `เข้าใกล้เป้าหมายมากขึ้น (ระยะประชิด ${Math.round(range)}px)`,
+        )
+      }
+      return false
     }
     faceToward(t.x, t.y)
     if (skill.kind === 'single') {
       if (job.ranged) {
-        shoot(t, [skillMult], vfx.primaryColor, 4, 0, 0, skill.id)
+        shoot(t, [skillMult], vfx.primaryColor, 4, 0, 0, skill.id, vfx.style, vfx.secondaryColor)
         addEffect({
           type: 'burst',
           x: t.x,
@@ -2651,7 +2871,7 @@ export function castSkill(index: number) {
     } else if (skill.kind === 'multi') {
       const hits = skill.hits ?? 2
       if (job.ranged) {
-        for (let i = 0; i < hits; i++) shoot(t, [skillMult], vfx.primaryColor, 2, 0, i * 0.1, skill.id)
+        for (let i = 0; i < hits; i++) shoot(t, [skillMult], vfx.primaryColor, 2.4, 0, i * 0.1, skill.id, vfx.style, vfx.secondaryColor)
       } else {
         for (let i = 0; i < hits; i++) {
           damageMonster(t, skillMult, skill.id)
@@ -2671,19 +2891,23 @@ export function castSkill(index: number) {
       })
     } else if (skill.kind === 'aoe-target') {
       const r = skill.radius ?? 48
-      addEffect({
-        type: 'burst',
-        x: t.x,
-        y: t.y - 6,
-        sourceX: p.x,
-        sourceY: p.y - 8,
-        r,
-        color: vfx.primaryColor,
-        secondaryColor: vfx.secondaryColor,
-        max: 0.65,
-        vfxStyle: vfx.style,
-      })
-      for (const m of game.monsters) if (!m.dead && Math.hypot(m.x - t.x, m.y - t.y) <= r) damageMonster(m, skillMult, skill.id)
+      if (job.ranged) {
+        shoot(t, [skillMult], vfx.primaryColor, 4.2, r, 0, skill.id, vfx.style, vfx.secondaryColor)
+      } else {
+        addEffect({
+          type: 'burst',
+          x: t.x,
+          y: t.y - 6,
+          sourceX: p.x,
+          sourceY: p.y - 8,
+          r,
+          color: vfx.primaryColor,
+          secondaryColor: vfx.secondaryColor,
+          max: 0.65,
+          vfxStyle: vfx.style,
+        })
+        for (const m of game.monsters) if (!m.dead && Math.hypot(m.x - t.x, m.y - t.y) <= r) damageMonster(m, skillMult, skill.id)
+      }
     }
   }
   p.mp -= skill.mp
@@ -2695,6 +2919,7 @@ export function castSkill(index: number) {
   game.skillVfxColor = vfx.primaryColor
   addFloat(p.x, p.y - 30, skill.name, vfx.primaryColor, 9)
   recordDailyMissionProgress({ skillsUsed: 1 })
+  return true
 }
 
 export function triggerOpenWorldGuard() {
@@ -3550,7 +3775,17 @@ export function findEquipment(id: string): InvItem | null {
 
 export type EnhanceResult = { result: 'success' | 'fail' | 'down' | 'error'; message: string }
 
-export function enhance(id: string): EnhanceResult {
+const ENHANCE_CHANCE_BONUS_MAP: Record<string, number> = {
+  enhance_chance_scroll_1: 0.1,
+  enhance_chance_scroll_2: 0.2,
+  enhance_chance_scroll_3: 0.35,
+  enhance_chance_scroll_4: 0.5,
+}
+
+export function enhance(
+  id: string,
+  options?: { chanceScrollId?: string | null; protectScrollId?: string | null },
+): EnhanceResult {
   const p = player()
   const it = findEquipment(id)
   if (!it) return { result: 'error', message: 'ไม่พบไอเทม' }
@@ -3561,11 +3796,36 @@ export function enhance(id: string): EnhanceResult {
   const cost = enhanceCost(it.plus, def.tier ?? 1)
   if (p.gold < cost.gold) return { result: 'error', message: 'เงินไม่พอ' }
   if (countItem('enhance_stone') < cost.stones) return { result: 'error', message: `หินตีบวกไม่พอ (ต้องการ ${cost.stones})` }
+
+  const chanceScrollId = options?.chanceScrollId && ENHANCE_CHANCE_BONUS_MAP[options.chanceScrollId] ? options.chanceScrollId : null
+  const protectScrollId =
+    options?.protectScrollId === 'enhance_protect_scroll_1' || options?.protectScrollId === 'enhance_protect_scroll_2'
+      ? options.protectScrollId
+      : null
+
+  if (chanceScrollId && countItem(chanceScrollId) < 1) {
+    return { result: 'error', message: `ไม่มี ${ITEMS[chanceScrollId]?.name ?? chanceScrollId} ในกระเป๋า` }
+  }
+  if (protectScrollId && countItem(protectScrollId) < 1) {
+    return { result: 'error', message: `ไม่มี ${ITEMS[protectScrollId]?.name ?? protectScrollId} ในกระเป๋า` }
+  }
+
   p.gold -= cost.gold
   removeItemId('enhance_stone', cost.stones)
+  let chanceBonus = 0
+  if (chanceScrollId) {
+    removeItemId(chanceScrollId, 1)
+    chanceBonus = ENHANCE_CHANCE_BONUS_MAP[chanceScrollId] ?? 0
+  }
+  let usedProtect = false
+  if (protectScrollId && it.plus >= 6) {
+    removeItemId(protectScrollId, 1)
+    usedProtect = true
+  }
+
   p.questState = recordQuestProgress(p.questState, { enhances: 1 }, p.kills)
   recordDailyMissionProgress({ enhances: 1 })
-  const rate = enhanceRate(it.plus)
+  const rate = Math.min(1, enhanceRate(it.plus) + chanceBonus)
   let res: EnhanceResult
   if (Math.random() < rate) {
     it.plus++
@@ -3575,10 +3835,25 @@ export function enhance(id: string): EnhanceResult {
     if (it.plus >= 10) {
       void broadcastWorldNewsAction('enhance', `${p.name} ตีบวก ${def.name} สำเร็จระดับ +${it.plus}!`)
     }
-  } else if (it.plus >= 6) {
+  } else if (it.plus >= 6 && !usedProtect) {
     it.plus--
     res = { result: 'down', message: `ตีบวกล้มเหลว! ระดับลดลงเป็น +${it.plus}` }
     say('error', res.message)
+  } else if (it.plus >= 6 && usedProtect) {
+    if (protectScrollId === 'enhance_protect_scroll_2') {
+      const refundedStones = Math.max(1, Math.floor(cost.stones * 0.5))
+      addItem('enhance_stone', refundedStones)
+      res = {
+        result: 'fail',
+        message: `ตีบวกล้มเหลว! ใบประกันชั้นดีป้องกันระดับไม่ให้ลด และคืนหินตีบวก ${refundedStones} ก้อน`,
+      }
+    } else {
+      res = {
+        result: 'fail',
+        message: 'ตีบวกล้มเหลว! ใบประกันความเสียหายป้องกันไม่ให้ระดับลดลง (+คงเดิม)',
+      }
+    }
+    say('system', res.message)
   } else {
     res = { result: 'fail', message: 'ตีบวกล้มเหลว! ระดับคงเดิม' }
     say('error', res.message)
@@ -3966,6 +4241,7 @@ export function deposit(id: string, requestedQty = Infinity): { ok: boolean; mes
     if (existingStack) existingStack.qty += it.qty
     else p.storage.push(it)
   }
+  pruneDepletedQuickSlots(p)
   saveGame()
   notify()
   return { ok: true }
@@ -4376,16 +4652,21 @@ export function gatherNearbyNodeAction(nodeId?: string): { ok: boolean; message:
   const extV2 = sanitizeExtV2(p.extV2)
   const prog = extV2.lifeSkills[node.skill]
   const drop = rollGatheringDrops(node, prog.level)
+  const asuraLifeBoost = getActiveAsuraBoostSummary(extV2)
+  const lifeExpGain = Math.round(drop.expGain * (1 + asuraLifeBoost.lifeskillBonusPct / 100))
   const addedNames: string[] = []
   for (const item of drop.items) {
     if (addItem(item.itemId, item.qty)) {
       addedNames.push(`${ITEMS[item.itemId]?.name ?? item.itemId} x${item.qty}`)
     }
   }
+  if (asuraLifeBoost.lifeskillBonusPct > 0 && Math.random() < 0.18 && addItem('pet_essence', 1)) {
+    addedNames.push('ผลึกวิญญาณคู่หู x1 (โบนัส)')
+  }
   if (addedNames.length === 0) {
     return { ok: false, message: 'กระเป๋าเต็ม กรุณาเคลียร์ช่องก่อนเก็บเกี่ยว' }
   }
-  prog.exp += drop.expGain
+  prog.exp += lifeExpGain
   let leveledUp = false
   while (prog.level < 50 && prog.exp >= lifeSkillExpToNext(prog.level)) {
     prog.exp -= lifeSkillExpToNext(prog.level)
@@ -4513,16 +4794,18 @@ export function resetStatPointsAction(): { ok: boolean; message: string } {
     (attrs.int - 1) +
     (attrs.luk - 1)
   if (spent <= 0) return { ok: false, message: 'ยังไม่มีแต้มสเตตัสที่อัปไว้' }
+  const hasPotion = countItem('stat_reset_potion') > 0
   const cost = 500
-  if (p.gold < cost) return { ok: false, message: `ต้องใช้ ${cost.toLocaleString()} G เพื่อรีเซ็ตค่าสถานะ` }
-  p.gold -= cost
+  if (!hasPotion && p.gold < cost) return { ok: false, message: `ต้องใช้ ${cost.toLocaleString()} G หรือน้ำยาหวนกลับเพื่อรีเซ็ตค่าสถานะ` }
+  if (hasPotion) removeItemId('stat_reset_potion', 1)
+  else p.gold -= cost
   p.stats = { ...DEFAULT_PLAYER_ATTRIBUTES }
   p.statPoints = (p.statPoints ?? 0) + spent
   clampVitals()
-  say('system', `รีเซ็ตสเตตัสสำเร็จ คืนแต้มโบนัส +${spent}`)
+  say('system', `${hasPotion ? 'ใช้น้ำยาหวนกลับ ' : ''}รีเซ็ตสเตตัสสำเร็จ คืนแต้มโบนัส +${spent}`)
   saveGame()
   notify()
-  return { ok: true, message: `รีเซ็ตค่าสถานะสำเร็จ คืน ${spent} แต้มโบนัส` }
+  return { ok: true, message: `${hasPotion ? 'ใช้น้ำยาหวนกลับ ' : ''}รีเซ็ตค่าสถานะสำเร็จ คืน ${spent} แต้มโบนัส` }
 }
 
 export function updatePlayerAliasAction(alias: string): { ok: boolean; message: string } {
@@ -4547,15 +4830,49 @@ export function resetSkillsAction(): { ok: boolean; message: string } {
     }
   }
   if (refunded <= 0) return { ok: false, message: 'ยังไม่มีทักษะที่อัปเกรดเกิน Lv.1' }
+  const hasPotion = countItem('skill_reset_potion') > 0
   const cost = 500
-  if (p.gold < cost) return { ok: false, message: `ต้องใช้ ${cost.toLocaleString()} G เพื่อล้างทักษะ` }
-  p.gold -= cost
+  if (!hasPotion && p.gold < cost) return { ok: false, message: `ต้องใช้ ${cost.toLocaleString()} G หรือน้ำยาลืมทักษะเพื่อล้างทักษะ` }
+  if (hasPotion) removeItemId('skill_reset_potion', 1)
+  else p.gold -= cost
   p.skillLevels = levels
   p.skillPoints = (p.skillPoints ?? 0) + refunded
-  say('system', `ล้างทักษะสำเร็จ คืน ${refunded} แต้มทักษะ`)
+  say('system', `${hasPotion ? 'ใช้น้ำยาลืมทักษะ ' : ''}ล้างทักษะสำเร็จ คืน ${refunded} แต้มทักษะ`)
   saveGame()
   notify()
-  return { ok: true, message: `ล้างทักษะสำเร็จ คืน ${refunded} SP` }
+  return { ok: true, message: `${hasPotion ? 'ใช้น้ำยาลืมทักษะ ' : ''}ล้างทักษะสำเร็จ คืน ${refunded} SP` }
+}
+
+export function resetJobClassAction(): { ok: boolean; message: string } {
+  const p = player()
+  if (normalizeJobId(p.jobId) === 'novice') {
+    return { ok: false, message: 'คุณอยู่ในสายอาชีพผู้ฝึกหัด (Novice) อยู่แล้ว' }
+  }
+  const hasPotion = countItem('job_reset_potion') > 0
+  const cost = 2500
+  if (!hasPotion && p.gold < cost) {
+    return { ok: false, message: `ต้องใช้ น้ำยาเปลี่ยนอาชีพ หรือ ${cost.toLocaleString()} G เพื่อรีเซ็ตสายอาชีพ` }
+  }
+  if (hasPotion) removeItemId('job_reset_potion', 1)
+  else p.gold -= cost
+
+  const levels = p.skillLevels ?? {}
+  let refundedSp = 0
+  for (const k of Object.keys(levels)) {
+    const lv = levels[k] ?? 1
+    if (lv > 1) {
+      refundedSp += lv - 1
+      levels[k] = 1
+    }
+  }
+  p.skillLevels = levels
+  p.skillPoints = (p.skillPoints ?? 0) + refundedSp
+  applyJob('novice')
+  const msg = `${hasPotion ? 'ใช้น้ำยาเปลี่ยนอาชีพ ' : ''}รีเซ็ตสายอาชีพกลับสู่ผู้ฝึกหัดสำเร็จ! (คืน ${refundedSp} SP)`
+  say('system', msg)
+  saveGame()
+  notify()
+  return { ok: true, message: msg }
 }
 
 export function resetTalentsAction(): { ok: boolean; message: string } {
@@ -7263,7 +7580,13 @@ export function deleteSave() {
 function sanitizeList(list: unknown): InvItem[] {
   if (!Array.isArray(list)) return []
   return list
-    .filter((i): i is InvItem => !!i && typeof i.itemId === 'string' && !!ITEMS[i.itemId])
+    .filter(
+      (i): i is InvItem =>
+        !!i &&
+        typeof i.itemId === 'string' &&
+        !!ITEMS[i.itemId] &&
+        !(typeof i.qty === 'number' && (!Number.isFinite(i.qty) || i.qty <= 0)),
+    )
     .map((i) => ({
       uid: i.uid || uid(),
       itemId: i.itemId,
@@ -7462,6 +7785,7 @@ export function loadGame(d: SaveData) {
       : [],
   }
   if (p.hp <= 0) p.hp = getStats(p).maxHp
+  pruneDepletedQuickSlots(p)
   const prevSavedAt = p.savedAt
   startSession(p, `ยินดีต้อนรับกลับ ${p.name}! โหลดความคืบหน้าล่าสุดแล้ว`, true)
   game.offlineAfkReward = calculateOfflineAfkRewards(Date.now() - prevSavedAt, p.level, p.mapId)
@@ -7654,8 +7978,68 @@ export function update(dt: number) {
 
   if (game.attackHeld) basicAttack()
   if (game.autoFarm && !inputBlocked) {
-    if (game.autoSkills && currentJob().skills.length) castSkill(game.autoSkillIndex % currentJob().skills.length)
-    else basicAttack()
+    const job = currentJob()
+    const allowCombatHere = !map.safe || Boolean(game.invasion?.active && map.id === 'town')
+    if (allowCombatHere) {
+      const autoTarget = nearestMonster(420)
+      if (!game.moving && autoTarget) {
+        const dx = autoTarget.x - p.x
+        const dy = autoTarget.y - 6 - p.y
+        const dist = Math.hypot(dx, dy)
+        const desiredDist = job.ranged ? Math.max(76, job.range * 0.85) : Math.max(16, job.range - 2)
+        const isOnPortal = (px: number, py: number) => {
+          const ptx = Math.floor(px / TILE)
+          const pty = Math.floor(py / TILE)
+          return map.portals.some((pt) => ptx >= pt.x && ptx < pt.x + pt.w && pty >= pt.y && pty < pt.y + pt.h)
+        }
+        const sp = getStats().speed * dt
+        if (dist > desiredDist) {
+          const stepX = (dx / Math.max(1, dist)) * sp
+          const stepY = (dy / Math.max(1, dist)) * sp
+          const nextX = p.x + stepX
+          const nextY = p.y + stepY
+          if (!isOnPortal(nextX, nextY)) {
+            moveEntity(map, p, stepX, stepY)
+            game.moving = true
+            game.walkT += dt
+            faceToward(autoTarget.x, autoTarget.y)
+          }
+        } else if (job.ranged && dist < 28 && dist > 1) {
+          const stepX = (-dx / dist) * sp * 0.85
+          const stepY = (-dy / dist) * sp * 0.85
+          const nextX = p.x + stepX
+          const nextY = p.y + stepY
+          if (!isOnPortal(nextX, nextY) && !boxBlocked(map, nextX, nextY, 4, 3)) {
+            moveEntity(map, p, stepX, stepY)
+            game.moving = true
+            game.walkT += dt
+          }
+        }
+      }
+      let castSucceeded = false
+      if (game.autoSkills && job.skills.length) {
+        const stats = getStats(p)
+        const count = job.skills.length
+        for (let offset = 0; offset < count; offset++) {
+          const idx = (game.autoSkillIndex + offset) % count
+          const sk = job.skills[idx]
+          if (!sk) continue
+          if (sk.kind === 'heal' && p.hp >= stats.maxHp * 0.68) continue
+          if (sk.kind === 'aoe-self') {
+            const near = nearestMonster(sk.radius ?? getJobBasicAttackRange(job))
+            if (!near) continue
+          }
+          if (castSkill(idx, true)) {
+            game.autoSkillIndex = (idx + 1) % count
+            castSucceeded = true
+            break
+          }
+        }
+      }
+      if (!castSucceeded) {
+        basicAttack()
+      }
+    }
   }
 
   // Active Pet Follow AI update
@@ -7869,24 +8253,50 @@ function updateProjectiles(dt: number) {
       continue
     }
     const t = game.monsters.find((m) => m.uid === pr.targetUid)
-    if (!t || t.dead) continue
-    const tx = t.x
-    const ty = t.y - 8
+    if (t && !t.dead) {
+      pr.tx = t.x
+      pr.ty = t.y - 8
+    } else if (pr.aoe <= 0 || pr.tx === undefined || pr.ty === undefined) {
+      continue
+    }
+    const tx = t && !t.dead ? t.x : (pr.tx ?? pr.x)
+    const ty = t && !t.dead ? t.y - 8 : (pr.ty ?? pr.y)
     const d = Math.hypot(tx - pr.x, ty - pr.y)
     const step = pr.speed * dt
     if (d <= step + 4) {
       if (typeof pr.flatDmg === 'number') {
-        const def = MONSTERS[t.defId]
-        if (def) {
-          const raw = (pr.flatDmg * pr.flatDmg) / Math.max(1, pr.flatDmg + def.def * 0.55)
-          const dmg = Math.max(2, Math.round(raw * rand(0.92, 1.08)))
-          t.hp -= dmg
-          t.provoked = true
-          t.hitFlash = 0.12
-          addFloat(t.x, t.y - 24, `${dmg}`, pr.color, 13)
-          if (t.hp <= 0) killMonster(t)
+        if (t && !t.dead) {
+          const def = MONSTERS[t.defId]
+          if (def) {
+            const raw = (pr.flatDmg * pr.flatDmg) / Math.max(1, pr.flatDmg + def.def * 0.55)
+            const dmg = Math.max(2, Math.round(raw * rand(0.92, 1.08)))
+            t.hp -= dmg
+            t.provoked = true
+            t.hitFlash = 0.12
+            addFloat(t.x, t.y - 24, `${dmg}`, pr.color, 13)
+            if (t.hp <= 0) killMonster(t)
+          }
         }
-      } else {
+      } else if (pr.aoe > 0) {
+        const impactY = ty + 8
+        addEffect({
+          type: 'burst',
+          x: tx,
+          y: ty,
+          sourceX: pr.x,
+          sourceY: pr.y,
+          r: pr.aoe,
+          color: pr.color,
+          secondaryColor: pr.secondaryColor,
+          max: 0.65,
+          vfxStyle: pr.vfxStyle,
+        })
+        for (const m of game.monsters) {
+          if (!m.dead && Math.hypot(m.x - tx, m.y - impactY) <= pr.aoe) {
+            for (const mult of pr.mults) damageMonster(m, mult, pr.skillId)
+          }
+        }
+      } else if (t && !t.dead) {
         for (const mult of pr.mults) damageMonster(t, mult, pr.skillId)
       }
       addEffect({ type: 'spark', x: tx, y: ty, r: 6 + pr.size * 2, color: pr.color, max: 0.2 })

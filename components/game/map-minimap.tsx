@@ -1,9 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronUp, MapPin } from 'lucide-react'
+import { ChevronDown, ChevronUp, MapPin, Minus, Plus } from 'lucide-react'
 import { MONSTERS } from '@/lib/game/data'
-import { currentMap, game } from '@/lib/game/engine'
+import { adjustCameraZoomAction, currentMap, game } from '@/lib/game/engine'
 import { T, TILE, type MapDef } from '@/lib/game/maps'
 import { useGame } from '@/lib/game/use-game'
 
@@ -40,7 +40,7 @@ function tileMinimapColor(tile: number, map: MapDef): string {
     case T.CAVEWALL:
     case T.WINDOW:
     case T.DOOR:
-      return '#332f42'
+      return '#1a2232'
     case T.ROOF_RED:
       return '#a8363a'
     case T.ROOF_BLUE:
@@ -74,11 +74,11 @@ function tileMinimapColor(tile: number, map: MapDef): string {
     case T.CRYSTAL:
       return '#72efdd'
     case T.ROCK:
-      return '#646672'
+      return '#545b6b'
     case T.FOUNTAIN:
       return '#56cfe1'
     default:
-      return '#4d8a3f'
+      return '#39623d'
   }
 }
 
@@ -117,13 +117,13 @@ function getBaseMinimapCanvas(map: MapDef): HTMLCanvasElement {
 
 export function MapMinimap() {
   const { p } = useGame()
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(true)
   const [coords, setCoords] = useState({ mapId: '', tx: 0, ty: 0 })
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
   useEffect(() => {
     const syncExpanded = () => {
-      setExpanded(window.innerWidth >= 900 && window.innerHeight >= 560)
+      setExpanded(window.innerWidth >= 640 && window.innerHeight >= 460)
     }
     syncExpanded()
     window.addEventListener('resize', syncExpanded)
@@ -180,7 +180,7 @@ export function MapMinimap() {
       ctx.fillRect(nx - 1, ny - 1, 2, 2)
     }
 
-    // Active Monsters (red / magenta for boss)
+    // Active Monsters
     for (const m of game.monsters) {
       if (m.dead) continue
       const def = MONSTERS[m.defId]
@@ -197,7 +197,7 @@ export function MapMinimap() {
       }
     }
 
-    // Visible Remote Players (purple for party mate, gold for GM, cyan for others)
+    // Remote Players
     const partySet = new Set(game.party?.memberIds ?? [])
     for (const other of game.remotePlayers) {
       if (other.invisible || other.mapId !== cur.id) continue
@@ -210,12 +210,12 @@ export function MapMinimap() {
       ctx.fillRect(rx - 1, ry - 1, isMate ? 3 : 2, isMate ? 3 : 2)
     }
 
-    // Player Marker (bright emerald with dark outline)
+    // Player Marker (bright yellow-gold dot matching Asura radar)
     const playerX = Math.round((player.x / TILE) * MINIMAP_SCALE)
     const playerY = Math.round((player.y / TILE) * MINIMAP_SCALE)
     ctx.fillStyle = '#0e0f1a'
     ctx.fillRect(playerX - 2, playerY - 2, 5, 5)
-    ctx.fillStyle = '#7ae582'
+    ctx.fillStyle = '#facc15'
     ctx.fillRect(playerX - 1, playerY - 1, 3, 3)
   }, [expanded])
 
@@ -231,55 +231,68 @@ export function MapMinimap() {
   const map = currentMap()
   const displayTx = coords.mapId === map.id ? coords.tx : Math.floor(p.x / TILE)
   const displayTy = coords.mapId === map.id ? coords.ty : Math.floor(p.y / TILE)
+  const zoomVal = game.cameraZoomScale ?? 1
 
   return (
-    <div className="pointer-events-auto pixel-panel w-full px-1.5 py-1 shadow-lg sm:px-2 sm:py-1.5">
-      <button
-        type="button"
-        onClick={() => setExpanded((prev) => !prev)}
-        aria-expanded={expanded}
-        aria-label={expanded ? 'ย่อมินิแมพ' : 'เปิดมินิแมพ'}
-        className="flex w-full cursor-pointer items-center justify-between gap-1 text-left hover:opacity-90"
-      >
-        <div className="min-w-0">
-          <div className="flex items-center gap-1 truncate text-[10px] font-bold text-primary sm:text-[11px]">
-            <MapPin className="size-3 shrink-0 text-accent" aria-hidden />
-            <span className="truncate">{map.name}</span>
-          </div>
-          <div className="flex items-center justify-between gap-1 text-[9px] text-muted-foreground tabular-nums">
-            <span className="truncate">{map.levelLabel}</span>
-            <span className="hidden shrink-0 sm:inline">
-              {displayTx},{displayTy}
-            </span>
-          </div>
-        </div>
-        <span className="shrink-0 p-0.5 text-muted-foreground">
-          {expanded ? <ChevronUp className="size-3.5" aria-hidden /> : <ChevronDown className="size-3.5" aria-hidden />}
-        </span>
-      </button>
+    <div className="pointer-events-auto relative w-full overflow-hidden rounded-md border border-[#3a639a]/80 bg-[#080d16]/78 shadow-xl backdrop-blur-[1px]">
+      {/* Top Bar: Map Name / Toggle & Zoom x 1.0 - + */}
+      <div className="flex items-center justify-between gap-1 border-b border-[#264268]/70 bg-[#0d1626]/85 px-1.5 py-0.5 text-[9.5px]">
+        <button
+          type="button"
+          onClick={() => setExpanded((prev) => !prev)}
+          aria-expanded={expanded}
+          aria-label={expanded ? 'ย่อมินิแมพ' : 'เปิดมินิแมพ'}
+          className="flex min-w-0 flex-1 items-center gap-1 text-left font-bold text-slate-100 hover:text-amber-200"
+        >
+          {expanded ? <ChevronUp className="size-3 shrink-0 text-sky-300" aria-hidden /> : <ChevronDown className="size-3 shrink-0 text-sky-300" aria-hidden />}
+          <span className="truncate">{map.name}</span>
+        </button>
 
-      {expanded && (
-        <div className="mt-1.5 border-t border-border/60 pt-1.5">
-          <div className="overflow-hidden rounded-md border border-[#c9963b]/60 bg-[#0e0f1a]">
-            <canvas
-              ref={canvasRef}
-              width={map.width * MINIMAP_SCALE}
-              height={map.height * MINIMAP_SCALE}
-              className="block h-auto w-full"
-              aria-label={`แผนที่ย่อ ${map.name}`}
-            />
-          </div>
-          <div className="mt-1 flex items-center justify-between text-[8px] text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <span className="inline-block size-1.5 bg-[#7ae582]" /> คุณ
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="inline-block size-1.5 bg-[#4cc9f0]" /> วาร์ป
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="inline-block size-1.5 bg-[#f2c94c]" /> {map.npcs.length > 0 ? 'NPC' : 'บอส'}
-            </span>
-          </div>
+        <div className="flex shrink-0 items-center gap-0.5 font-mono text-[9px] font-bold text-white tabular-nums">
+          <span className="mr-0.5 text-slate-200">x {zoomVal.toFixed(1)}</span>
+          <button
+            type="button"
+            onClick={() => adjustCameraZoomAction(-0.15)}
+            aria-label="ซูมออก"
+            title="ซูมออก"
+            className="grid size-4 place-items-center rounded bg-[#182942] text-slate-200 hover:bg-[#243d61] hover:text-white"
+          >
+            <Minus className="size-2.5" aria-hidden />
+          </button>
+          <button
+            type="button"
+            onClick={() => adjustCameraZoomAction(0.15)}
+            aria-label="ซูมเข้า"
+            title="ซูมเข้า"
+            className="grid size-4 place-items-center rounded bg-[#182942] text-slate-200 hover:bg-[#243d61] hover:text-white"
+          >
+            <Plus className="size-2.5" aria-hidden />
+          </button>
+        </div>
+      </div>
+
+      {expanded ? (
+        <div className="relative bg-[#070b13]/85">
+          <canvas
+            ref={canvasRef}
+            width={map.width * MINIMAP_SCALE}
+            height={map.height * MINIMAP_SCALE}
+            className="block h-auto max-h-[6.5rem] w-full object-contain opacity-85"
+            aria-label={`แผนที่ย่อ ${map.name}`}
+          />
+          <span className="pointer-events-none absolute bottom-0.5 right-1 rounded bg-black/70 px-1 font-mono text-[9.5px] font-bold text-white shadow tabular-nums">
+            {displayTx},{displayTy}
+          </span>
+        </div>
+      ) : (
+        <div className="flex items-center justify-between px-1.5 py-0.5 text-[9px] text-slate-300 tabular-nums">
+          <span className="flex items-center gap-0.5 truncate">
+            <MapPin className="size-2.5 text-amber-300" aria-hidden />
+            {map.levelLabel}
+          </span>
+          <span className="font-mono font-bold text-white">
+            {displayTx},{displayTy}
+          </span>
         </div>
       )}
     </div>

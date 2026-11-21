@@ -1506,6 +1506,31 @@ const BASE_ITEMS: Record<string, ItemDef> = {
   food_hero_feast: { id: 'food_hero_feast', name: 'ชุดอาหารผู้กล้า', kind: 'consumable', price: 420, heal: 420, icon: 'core', color: '#facc15', description: 'เพิ่ม ATK +18%, คริติคอล +8% และ EXP +25% นาน 8 นาที' },
   food_dragon_soup: { id: 'food_dragon_soup', name: 'ซุปมังกรศิลา', kind: 'consumable', price: 650, heal: 700, icon: 'core', color: '#f43f5e', description: 'เพิ่ม ATK +25%, DEF +20% และ EXP +35% นาน 10 นาที' },
 
+  // ---- Asura Online Boosters, Upgrade Scrolls & Utility Potions ----
+  asura_exp_50: { id: 'asura_exp_50', name: 'EXP Boost Up 50% (20น.)', kind: 'consumable', price: 0, icon: 'potion', color: '#f59e0b', asset: '', description: 'เพิ่มค่าประสบการณ์ (EXP) ที่ได้รับจากมอนสเตอร์ +50% นาน 20 นาที', effect: true },
+  asura_exp_100: { id: 'asura_exp_100', name: 'EXP Boost Up 100% (20น.)', kind: 'consumable', price: 0, icon: 'potion', color: '#facc15', asset: '', description: 'เพิ่มค่าประสบการณ์ (EXP) จากมอนสเตอร์ +100% (x2) นาน 20 นาที', effect: true },
+  asura_jp_50: { id: 'asura_jp_50', name: 'การงาน Boost Up 50% (20น.)', kind: 'consumable', price: 0, icon: 'potion', color: '#fb923c', asset: '', description: 'เพิ่มค่าประสบการณ์อาชีพ (JP) +50% นาน 20 นาที', effect: true },
+  asura_jp_100: { id: 'asura_jp_100', name: 'การงาน Boost Up 100% (20น.)', kind: 'consumable', price: 0, icon: 'potion', color: '#f97316', asset: '', description: 'เพิ่มค่าประสบการณ์อาชีพ (JP) +100% (x2) นาน 20 นาที', effect: true },
+  asura_lifeskill_50: { id: 'asura_lifeskill_50', name: 'ทักษะฝึกฝน Boost Up 50%', kind: 'consumable', price: 0, icon: 'potion', color: '#4ade80', asset: '', description: 'เพิ่ม EXP ทักษะฝึกฝน (ตกปลา/ขุดแร่/เก็บสมุนไพร) +50% และเพิ่มโอกาสดรอปแรร์ 20 นาที', effect: true },
+  asura_leg_muscle: { id: 'asura_leg_muscle', name: 'ยาเพิ่มกล้ามเนื้อขา (20น.)', kind: 'consumable', price: 0, icon: 'potion', color: '#38bdf8', asset: '', description: 'เพิ่มความเร็วในการเคลื่อนที่ +25% ต่อเนื่อง 20 นาที', effect: true },
+  asura_weight_potion: { id: 'asura_weight_potion', name: 'ยาเพิ่มพลังแบกของ (30น.)', kind: 'consumable', price: 0, icon: 'potion', color: '#a78bfa', asset: '', description: 'เพิ่มขีดจำกัดน้ำหนักสัมภาระ +650 หน่วย นาน 30 นาที', effect: true },
+  asura_stat_potion_s: { id: 'asura_stat_potion_s', name: 'ยาเพิ่มสเตตัสขนาดเล็ก', kind: 'consumable', price: 0, icon: 'potion', color: '#34d399', asset: '', description: 'เพิ่ม ATK / DEF / MaxHP +5% นาน 20 นาที', effect: true },
+  asura_stat_potion_m: { id: 'asura_stat_potion_m', name: 'ยาเพิ่มสเตตัสขนาดกลาง', kind: 'consumable', price: 0, icon: 'potion', color: '#22d3ee', asset: '', description: 'เพิ่ม ATK / DEF / MaxHP +10% และ CRIT +5% นาน 20 นาที', effect: true },
+
+  enhance_chance_scroll_1: { id: 'enhance_chance_scroll_1', name: 'ใบเพิ่มโอกาส (+10%)', kind: 'material', price: 450, icon: 'scroll', color: '#38bdf8', asset: '', description: 'ใช้ในหน้าต่างตีบวกเพื่อเพิ่มโอกาสสำเร็จ +10%', effect: true },
+  enhance_chance_scroll_2: { id: 'enhance_chance_scroll_2', name: 'ใบเพิ่มโอกาสชั้นดี (+20%)', kind: 'material', price: 900, icon: 'scroll', color: '#818cf8', asset: '', description: 'ใช้ในหน้าต่างตีบวกเพื่อเพิ่มโอกาสสำเร็จ +20%', effect: true },
+  enhance_chance_scroll_3: { id: 'enhance_chance_scroll_3', name: 'ใบเพิ่มโอกาสชั้นเยี่ยม (+35%)', kind: 'material', price: 1800, icon: 'scroll', color: '#c084fc', asset: '', description: 'ใช้ในหน้าต่างตีบวกเพื่อเพิ่มโอกาสสำเร็จ +35%', effect: true },
+  enhance_chance_scroll_4: { id: 'enhance_chance_scroll_4', name: 'ใบเพิ่มโอกาสของคหบดี (+50%)', kind: 'material', price: 3200, icon: 'scroll', color: '#fbbf24', asset: '', description: 'ใบอัพเกรดระดับตำนาน เพิ่มโอกาสตีบวกสำเร็จ +50%', effect: true },
+  enhance_protect_scroll_1: { id: 'enhance_protect_scroll_1', name: 'ใบประกันความเสียหาย', kind: 'material', price: 800, icon: 'scroll', color: '#4ade80', asset: '', description: 'ใช้ในหน้าต่างตีบวก ป้องกันระดับไอเทมลดลงเมื่อตีบวกล้มเหลว (+6 ขึ้นไป)', effect: true },
+  enhance_protect_scroll_2: { id: 'enhance_protect_scroll_2', name: 'ใบประกันความเสียหายชั้นดี', kind: 'material', price: 1600, icon: 'scroll', color: '#f43f5e', asset: '', description: 'ป้องกันระดับไอเทมลดลงเมื่อตีบวกล้มเหลว พร้อมคืนหินตีบวกครึ่งหนึ่ง', effect: true },
+
+  stat_reset_potion: { id: 'stat_reset_potion', name: 'น้ำยาหวนกลับ', kind: 'consumable', price: 600, icon: 'potion', color: '#fb7185', asset: '', description: 'ใช้ล้างแต้มสเตตัส (STR/VIT/DEX/AGI/INT/LUK) ทั้งหมดคืนฟรี 1 ครั้ง', effect: true },
+  skill_reset_potion: { id: 'skill_reset_potion', name: 'น้ำยาลืมทักษะ', kind: 'consumable', price: 600, icon: 'potion', color: '#c084fc', asset: '', description: 'ใช้ล้างแต้มทักษะ (SP) ทั้งหมดคืนฟรี 1 ครั้ง', effect: true },
+  job_reset_potion: { id: 'job_reset_potion', name: 'น้ำยาเปลี่ยนอาชีพ', kind: 'consumable', price: 1500, icon: 'potion', color: '#f59e0b', asset: '', description: 'รีเซ็ตสายอาชีพกลับสู่ผู้ฝึกหัด (คงเลเวลและอุปกรณ์) เพื่อเลือกสายใหม่', effect: true },
+  title_clear_scroll: { id: 'title_clear_scroll', name: 'ใบแจ้งลบฉายา', kind: 'consumable', price: 250, icon: 'scroll', color: '#94a3b8', asset: '', description: 'ล้างนามแฝงและฉายาที่แสดงบนตัวละครออกทั้งหมดทันที' },
+  companion_gacha_box: { id: 'companion_gacha_box', name: 'กล่องสุ่มคู่หูอสุรา', kind: 'consumable', price: 0, icon: 'bag', color: '#f472b6', asset: '', description: 'เปิดเพื่อสุ่มรับคู่หู (ผอบ) หรือผลึกวิวัฒนาการคู่หู x5 + EXP สัตว์เลี้ยง', effect: true },
+
+
   wooden_stick: weapon('wooden_stick', 'ไม้พลอง', 'stick', 6, 50, 1, 1, '#a47148'),
   oak_club: weapon('oak_club', 'กระบองโอ๊ค', 'stick', 14, 400, 2, 5, '#7f5539'),
 

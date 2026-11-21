@@ -356,6 +356,9 @@ export function InventoryScreen() {
       }
       saveRef.current = res.nextSave
       setSave(res.nextSave)
+      if (!res.nextSave.inventory.some((i) => i.uid === itemUid)) {
+        setSelectedUid((prev) => (prev === itemUid ? null : prev))
+      }
       setActionFeedback({ tone: 'ok', text: res.message })
       void syncSave(res.nextSave, user, slotId)
     },

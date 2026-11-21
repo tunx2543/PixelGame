@@ -280,6 +280,7 @@ export function GameCanvas() {
   return (
     <canvas
       ref={ref}
+      data-testid="game-canvas"
       onPointerMove={(e) => {
         const canvas = ref.current
         if (!canvas) return

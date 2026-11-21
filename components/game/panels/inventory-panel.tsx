@@ -959,8 +959,13 @@ export function InventoryPanel() {
                           <PxButton
                             className="flex-1 py-1 text-[10px]"
                             onClick={() => {
-                              const res = consumeItemWithFeedback(item.uid)
+                              const uid = item.uid
+                              const res = consumeItemWithFeedback(uid)
                               setAssignFeedback({ ok: res.ok, text: res.message })
+                              if (!p.inventory.some((i) => i.uid === uid)) {
+                                if (selectedUid === uid) setSelectedUid(null)
+                                if (hoveredUid === uid) setHoveredUid(null)
+                              }
                             }}
                           >
                             ใช้

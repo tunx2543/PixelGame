@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Lock, RefreshCw } from 'lucide-react'
+import { Flame, Lock, RefreshCw, ShieldCheck, Sparkles } from 'lucide-react'
 import { ITEMS, MAX_PLUS, enhanceCost, enhanceRate } from '@/lib/game/data'
 import {
   countItem,
@@ -27,9 +27,23 @@ import { formatNum } from '../format'
 import { ItemIcon, ItemSlot } from '../item-icon'
 import { PanelFrame, PxButton } from './panels'
 
+const CHANCE_SCROLL_OPTIONS: Array<{ id: string; label: string; bonusPct: number }> = [
+  { id: 'enhance_chance_scroll_1', label: 'ใบเพิ่มโอกาส +10%', bonusPct: 10 },
+  { id: 'enhance_chance_scroll_2', label: 'ใบเพิ่มโอกาสชั้นดี +20%', bonusPct: 20 },
+  { id: 'enhance_chance_scroll_3', label: 'ใบเพิ่มโอกาสชั้นเยี่ยม +35%', bonusPct: 35 },
+  { id: 'enhance_chance_scroll_4', label: 'ใบเพิ่มโอกาสคหบดี +50%', bonusPct: 50 },
+]
+
+const PROTECT_SCROLL_OPTIONS: Array<{ id: string; label: string; desc: string }> = [
+  { id: 'enhance_protect_scroll_1', label: 'ใบประกันความเสียหาย', desc: 'กันระดับลด' },
+  { id: 'enhance_protect_scroll_2', label: 'ใบประกันชั้นดี', desc: 'กันลด + คืนหิน 50%' },
+]
+
 export function EnhancePanel() {
   const g = useGame()
   const [selected, setSelected] = useState<string | null>(null)
+  const [chanceScrollId, setChanceScrollId] = useState<string | null>(null)
+  const [protectScrollId, setProtectScrollId] = useState<string | null>(null)
   const [result, setResult] = useState<EnhanceResult | null>(null)
   const [reforgeNotice, setReforgeNotice] = useState<{ ok: boolean; text: string } | null>(null)
   if (!g.p) return null
@@ -50,7 +64,12 @@ export function EnhancePanel() {
   const def = item ? ITEMS[item.itemId] : null
   const stones = countItem('enhance_stone')
   const cost = item && def ? enhanceCost(item.plus, def.tier ?? 1) : null
-  const rate = item ? enhanceRate(item.plus) : 0
+  const baseRate = item ? enhanceRate(item.plus) : 0
+  const activeChanceOpt = CHANCE_SCROLL_OPTIONS.find((opt) => opt.id === chanceScrollId && countItem(opt.id) > 0) ?? null
+  const activeProtectOpt =
+    PROTECT_SCROLL_OPTIONS.find((opt) => opt.id === protectScrollId && countItem(opt.id) > 0) ?? null
+  const bonusChance = activeChanceOpt ? activeChanceOpt.bonusPct / 100 : 0
+  const rate = Math.min(1, baseRate + bonusChance)
   const maxed = item ? item.plus >= MAX_PLUS : false
   const rarity = item && def ? resolveEffectiveRarity(item, def) : 'common'
   const rarityMeta = EQUIPMENT_RARITY_META[rarity]
@@ -63,10 +82,10 @@ export function EnhancePanel() {
       subtitle={
         isRemoteVip
           ? 'สิทธิ์ VIP ระยะไกล — ตีบวกอุปกรณ์ (+15) และ Reforge ออปชันได้จากทุกแผนที่'
-          : 'ตีบวกเพิ่มพลัง (สูงสุด +15) หรือ Reforge สุ่มระดับและออปชันเสริมใหม่'
+          : 'ตีบวกเพิ่มพลัง (สูงสุด +15) ใช้ใบเพิ่มโอกาส / ใบประกันความเสียหาย หรือ Reforge ออปชันใหม่'
       }
     >
-      <div className="grid gap-4 md:grid-cols-[1fr_1.2fr]">
+      <div className="grid gap-4 md:grid-cols-[1fr_1.25fr]">
         <div>
           <p className="mb-2 text-xs text-muted-foreground">เลือกอุปกรณ์ ({gear.length})</p>
           {gear.length === 0 ? (
@@ -90,7 +109,7 @@ export function EnhancePanel() {
             </div>
           )}
           <p className="mt-3 text-xs text-muted-foreground">
-            หินตีบวกที่มี: <span className="text-[#4cc9f0]">{stones}</span> ก้อน (ซื้อได้ที่พ่อค้า หรือดรอปจากมอนสเตอร์)
+            หินตีบวกที่มี: <span className="text-[#4cc9f0] tabular-nums">{stones}</span> ก้อน (ซื้อได้ที่พ่อค้า / ร้านโซล หรือดรอปจากมอนสเตอร์)
           </p>
         </div>
 
@@ -136,32 +155,116 @@ export function EnhancePanel() {
             {maxed ? (
               <p className="text-sm text-gold">อุปกรณ์นี้ตีบวกถึงระดับสูงสุดแล้ว!</p>
             ) : (
-              <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                <dt className="text-muted-foreground">ระดับ</dt>
-                <dd className="text-right text-foreground">
-                  +{item.plus} → <span className="text-gold">+{item.plus + 1}</span>
-                </dd>
-                <dt className="text-muted-foreground">โอกาสสำเร็จ</dt>
-                <dd className={cn('text-right', rate >= 0.8 ? 'text-accent' : rate >= 0.4 ? 'text-gold' : 'text-destructive')}>
-                  {Math.round(rate * 100)}%
-                </dd>
-                <dt className="text-muted-foreground">ค่าตีบวก</dt>
-                <dd className={cn('text-right', p.gold >= cost.gold ? 'text-gold' : 'text-destructive')}>{formatNum(cost.gold)} G</dd>
-                <dt className="text-muted-foreground">หินตีบวก</dt>
-                <dd className={cn('text-right', stones >= cost.stones ? 'text-[#4cc9f0]' : 'text-destructive')}>
-                  {cost.stones} ก้อน
-                </dd>
-              </dl>
+              <>
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                  <dt className="text-muted-foreground">ระดับ</dt>
+                  <dd className="text-right text-foreground tabular-nums">
+                    +{item.plus} → <span className="text-gold">+{item.plus + 1}</span>
+                  </dd>
+                  <dt className="text-muted-foreground">โอกาสสำเร็จ</dt>
+                  <dd className={cn('text-right font-bold tabular-nums', rate >= 0.8 ? 'text-accent' : rate >= 0.4 ? 'text-gold' : 'text-destructive')}>
+                    {Math.round(baseRate * 100)}%
+                    {activeChanceOpt ? (
+                      <span className="text-emerald-300">
+                        {' '}
+                        (+{activeChanceOpt.bonusPct}% → {Math.round(rate * 100)}%)
+                      </span>
+                    ) : null}
+                  </dd>
+                  <dt className="text-muted-foreground">ค่าตีบวก</dt>
+                  <dd className={cn('text-right tabular-nums', p.gold >= cost.gold ? 'text-gold' : 'text-destructive')}>
+                    {formatNum(cost.gold)} G
+                  </dd>
+                  <dt className="text-muted-foreground">หินตีบวก</dt>
+                  <dd className={cn('text-right tabular-nums', stones >= cost.stones ? 'text-[#4cc9f0]' : 'text-destructive')}>
+                    {cost.stones} ก้อน
+                  </dd>
+                </dl>
+
+                {/* Asura Upgrade Boosters: Chance Scrolls & Insurance Scrolls */}
+                <div className="space-y-2 rounded border border-[#2d4e80] bg-background/70 p-2 text-[11px]">
+                  <div>
+                    <p className="mb-1 flex items-center gap-1 font-bold text-amber-300">
+                      <Sparkles className="size-3.5" aria-hidden /> ใบเพิ่มโอกาสตีบวก
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {CHANCE_SCROLL_OPTIONS.map((opt) => {
+                        const qty = countItem(opt.id)
+                        const active = activeChanceOpt?.id === opt.id
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            disabled={qty <= 0}
+                            onClick={() => setChanceScrollId(active ? null : opt.id)}
+                            className={cn(
+                              'rounded border px-2 py-1 text-[10px] font-semibold transition-colors disabled:opacity-35',
+                              active
+                                ? 'border-amber-300 bg-amber-500/20 text-amber-200'
+                                : 'border-border bg-secondary/70 text-slate-200 hover:border-sky-400',
+                            )}
+                          >
+                            +{opt.bonusPct}% ({qty})
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="mb-1 flex items-center gap-1 font-bold text-cyan-300">
+                      <ShieldCheck className="size-3.5" aria-hidden /> ใบประกันความเสียหาย (+6 ขึ้นไป)
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {PROTECT_SCROLL_OPTIONS.map((opt) => {
+                        const qty = countItem(opt.id)
+                        const active = activeProtectOpt?.id === opt.id
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            disabled={qty <= 0}
+                            onClick={() => setProtectScrollId(active ? null : opt.id)}
+                            className={cn(
+                              'rounded border px-2 py-1 text-[10px] font-semibold transition-colors disabled:opacity-35',
+                              active
+                                ? 'border-cyan-300 bg-cyan-500/20 text-cyan-200'
+                                : 'border-border bg-secondary/70 text-slate-200 hover:border-sky-400',
+                            )}
+                          >
+                            {opt.label} · {opt.desc} ({qty})
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </>
             )}
 
-            {!maxed && item.plus >= 6 && (
+            {!maxed && item.plus >= 6 && !activeProtectOpt && (
               <p className="border-2 border-destructive/60 bg-destructive/10 p-2 text-[11px] text-destructive">
-                คำเตือน: ตั้งแต่ +6 ขึ้นไป หากล้มเหลวระดับจะลดลง 1
+                คำเตือน: ตั้งแต่ +6 ขึ้นไป หากล้มเหลวระดับจะลดลง 1 (สามารถเลือกใช้ใบประกันความเสียหายได้)
+              </p>
+            )}
+
+            {!maxed && item.plus >= 6 && activeProtectOpt && (
+              <p className="flex items-center gap-1.5 border border-cyan-400/50 bg-cyan-950/40 p-2 text-[11px] text-cyan-200">
+                <Flame className="size-3.5 shrink-0 text-cyan-300" aria-hidden />
+                <span>เปิดใช้ {activeProtectOpt.label}: ป้องกันระดับลดลงเมื่อตีบวกล้มเหลว ({activeProtectOpt.desc})</span>
               </p>
             )}
 
             <PxButton
-              onClick={() => setResult(enhance(item.uid))}
+              onClick={() => {
+                const res = enhance(item.uid, {
+                  chanceScrollId: activeChanceOpt?.id ?? null,
+                  protectScrollId: activeProtectOpt?.id ?? null,
+                })
+                setResult(res)
+                if (activeChanceOpt && countItem(activeChanceOpt.id) <= 0) setChanceScrollId(null)
+                if (activeProtectOpt && countItem(activeProtectOpt.id) <= 0) setProtectScrollId(null)
+              }}
               disabled={maxed || p.gold < cost.gold || stones < cost.stones}
               className="py-2.5 text-sm"
             >

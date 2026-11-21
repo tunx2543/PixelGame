@@ -3,11 +3,13 @@
  * On wide-but-short mobile landscape screens (e.g. 844x390), capping zoom by height
  * keeps at least ~280 world pixels (~17.5 tiles) visible vertically so sprites don't fill the screen.
  */
-export function computeCameraZoom(cssWidth: number, cssHeight: number): number {
+export function computeCameraZoom(cssWidth: number, cssHeight: number, scale = 1): number {
   const widthZoom = cssWidth < 700 ? 1.6 : 2.4
-  if (!Number.isFinite(cssHeight) || cssHeight <= 0) return widthZoom
+  const safeScale = Number.isFinite(scale) ? Math.max(0.7, Math.min(1.5, scale)) : 1
+  if (!Number.isFinite(cssHeight) || cssHeight <= 0) return Math.round(widthZoom * safeScale * 100) / 100
   const heightZoomCap = Math.max(1.15, cssHeight / 280)
-  return Math.round(Math.min(widthZoom, heightZoomCap) * 100) / 100
+  const baseZoom = Math.min(widthZoom, heightZoomCap)
+  return Math.round(baseZoom * safeScale * 100) / 100
 }
 
 export interface SmoothCameraState {

@@ -175,7 +175,7 @@ export function TalentsPanel() {
                     </div>
                     <p className="mt-1.5 text-[10.5px] font-medium text-muted-foreground tabular-nums">
                       ใช้ {sk.mp} MP · ตัวคูณ x{(sk.mult * (1 + (lv - 1) * 0.15)).toFixed(2)} · CD {Math.max(1.2, sk.cooldown - (lv - 1) * 0.2).toFixed(1)}s
-                      {sk.radius > 0 ? ` · รัศมี ${sk.radius}px` : ''}
+                      {(sk.radius ?? 0) > 0 ? ` · รัศมี ${sk.radius}px` : ''}
                     </p>
                     {sk.effectSummary && (
                       <p className="mt-1 text-[10.5px] font-semibold text-emerald-300">{sk.effectSummary}</p>

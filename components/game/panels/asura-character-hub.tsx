@@ -33,7 +33,7 @@ import {
   X,
   Zap,
 } from 'lucide-react'
-import { ITEMS, JOBS, normalizeJobId, type EquipmentSlot, type JobDef } from '@/lib/game/data'
+import { ITEMS, JOBS, expToNext, normalizeJobId, type EquipmentSlot, type JobDef } from '@/lib/game/data'
 import {
   allocateStatPointsAction,
   applyLoadoutAction,
@@ -42,12 +42,12 @@ import {
   changeJob,
   closePanel,
   consumeItemWithFeedback,
+  countItem,
   currentJob,
   ensurePremiumState,
   equip,
   equipCombatPet,
   equipFashionAction,
-  expToNext,
   getActiveAccountGameUid,
   getInventoryWeightSummary,
   getPlayerAttributeBreakdown,
@@ -59,6 +59,7 @@ import {
   jobExpToNext,
   openPanel,
   rebirth,
+  resetJobClassAction,
   resetSkillsAction,
   resetStatPointsAction,
   resetTalentsAction,
@@ -81,6 +82,7 @@ import {
   TALENT_BRANCH_META,
   TALENT_NODES,
   computeTalentBonuses,
+  getActiveAsuraBoostSummary,
   sanitizeExtV2,
   skillUpgradeCost,
   type TalentBranch,
@@ -99,7 +101,7 @@ import {
 } from '@/lib/game/premium/fashion-pet'
 import { getEffectiveVipBonuses } from '@/lib/game/premium/vip'
 import { RUNE_DEFS, computeCombatPower, computeEquipmentSetBonuses, sanitizeRpgExt } from '@/lib/game/rpg-systems'
-import { playEnhanceSfx, playQuestClaimSfx } from '@/lib/game/sfx'
+import { isSfxMuted, playEnhanceSfx, playQuestClaimSfx } from '@/lib/game/sfx'
 import type { Dir } from '@/lib/game/sprites'
 import { getCombatPetDef, sanitizePetState } from '@/lib/game/systems'
 import { useGame } from '@/lib/game/use-game'
@@ -223,6 +225,7 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
 
   // Training / Spirit tab state
   const [loadoutName, setLoadoutName] = useState('')
+  const [selectedLoadoutIdx, setSelectedLoadoutIdx] = useState(0)
   const [rebirthPreviewTier, setRebirthPreviewTier] = useState<number | null>(null)
 
   const p = g.p
@@ -262,6 +265,10 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
   const fashionLoadout = resolvePlayerFashionLoadout(p)
   const setBonus = computeEquipmentSetBonuses(p.equipment)
   const quickSlots = getQuickSlots()
+  const boostSummary = getActiveAsuraBoostSummary(extV2)
+  const statResetPotCount = countItem('stat_reset_potion')
+  const skillResetPotCount = countItem('skill_reset_potion')
+  const jobResetPotCount = countItem('job_reset_potion')
 
   const isGmDev = Boolean(p.gm && isCurrentAccountGm())
   const displayCid = isGmDev ? PERMANENT_GM_GAME_UID : (p.gameUid ?? getActiveAccountGameUid() ?? String(p.uid ?? '100001'))
@@ -530,6 +537,7 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                         {(['armor', 'shoes'] as EquipmentSlot[]).map((slot) => {
                           const it = p.equipment[slot]
                           const selected = selectedEqSlot === slot && !selectedBagUid
+                          const romanTier = it ? ['I', 'II', 'III', 'IV'][Math.min(3, Math.max(0, (ITEMS[it.itemId]?.tier ?? 1) - 1))] : null
                           return (
                             <button
                               key={slot}
@@ -547,6 +555,11 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                               )}
                             >
                               <ItemSlot item={it} label={slot === 'armor' ? 'เกราะ' : 'เท้า'} />
+                              {romanTier && (
+                                <span className="pointer-events-none absolute left-0.5 top-0.5 rounded bg-slate-950/85 px-1 text-[8.5px] font-black text-sky-300">
+                                  {romanTier}
+                                </span>
+                              )}
                               {it && it.plus > 0 && (
                                 <span className="absolute -right-1 -top-1 rounded bg-amber-500 px-1 text-[9px] font-bold text-slate-950 tabular-nums">
                                   +{it.plus}
@@ -562,6 +575,11 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                           title={activePetDef ? `ผอบ: ${activePetDef.name}` : 'เปิดหน้าต่างผอบ/สัตว์เลี้ยง'}
                           className="relative flex aspect-square flex-col items-center justify-center rounded border border-pink-400/50 bg-[#1a2033] text-[9px] text-pink-200 hover:border-pink-300"
                         >
+                          {activePetDef && (
+                            <span className="absolute -right-1 -top-1 rounded bg-amber-400 px-1 text-[8.5px] font-black text-slate-950">
+                              S
+                            </span>
+                          )}
                           <PawPrint className="size-4 text-pink-300" aria-hidden />
                           <span className="mt-0.5 max-w-full truncate px-0.5">
                             {activePetDef ? activePetDef.name.slice(0, 5) : 'ผอบ'}
@@ -608,6 +626,7 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                           {(['weapon', 'accessory'] as EquipmentSlot[]).map((slot) => {
                             const it = p.equipment[slot]
                             const selected = selectedEqSlot === slot && !selectedBagUid
+                            const romanTier = it ? ['I', 'II', 'III', 'IV'][Math.min(3, Math.max(0, (ITEMS[it.itemId]?.tier ?? 1) - 1))] : null
                             return (
                               <button
                                 key={slot}
@@ -625,6 +644,11 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                                 )}
                               >
                                 <ItemSlot item={it} label={slot === 'weapon' ? 'อาวุธ' : 'แหวน'} />
+                                {romanTier && (
+                                  <span className="pointer-events-none absolute left-0.5 top-0.5 rounded bg-slate-950/85 px-1 text-[8px] font-black text-sky-300">
+                                    {romanTier}
+                                  </span>
+                                )}
                               </button>
                             )
                           })}
@@ -636,6 +660,7 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                         {(['cloak'] as EquipmentSlot[]).map((slot) => {
                           const it = p.equipment[slot]
                           const selected = selectedEqSlot === slot && !selectedBagUid
+                          const romanTier = it ? ['I', 'II', 'III', 'IV'][Math.min(3, Math.max(0, (ITEMS[it.itemId]?.tier ?? 1) - 1))] : null
                           return (
                             <button
                               key={slot}
@@ -653,6 +678,11 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                               )}
                             >
                               <ItemSlot item={it} label="คลุม" />
+                              {romanTier && (
+                                <span className="pointer-events-none absolute left-0.5 top-0.5 rounded bg-slate-950/85 px-1 text-[8.5px] font-black text-sky-300">
+                                  {romanTier}
+                                </span>
+                              )}
                             </button>
                           )
                         })}
@@ -683,8 +713,8 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                     <p className="font-bold text-sky-300">รูนประจำอุปกรณ์</p>
                     {(['weapon', 'armor', 'shoes', 'cloak', 'accessory'] as EquipmentSlot[]).map((slot) => {
                       const runeId = rpgExt.equippedRunes[slot]
-                      const runeDef = runeId ? RUNE_DEFS.find((r) => r.id === runeId) : null
-                      const ownedRunes = Object.entries(rpgExt.runeInventory).filter(([, qty]) => qty > 0)
+                      const runeDef = runeId ? RUNE_DEFS[runeId] ?? null : null
+                      const ownedRunes = Object.entries(rpgExt.runeBag).filter(([, qty]) => qty > 0)
                       return (
                         <div key={slot} className="flex items-center justify-between gap-2 rounded border border-[#22395a] bg-[#0e1623] px-2 py-1">
                           <span className="text-[11px] text-slate-300">{slot}</span>
@@ -699,7 +729,7 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                           >
                             <option value="">{runeDef ? runeDef.name : '- ว่าง -'}</option>
                             {ownedRunes.map(([id, qty]) => {
-                              const r = RUNE_DEFS.find((d) => d.id === id)
+                              const r = RUNE_DEFS[id]
                               return (
                                 <option key={id} value={id}>
                                   {r?.name ?? id} ({qty})
@@ -784,14 +814,14 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                       <div className="space-y-1">
                         <div className="flex items-start gap-2">
                           <div className="grid size-10 shrink-0 place-items-center rounded border border-[#2d4e80] bg-[#172336]">
-                            <ItemIcon item={inspectedItem} size={28} />
+                            <ItemIcon itemId={inspectedItem.itemId} size={28} />
                           </div>
                           <div className="min-w-0 flex-1">
                             <p className={cn('truncate font-bold', inspectedRarityMeta.textColorClass)}>
                               {itemLabel(inspectedItem)}
                             </p>
                             <p className="text-[10px] text-slate-400">
-                              Lv.{inspectedDef.reqLevel ?? 1} · {inspectedRarityMeta.label}
+                              Lv.{inspectedDef.reqLevel ?? 1} · {inspectedRarityMeta.thaiLabel}
                               {inspectedDef.kind === 'weapon' || inspectedDef.kind === 'armor'
                                 ? ` · พลัง ${itemPower(inspectedItem)}`
                                 : ''}
@@ -839,8 +869,10 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                             <button
                               type="button"
                               onClick={() => {
-                                const res = consumeItemWithFeedback(selectedBagItem.uid)
+                                const uid = selectedBagItem.uid
+                                const res = consumeItemWithFeedback(uid)
                                 setNotice({ ok: res.ok, text: res.message })
+                                if (!p.inventory.some((i) => i.uid === uid)) setSelectedBagUid(null)
                               }}
                               className="asura-tab-active px-2.5 py-1 text-[11px] font-bold"
                             >
@@ -954,7 +986,7 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                                   : 'border-[#27436b]',
                             )}
                           >
-                            <ItemIcon item={it} size={30} />
+                            <ItemIcon itemId={it.itemId} size={30} />
                             {it.qty > 1 && (
                               <span className="absolute bottom-0.5 right-1 rounded bg-black/70 px-1 text-[9.5px] font-bold text-white tabular-nums">
                                 {it.qty}
@@ -1000,8 +1032,10 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                     type="button"
                     onClick={() => {
                       if (selectedBagItem && selectedBagDef?.kind === 'consumable') {
-                        const res = consumeItemWithFeedback(selectedBagItem.uid)
+                        const uid = selectedBagItem.uid
+                        const res = consumeItemWithFeedback(uid)
                         setNotice({ ok: res.ok, text: res.message })
+                        if (!p.inventory.some((i) => i.uid === uid)) setSelectedBagUid(null)
                       } else if (selectedBagItem && (selectedBagDef?.kind === 'weapon' || selectedBagDef?.kind === 'armor')) {
                         const err = canEquip(selectedBagItem)
                         if (err) setNotice({ ok: false, text: err })
@@ -1134,7 +1168,7 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                           setNotice({ ok: res.ok, text: res.message })
                           if (res.ok) {
                             setPendingStats({ str: 0, vit: 0, dex: 0, agi: 0, int: 0, luk: 0 })
-                            playEnhanceSfx(true)
+                            playEnhanceSfx(true, isSfxMuted())
                           }
                         }}
                         className="asura-tab-active px-3.5 py-1.5 text-xs font-bold disabled:opacity-40"
@@ -1166,7 +1200,7 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                       }}
                       className="asura-tab px-5 py-1.5 text-xs font-bold text-amber-200"
                     >
-                      ล้าง (500 G)
+                      {statResetPotCount > 0 ? `ล้าง (น้ำยาหวนกลับ x${statResetPotCount})` : 'ล้าง (500 G)'}
                     </button>
                   </div>
 
@@ -1197,6 +1231,16 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                         ★
                       </span>
                       <span className="font-semibold text-amber-300">{job.name}</span>
+                      <span
+                        className={cn(
+                          'rounded border px-1.5 py-0.5 text-[9.5px] font-bold',
+                          job.ranged
+                            ? 'border-sky-400/50 bg-sky-500/15 text-sky-300'
+                            : 'border-rose-400/50 bg-rose-500/15 text-rose-300',
+                        )}
+                      >
+                        {job.ranged ? `ตีไกล · ${job.range}px` : `ตีใกล้ · ${job.range}px`}
+                      </span>
                     </div>
                   </div>
 
@@ -1233,6 +1277,7 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                 {statusSubView === 'combat' && (
                   <div className="grid grid-cols-2 gap-1.5 rounded border border-[#233d62] bg-[#0b121e] p-2.5 text-xs tabular-nums">
                     <div>พลังรบ (CP): <b className="text-amber-300">{formatNum(cp)}</b></div>
+                    <div>ระยะโจมตี: <b className={job.ranged ? 'text-sky-300' : 'text-rose-300'}>{job.ranged ? `ตีไกล ${job.range}px` : `ตีใกล้ ${job.range}px`}</b></div>
                     <div>HP สูงสุด: <b className="text-emerald-300">{formatNum(stats.maxHp)}</b></div>
                     <div>MP สูงสุด: <b className="text-sky-300">{formatNum(stats.maxMp)}</b></div>
                     <div>ATK: <b className="text-rose-300">{formatNum(stats.atk)}</b></div>
@@ -1241,18 +1286,20 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                     <div>ความเร็ว: <b className="text-cyan-300">{Math.round(stats.speed)}</b></div>
                     <div>สังหาร: <b className="text-slate-200">{formatNum(p.kills)}</b></div>
                     <div>ดูดเลือด: <b className="text-pink-300">{(stats.lifestealPct * 100).toFixed(1)}%</b></div>
-                    <div>เวลาเล่น: <b className="text-slate-300">{formatPlayTime(p.playTime)}</b></div>
+                    <div className="col-span-2">เวลาเล่น: <b className="text-slate-300">{formatPlayTime(p.playTime)}</b></div>
                   </div>
                 )}
 
                 {statusSubView === 'buffs' && (
-                  <div className="space-y-1.5 rounded border border-[#233d62] bg-[#0b121e] p-2.5 text-xs">
+                  <div className="max-h-36 space-y-1.5 overflow-y-auto rounded border border-[#233d62] bg-[#0b121e] p-2.5 text-xs">
                     <p className="font-bold text-sky-300">บัฟที่เปิดใช้งานอยู่</p>
                     <div className="grid gap-1 text-[11px]">
                       <div className="flex justify-between">
                         <span>VIP Advantage</span>
                         <b className={vipBonuses.active ? 'text-amber-300' : 'text-slate-500'}>
-                          {vipBonuses.active ? `${vipBonuses.tierLabel} (+EXP ${vipBonuses.expPct}%)` : 'ไม่มี'}
+                          {vipBonuses.active
+                            ? `${vipBonuses.tierDef?.badgeLabel ?? `VIP ${vipBonuses.level}`} (+EXP ${vipBonuses.expBonusPct}%)`
+                            : 'ไม่มี'}
                         </b>
                       </div>
                       <div className="flex justify-between">
@@ -1263,9 +1310,17 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                             : 'ไม่มี'}
                         </b>
                       </div>
+                      {boostSummary.activeList.map((b) => (
+                        <div key={b.id} className="flex justify-between">
+                          <span>{b.label}</span>
+                          <b className="text-amber-300 tabular-nums">
+                            {b.kind === 'weight' ? `+${b.value} น้ำหนัก` : `+${b.value}%`}
+                          </b>
+                        </div>
+                      ))}
                       <div className="flex justify-between">
                         <span>โบนัสเซ็ตอุปกรณ์</span>
-                        <b className="text-sky-300">{setBonus.activeSets.length} เซ็ต</b>
+                        <b className="text-sky-300">{setBonus.activeLabels.length} เซ็ต</b>
                       </div>
                       <div className="flex justify-between">
                         <span>โบนัสกิลด์</span>
@@ -1276,13 +1331,13 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                 )}
 
                 {statusSubView === 'expiry' && (
-                  <div className="space-y-1.5 rounded border border-[#233d62] bg-[#0b121e] p-2.5 text-xs tabular-nums">
-                    <p className="font-bold text-amber-300">เวลาคงเหลือสิทธิพิเศษ</p>
+                  <div className="max-h-36 space-y-1.5 overflow-y-auto rounded border border-[#233d62] bg-[#0b121e] p-2.5 text-xs tabular-nums">
+                    <p className="font-bold text-amber-300">เวลาคงเหลือสิทธิพิเศษ & ยาเสริมพลัง</p>
                     <div className="flex justify-between text-[11px]">
                       <span>VIP Pass</span>
                       <b>
                         {vipBonuses.active
-                          ? `เหลืออีก ${Math.max(1, Math.ceil((prem.vip.expiresAtMs - Date.now()) / 86400000))} วัน`
+                          ? `เหลืออีก ${Math.max(1, Math.ceil(((prem.vip.expiresAtMs ?? Date.now()) - Date.now()) / 86400000))} วัน`
                           : 'หมดอายุ / ยังไม่เปิดใช้'}
                       </b>
                     </div>
@@ -1302,6 +1357,16 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                           : 'ไม่มี'}
                       </b>
                     </div>
+                    {boostSummary.activeList.map((b) => {
+                      const remSec = Math.max(1, Math.ceil((b.expiresAtMs - Date.now()) / 1000))
+                      const remLabel = remSec >= 60 ? `${Math.ceil(remSec / 60)} นาที` : `${remSec} วินาที`
+                      return (
+                        <div key={b.id} className="flex justify-between text-[11px]">
+                          <span className="text-sky-200">{b.label}</span>
+                          <b className="text-amber-300">{remLabel}</b>
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
 
@@ -1536,6 +1601,16 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                   <div className="min-w-0 flex-1 space-y-1 text-xs">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-sm font-bold text-white">{treeJob.name}</span>
+                      <span
+                        className={cn(
+                          'rounded border px-1.5 py-0.5 text-[10px] font-bold',
+                          treeJob.ranged
+                            ? 'border-sky-400/50 bg-sky-500/15 text-sky-300'
+                            : 'border-rose-400/50 bg-rose-500/15 text-rose-300',
+                        )}
+                      >
+                        {treeJob.ranged ? `ตีไกล (Ranged · ${treeJob.range}px)` : `ตีใกล้ (Melee · ${treeJob.range}px)`}
+                      </span>
                       <span className="rounded bg-[#1a2b44] px-1.5 py-0.5 text-[10px] text-sky-300 tabular-nums">
                         ปลดล็อก Lv.{treeJob.reqLevel}
                       </span>
@@ -1574,21 +1649,41 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                   </div>
                 </div>
 
-                <div className="flex shrink-0 items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    disabled={!canPromoteTreeJob || p.level < treeJob.reqLevel || p.gold < treeJob.cost}
-                    onClick={() => changeJob(treeJob.id)}
-                    className={cn(
-                      'flex size-16 flex-col items-center justify-center rounded-full border-2 text-[11px] font-extrabold transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40',
-                      canPromoteTreeJob && p.level >= treeJob.reqLevel && p.gold >= treeJob.cost
-                        ? 'border-amber-300 bg-gradient-to-b from-sky-500 to-blue-700 text-white shadow-lg'
-                        : 'border-slate-500 bg-[#1c2838] text-slate-300',
+                <div className="flex shrink-0 flex-col items-end justify-center gap-1.5">
+                  <div className="text-right text-[10px] font-bold text-amber-300 tabular-nums">
+                    อาชีพปัจจุบัน: {job.name} (JLv.{jobLevel} · {jobExpPct}%)
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {normalizeJobId(p.jobId) !== 'novice' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const res = resetJobClassAction()
+                          setNotice({ ok: res.ok, text: res.message })
+                          if (res.ok) playQuestClaimSfx(isSfxMuted())
+                        }}
+                        className="asura-tab px-2.5 py-1.5 text-[10.5px] font-bold text-amber-200 whitespace-nowrap"
+                      >
+                        {jobResetPotCount > 0
+                          ? `เปลี่ยนสายอาชีพ (น้ำยา x${jobResetPotCount})`
+                          : 'รีเซ็ตสายอาชีพ (1,500 G)'}
+                      </button>
                     )}
-                  >
-                    <Crown className="mb-0.5 size-4 text-amber-300" aria-hidden />
-                    <span>เลื่อนชั้น</span>
-                  </button>
+                    <button
+                      type="button"
+                      disabled={!canPromoteTreeJob || p.level < treeJob.reqLevel || p.gold < treeJob.cost}
+                      onClick={() => changeJob(treeJob.id)}
+                      className={cn(
+                        'flex size-16 flex-col items-center justify-center rounded-full border-2 text-[11px] font-extrabold transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40',
+                        canPromoteTreeJob && p.level >= treeJob.reqLevel && p.gold >= treeJob.cost
+                          ? 'border-amber-300 bg-gradient-to-b from-sky-500 to-blue-700 text-white shadow-lg'
+                          : 'border-slate-500 bg-[#1c2838] text-slate-300',
+                      )}
+                    >
+                      <Crown className="mb-0.5 size-4 text-amber-300" aria-hidden />
+                      <span>เลื่อนชั้น</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1690,11 +1785,27 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                         const res = resetSkillsAction()
                         setNotice({ ok: res.ok, text: res.message })
                       }}
-                      className="asura-tab px-3 py-1 text-xs font-bold"
+                      className="asura-tab px-3 py-1 text-xs font-bold whitespace-nowrap"
                     >
-                      ล้าง (500 G)
+                      {skillResetPotCount > 0 ? `ล้าง (น้ำยาลืมทักษะ x${skillResetPotCount})` : 'ล้าง (500 G)'}
                     </button>
                   </div>
+                  {skillTierTab === 'special' && (
+                    <div className="grid grid-cols-3 gap-1 rounded border border-[#243d63] bg-[#0d1521] p-1.5 text-[10px] tabular-nums">
+                      <div>
+                        <span className="block text-slate-400">พลังจุติ</span>
+                        <b className="text-amber-300">จุติ {p.rebirthCount ?? 0}/6</b>
+                      </div>
+                      <div>
+                        <span className="block text-slate-400">พรสวรรค์</span>
+                        <b className="text-sky-300">+{computeTalentBonuses(extV2.talents).atkPct}% ATK</b>
+                      </div>
+                      <div>
+                        <span className="block text-slate-400">สิทธิ์ VIP</span>
+                        <b className="text-emerald-300">{vipBonuses.active ? `VIP ${vipBonuses.level}` : 'ไม่มี'}</b>
+                      </div>
+                    </div>
+                  )}
 
                   {activeSkillEntry ? (
                     <div className="space-y-2 text-xs">
@@ -1735,7 +1846,7 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                             onClick={() => {
                               const res = upgradeSkillAction(activeSkillEntry.skill.id)
                               setNotice({ ok: res.ok, text: res.message })
-                              if (res.ok) playQuestClaimSfx()
+                              if (res.ok) playQuestClaimSfx(isSfxMuted())
                             }}
                             className="asura-tab-active flex-1 py-1.5 text-[11px] font-bold"
                           >
@@ -1814,7 +1925,7 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                               onClick={() => {
                                 const res = upgradeTalentAction(node.id)
                                 setNotice({ ok: res.ok, text: res.message })
-                                if (res.ok) playEnhanceSfx(true)
+                                if (res.ok) playEnhanceSfx(true, isSfxMuted())
                               }}
                               className="asura-tab-active mt-1.5 w-full py-1 text-[10px] font-bold disabled:opacity-40"
                             >
@@ -1831,8 +1942,20 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
               {/* Quick Loadout Presets + Life Skills Summary */}
               <div className="grid gap-2.5 md:grid-cols-2">
                 <div className="space-y-2 rounded-lg border border-[#243d63] bg-[#101824] p-2.5">
-                  <p className="font-bold text-amber-300">พรีเซ็ตอุปกรณ์ ({extV2.loadouts.length}/4)</p>
+                  <p className="font-bold text-amber-300">พรีเซ็ตอุปกรณ์ ({extV2.loadouts.length}/3)</p>
                   <div className="flex gap-1.5">
+                    <select
+                      aria-label="เลือกช่องพรีเซ็ต"
+                      value={selectedLoadoutIdx}
+                      onChange={(e) => setSelectedLoadoutIdx(Number(e.target.value) || 0)}
+                      className="rounded border border-[#2d4e80] bg-[#162336] px-2 py-1 text-xs text-white"
+                    >
+                      {extV2.loadouts.map((lo, idx) => (
+                        <option key={lo.id} value={idx}>
+                          ช่อง {idx + 1}
+                        </option>
+                      ))}
+                    </select>
                     <input
                       type="text"
                       value={loadoutName}
@@ -1843,7 +1966,7 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                     <button
                       type="button"
                       onClick={() => {
-                        const res = saveLoadoutAction(loadoutName || `เซ็ต ${extV2.loadouts.length + 1}`)
+                        const res = saveLoadoutAction(selectedLoadoutIdx, loadoutName || undefined)
                         setNotice({ ok: res.ok, text: res.message })
                         setLoadoutName('')
                       }}
@@ -1853,12 +1976,13 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                     </button>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
-                    {extV2.loadouts.map((lo) => (
+                    {extV2.loadouts.map((lo, idx) => (
                       <button
                         key={lo.id}
                         type="button"
                         onClick={() => {
-                          const res = applyLoadoutAction(lo.id)
+                          setSelectedLoadoutIdx(idx)
+                          const res = applyLoadoutAction(idx)
                           setNotice({ ok: res.ok, text: res.message })
                         }}
                         className="asura-tab flex items-center gap-1 px-2.5 py-1 text-[11px]"

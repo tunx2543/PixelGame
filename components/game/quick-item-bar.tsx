@@ -49,7 +49,13 @@ function CooldownSweep({ remaining, duration }: { remaining: number; duration: n
   )
 }
 
-export function QuickItemBar({ compact = false }: { compact?: boolean }) {
+export function QuickItemBar({
+  compact = false,
+  layoutMode = 'horizontal',
+}: {
+  compact?: boolean
+  layoutMode?: 'horizontal' | 'vertical-grid'
+}) {
   const { p } = useGame()
   const layout = useUiLayout()
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
@@ -109,7 +115,7 @@ export function QuickItemBar({ compact = false }: { compact?: boolean }) {
       {barFeedback && (
         <div
           role="status"
-          className="pixel-panel border-amber-400/70 bg-black/90 px-2.5 py-0.5 text-[10px] font-semibold text-amber-200 shadow-lg"
+          className="asura-panel border-amber-400/70 px-2 py-0.5 text-[9.5px] font-semibold text-amber-200 shadow-lg"
         >
           {barFeedback}
         </div>
@@ -117,10 +123,14 @@ export function QuickItemBar({ compact = false }: { compact?: boolean }) {
 
       <div
         className={cn(
-          'pixel-panel flex items-center bg-[#161113]/92 shadow-xl',
-          compact
-            ? 'max-w-[calc(100vw-0.75rem)] gap-0.5 overflow-x-auto p-0.5'
-            : 'gap-1 p-1',
+          layoutMode === 'vertical-grid'
+            ? 'grid grid-cols-2 gap-1 rounded-lg border border-[#3a639a]/70 bg-[#0b1320]/82 p-1 shadow-xl'
+            : cn(
+                'pixel-panel flex items-center bg-[#161113]/92 shadow-xl',
+                compact
+                  ? 'max-w-[calc(100vw-0.75rem)] gap-0.5 overflow-x-auto p-0.5'
+                  : 'gap-1 p-1',
+              ),
         )}
       >
         {Array.from({ length: QUICK_SLOT_COUNT }).map((_, idx) => {
@@ -184,23 +194,27 @@ export function QuickItemBar({ compact = false }: { compact?: boolean }) {
                     : `ช่องลัด ${keyLabel}: ว่าง`
                 }
                 className={cn(
-                  'pixel-btn relative flex shrink-0 items-center justify-center overflow-hidden rounded-md transition',
-                  compact ? 'size-7' : 'size-8 sm:size-9',
+                  'relative flex shrink-0 items-center justify-center overflow-hidden rounded-md border transition',
+                  layoutMode === 'vertical-grid'
+                    ? 'size-9 sm:size-10'
+                    : compact
+                      ? 'size-7'
+                      : 'size-8 sm:size-9',
                   dragOverIdx === idx
                     ? 'border-accent bg-accent/25 ring-2 ring-accent'
                     : hasItem
-                      ? 'border-[#d4a348]/80 bg-[#2a1f1c] hover:brightness-110'
-                      : 'border-border/70 bg-[#121018]/90 hover:border-primary/50',
+                      ? 'border-[#8ec5ff]/70 bg-[#1a2940] hover:brightness-110'
+                      : 'border-[#2f5180]/75 bg-[#0e1726]/90 hover:border-sky-300/70',
                 )}
               >
                 {hasItem && itemId ? (
                   <>
-                    <ItemIcon itemId={itemId} size={compact ? 18 : 22} />
+                    <ItemIcon itemId={itemId} size={layoutMode === 'vertical-grid' ? 24 : compact ? 18 : 22} />
                     <span
                       data-testid={`quick-slot-qty-${idx}`}
                       className={cn(
-                        "absolute bottom-0 right-0 rounded bg-black/85 font-mono font-bold leading-none text-amber-200 tabular-nums",
-                        compact ? "px-0.5 text-[8px]" : "px-1 text-[9px]",
+                        'absolute bottom-0 right-0 rounded bg-black/85 font-mono font-bold leading-none text-amber-200 tabular-nums',
+                        compact && layoutMode !== 'vertical-grid' ? 'px-0.5 text-[8px]' : 'px-1 text-[9px]',
                       )}
                     >
                       {qty}
@@ -208,10 +222,21 @@ export function QuickItemBar({ compact = false }: { compact?: boolean }) {
                     <CooldownSweep remaining={cdRem} duration={cdDur} />
                   </>
                 ) : (
-                  <Plus className={cn("text-muted-foreground/45 group-hover:text-primary/70", compact ? "size-2.5" : "size-3.5")} aria-hidden />
+                  <Plus
+                    className={cn(
+                      'text-slate-400/55 group-hover:text-sky-300',
+                      compact && layoutMode !== 'vertical-grid' ? 'size-2.5' : 'size-3.5',
+                    )}
+                    aria-hidden
+                  />
                 )}
 
-                <span className={cn("pointer-events-none absolute left-0.5 top-0 font-mono font-bold leading-none text-white/85 drop-shadow", compact ? "text-[7px]" : "text-[8px]")}>
+                <span
+                  className={cn(
+                    'pointer-events-none absolute left-0.5 top-0 font-mono font-bold leading-none text-white/85 drop-shadow',
+                    compact && layoutMode !== 'vertical-grid' ? 'text-[7px]' : 'text-[8px]',
+                  )}
+                >
                   {hotkeyDisplay}
                 </span>
               </button>

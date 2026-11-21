@@ -11,7 +11,7 @@ export function ItemIcon({ itemId, size = 32, className }: { itemId: string; siz
 
   return (
     <img
-      src={def.asset ?? itemIconUrl(def.icon, def.color)}
+      src={def.asset ? def.asset : itemIconUrl(def.icon, def.color)}
       onError={(event) => {
         event.currentTarget.onerror = null
         event.currentTarget.src = itemIconUrl(def.icon, def.color)

@@ -19,7 +19,12 @@ import {
   getEquipRestriction,
   resolveItemEquipmentSlot,
 } from './equipment-ui'
-import { getFoodBuffForItem, sanitizeExtV2 } from './extended-systems'
+import {
+  getFoodBuffForItem,
+  pruneDepletedQuickSlotsInExtV2,
+  sanitizeExtV2,
+  type ActiveBoostBuff,
+} from './extended-systems'
 import { MAPS, TILE } from './maps'
 import type { VipTierId } from './premium/types'
 import { getEffectiveVipBonuses, resolveVipLevelFromExp } from './premium/vip'
@@ -29,7 +34,7 @@ import {
   appendAuditLog,
   sanitizePremiumState,
 } from './premium/wallet'
-import { MAX_PET_LEVEL, grantActivePetExp, sanitizePetState } from './systems'
+import { COMBAT_PETS, MAX_PET_LEVEL, grantActivePetExp, sanitizePetState } from './systems'
 
 export type InventoryFilterTab =
   | 'all'
@@ -355,6 +360,9 @@ export function useConsumableInInventory(
   const consumeOne = () => {
     entry.qty -= 1
     if (entry.qty <= 0) nextSave.inventory.splice(targetIdx, 1)
+    nextSave.inventory = nextSave.inventory.filter((i) => i.qty > 0)
+    const cleanExt = sanitizeExtV2(nextSave.extV2)
+    nextSave.extV2 = pruneDepletedQuickSlotsInExtV2(cleanExt, nextSave.inventory).nextExtV2
   }
   const buildPremCtx = () => ({
     characterId: String(nextSave.gameUid ?? nextSave.uid ?? 'char_local'),
@@ -544,6 +552,88 @@ export function useConsumableInInventory(
     }
   }
 
+  const ASURA_BOOST_MAP: Record<string, Omit<ActiveBoostBuff, 'expiresAtMs'> & { durationMs: number }> = {
+    asura_exp_50: { id: 'asura_exp_boost', kind: 'exp', label: 'EXP Boost Up 50%', shortTag: 'EXP+', value: 50, durationMs: 20 * 60 * 1000, color: '#f59e0b' },
+    asura_exp_100: { id: 'asura_exp_boost', kind: 'exp', label: 'EXP Boost Up 100%', shortTag: 'EXPx2', value: 100, durationMs: 20 * 60 * 1000, color: '#facc15' },
+    asura_jp_50: { id: 'asura_jp_boost', kind: 'jp', label: 'การงาน Boost Up 50%', shortTag: 'JP+', value: 50, durationMs: 20 * 60 * 1000, color: '#fb923c' },
+    asura_jp_100: { id: 'asura_jp_boost', kind: 'jp', label: 'การงาน Boost Up 100%', shortTag: 'JPx2', value: 100, durationMs: 20 * 60 * 1000, color: '#f97316' },
+    asura_lifeskill_50: { id: 'asura_life_boost', kind: 'lifeskill', label: 'ทักษะฝึกฝน Boost 50%', shortTag: 'LIFE', value: 50, durationMs: 20 * 60 * 1000, color: '#4ade80' },
+    asura_leg_muscle: { id: 'asura_speed_boost', kind: 'speed', label: 'กล้ามเนื้อขา +25% SPD', shortTag: 'SPD+', value: 25, durationMs: 20 * 60 * 1000, color: '#38bdf8' },
+    asura_weight_potion: { id: 'asura_weight_boost', kind: 'weight', label: 'พลังแบกของ +650', shortTag: 'WGT+', value: 650, durationMs: 30 * 60 * 1000, color: '#a78bfa' },
+    asura_stat_potion_s: { id: 'asura_stat_boost', kind: 'stat', label: 'พลังกายเล็ก +5%', shortTag: 'ST+5', value: 5, durationMs: 20 * 60 * 1000, color: '#34d399' },
+    asura_stat_potion_m: { id: 'asura_stat_boost', kind: 'stat', label: 'พลังกายกลาง +10%', shortTag: 'ST+10', value: 10, durationMs: 20 * 60 * 1000, color: '#22d3ee' },
+  }
+  const boostCfg = ASURA_BOOST_MAP[def.id]
+  if (boostCfg) {
+    const extV2 = sanitizeExtV2(nextSave.extV2)
+    const now = Date.now()
+    const existing = extV2.activeBoosts.find((b) => b.id === boostCfg.id && b.expiresAtMs > now)
+    const baseMs = existing && existing.value === boostCfg.value ? existing.expiresAtMs : now
+    const nextBoost: ActiveBoostBuff = {
+      id: boostCfg.id,
+      kind: boostCfg.kind,
+      label: boostCfg.label,
+      shortTag: boostCfg.shortTag,
+      value: boostCfg.value,
+      expiresAtMs: baseMs + boostCfg.durationMs,
+      color: boostCfg.color,
+    }
+    extV2.activeBoosts = [...extV2.activeBoosts.filter((b) => b.id !== boostCfg.id && b.expiresAtMs > now), nextBoost]
+    nextSave.extV2 = extV2
+    nextSave.savedAt = Date.now()
+    consumeOne()
+    return {
+      nextSave,
+      message: `เปิดใช้ ${def.name} สำเร็จ!`,
+      error: null,
+    }
+  }
+
+  if (def.id === 'title_clear_scroll') {
+    nextSave.alias = ''
+    if (nextSave.rpgExt) nextSave.rpgExt.activeTitle = null
+    nextSave.savedAt = Date.now()
+    consumeOne()
+    return {
+      nextSave,
+      message: 'ใช้ใบแจ้งลบฉายา ล้างนามแฝงและฉายาทั้งหมดออกเรียบร้อยแล้ว',
+      error: null,
+    }
+  }
+
+  if (def.id === 'companion_gacha_box') {
+    const petState = sanitizePetState(nextSave.petState, nextSave.ownedGemItems, nextSave.equippedGemCompanion)
+    nextSave.petState = petState
+    const candidates = COMBAT_PETS.filter((pet) => !pet.linkedGemItemId)
+    const unowned = candidates.filter((pet) => !petState.ownedPets[pet.id])
+    consumeOne()
+    nextSave.savedAt = Date.now()
+    if (unowned.length > 0) {
+      const picked = unowned[Math.floor(Math.random() * unowned.length)]
+      petState.ownedPets[picked.id] = { level: 1, exp: 0, stars: 1 }
+      petState.activePetId = picked.id
+      nextSave.equippedGemCompanion = null
+      return {
+        nextSave,
+        message: `★ เปิดกล่องสุ่มคู่หูได้รับ "${picked.name}" เข้าร่วมทีมทันที!`,
+        error: null,
+      }
+    }
+    return {
+      nextSave,
+      message: 'คุณมีคู่หูครบทุกตัวแล้ว! กล่องสุ่มคู่หูถูกใช้หมดแล้ว',
+      error: null,
+    }
+  }
+
+  if (def.id === 'stat_reset_potion' || def.id === 'skill_reset_potion' || def.id === 'job_reset_potion') {
+    return {
+      nextSave: save,
+      message: '',
+      error: 'กรุณาเปิดหน้าต่างสถานะ / อาชีพภายในเกมเพื่อใช้น้ำยารีเซ็ตนี้',
+    }
+  }
+
   const foodDef = getFoodBuffForItem(def.id)
   if (foodDef) {
     const stats = getStats(nextSave)
@@ -629,6 +719,8 @@ export function renameWithTicketInSave(
   const entry = nextSave.inventory[targetIdx]
   entry.qty -= 1
   if (entry.qty <= 0) nextSave.inventory.splice(targetIdx, 1)
+  nextSave.inventory = nextSave.inventory.filter((i) => i.qty > 0)
+  nextSave.extV2 = pruneDepletedQuickSlotsInExtV2(sanitizeExtV2(nextSave.extV2), nextSave.inventory).nextExtV2
   const prevName = nextSave.name
   nextSave.name = nextName
   nextSave.savedAt = Date.now()

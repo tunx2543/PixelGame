@@ -1,143 +1,418 @@
 'use client'
 
+import { useEffect, useState } from 'react'
+import {
+  Bot,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Crown,
+  Leaf,
+  Magnet,
+  MessageCircle,
+  ScrollText,
+  Sparkles,
+  Swords,
+  Users,
+  Utensils,
+  Wind,
+  Zap,
+} from 'lucide-react'
+import { expToNext } from '@/lib/game/data'
+import {
+  game,
+  gatherNearbyNodeAction,
+  interact,
+  jobExpToNext,
+  notify,
+  openPanel,
+  toggleMountRiding,
+  togglePkModeAction,
+} from '@/lib/game/engine'
+import {
+  findNearbyGatheringNode,
+  getActiveAsuraBoostSummary,
+  getActiveFoodBuffBonuses,
+  sanitizeExtV2,
+} from '@/lib/game/extended-systems'
+import { sanitizeMountState } from '@/lib/game/mounts'
+import { getEffectiveVipBonuses } from '@/lib/game/premium/vip'
+import { updateUiPref, useUiLayout } from '@/lib/game/ui-layout'
 import { useGame } from '@/lib/game/use-game'
-import { getStats } from '@/lib/game/engine'
-import { buildVitalsSnapshot } from '@/lib/game/hud-vitals'
-import { computeCombatPower } from '@/lib/game/rpg-systems'
-import { formatCompactNum, formatNum } from './format'
+import { cn } from '@/lib/utils'
+import { formatCompactNum } from './format'
 
-const BAR_STYLES = {
-  hp: {
-    fill: 'bg-gradient-to-b from-[#ff6b72] via-[#ef4444] to-[#b91c1c]',
-    text: 'text-[#ffb3b8]',
-  },
-  mp: {
-    fill: 'bg-gradient-to-b from-[#6bb6ff] via-[#3b82f6] to-[#1d4ed8]',
-    text: 'text-[#9ecaff]',
-  },
-  exp: {
-    fill: 'bg-gradient-to-b from-[#fde047] via-[#f59e0b] to-[#b45309]',
-    text: 'text-[#fde68a]',
-  },
-} as const
-
-function VitalBar({
-  barKey,
-  label,
-  current,
-  max,
-  percent,
-  slim = false,
-}: {
-  barKey: 'hp' | 'mp' | 'exp'
-  label: string
-  current: number
-  max: number
-  percent: number
-  slim?: boolean
-}) {
-  const tone = BAR_STYLES[barKey]
-
-  return (
-    <div
-      title={`${label}: ${formatNum(current)} / ${formatNum(max)}`}
-      className={`flex items-center gap-1 ${slim ? 'text-[8.5px]' : 'text-[9px]'}`}
-    >
-      <span className={`w-5 shrink-0 font-bold tracking-wide ${tone.text}`}>{label}</span>
-      <div
-        role="progressbar"
-        aria-label={label}
-        aria-valuemin={0}
-        aria-valuemax={max}
-        aria-valuenow={current}
-        className={`relative flex-1 overflow-hidden rounded-full border border-[#3d281f] bg-[#160f10]/90 shadow-inner ${slim ? 'h-2' : 'h-2.5'}`}
-      >
-        <div
-          className={`h-full rounded-full ${tone.fill} transition-[width] duration-150`}
-          style={{ width: `${percent}%` }}
-        />
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-1 top-0.5 h-[2px] rounded-full bg-white/30"
-        />
-      </div>
-      <span
-        className={`shrink-0 whitespace-nowrap text-right font-mono text-amber-100/85 tabular-nums ${
-          slim ? 'min-w-[3.8rem] text-[8.5px]' : 'min-w-[4.6rem] text-[9px]'
-        }`}
-      >
-        {formatCompactNum(current)}/{formatCompactNum(max)}
-      </span>
-    </div>
-  )
+function formatBuffRemain(remainMs: number): string {
+  const sec = Math.max(1, Math.ceil(remainMs / 1000))
+  if (sec < 60) return `${sec}s`
+  const mins = Math.ceil(sec / 60)
+  if (mins < 60) return `${mins}m`
+  const hrs = Math.floor(mins / 60)
+  return `${hrs}h`
 }
 
 export function Hud({ compact = false, slim = false }: { compact?: boolean; slim?: boolean }) {
   const { p } = useGame()
+  const layout = useUiLayout()
   if (!p) return null
 
-  const s = getStats(p)
-  const vitals = buildVitalsSnapshot({
-    hp: p.hp,
-    maxHp: s.maxHp,
-    mp: p.mp,
-    maxMp: s.maxMp,
-    level: p.level,
-    exp: p.exp,
-    gold: p.gold,
-    diamonds: p.diamonds,
-  })
-  const cp = computeCombatPower(p, s)
-  const bars = compact ? vitals.bars.filter((b) => b.key !== 'exp') : vitals.bars
+  const partyCount = game.party?.memberIds.length ?? 0
 
   return (
     <section
-      aria-label="แถบสถานะพลังชีวิตและทรัพยากร"
+      aria-label="แถบสถานะภารกิจ ปาร์ตี้ และทรัพยากร"
       data-testid="vitals-hud"
-      className={`pointer-events-auto pixel-panel w-full shadow-lg ${slim ? 'px-1.5 py-1' : 'px-2 py-1.5'}`}
+      className="pointer-events-auto flex w-full flex-col gap-1"
     >
-      <div className={`flex flex-col ${slim ? 'gap-0.5' : 'gap-1'}`}>
-        {bars.map((bar) => (
-          <VitalBar
-            key={bar.key}
-            barKey={bar.key}
-            label={bar.label}
-            current={bar.current}
-            max={bar.max}
-            percent={bar.percent}
-            slim={slim}
-          />
-        ))}
+      {/* Compact Quest & Party Dropdown Strip matching Asura HUD */}
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => updateUiPref('questTrackerHidden', !layout.preferences.questTrackerHidden)}
+          title="พับ/แสดงแถบภารกิจ"
+          className="flex flex-1 items-center justify-between gap-1 rounded border border-[#32578a]/75 bg-[#0b1320]/85 px-1.5 py-0.5 text-[9.5px] font-bold text-amber-200 hover:border-amber-300/75"
+        >
+          <span className="flex items-center gap-1 truncate">
+            <ScrollText className="size-3 shrink-0 text-amber-300" aria-hidden />
+            <span className="truncate">ภารกิจ</span>
+          </span>
+          <ChevronDown className="size-3 shrink-0 text-slate-300" aria-hidden />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            game.partyPanelOpen = !game.partyPanelOpen
+            if (game.partyPanelOpen) {
+              game.onlinePanelOpen = false
+              game.socialMenuOpen = false
+            }
+            notify()
+          }}
+          title="หน้าต่างปาร์ตี้"
+          className="flex flex-1 items-center justify-between gap-1 rounded border border-[#32578a]/75 bg-[#0b1320]/85 px-1.5 py-0.5 text-[9.5px] font-bold text-sky-200 hover:border-sky-300/75 tabular-nums"
+        >
+          <span className="flex items-center gap-1 truncate">
+            <Users className="size-3 shrink-0 text-sky-300" aria-hidden />
+            <span className="truncate">{partyCount > 0 ? `ตี้ (${partyCount})` : 'ปาร์ตี้'}</span>
+          </span>
+          <ChevronDown className="size-3 shrink-0 text-slate-300" aria-hidden />
+        </button>
       </div>
 
       {!compact && (
         <div
-          className={`flex items-center justify-between gap-1.5 border-t border-[#c9963b]/30 font-semibold ${
-            slim ? 'mt-1 pt-0.5 text-[9px]' : 'mt-1.5 pt-1 text-[10px]'
-          }`}
+          className={cn(
+            'flex items-center justify-between gap-1.5 rounded border border-[#2a4a78]/70 bg-[#09101c]/82 px-2 py-0.5 font-semibold',
+            slim ? 'text-[9px]' : 'text-[10px]',
+          )}
         >
-          <span
-            title={`Gold: ${formatNum(vitals.gold)} G`}
-            className="flex shrink-0 items-center gap-1 whitespace-nowrap text-gold tabular-nums"
+          <button
+            type="button"
+            onClick={() => openPanel('inventory')}
+            className="flex items-center gap-1 whitespace-nowrap text-gold tabular-nums hover:brightness-110"
           >
-            <img src="/assets/hd/ui/coin_gold.png" alt="" width={14} height={14} className="size-3.5 shrink-0 object-contain" />
-            <span>{formatCompactNum(vitals.gold)} G</span>
-          </span>
-          <span
-            title={`พลังรบรวม (Combat Power): ${formatNum(cp)}`}
-            className="shrink-0 whitespace-nowrap font-mono text-[9px] text-amber-100/80 tabular-nums"
+            <img src="/assets/hd/ui/coin_gold.png" alt="" width={12} height={12} className="size-3 shrink-0 object-contain" />
+            <span>{formatCompactNum(p.gold)} G</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => openPanel('gem-shop')}
+            className="flex items-center gap-1 whitespace-nowrap text-cyan-200 tabular-nums hover:brightness-110"
           >
-            CP {formatCompactNum(cp)}
-          </span>
-          <span
-            title={`เพชร (Diamonds): ${formatNum(vitals.diamonds)} D`}
-            className="flex shrink-0 items-center gap-1 whitespace-nowrap text-cyan-200 tabular-nums"
-          >
-            <img src="/assets/hd/ui/gem_blue.png" alt="" width={14} height={14} className="size-3.5 shrink-0 object-contain" />
-            <span>{formatCompactNum(vitals.diamonds)} D</span>
-          </span>
+            <img src="/assets/hd/ui/gem_blue.png" alt="" width={12} height={12} className="size-3 shrink-0 object-contain" />
+            <span>{formatCompactNum(p.diamonds ?? 0)} โซล</span>
+          </button>
         </div>
       )}
     </section>
+  )
+}
+
+export function AsuraBuffAndToggleStrip() {
+  const { p } = useGame()
+  const [buffExpanded, setBuffExpanded] = useState(true)
+  const [nowMs, setNowMs] = useState(() => Date.now())
+
+  const extV2 = p ? sanitizeExtV2(p.extV2) : null
+  const boostSummary = extV2 ? getActiveAsuraBoostSummary(extV2, nowMs) : null
+  const activeBoostCount = boostSummary?.activeList.length ?? 0
+  const hasAnyTimedBuff = Boolean(
+    activeBoostCount > 0 ||
+      (extV2?.activeFoodBuff && extV2.activeFoodBuff.expiresAtMs > nowMs) ||
+      (p && (p.lootMagnetUntil ?? 0) > nowMs),
+  )
+
+  useEffect(() => {
+    if (!hasAnyTimedBuff) return
+    const timer = window.setInterval(() => setNowMs(Date.now()), 5000)
+    return () => window.clearInterval(timer)
+  }, [hasAnyTimedBuff])
+
+  if (!p || !extV2 || !boostSummary) return null
+
+  const vipBonus = getEffectiveVipBonuses(p.premium?.vip, nowMs)
+  const foodBuff = getActiveFoodBuffBonuses(extV2.activeFoodBuff, nowMs)
+  const mountState = sanitizeMountState(p.mountState, p.ownedGemItems)
+  const hasMount = Object.keys(mountState.ownedMounts).length > 0
+  const isMounted = Boolean(mountState.activeMountId && mountState.mounted)
+  const nearbyNode = findNearbyGatheringNode(p.mapId, p.x, p.y)
+  const nearNpc = !game.panel ? game.nearNpc : null
+
+  const buffBadges: Array<{
+    key: string
+    tag: string
+    title: string
+    remain: string
+    tone: string
+    kind: 'boost' | 'food' | 'vip' | 'magnet'
+  }> = []
+
+  for (const b of boostSummary.activeList) {
+    const tagMap: Record<string, string> = {
+      exp: 'XP',
+      jp: 'JP',
+      lifeskill: 'LS',
+      speed: 'SPD',
+      weight: 'WT',
+      stat: 'ALL',
+    }
+    const toneMap: Record<string, string> = {
+      exp: 'border-amber-300/80 bg-amber-900/85 text-amber-200',
+      jp: 'border-orange-300/80 bg-orange-900/85 text-orange-200',
+      lifeskill: 'border-emerald-300/80 bg-emerald-900/85 text-emerald-200',
+      speed: 'border-cyan-300/80 bg-cyan-900/85 text-cyan-200',
+      weight: 'border-sky-300/80 bg-sky-900/85 text-sky-200',
+      stat: 'border-fuchsia-300/80 bg-fuchsia-900/85 text-fuchsia-200',
+    }
+    buffBadges.push({
+      key: `boost_${b.id}`,
+      tag: b.shortTag || tagMap[b.kind] || 'BUF',
+      title: `${b.label} (${formatBuffRemain(b.expiresAtMs - nowMs)})`,
+      remain: formatBuffRemain(b.expiresAtMs - nowMs),
+      tone: toneMap[b.kind] ?? 'border-sky-300/80 bg-slate-900/90 text-white',
+      kind: 'boost',
+    })
+  }
+
+  if (foodBuff.active && extV2.activeFoodBuff) {
+    buffBadges.push({
+      key: 'food',
+      tag: 'FOOD',
+      title: `${extV2.activeFoodBuff.name} (${foodBuff.remainingSec}s)`,
+      remain: formatBuffRemain(foodBuff.remainingSec * 1000),
+      tone: 'border-lime-300/80 bg-lime-950/85 text-lime-200',
+      kind: 'food',
+    })
+  }
+
+  if (vipBonus.active && vipBonus.tierDef) {
+    buffBadges.push({
+      key: 'vip',
+      tag: 'VIP',
+      title: `${vipBonus.tierDef.name} (+EXP ${vipBonus.expBonusPct}%)`,
+      remain: `${Math.max(1, Math.ceil(vipBonus.remainingMs / 86400000))}d`,
+      tone: 'border-yellow-300/85 bg-yellow-950/90 text-yellow-200',
+      kind: 'vip',
+    })
+  }
+
+  if ((p.lootMagnetUntil ?? 0) > nowMs) {
+    buffBadges.push({
+      key: 'magnet',
+      tag: 'MAG',
+      title: 'แม่เหล็กดูดไอเทมอัตโนมัติ',
+      remain: formatBuffRemain((p.lootMagnetUntil ?? 0) - nowMs),
+      tone: 'border-cyan-300/85 bg-cyan-950/90 text-cyan-200',
+      kind: 'magnet',
+    })
+  }
+
+  return (
+    <div
+      data-testid="auto-farm-widget"
+      className="pointer-events-auto flex flex-col items-start gap-1 select-none"
+    >
+      {/* Row 1: Expandable Buff Timer Strip */}
+      <div className="flex flex-wrap items-center gap-1">
+        <button
+          type="button"
+          onClick={() => setBuffExpanded((v) => !v)}
+          aria-expanded={buffExpanded}
+          title={buffExpanded ? 'ย่อแถบเวลาบัฟ' : 'ขยายแถบเวลาบัฟ'}
+          className="grid size-6 place-items-center rounded border border-[#3b6bb3]/75 bg-[#0c1624]/85 text-white hover:border-amber-300"
+        >
+          {buffExpanded ? <ChevronLeft className="size-3.5" aria-hidden /> : <ChevronRight className="size-3.5" aria-hidden />}
+        </button>
+
+        {buffExpanded &&
+          buffBadges.map((b) => (
+            <div
+              key={b.key}
+              title={b.title}
+              className={cn(
+                'relative flex size-6 flex-col items-center justify-between rounded border px-0.5 py-px shadow-md sm:size-7',
+                b.tone,
+              )}
+            >
+              {b.kind === 'vip' ? (
+                <Crown className="size-3" aria-hidden />
+              ) : b.kind === 'food' ? (
+                <Utensils className="size-3" aria-hidden />
+              ) : b.kind === 'magnet' ? (
+                <Magnet className="size-3" aria-hidden />
+              ) : (
+                <Sparkles className="size-2.5" aria-hidden />
+              )}
+              <span className="font-mono text-[7.5px] font-extrabold leading-none text-white tabular-nums">
+                {b.remain}
+              </span>
+              <span className="sr-only">{b.tag}</span>
+            </div>
+          ))}
+      </div>
+
+      {/* Row 2: Quick Action Toggles (AutoSkill, AutoFarm, PK, Mount) + Context Prompt */}
+      <div className="flex flex-wrap items-center gap-1">
+        <button
+          type="button"
+          aria-pressed={game.autoSkills}
+          onClick={() => {
+            if (!game.autoFarm) game.autoFarm = true
+            game.autoSkills = !game.autoSkills
+            notify()
+          }}
+          title="สลับใช้ออโต้สกิล"
+          className={cn(
+            'grid size-7 place-items-center rounded border shadow transition-colors',
+            game.autoSkills && game.autoFarm
+              ? 'border-purple-300 bg-purple-700/85 text-white'
+              : 'border-[#3b6bb3]/75 bg-[#0d1726]/85 text-slate-300 hover:text-white',
+          )}
+        >
+          <Zap className="size-3.5" aria-hidden />
+        </button>
+
+        <button
+          type="button"
+          aria-pressed={game.autoFarm}
+          onClick={() => {
+            game.autoFarm = !game.autoFarm
+            notify()
+          }}
+          title={game.autoFarm ? 'ปิดออโต้ฟาร์ม' : 'เปิดออโต้ฟาร์ม'}
+          className={cn(
+            'grid size-7 place-items-center rounded border shadow transition-colors',
+            game.autoFarm
+              ? 'border-emerald-300 bg-emerald-700/85 text-white'
+              : 'border-[#3b6bb3]/75 bg-[#0d1726]/85 text-slate-300 hover:text-white',
+          )}
+        >
+          <Bot className="size-3.5" aria-hidden />
+        </button>
+
+        <button
+          type="button"
+          aria-pressed={extV2.pkEnabled}
+          onClick={() => togglePkModeAction()}
+          title={extV2.pkEnabled ? 'สถานะ PK เปิดอยู่ (คลิกเพื่อปิด)' : 'สถานะ PK ปิดอยู่ (คลิกเพื่อเปิดโหมดท้าสู้)'}
+          className={cn(
+            'flex h-7 min-w-7 items-center justify-center gap-0.5 rounded border px-1.5 font-mono text-[9.5px] font-extrabold shadow transition-colors',
+            extV2.pkEnabled
+              ? 'border-rose-300 bg-rose-700/90 text-white shadow-[0_0_8px_rgba(244,63,94,0.6)]'
+              : 'border-[#3b6bb3]/75 bg-[#0d1726]/85 text-slate-300 hover:border-rose-300/60 hover:text-white',
+          )}
+        >
+          <Swords className="size-3" aria-hidden />
+          <span>PK</span>
+        </button>
+
+        <button
+          type="button"
+          data-testid="hud-mount-toggle"
+          aria-pressed={isMounted}
+          onClick={() => (hasMount ? toggleMountRiding() : openPanel('pets'))}
+          title={hasMount ? (isMounted ? 'ลงจากสัตว์ขี่ [M]' : 'ขึ้นขี่สัตว์ [M]') : 'ดูสัตว์ขี่และคู่หู'}
+          className={cn(
+            'grid size-7 place-items-center rounded border shadow transition-colors',
+            isMounted
+              ? 'border-amber-300 bg-amber-600/85 text-white'
+              : 'border-[#3b6bb3]/75 bg-[#0d1726]/85 text-cyan-200 hover:border-amber-300/70',
+          )}
+        >
+          <Wind className="size-3.5" aria-hidden />
+        </button>
+
+        {nearNpc && (
+          <button
+            type="button"
+            onClick={() => interact()}
+            className="flex h-7 items-center gap-1 rounded border border-emerald-300/80 bg-emerald-950/90 px-2 text-[10px] font-bold text-emerald-200 shadow-lg hover:brightness-110"
+          >
+            <MessageCircle className="size-3" aria-hidden />
+            คุย: {nearNpc.name} [E]
+          </button>
+        )}
+
+        {nearbyNode && (
+          <button
+            type="button"
+            onClick={() => gatherNearbyNodeAction(nearbyNode.id)}
+            className="flex h-7 items-center gap-1 rounded border border-lime-300/70 bg-lime-950/90 px-2 text-[10px] font-bold text-lime-200 shadow-lg hover:brightness-110"
+          >
+            <Leaf className="size-3" aria-hidden />
+            {nearbyNode.label} [E]
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export function AsuraExpStrip() {
+  const { p } = useGame()
+  if (!p) return null
+
+  const maxExp = expToNext(p.level)
+  const xpPct = p.level >= 99 ? 100 : Math.min(100, (p.exp / Math.max(1, maxExp)) * 100)
+  const jLv = Math.max(1, p.jobLevel ?? 1)
+  const maxJp = jobExpToNext(jLv)
+  const jpPct = jLv >= 99 ? 100 : Math.min(100, ((p.jobExp ?? 0) / Math.max(1, maxJp)) * 100)
+
+  return (
+    <div
+      data-testid="asura-exp-strip"
+      className="pointer-events-auto flex items-center gap-1.5 select-none"
+    >
+      <button
+        type="button"
+        onClick={() => openPanel('character')}
+        title={`ค่าประสบการณ์ตัวละคร: ${p.exp} / ${maxExp}`}
+        className="relative h-5 w-28 overflow-hidden rounded border border-[#3b6bb3]/85 bg-[#0c1626]/92 shadow-md sm:w-36"
+      >
+        <div
+          className="h-full bg-gradient-to-r from-[#1d4ed8] via-[#2563eb] to-[#38bdf8] transition-[width] duration-200"
+          style={{ width: `${xpPct}%` }}
+        />
+        <span className="pointer-events-none absolute inset-0 flex items-center justify-center font-mono text-[10px] font-extrabold text-white [text-shadow:0_1px_2px_#000] tabular-nums">
+          XP {xpPct.toFixed(2)} %
+        </span>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => openPanel('job')}
+        title={`ค่าประสบการณ์อาชีพ: ${p.jobExp ?? 0} / ${maxJp}`}
+        className="relative h-5 w-28 overflow-hidden rounded border border-[#3b6bb3]/85 bg-[#0c1626]/92 shadow-md sm:w-36"
+      >
+        <div
+          className="h-full bg-gradient-to-r from-[#b45309] via-[#d97706] to-[#fbbf24] transition-[width] duration-200"
+          style={{ width: `${jpPct}%` }}
+        />
+        <span className="pointer-events-none absolute inset-0 flex items-center justify-center font-mono text-[10px] font-extrabold text-white [text-shadow:0_1px_2px_#000] tabular-nums">
+          JP {jpPct.toFixed(2)} %
+        </span>
+      </button>
+    </div>
   )
 }

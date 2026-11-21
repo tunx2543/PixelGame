@@ -110,7 +110,7 @@ function drawMountForegroundSaddleStrap(
 export function screenToWorld(cssX: number, cssY: number, cssW: number, cssH: number): { x: number; y: number } {
   const safeW = Math.max(1, cssW)
   const safeH = Math.max(1, cssH)
-  const zoom = computeCameraZoom(safeW, safeH)
+  const zoom = computeCameraZoom(safeW, safeH, game.cameraZoomScale)
   const mapId = currentMap().id
   const camX = lastRenderCam.mapId === mapId ? lastRenderCam.x : cameraState.x
   const camY = lastRenderCam.mapId === mapId ? lastRenderCam.y : cameraState.y
@@ -272,7 +272,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
 
   const cssW = cw / dpr
   const cssH = ch / dpr
-  const zoom = computeCameraZoom(cssW, cssH)
+  const zoom = computeCameraZoom(cssW, cssH, game.cameraZoomScale)
   const s = zoom * dpr
   const viewW = cw / s
   const viewH = ch / s
@@ -1578,12 +1578,19 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
 
   for (const pr of game.projectiles) {
     if (pr.delay > 0) continue
+    ctx.save()
     ctx.fillStyle = pr.color
-    ctx.globalAlpha = 0.4
-    ctx.fillRect(Math.round(pr.x - pr.size), Math.round(pr.y - pr.size), pr.size * 2 + 1, pr.size * 2 + 1)
+    ctx.globalAlpha = pr.aoe > 0 ? 0.55 : 0.42
+    const outer = pr.aoe > 0 ? pr.size + 1.5 : pr.size
+    ctx.beginPath()
+    ctx.arc(Math.round(pr.x), Math.round(pr.y), outer + 0.5, 0, Math.PI * 2)
+    ctx.fill()
     ctx.globalAlpha = 1
+    ctx.fillStyle = pr.color
+    ctx.fillRect(Math.round(pr.x - pr.size * 0.7), Math.round(pr.y - pr.size * 0.7), Math.max(2, Math.round(pr.size * 1.4)), Math.max(2, Math.round(pr.size * 1.4)))
     ctx.fillStyle = '#ffffff'
     ctx.fillRect(Math.round(pr.x), Math.round(pr.y), 1 + Math.floor(pr.size / 2), 1 + Math.floor(pr.size / 2))
+    ctx.restore()
   }
 
   for (const e of game.effects) {
@@ -1917,39 +1924,51 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     const remoteX = (other.previousX ?? other.x) + (other.x - (other.previousX ?? other.x)) * networkBlend
     const remoteY = (other.previousY ?? other.y) + (other.y - (other.previousY ?? other.y)) * networkBlend
     const isRemoteMounted = Boolean(other.mountId && getMountDef(other.mountId))
-    const [x, y] = toS(remoteX, remoteY - (isRemoteMounted ? 44 : 38))
+    const [footCx, footTopY] = toS(remoteX, remoteY + (isRemoteMounted ? 6 : 4.5))
     const remoteJob = JOBS[normalizeJobId(other.jobId)]
     const activeTitleDef = other.activeTitle ? TITLE_DEFS.find((item) => item.id === other.activeTitle) : null
     const vipTierDef = (other.vipLevel ?? 0) > 0 ? getVipTierDef(other.vipLevel ?? 0) : null
     const equippedFrame = getCosmeticDef(other.frameId)
     const gmPrefix = other.gm ? '[GM] ' : ''
-    const guildTagPrefix = other.guildTag ? `[${other.guildTag}] ` : ''
     const vipPrefix = vipTierDef ? `[${vipTierDef.badgeLabel}] ` : ''
-    const displayNameLine = `${gmPrefix}${vipPrefix}${guildTagPrefix}${other.displayName} [${other.gm ? '0000' : String(other.uid).padStart(5, '0')}] Lv.${other.level}`
+    const displayNameLine = `${gmPrefix}${vipPrefix}${other.displayName}`
+    const guildLine = other.guildTag ? `[${other.guildTag}]` : `Lv.${other.level} · ${remoteJob.name}`
 
+    // Asura compact emerald HP bar under feet/mount
+    const rbw = 26 * s
+    const rbh = 2.1 * s
+    ctx.fillStyle = 'rgba(7, 11, 20, 0.92)'
+    ctx.fillRect(Math.round(footCx - rbw / 2 - dpr), Math.round(footTopY - dpr), Math.round(rbw + 2 * dpr), Math.round(rbh + 2 * dpr))
+    ctx.fillStyle = '#143227'
+    ctx.fillRect(Math.round(footCx - rbw / 2), Math.round(footTopY), Math.round(rbw), Math.round(rbh))
+    ctx.fillStyle = '#4ade80'
+    ctx.fillRect(Math.round(footCx - rbw / 2), Math.round(footTopY), Math.round(rbw), Math.round(rbh))
+
+    let nameOffsetY = footTopY + rbh + 7.5 * dpr
     if (equippedFrame) {
       ctx.save()
       ctx.strokeStyle = equippedFrame.primaryColor
       ctx.fillStyle = equippedFrame.secondaryColor
       ctx.globalAlpha = 0.72
-      const fw = Math.max(76, displayNameLine.length * 4.5) * dpr
+      const fw = Math.max(76, displayNameLine.length * 4.8) * dpr
       const fh = 12 * dpr
-      ctx.fillRect(Math.round(x - fw / 2), Math.round(y - 5 * dpr - fh / 2), Math.round(fw), Math.round(fh))
-      ctx.lineWidth = 1.2 * dpr
-      ctx.strokeRect(Math.round(x - fw / 2), Math.round(y - 5 * dpr - fh / 2), Math.round(fw), Math.round(fh))
+      ctx.fillRect(Math.round(footCx - fw / 2), Math.round(nameOffsetY - fh / 2), Math.round(fw), Math.round(fh))
+      ctx.lineWidth = 1.1 * dpr
+      ctx.strokeRect(Math.round(footCx - fw / 2), Math.round(nameOffsetY - fh / 2), Math.round(fw), Math.round(fh))
       ctx.restore()
     }
-    text(`✦ ${remoteJob.name} ✦`, x, y - 16 * dpr, other.gm ? '#ffd60a' : '#72efdd', 7.8)
+    if (activeTitleDef) {
+      text(`«${activeTitleDef.name}»`, footCx, nameOffsetY, activeTitleDef.color, 7.6)
+      nameOffsetY += 9 * dpr
+    }
     text(
       displayNameLine,
-      x,
-      y - 5 * dpr,
-      other.gm ? '#ffd60a' : equippedFrame?.primaryColor ?? vipTierDef?.badgeColor ?? '#8be9fd',
+      footCx,
+      nameOffsetY,
+      other.gm ? '#ffd60a' : equippedFrame?.primaryColor ?? vipTierDef?.badgeColor ?? '#ffffff',
       9.2,
     )
-    if (activeTitleDef) {
-      text(`«${activeTitleDef.name}»`, x, y - 27 * dpr, activeTitleDef.color, 7.6)
-    }
+    text(guildLine, footCx, nameOffsetY + 9.5 * dpr, other.guildTag ? '#fde68a' : '#cbd5e1', 7.8)
   }
 
   {
@@ -1957,34 +1976,34 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       activeMount &&
         (activeMount.mounted || game.mountTransition === 'mounting' || game.mountTransition === 'dismounting'),
     )
-    const [x, y] = toS(p.x, p.y - (isLocalMounted ? 44 : 38))
-    // Compact HP & MP bar anchored cleanly below the character's feet
+    const [headX, headY] = toS(p.x, p.y - (isLocalMounted ? 48 : 42))
+    const [barCx, barTopY] = toS(p.x, p.y + (isLocalMounted ? 6 : 4.5))
+    // Compact Asura HP & MP bar anchored cleanly below character/mount feet
     const stats = getStats(p)
+    const bw = 26 * s
+    const hpH = 2.2 * s
+    const mpH = 1.4 * s
+    const gap = Math.max(1, 0.5 * dpr)
     if (stats) {
-      const [barCx, barTopY] = toS(p.x, p.y + (isLocalMounted ? 6.5 : 5))
-      const bw = 24 * s
-      const hpH = 2.1 * s
-      const mpH = 1.4 * s
-      const gap = Math.max(1, 0.5 * dpr)
-      ctx.fillStyle = 'rgba(10, 8, 20, 0.92)'
+      ctx.fillStyle = 'rgba(7, 11, 20, 0.94)'
       ctx.fillRect(
         Math.round(barCx - bw / 2 - dpr),
         Math.round(barTopY - dpr),
         Math.round(bw + 2 * dpr),
         Math.round(hpH + mpH + gap + 2 * dpr),
       )
-      ctx.fillStyle = '#3a0d12'
+      ctx.fillStyle = '#132a1f'
       ctx.fillRect(Math.round(barCx - bw / 2), Math.round(barTopY), Math.round(bw), Math.round(hpH))
-      ctx.fillStyle = '#e5484d'
+      ctx.fillStyle = '#4ade80'
       ctx.fillRect(
         Math.round(barCx - bw / 2),
         Math.round(barTopY),
         Math.round(bw * Math.max(0, Math.min(1, p.hp / Math.max(1, stats.maxHp)))),
         Math.round(hpH),
       )
-      ctx.fillStyle = '#132445'
+      ctx.fillStyle = '#0f2342'
       ctx.fillRect(Math.round(barCx - bw / 2), Math.round(barTopY + hpH + gap), Math.round(bw), Math.round(mpH))
-      ctx.fillStyle = '#4c8bf5'
+      ctx.fillStyle = '#38bdf8'
       ctx.fillRect(
         Math.round(barCx - bw / 2),
         Math.round(barTopY + hpH + gap),
@@ -1992,46 +2011,61 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         Math.round(mpH),
       )
     }
+
     const activeTitleDef = p.rpgExt?.activeTitle ? TITLE_DEFS.find((item) => item.id === p.rpgExt?.activeTitle) : null
     const gmPrefix = p.gm ? '[GM] ' : ''
-    const guildTagPrefix = p.rpgExt?.guildTag ? `[${p.rpgExt.guildTag}] ` : ''
     const vipPrefix = vipBonus.active && vipBonus.tierDef ? `[${vipBonus.tierDef.badgeLabel}] ` : ''
-    const displayNameLine = `${gmPrefix}${vipPrefix}${guildTagPrefix}${p.name} [${p.uid === undefined ? 'Guest' : String(p.uid).padStart(5, '0')}]`
+    const displayNameLine = `${gmPrefix}${vipPrefix}${p.name}`
+    const guildDisplay = p.rpgExt?.guildName
+      ? p.rpgExt.guildName
+      : p.rpgExt?.guildTag
+        ? `[${p.rpgExt.guildTag}]`
+        : job.name
+
+    let labelY = barTopY + hpH + mpH + gap + 8 * dpr
     if (equippedFrame) {
       ctx.save()
       ctx.strokeStyle = equippedFrame.primaryColor
       ctx.fillStyle = equippedFrame.secondaryColor
       ctx.globalAlpha = 0.72
-      const fw = Math.max(76, displayNameLine.length * 4.5) * dpr
+      const fw = Math.max(76, displayNameLine.length * 4.8) * dpr
       const fh = 12 * dpr
-      ctx.fillRect(Math.round(x - fw / 2), Math.round(y - 5 * dpr - fh / 2), Math.round(fw), Math.round(fh))
-      ctx.lineWidth = 1.2 * dpr
-      ctx.strokeRect(Math.round(x - fw / 2), Math.round(y - 5 * dpr - fh / 2), Math.round(fw), Math.round(fh))
+      ctx.fillRect(Math.round(barCx - fw / 2), Math.round(labelY - fh / 2), Math.round(fw), Math.round(fh))
+      ctx.lineWidth = 1.1 * dpr
+      ctx.strokeRect(Math.round(barCx - fw / 2), Math.round(labelY - fh / 2), Math.round(fw), Math.round(fh))
       ctx.restore()
     }
-    text(`✦ ${job.name} ✦`, x, y - 16 * dpr, p.gm ? '#ffd60a' : '#72efdd', 7.8)
+    if (activeTitleDef) {
+      text(`«${activeTitleDef.name}»`, barCx, labelY, activeTitleDef.color, 7.6)
+      labelY += 9 * dpr
+    }
     text(
       displayNameLine,
-      x,
-      y - 5 * dpr,
+      barCx,
+      labelY,
       p.gm ? '#ffd60a' : equippedFrame?.primaryColor ?? (vipBonus.active && vipBonus.tierDef ? vipBonus.tierDef.badgeColor : '#ffffff'),
-      9.5,
+      9.4,
     )
-    if (activeTitleDef) {
-      text(`«${activeTitleDef.name}»`, x, y - 27 * dpr, activeTitleDef.color, 7.6)
-    }
+    text(
+      guildDisplay,
+      barCx,
+      labelY + 9.5 * dpr,
+      p.rpgExt?.guildName || p.rpgExt?.guildTag ? '#f8fafc' : '#72efdd',
+      8.1,
+    )
+
     if (game.bubble) {
       ctx.font = `${Math.round(11 * dpr * (zoom / 3) * 1.2)}px ${font}`
       const tw = Math.min(ctx.measureText(game.bubble.text).width, 260 * dpr)
-      const by = y - (activeTitleDef ? 42 : 31) * dpr
+      const by = headY - 10 * dpr
       ctx.fillStyle = 'rgba(255,250,235,0.95)'
-      ctx.fillRect(x - tw / 2 - 6 * dpr, by - 10 * dpr, tw + 12 * dpr, 20 * dpr)
+      ctx.fillRect(headX - tw / 2 - 6 * dpr, by - 10 * dpr, tw + 12 * dpr, 20 * dpr)
       ctx.fillStyle = 'rgba(10,8,20,0.9)'
-      ctx.fillRect(x - 2 * dpr, by + 10 * dpr, 4 * dpr, 3 * dpr)
+      ctx.fillRect(headX - 2 * dpr, by + 10 * dpr, 4 * dpr, 3 * dpr)
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
       ctx.fillStyle = '#1a1423'
-      ctx.fillText(game.bubble.text, x, by, 260 * dpr)
+      ctx.fillText(game.bubble.text, headX, by, 260 * dpr)
     }
   }
 

@@ -27,6 +27,7 @@ import {
   QrCode,
   Receipt,
   RefreshCw,
+  Search,
   ShieldCheck,
   Sparkles,
   Store,
@@ -100,9 +101,11 @@ import {
   sanitizeExtV2,
 } from '@/lib/game/extended-systems'
 import {
+  ASURA_SOUL_CATEGORIES,
   PREMIUM_CATALOG,
-  PREMIUM_CATEGORY_META,
   getPremiumProduct,
+  resolveAsuraShopBucket,
+  type AsuraShopCategoryId,
 } from '@/lib/game/premium/catalog'
 import {
   FASHION_CHARACTER_SLOTS,
@@ -155,11 +158,9 @@ type PremiumTabId =
   | 'storage'
   | 'history'
 
-type StoreCategoryFilter = 'all' | PremiumCategory
-
 const TABS: Array<{ id: PremiumTabId; label: string; icon: typeof Store }> = [
-  { id: 'overview', label: 'ภาพรวม & ร้านค้า', icon: Store },
-  { id: 'diamond', label: 'เติมเงิน & กระเป๋าเพชร', icon: Gem },
+  { id: 'overview', label: 'ร้านค้าโซล', icon: Store },
+  { id: 'diamond', label: 'เติมโซล & กระเป๋า', icon: Gem },
   { id: 'vip', label: 'สมาชิก VIP', icon: Crown },
   { id: 'pass', label: 'Season Pass', icon: Award },
   { id: 'fashion', label: 'แฟชั่นครบส่วน', icon: Sparkles },
@@ -261,8 +262,10 @@ function ProductThumb({ product }: { product: PremiumProduct }) {
 export function PremiumShopPanel() {
   const { p } = useGame()
   const [activeTab, setActiveTab] = useState<PremiumTabId>('overview')
-  const [storeCategory, setStoreCategory] = useState<StoreCategoryFilter>('all')
+  const [soulCat, setSoulCat] = useState<AsuraShopCategoryId>('recommend')
+  const [soulSubTab, setSoulSubTab] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
+  const [inspectProduct, setInspectProduct] = useState<PremiumProduct | null>(null)
   const [fashionSlot, setFashionSlot] = useState<FashionSlot>('costume')
   const [fashionPreviewOverrides, setFashionPreviewOverrides] = useState<Partial<Record<FashionSlot, string | null>>>({})
   const [fashionPreviewDir, setFashionPreviewDir] = useState<Dir>('down')
@@ -383,19 +386,25 @@ export function PremiumShopPanel() {
     return () => clearInterval(timer)
   }, [selectedTopupPkg, activeIntent])
 
+  const activeSoulCatMeta = ASURA_SOUL_CATEGORIES.find((c) => c.id === soulCat) ?? ASURA_SOUL_CATEGORIES[0]
+
   const catalogFiltered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     return PREMIUM_CATALOG.filter((prod) => {
       if (!prod.enabled) return false
-      if (storeCategory !== 'all' && prod.category !== storeCategory) return false
-      if (!q) return true
-      return (
-        prod.name.toLowerCase().includes(q) ||
-        prod.description.toLowerCase().includes(q) ||
-        prod.productId.toLowerCase().includes(q)
-      )
+      if (q) {
+        return (
+          prod.name.toLowerCase().includes(q) ||
+          prod.description.toLowerCase().includes(q) ||
+          prod.productId.toLowerCase().includes(q)
+        )
+      }
+      const bucket = resolveAsuraShopBucket(prod)
+      if (bucket.category !== soulCat) return false
+      if (soulSubTab !== 'all' && bucket.subTab !== soulSubTab) return false
+      return true
     })
-  }, [searchQuery, storeCategory])
+  }, [searchQuery, soulCat, soulSubTab])
 
   if (!p) return null
 
@@ -782,24 +791,24 @@ export function PremiumShopPanel() {
     return (
       <div
         key={prod.productId}
-        className="flex flex-col justify-between gap-2.5 border-2 border-border bg-background/70 p-2.5 transition-colors hover:border-cyan-400/50"
+        className="flex flex-col justify-between gap-2.5 rounded-md border border-[#2a4c7d] bg-[#101c2f]/95 p-2.5 transition-colors hover:border-sky-400/70"
       >
         <div className="flex items-start gap-2.5">
-          <div className="grid size-11 shrink-0 place-items-center border border-border bg-slate-950/80">
+          <div className="grid size-11 shrink-0 place-items-center rounded border border-[#2c4e7f] bg-[#0b1320]">
             <ProductThumb product={prod} />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-1.5">
-              <h4 className="truncate text-xs font-bold text-foreground">{prod.name}</h4>
+              <h4 className="truncate text-xs font-bold text-white">{prod.name}</h4>
               <span className={cn('border px-1.5 py-0.5 text-[9px] font-semibold', rarityBadgeClass(prod.rarity))}>
                 {prod.rarity}
               </span>
             </div>
-            <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">{prod.description}</p>
-            <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[10px] text-muted-foreground">
+            <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-slate-300">{prod.description}</p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[10px] text-slate-400">
               {prod.purchaseLimit !== null && (
                 <span>
-                  จำกัด {bought}/{prod.purchaseLimit} ครั้ง
+                  จำกัด {bought}/{prod.purchaseLimit}
                 </span>
               )}
               {prod.stock !== null && <span>สต็อก {prod.stock}</span>}
@@ -808,19 +817,37 @@ export function PremiumShopPanel() {
             </div>
           </div>
         </div>
-        <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-2">
-          <span className="flex items-center gap-1 text-xs font-bold text-cyan-200 tabular-nums">
-            <Gem className="size-3.5 text-cyan-300" aria-hidden />
-            {formatNum(prod.diamondPrice)} D
+        <div className="flex items-center justify-between gap-2 border-t border-[#203a60] pt-2">
+          <span className="flex items-center gap-1 text-xs font-bold text-amber-300 tabular-nums">
+            <Gem className="size-3.5 text-sky-300" aria-hidden />
+            {formatNum(prod.diamondPrice)} โซล
           </span>
-          <PxButton
-            variant={status.locked ? 'secondary' : canAfford ? 'accent' : 'primary'}
-            disabled={status.locked || !canAfford || inFlight}
-            onClick={() => openBuyModal(prod)}
-            className="px-2.5 py-1 text-[10px]"
-          >
-            {status.locked ? status.label : canAfford ? 'ซื้อสินค้า' : 'เพชรไม่พอ'}
-          </PxButton>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setInspectProduct(prod)}
+              aria-label={`ดูรายละเอียด ${prod.name}`}
+              title="ตรวจสอบรายละเอียด"
+              className="asura-tab grid size-7 place-items-center text-sky-200 hover:text-white"
+            >
+              <Search className="size-3.5" aria-hidden />
+            </button>
+            <button
+              type="button"
+              disabled={status.locked || !canAfford || inFlight}
+              onClick={() => openBuyModal(prod)}
+              className={cn(
+                'px-3 py-1 text-[10.5px] font-bold whitespace-nowrap transition-all disabled:opacity-45',
+                status.locked
+                  ? 'asura-tab text-slate-300'
+                  : canAfford
+                    ? 'asura-tab-active text-white'
+                    : 'rounded border border-rose-400/50 bg-rose-900/60 text-rose-200',
+              )}
+            >
+              {status.locked ? status.label : canAfford ? 'ซื้อ' : 'โซลไม่พอ'}
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -828,27 +855,19 @@ export function PremiumShopPanel() {
 
   return (
     <PanelFrame
-      title="ศูนย์พรีเมียม & เติมเงินเพชร (Real Top-Up)"
-      subtitle="เติมเงินจริง (PromptPay / Stripe / ตรวจสลิป) · VIP 1–5 · Season Pass · แฟชั่น 5 ส่วน · ขยายกระเป๋า/คลัง"
+      title="ร้านค้าโซล (Asura Soul Shop)"
+      subtitle="เลือกซื้อไอเทมสนับสนุน ตีบวก แฟชั่น คู่หู เปิดเคล็ด และเติมโซลจริง (PromptPay / Stripe / ตรวจสลิป)"
     >
-      {/* Top Banner: Verified Payment & Wallet Strip */}
+      {/* Top Banner: Verified Payment & Soul Wallet Strip */}
       <div className="mb-3 space-y-2">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-2 border-cyan-400/40 bg-cyan-950/30 px-3 py-2">
-          <div className="flex items-center gap-2 text-[11px] text-cyan-100">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-[#2c5490] bg-[#101c2f]/95 px-3 py-2">
+          <div className="flex items-center gap-2 text-[11px] text-sky-100">
             <ShieldCheck className="size-4 shrink-0 text-emerald-300" aria-hidden />
             <span>
-              <strong className="text-emerald-300">ระบบเติมเงินจริง (Server-Verified):</strong>{' '}
-              รองรับ PromptPay QR, บัตรเครดิต/เดบิต Stripe และสลิปธนาคารอัตโนมัติ (เติมเข้าตัวละครทันที)
+              <strong className="text-emerald-300">ร้านค้าโซลอสุรา (Server-Verified):</strong>{' '}
+              รองรับเติมโซล PromptPay QR, บัตรเครดิต Stripe และสลิปธนาคารอัตโนมัติ
             </span>
           </div>
-          <PxButton
-            variant="accent"
-            onClick={() => setActiveTab('diamond')}
-            className="px-2.5 py-1 text-[10px]"
-          >
-            <CreditCard className="mr-1 inline size-3" aria-hidden />
-            เติมเพชร
-          </PxButton>
           <div className="flex flex-wrap items-center gap-2">
             {vipActive && vipBonuses.tierDef && (
               <span
@@ -863,10 +882,18 @@ export function PremiumShopPanel() {
                 {vipBonuses.tierDef.badgeLabel} ({formatVipRemaining(vipBonuses.remainingMs)})
               </span>
             )}
-            <span className="inline-flex items-center gap-1.5 border border-cyan-300/40 bg-cyan-400/10 px-2.5 py-1 text-xs font-bold text-cyan-100 tabular-nums">
-              <Gem className="size-3.5 text-cyan-300" aria-hidden />
-              {formatNum(p.diamonds ?? 0)} D
+            <span className="inline-flex items-center gap-1.5 rounded border border-sky-400/40 bg-[#0b1320] px-2.5 py-1 text-xs font-bold text-amber-300 tabular-nums">
+              <Gem className="size-3.5 text-sky-300" aria-hidden />
+              {formatNum(p.diamonds ?? 0)} โซล
             </span>
+            <button
+              type="button"
+              onClick={() => setActiveTab('diamond')}
+              className="asura-tab-active flex items-center gap-1 px-3 py-1 text-[11px] font-bold whitespace-nowrap"
+            >
+              <CreditCard className="size-3.5" aria-hidden />
+              เติมโซล
+            </button>
           </div>
         </div>
 
@@ -918,169 +945,142 @@ export function PremiumShopPanel() {
         )}
       </div>
 
-      {/* TAB 1: OVERVIEW & FULL 8-CATEGORY STOREFRONT */}
+      {/* TAB 1: ASURA 6-CATEGORY SOUL SHOP */}
       {activeTab === 'overview' && (
-        <div className="space-y-4">
-          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="border-2 border-cyan-400/35 bg-muted/60 p-2.5">
-              <p className="text-[10px] text-muted-foreground">ยอดเพชรคงเหลือ (Wallet)</p>
-              <p className="mt-1 flex items-center gap-1.5 text-base font-bold text-cyan-200 tabular-nums">
-                <Gem className="size-4 text-cyan-300" aria-hidden />
-                {formatNum(p.diamonds ?? 0)} D
-              </p>
-              <p className="mt-1 text-[10px] text-muted-foreground tabular-nums">
-                รับรวม {formatNum(wallet.totalEarned)} · ใช้รวม {formatNum(wallet.totalSpent)}
-              </p>
-            </div>
+        <div className="space-y-3">
+          {/* Asura 6-Category Vertical Rail + Sub-tab Matrix + Products */}
+          <div className="grid gap-3 rounded-lg border border-[#2a4c7d] bg-[#0d1522]/95 p-3 lg:grid-cols-[8.5rem_1fr]">
+            {/* Left 6 Asura Soul Shop Categories */}
+            <nav
+              aria-label="หมวดหมู่ร้านค้าโซล"
+              className="flex gap-1.5 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0"
+            >
+              {ASURA_SOUL_CATEGORIES.map((cat) => {
+                const active = soulCat === cat.id && !searchQuery.trim()
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('')
+                      setSoulCat(cat.id)
+                      setSoulSubTab('all')
+                    }}
+                    className={cn(
+                      'shrink-0 px-3 py-2 text-center text-xs font-bold whitespace-nowrap transition-all lg:w-full',
+                      active ? 'asura-tab-active' : 'asura-tab',
+                    )}
+                  >
+                    {cat.label}
+                  </button>
+                )
+              })}
+            </nav>
 
-            <div className="border-2 border-amber-400/35 bg-muted/60 p-2.5">
-              <p className="text-[10px] text-muted-foreground">สถานะสมาชิก VIP</p>
-              <p className="mt-1 flex items-center gap-1.5 text-sm font-bold text-amber-200">
-                <Crown className="size-4 text-amber-300" aria-hidden />
-                {vipActive && vipBonuses.tierDef ? vipBonuses.tierDef.name : 'ยังไม่ได้เปิดใช้งาน VIP'}
-              </p>
-              <p className="mt-1 text-[10px] text-muted-foreground tabular-nums">
-                {vipActive
-                  ? `EXP +${vipBonuses.expBonusPct}% · คงเหลือ ${formatVipRemaining(vipBonuses.remainingMs)}`
-                  : `สะสม ${formatNum(vip.vipExp)} VIP EXP`}
-              </p>
-            </div>
-
-            <div className="border-2 border-border bg-muted/60 p-2.5">
-              <p className="text-[10px] text-muted-foreground">ความจุกระเป๋า & คลัง</p>
-              <p className="mt-1 text-sm font-bold text-foreground tabular-nums">
-                กระเป๋า {p.inventory.length}/{invBreakdown.total} · คลัง {p.storage.length}/{storBreakdown.total}
-              </p>
-              <p className="mt-1 text-[10px] text-muted-foreground">
-                โบนัส VIP +{invBreakdown.vipExtra} กระเป๋า / +{storBreakdown.vipExtra} คลัง
-              </p>
-            </div>
-
-            <div className="border-2 border-border bg-muted/60 p-2.5">
-              <p className="text-[10px] text-muted-foreground">แฟชั่น & คู่หูที่สวมใส่</p>
-              <div className="mt-1 flex items-center gap-2">
-                <SpriteModelCanvas
-                  mode="job"
-                  id={p.jobId}
-                  action="idle"
-                  dir="down"
-                  size={34}
-                  fashion={resolvePlayerFashionLoadout(p)}
-                  isGm={p.gm}
-                  rebirthCount={p.rebirthCount}
-                  showShadow={false}
-                />
-                <div className="min-w-0 text-[10px] text-muted-foreground">
-                  <p className="truncate font-semibold text-foreground">
-                    แฟชั่น {prem.fashion.unlockedIds.length} ชิ้น
-                  </p>
-                  <p className="truncate">
-                    คู่หู: {activePetBonus ? activePetBonus.def.name : 'ไม่ได้เรียก'}
-                  </p>
+            {/* Right Sub-tabs + Search + Grid */}
+            <div className="flex min-w-0 flex-col gap-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#20395d] pb-2">
+                <div className="flex flex-wrap gap-1.5">
+                  {activeSoulCatMeta.subTabs.map((sub) => {
+                    const active = soulSubTab === sub.id && !searchQuery.trim()
+                    return (
+                      <button
+                        key={sub.id}
+                        type="button"
+                        onClick={() => {
+                          setSearchQuery('')
+                          setSoulSubTab(sub.id)
+                        }}
+                        className={cn(
+                          'px-3 py-1 text-[11px] font-bold whitespace-nowrap',
+                          active ? 'asura-tab-active' : 'asura-tab',
+                        )}
+                      >
+                        {sub.label}
+                      </button>
+                    )
+                  })}
                 </div>
+                <label className="relative flex w-full items-center sm:w-52">
+                  <Search className="pointer-events-none absolute left-2.5 size-3.5 text-slate-400" aria-hidden />
+                  <input
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="ค้นหาไอเทมโซล..."
+                    className="w-full rounded border border-[#2d4e80] bg-[#142033] py-1 pl-8 pr-2.5 text-xs text-white placeholder:text-slate-400 focus:border-sky-400 focus:outline-none"
+                  />
+                </label>
               </div>
-            </div>
-          </div>
 
-          {/* VIP Remote Services Quick Access */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-2 border-amber-400/45 bg-amber-950/20 p-2.5">
-            <div className="min-w-0">
-              <p className="flex items-center gap-1.5 text-xs font-bold text-amber-200">
-                <Crown className="size-3.5 text-amber-300" aria-hidden />
-                บริการ VIP ระยะไกล (ใช้งานได้ทุกแผนที่)
-              </p>
-              <p className="text-[10px] text-muted-foreground">
-                {vipActive
-                  ? 'เปิดร้านค้าระยะไกล, ตีบวกอุปกรณ์ และฝาก-ถอนคลังเก็บของได้ทันที'
-                  : 'เปิดใช้งานสมาชิก VIP เพื่อซื้อของ ตีบวก และฝาก-ถอนคลังจากระยะไกล'}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <PxButton
-                variant={vipActive ? 'accent' : 'secondary'}
-                disabled={!vipActive}
-                onClick={() => openPanel('shop')}
-                className="px-2.5 py-1 text-[10px]"
-              >
-                <Store className="mr-1 inline size-3" aria-hidden />
-                ร้านค้าระยะไกล
-              </PxButton>
-              <PxButton
-                variant={vipActive ? 'accent' : 'secondary'}
-                disabled={!vipActive}
-                onClick={() => openPanel('enhance')}
-                className="px-2.5 py-1 text-[10px]"
-              >
-                <Hammer className="mr-1 inline size-3" aria-hidden />
-                ตีบวกระยะไกล
-              </PxButton>
-              <PxButton
-                variant={vipActive ? 'accent' : 'secondary'}
-                disabled={!vipActive}
-                onClick={() => openPanel('storage')}
-                className="px-2.5 py-1 text-[10px]"
-              >
-                <Warehouse className="mr-1 inline size-3" aria-hidden />
-                คลังระยะไกล
-              </PxButton>
-              {!vipActive && (
-                <PxButton variant="primary" onClick={() => setActiveTab('vip')} className="px-2.5 py-1 text-[10px]">
-                  เปิด VIP
-                </PxButton>
+              {catalogFiltered.length === 0 ? (
+                <div className="flex h-40 flex-col items-center justify-center rounded border border-[#213a5e] bg-[#0a1019] text-xs text-slate-400">
+                  <Tag className="mb-1 size-5 opacity-60" aria-hidden />
+                  ไม่พบสินค้าที่ตรงกับคำค้นหา
+                </div>
+              ) : (
+                <div className="grid gap-2.5 sm:grid-cols-2">
+                  {catalogFiltered.map(renderProductCard)}
+                </div>
               )}
             </div>
           </div>
 
-          {/* 8-Category Premium Storefront */}
-          <div className="space-y-3 border-2 border-border bg-muted/35 p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h3 className="flex items-center gap-1.5 text-sm font-bold text-primary">
-                  <Tag className="size-4" aria-hidden />
-                  ร้านค้าพรีเมียมครบ 8 หมวดหมู่
-                </h3>
-                <p className="text-[11px] text-muted-foreground">
-                  ทุกการสั่งซื้อตรวจสอบราคา สต็อก และป้องกันรายการซ้ำผ่านเซิร์ฟเวอร์
-                </p>
+          {/* Compact Summary & VIP Remote Access Footer */}
+          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded border border-[#274672] bg-[#101a2a] p-2.5">
+              <p className="text-[10px] text-slate-400">ยอดโซลคงเหลือ</p>
+              <p className="mt-1 flex items-center gap-1.5 text-sm font-bold text-amber-300 tabular-nums">
+                <Gem className="size-4 text-sky-300" aria-hidden />
+                {formatNum(p.diamonds ?? 0)} โซล
+              </p>
+              <p className="mt-0.5 text-[10px] text-slate-400 tabular-nums">
+                รับรวม {formatNum(wallet.totalEarned)} · ใช้รวม {formatNum(wallet.totalSpent)}
+              </p>
+            </div>
+            <div className="rounded border border-[#274672] bg-[#101a2a] p-2.5">
+              <p className="text-[10px] text-slate-400">สถานะ VIP</p>
+              <p className="mt-1 flex items-center gap-1.5 text-xs font-bold text-amber-200">
+                <Crown className="size-3.5 text-amber-300" aria-hidden />
+                {vipActive && vipBonuses.tierDef ? vipBonuses.tierDef.name : 'ยังไม่ได้เปิดใช้งาน VIP'}
+              </p>
+              <p className="mt-0.5 text-[10px] text-slate-400 tabular-nums">
+                {vipActive
+                  ? `EXP +${vipBonuses.expBonusPct}% · เหลือ ${formatVipRemaining(vipBonuses.remainingMs)}`
+                  : `สะสม ${formatNum(vip.vipExp)} VIP EXP`}
+              </p>
+            </div>
+            <div className="rounded border border-[#274672] bg-[#101a2a] p-2.5">
+              <p className="text-[10px] text-slate-400">ความจุกระเป๋า & คลัง</p>
+              <p className="mt-1 text-xs font-bold text-white tabular-nums">
+                กระเป๋า {p.inventory.length}/{invBreakdown.total} · คลัง {p.storage.length}/{storBreakdown.total}
+              </p>
+              <p className="mt-0.5 text-[10px] text-slate-400">
+                VIP +{invBreakdown.vipExtra} กระเป๋า / +{storBreakdown.vipExtra} คลัง
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-1.5 rounded border border-amber-400/35 bg-[#151c29] p-2.5">
+              <div className="text-[10px]">
+                <p className="font-bold text-amber-300">บริการ VIP ระยะไกล</p>
+                <p className="text-slate-400">{vipActive ? 'เปิดใช้จากทุกแผนที่' : 'ต้องเปิด VIP ก่อน'}</p>
               </div>
-              <input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="ค้นหาสินค้าพรีเมียม..."
-                className="w-full border border-border bg-background px-2.5 py-1 text-xs text-foreground outline-none focus:border-cyan-400 sm:w-52"
-              />
-            </div>
-
-            <div className="flex gap-1.5 overflow-x-auto pb-1">
-              <button
-                type="button"
-                onClick={() => setStoreCategory('all')}
-                className={cn(
-                  'pixel-btn shrink-0 px-2.5 py-1 text-[10px]',
-                  storeCategory === 'all' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground',
-                )}
-              >
-                ทั้งหมด ({PREMIUM_CATALOG.length})
-              </button>
-              {PREMIUM_CATEGORY_META.map((cat) => (
+              <div className="flex gap-1">
                 <button
-                  key={cat.id}
                   type="button"
-                  onClick={() => setStoreCategory(cat.id)}
-                  className={cn(
-                    'pixel-btn shrink-0 px-2.5 py-1 text-[10px]',
-                    storeCategory === cat.id
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-secondary text-muted-foreground hover:text-foreground',
-                  )}
+                  disabled={!vipActive}
+                  onClick={() => openPanel('enhance')}
+                  className="asura-tab px-2 py-1 text-[10px] font-bold disabled:opacity-40"
                 >
-                  {cat.label}
+                  ตีบวก
                 </button>
-              ))}
-            </div>
-
-            <div className="grid gap-2.5 sm:grid-cols-2">
-              {catalogFiltered.map(renderProductCard)}
+                <button
+                  type="button"
+                  disabled={!vipActive}
+                  onClick={() => openPanel('storage')}
+                  className="asura-tab px-2 py-1 text-[10px] font-bold disabled:opacity-40"
+                >
+                  คลัง
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -2647,6 +2647,83 @@ export function PremiumShopPanel() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ITEM INSPECT DETAIL MODAL */}
+      {inspectProduct && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`รายละเอียด ${inspectProduct.name}`}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3"
+          onPointerDown={(e) => {
+            if (e.target === e.currentTarget) setInspectProduct(null)
+          }}
+        >
+          <div className="asura-panel w-full max-w-sm space-y-3 border-2 border-[#3c73ba] p-4 text-slate-100 shadow-2xl">
+            <div className="flex items-start justify-between gap-2 border-b border-[#284b7d] pb-2">
+              <div className="flex items-center gap-2.5">
+                <div className="grid size-12 place-items-center rounded border border-[#2d5186] bg-[#0c1422]">
+                  <ProductThumb product={inspectProduct} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">{inspectProduct.name}</h3>
+                  <span className={cn('inline-block border px-1.5 py-0.5 text-[9.5px]', rarityBadgeClass(inspectProduct.rarity))}>
+                    {inspectProduct.rarity}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInspectProduct(null)}
+                aria-label="ปิดรายละเอียด"
+                className="rounded border border-slate-600/50 bg-[#18263b] p-1 text-slate-300 hover:text-white"
+              >
+                <X className="size-4" aria-hidden />
+              </button>
+            </div>
+            <p className="text-xs leading-relaxed text-slate-200">{inspectProduct.description}</p>
+            <div className="space-y-1 rounded border border-[#233d62] bg-[#0b1320] p-2.5 text-[11px] tabular-nums">
+              <div className="flex justify-between">
+                <span className="text-slate-400">ราคาจำหน่าย</span>
+                <b className="text-amber-300">{formatNum(inspectProduct.diamondPrice)} โซล</b>
+              </div>
+              {inspectProduct.qty && inspectProduct.qty > 1 && (
+                <div className="flex justify-between">
+                  <span className="text-slate-400">จำนวนต่อแพ็ก</span>
+                  <b className="text-sky-300">x{inspectProduct.qty} ชิ้น</b>
+                </div>
+              )}
+              {inspectProduct.vipExpGrant ? (
+                <div className="flex justify-between">
+                  <span className="text-slate-400">โบนัส VIP EXP</span>
+                  <b className="text-emerald-300">+{inspectProduct.vipExpGrant}</b>
+                </div>
+              ) : null}
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setInspectProduct(null)}
+                className="asura-tab px-3 py-1.5 text-xs font-bold"
+              >
+                ปิด
+              </button>
+              <button
+                type="button"
+                disabled={isProductOwnedOrMaxed(inspectProduct).locked || (p.diamonds ?? 0) < inspectProduct.diamondPrice}
+                onClick={() => {
+                  const target = inspectProduct
+                  setInspectProduct(null)
+                  openBuyModal(target)
+                }}
+                className="asura-tab-active px-4 py-1.5 text-xs font-bold disabled:opacity-45"
+              >
+                ซื้อสินค้า
+              </button>
+            </div>
           </div>
         </div>
       )}

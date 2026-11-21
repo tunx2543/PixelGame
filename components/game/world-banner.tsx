@@ -1,138 +1,226 @@
 'use client'
 
-import { Flame, Megaphone, Moon, Skull, Sparkles, Sun, Users, Utensils } from 'lucide-react'
-import { currentMap, game, notify, openPanel } from '@/lib/game/engine'
-import { getActiveFoodBuffBonuses, getWorldTimePhase, sanitizeExtV2 } from '@/lib/game/extended-systems'
+import {
+  Award,
+  Flame,
+  Gem,
+  Megaphone,
+  Moon,
+  Shield,
+  Sparkles,
+  Sun,
+  Trophy,
+  Users,
+  Zap,
+} from 'lucide-react'
+import { useDailyMissions } from '@/lib/game/daily-missions'
+import { ensurePremiumState, game, isCurrentAccountGm, notify, openPanel } from '@/lib/game/engine'
+import { getWorldTimePhase } from '@/lib/game/extended-systems'
 import { getFieldBossForMap } from '@/lib/game/mmo-systems'
-import { getActiveWorldBoss } from '@/lib/game/rpg-systems'
+import { TOPUP_MILESTONES } from '@/lib/game/premium/topup'
+import { getActiveWorldBoss, todayIsoDate } from '@/lib/game/rpg-systems'
+import { countClaimableQuests } from '@/lib/game/systems'
 import { useGame } from '@/lib/game/use-game'
+import { cn } from '@/lib/utils'
 import { MapMinimap } from './map-minimap'
 import { OnlinePlayersPopover } from './online-players-popover'
 import { SocialBar } from './social-bar'
 
-export function WorldBanner() {
+export function TopAnnouncementTicker() {
   const { p } = useGame()
-  const map = currentMap()
+  if (!p) return null
+
+  const map = game.p ? p.mapId : 'town'
   const announcement = game.announcement && game.announcement.until > Date.now() ? game.announcement : null
-  const totalOnline = game.onlinePlayers.filter((other) => !other.invisible).length
-  const sameMapOnline = game.remotePlayers.filter((other) => !other.invisible && other.mapId === map.id).length
-  const worldPhase = getWorldTimePhase()
-  const extV2 = p ? sanitizeExtV2(p.extV2) : null
-  const foodBuff = extV2 ? getActiveFoodBuffBonuses(extV2.activeFoodBuff) : null
   const worldBoss = getActiveWorldBoss()
   const wbRemainSec = Math.max(0, Math.floor((worldBoss.endsAtMs - Date.now()) / 1000))
   const wbMin = Math.floor(wbRemainSec / 60)
-  const wbSec = wbRemainSec % 60
-  const fieldBoss = getFieldBossForMap(map.id)
+  const fieldBoss = getFieldBossForMap(map)
+
+  let headline = `ยินดีต้อนรับสู่โลกอสุรา · บอสโลก ${worldBoss.name} เหลือเวลาอีก ${wbMin} นาที`
+  let iconKind: 'megaphone' | 'shield' | 'flame' = 'flame'
+  if (announcement) {
+    headline = `${announcement.authorName ? `[${announcement.authorName}] ` : ''}${announcement.body}`
+    iconKind = 'megaphone'
+  } else if (game.invasion?.active) {
+    headline = `กิจกรรม ปกป้องหมู่บ้าน Wave ${game.invasion.wave}/${game.invasion.maxWaves} กำลังเปิดฉาก!`
+    iconKind = 'shield'
+  } else if (fieldBoss) {
+    headline = `ฟิลด์บอสประจำแมพ: ${fieldBoss.name} (Lv.${fieldBoss.level}) ปรากฏตัวแล้ว!`
+    iconKind = 'shield'
+  }
 
   return (
-    <>
-      {announcement && (
-        <aside
-          className={`pointer-events-none fixed left-1/2 top-12 z-30 w-[min(92vw,32rem)] -translate-x-1/2 border-2 bg-black/90 px-3.5 py-2 text-center shadow-2xl ${
-            announcement.variant === 'news'
-              ? 'border-cyan-300/80'
-              : 'border-yellow-300/75'
-          }`}
-        >
-          <div
-            className={`flex items-center justify-center gap-1.5 text-[10px] font-bold tracking-[0.14em] ${
-              announcement.variant === 'news' ? 'text-cyan-300' : 'text-yellow-300'
-            }`}
-          >
-            {announcement.variant === 'news' ? (
-              <Sparkles className="size-3.5 shrink-0 text-cyan-300" aria-hidden />
-            ) : (
-              <Megaphone className="size-3.5 shrink-0 text-yellow-300" aria-hidden />
-            )}
-            <span>
-              {announcement.variant === 'news'
-                ? `ข่าวเซิร์ฟเวอร์${announcement.authorName ? ` · ${announcement.authorName}` : ''}`
-                : `ประกาศจาก GM${announcement.authorName ? ` · ${announcement.authorName}` : ''}`}
-            </span>
-          </div>
-          <div className="mt-0.5 break-words text-xs font-semibold text-white">{announcement.body}</div>
-        </aside>
+    <button
+      type="button"
+      onClick={() => openPanel('guild')}
+      aria-label="ประกาศกิจกรรมเซิร์ฟเวอร์"
+      className="pointer-events-auto fixed left-1/2 top-0.5 z-20 flex max-w-[min(92vw,34rem)] -translate-x-1/2 items-center gap-2 rounded-b-md border border-t-0 border-[#3b6bb3]/65 bg-[#09101c]/82 px-3 py-1 text-left shadow-lg backdrop-blur-[2px] transition-colors hover:border-amber-300/70"
+    >
+      <span className="grid size-4 shrink-0 place-items-center rounded bg-sky-500/25 text-amber-300">
+        {iconKind === 'megaphone' ? (
+          <Megaphone className="size-3" aria-hidden />
+        ) : iconKind === 'shield' ? (
+          <Shield className="size-3" aria-hidden />
+        ) : (
+          <Flame className="size-3 text-rose-400" aria-hidden />
+        )}
+      </span>
+      <span className="truncate text-[11px] font-bold text-amber-300 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]">
+        {headline}
+      </span>
+    </button>
+  )
+}
+
+export function WorldBanner() {
+  const { p, topupBadge } = useGame()
+  const dailyMissions = useDailyMissions()
+  if (!p) return null
+
+  const map = game.p ? p.mapId : 'town'
+  const totalOnline = game.onlinePlayers.filter((other) => !other.invisible).length
+  const worldPhase = getWorldTimePhase()
+  const worldBoss = getActiveWorldBoss()
+  const wbRemainSec = Math.max(0, Math.floor((worldBoss.endsAtMs - Date.now()) / 1000))
+  const wbMin = Math.floor(wbRemainSec / 60)
+  const fieldBoss = getFieldBossForMap(map)
+
+  const prem = ensurePremiumState(p)
+  const today = todayIsoDate()
+  const claimableMilestones = TOPUP_MILESTONES.filter(
+    (m) => (prem.totalTopupThb ?? 0) >= m.thresholdThb && !(prem.claimedTopupMilestones ?? []).includes(m.id),
+  ).length
+  const claimableDailyTopup = prem.lastDailyTopupDate === today && prem.claimedDailyTopupDate !== today ? 1 : 0
+  const isGmDev = Boolean(p.gm && isCurrentAccountGm())
+  const shopAlert =
+    topupBadge.approvedUnclaimed + (isGmDev ? topupBadge.gmPending : 0) + claimableMilestones + claimableDailyTopup > 0
+  const questAlert =
+    countClaimableQuests(p.questState, p.towerState, p.petState, p.kills) + dailyMissions.claimableCount > 0
+  const bpArchiveCount = p.extV2?.battlePass?.expiredArchive?.length ?? 0
+
+  return (
+    <div
+      data-testid="right-hud-panel"
+      className={cn(
+        'pointer-events-none flex w-[8.75rem] flex-col items-end gap-1 sm:w-[10.5rem]',
+        game.onlinePanelOpen ? 'z-40' : 'z-20',
       )}
-      <div
-        data-testid="right-hud-panel"
-        className={`pointer-events-none flex w-[9.25rem] flex-col items-end gap-0.5 sm:w-[10.75rem] sm:gap-1 ${game.onlinePanelOpen ? 'z-40' : 'z-20'}`}
-      >
-        {/* 1. Mini Map & Location */}
-        <MapMinimap />
+    >
+      {/* 1. Translucent Square Minimap + Zoom Controls + Coordinates */}
+      <MapMinimap />
 
-        {/* 2. Friends Online & Party Status */}
-        <div className="flex w-full flex-col items-end gap-1">
-          <button
-            type="button"
-            onClick={() => {
-              game.onlinePanelOpen = !game.onlinePanelOpen
-              if (game.onlinePanelOpen) {
-                game.socialMenuOpen = false
-                game.partyPanelOpen = false
-              }
-              notify()
-            }}
-            aria-expanded={game.onlinePanelOpen}
-            aria-label="เปิดรายชื่อผู้เล่นและเพื่อนออนไลน์"
-            className="pointer-events-auto pixel-panel flex w-full items-center justify-between gap-1 px-1.5 py-0.5 text-[9px] sm:px-2 sm:py-1 sm:text-[10px] font-semibold text-foreground shadow-lg transition-colors hover:border-cyan-400/70"
-          >
-            <span className="flex items-center gap-1.5 truncate">
-              <span
-                className={`size-2 shrink-0 rounded-full ${totalOnline > 0 ? 'bg-emerald-400' : 'bg-muted-foreground/60'}`}
-                aria-hidden
-              />
-              <Users className="size-3 shrink-0 text-cyan-300" aria-hidden />
-              <span className="truncate tabular-nums">ออนไลน์ {totalOnline}</span>
-            </span>
-            {sameMapOnline > 0 && (
-              <span className="shrink-0 text-[9px] text-emerald-300 tabular-nums">แมพนี้ {sameMapOnline}</span>
-            )}
-          </button>
-          <SocialBar />
-        </div>
-
-        {/* 3. World Information */}
-        <div className="flex w-full flex-wrap items-center justify-end gap-0.5 text-[8.5px] sm:gap-1 sm:text-[9.5px]">
-          <button
-            type="button"
-            onClick={() => openPanel('guild')}
-            aria-label="เปิดหน้าต่างเวิลด์บอสและฟิลด์บอส"
-            className="pointer-events-auto pixel-panel flex items-center gap-1 border-rose-400/50 px-1.5 py-0.5 font-semibold text-rose-200 shadow hover:border-rose-400 tabular-nums"
-          >
-            <Flame className="size-3 text-rose-400" aria-hidden />
-            <span>บอสโลก {String(wbMin).padStart(2, '0')}:{String(wbSec).padStart(2, '0')}</span>
-          </button>
-          {fieldBoss && (
-            <button
-              type="button"
-              onClick={() => openPanel('guild')}
-              aria-label={`เปิดฟิลด์บอส ${fieldBoss.name}`}
-              className="pointer-events-auto pixel-panel flex items-center gap-1 border-amber-400/50 px-1.5 py-0.5 font-semibold text-amber-200 shadow hover:border-amber-400"
-            >
-              <Skull className="size-3 text-amber-300" aria-hidden />
-              <span>ฟิลด์บอส Lv.{fieldBoss.level}</span>
-            </button>
-          )}
-          <span className="pixel-panel flex items-center gap-1 px-1.5 py-0.5 font-semibold text-amber-100/90 shadow">
-            {worldPhase.phase === 'night' ? (
-              <Moon className="size-3 text-indigo-300" aria-hidden />
-            ) : (
-              <Sun className="size-3 text-amber-300" aria-hidden />
-            )}
-            <span>{worldPhase.label}</span>
-          </span>
-          {foodBuff?.active && extV2?.activeFoodBuff && (
-            <span className="pixel-panel flex items-center gap-1 border-amber-400/50 px-1.5 py-0.5 font-semibold text-amber-200 shadow tabular-nums">
-              <Utensils className="size-3" aria-hidden />
-              <span className="truncate">
-                {extV2.activeFoodBuff.name} ({foodBuff.remainingSec}s)
+      {/* 2. Four Circular Shortcut Badges directly below Minimap: กิจกรรม, สุดคุ้ม, GP, BP */}
+      <div className="pointer-events-auto grid w-full grid-cols-4 gap-1 pt-0.5">
+        <button
+          type="button"
+          onClick={() => openPanel('quests')}
+          title="กิจกรรม & เควสต์รายวัน"
+          className="group relative flex flex-col items-center gap-0.5"
+        >
+          <span className="relative grid size-8 place-items-center rounded-full border-2 border-amber-300/85 bg-gradient-to-b from-[#3d311a] to-[#1a150b] shadow-md transition-transform group-hover:scale-105 sm:size-9">
+            <Zap className="size-3.5 text-amber-300 sm:size-4" aria-hidden />
+            {(questAlert || game.invasion?.active) && (
+              <span className="absolute -right-1 -top-1 grid size-3.5 place-items-center rounded-full border border-white bg-rose-600 text-[8px] font-extrabold text-white">
+                !
               </span>
-            </span>
-          )}
-        </div>
-        <OnlinePlayersPopover />
+            )}
+          </span>
+          <span className="font-mono text-[8.5px] font-bold text-white [text-shadow:0_1px_2px_#000] tabular-nums">
+            {wbMin}m
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => openPanel('gem-shop')}
+          title="แพ็กเกจสุดคุ้ม & ร้านโซล"
+          className="group relative flex flex-col items-center gap-0.5"
+        >
+          <span className="relative grid size-8 place-items-center rounded-full border-2 border-amber-200/85 bg-gradient-to-b from-[#453118] to-[#1c130a] shadow-md transition-transform group-hover:scale-105 sm:size-9">
+            <Gem className="size-3.5 text-cyan-300 sm:size-4" aria-hidden />
+            {shopAlert && (
+              <span className="absolute -right-1 -top-1 grid size-3.5 place-items-center rounded-full border border-white bg-rose-600 text-[8px] font-extrabold text-white">
+                !
+              </span>
+            )}
+          </span>
+          <span className="whitespace-nowrap text-[8.5px] font-bold text-white [text-shadow:0_1px_2px_#000]">
+            สุดคุ้ม
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => openPanel('guild')}
+          title="กิลด์พ้อยต์ & เวิลด์บอส (GP)"
+          className="group relative flex flex-col items-center gap-0.5"
+        >
+          <span className="relative grid size-8 place-items-center rounded-full border-2 border-sky-300/85 bg-gradient-to-b from-[#1f3959] to-[#0e1b2c] shadow-md transition-transform group-hover:scale-105 sm:size-9">
+            <Trophy className="size-3.5 text-sky-200 sm:size-4" aria-hidden />
+            {fieldBoss && (
+              <span className="absolute -right-1 -top-1 grid size-3.5 place-items-center rounded-full border border-white bg-rose-600 text-[8px] font-extrabold text-white">
+                !
+              </span>
+            )}
+          </span>
+          <span className="whitespace-nowrap text-[8.5px] font-bold text-white [text-shadow:0_1px_2px_#000]">
+            GP
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => openPanel('pass')}
+          title="Battle Pass (BP)"
+          className="group relative flex flex-col items-center gap-0.5"
+        >
+          <span className="relative grid size-8 place-items-center rounded-full border-2 border-cyan-300/85 bg-gradient-to-b from-[#1c384a] to-[#0c1a24] shadow-md transition-transform group-hover:scale-105 sm:size-9">
+            <Award className="size-3.5 text-amber-300 sm:size-4" aria-hidden />
+            {bpArchiveCount > 0 && (
+              <span className="absolute -right-1 -top-1 grid size-3.5 place-items-center rounded-full border border-white bg-rose-600 text-[8px] font-extrabold text-white">
+                !
+              </span>
+            )}
+          </span>
+          <span className="whitespace-nowrap text-[8.5px] font-bold text-white [text-shadow:0_1px_2px_#000]">
+            BP
+          </span>
+        </button>
       </div>
-    </>
+
+      {/* 3. Subtle World Time + Online Trigger */}
+      <div className="pointer-events-auto flex w-full items-center justify-end gap-1 pt-0.5 text-[9px]">
+        <span className="flex items-center gap-0.5 rounded border border-[#294976]/75 bg-[#09101c]/80 px-1.5 py-0.5 font-semibold text-amber-100/90">
+          {worldPhase.phase === 'night' ? (
+            <Moon className="size-2.5 text-indigo-300" aria-hidden />
+          ) : (
+            <Sun className="size-2.5 text-amber-300" aria-hidden />
+          )}
+          <span className="hidden sm:inline">{worldPhase.label}</span>
+        </span>
+        <button
+          type="button"
+          onClick={() => {
+            game.onlinePanelOpen = !game.onlinePanelOpen
+            if (game.onlinePanelOpen) {
+              game.socialMenuOpen = false
+              game.partyPanelOpen = false
+            }
+            notify()
+          }}
+          aria-expanded={game.onlinePanelOpen}
+          aria-label="เปิดรายชื่อผู้เล่นและเพื่อนออนไลน์"
+          className="flex items-center gap-1 rounded border border-[#294976]/75 bg-[#09101c]/80 px-1.5 py-0.5 font-bold text-cyan-200 transition-colors hover:border-cyan-300 tabular-nums"
+        >
+          <span className={cn('size-1.5 rounded-full', totalOnline > 0 ? 'bg-emerald-400' : 'bg-slate-500')} />
+          <Users className="size-2.5" aria-hidden />
+          <span>{totalOnline}</span>
+        </button>
+      </div>
+
+      <SocialBar />
+      <OnlinePlayersPopover />
+    </div>
   )
 }

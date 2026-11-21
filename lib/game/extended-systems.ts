@@ -45,6 +45,18 @@ export interface ActiveFoodBuff {
   expMul: number
 }
 
+export type ActiveBoostKind = 'exp' | 'jp' | 'lifeskill' | 'speed' | 'weight' | 'stat'
+
+export interface ActiveBoostBuff {
+  id: string
+  kind: ActiveBoostKind
+  label: string
+  shortTag: string
+  value: number
+  expiresAtMs: number
+  color: string
+}
+
 export const LIFE_SKILL_META: Record<LifeSkillType, { label: string; color: string; actionLabel: string }> = {
   fishing: { label: 'ตกปลา', color: '#38bdf8', actionLabel: 'เหวี่ยงเบ็ดตกปลา' },
   mining: { label: 'ขุดแร่', color: '#94a3b8', actionLabel: 'ขุดสายแร่' },
@@ -730,6 +742,8 @@ export const DEFAULT_QUICK_SLOTS: ReadonlyArray<string | null> = [
 export interface PlayerExtensionV2 {
   lifeSkills: Record<LifeSkillType, LifeSkillProgress>
   activeFoodBuff: ActiveFoodBuff | null
+  activeBoosts: ActiveBoostBuff[]
+  pkEnabled: boolean
   talents: Record<string, number>
   talentPointsBonus: number
   battlePass: BattlePassState
@@ -753,6 +767,8 @@ export function createDefaultExtV2(): PlayerExtensionV2 {
       herbalism: { level: 1, exp: 0 },
     },
     activeFoodBuff: null,
+    activeBoosts: [],
+    pkEnabled: false,
     talents: {},
     talentPointsBonus: 0,
     battlePass: {
@@ -796,6 +812,35 @@ export function sanitizeQuickSlots(raw: unknown): Array<string | null> {
     }
   }
   return out
+}
+
+export function pruneDepletedQuickSlotsInExtV2(
+  extV2: PlayerExtensionV2,
+  inventory: ReadonlyArray<{ itemId: string; qty: number }>,
+): { nextExtV2: PlayerExtensionV2; changed: boolean } {
+  const counts = new Map<string, number>()
+  for (const item of inventory) {
+    if (item && typeof item.itemId === 'string' && Number(item.qty) > 0) {
+      counts.set(item.itemId, (counts.get(item.itemId) ?? 0) + Math.floor(item.qty))
+    }
+  }
+  let changed = false
+  const nextSlots = extV2.quickSlots.map((slotItemId) => {
+    if (!slotItemId) return null
+    if ((counts.get(slotItemId) ?? 0) <= 0) {
+      changed = true
+      return null
+    }
+    return slotItemId
+  })
+  if (!changed) return { nextExtV2: extV2, changed: false }
+  return {
+    nextExtV2: {
+      ...extV2,
+      quickSlots: nextSlots,
+    },
+    changed: true,
+  }
 }
 
 export function sanitizeExtV2(raw: unknown): PlayerExtensionV2 {
@@ -893,9 +938,30 @@ export function sanitizeExtV2(raw: unknown): PlayerExtensionV2 {
     }
   })
 
+  const nowMs = Date.now()
+  const activeBoosts: ActiveBoostBuff[] = Array.isArray(obj.activeBoosts)
+    ? obj.activeBoosts
+        .filter(
+          (b): b is ActiveBoostBuff =>
+            Boolean(b && typeof b.id === 'string' && typeof b.kind === 'string' && Number(b.expiresAtMs) > nowMs),
+        )
+        .slice(0, 12)
+        .map((b) => ({
+          id: String(b.id).slice(0, 48),
+          kind: (['exp', 'jp', 'lifeskill', 'speed', 'weight', 'stat'].includes(b.kind) ? b.kind : 'exp') as ActiveBoostKind,
+          label: String(b.label ?? 'บัฟเสริมพลัง').slice(0, 48),
+          shortTag: String(b.shortTag ?? 'BUF').slice(0, 8),
+          value: Math.max(0, Math.min(2000, Number(b.value ?? 0) || 0)),
+          expiresAtMs: Math.floor(Number(b.expiresAtMs)),
+          color: typeof b.color === 'string' ? b.color.slice(0, 24) : '#38bdf8',
+        }))
+    : []
+
   return {
     lifeSkills,
     activeFoodBuff,
+    activeBoosts,
+    pkEnabled: Boolean(obj.pkEnabled),
     talents,
     talentPointsBonus: Math.max(0, Math.min(50, Math.floor(Number(obj.talentPointsBonus ?? 0) || 0))),
     battlePass,
@@ -911,6 +977,38 @@ export function sanitizeExtV2(raw: unknown): PlayerExtensionV2 {
     invasionWavesCleared: Math.max(0, Math.floor(Number(obj.invasionWavesCleared ?? 0) || 0)),
     coopClears: Math.max(0, Math.floor(Number(obj.coopClears ?? 0) || 0)),
     quickSlots: sanitizeQuickSlots(obj.quickSlots),
+  }
+}
+
+export function getActiveAsuraBoostSummary(extV2: PlayerExtensionV2 | null | undefined, nowMs = Date.now()) {
+  const activeList = (extV2?.activeBoosts ?? []).filter((b) => b.expiresAtMs > nowMs)
+  let expBonusPct = 0
+  let jpBonusPct = 0
+  let lifeskillBonusPct = 0
+  let speedBonusPct = 0
+  let weightBonusFlat = 0
+  let statBonusPct = 0
+  let critBonus = 0
+  for (const b of activeList) {
+    if (b.kind === 'exp') expBonusPct = Math.max(expBonusPct, b.value)
+    else if (b.kind === 'jp') jpBonusPct = Math.max(jpBonusPct, b.value)
+    else if (b.kind === 'lifeskill') lifeskillBonusPct = Math.max(lifeskillBonusPct, b.value)
+    else if (b.kind === 'speed') speedBonusPct = Math.max(speedBonusPct, b.value)
+    else if (b.kind === 'weight') weightBonusFlat += b.value
+    else if (b.kind === 'stat') {
+      statBonusPct = Math.max(statBonusPct, b.value)
+      if (b.value >= 10) critBonus = Math.max(critBonus, 0.05)
+    }
+  }
+  return {
+    expBonusPct,
+    jpBonusPct,
+    lifeskillBonusPct,
+    speedBonusPct,
+    weightBonusFlat,
+    statBonusPct,
+    critBonus,
+    activeList,
   }
 }
 
