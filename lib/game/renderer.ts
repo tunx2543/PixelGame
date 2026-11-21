@@ -729,8 +729,6 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       ...(costumeFashion?.paletteOverride?.hat ? { hat: costumeFashion.paletteOverride.hat } : {}),
       ...(hairFashion?.paletteOverride?.hair ? { hair: hairFashion.paletteOverride.hair } : {}),
     }
-    const remoteWalkProg = (t * 1.8) % 1
-    const remoteIdleProg = (t * 0.6) % 1
     const remoteDrawable = resolveHumanDrawable(
       styledColors,
       other.facing,
@@ -740,17 +738,12 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       remoteAttacking,
       remoteAction,
       remoteAtkFrame,
-      {
-        progress: remoteAttacking ? atkProgress : other.moving ? remoteWalkProg : remoteIdleProg,
-        cycleFrames: 8,
-      },
     )
     const isRemoteGmEpic = Boolean(remoteDrawable.gmReady)
-    const isRemoteJobSprite = Boolean(remoteDrawable.jobSprite)
-    const remoteScale = (isRemoteGmEpic ? 50 : isRemoteJobSprite ? 41 : 33) / Math.max(1, remoteDrawable.height)
+    const remoteScale = (isRemoteGmEpic ? 50 : 33) / Math.max(1, remoteDrawable.height)
     const remoteW = remoteDrawable.width * remoteScale
     const remoteH = remoteDrawable.height * remoteScale
-    const remoteFootOffset = isRemoteGmEpic ? 10 : isRemoteJobSprite ? Math.round(remoteH * 0.035) : 2
+    const remoteFootOffset = isRemoteGmEpic ? 10 : 2
 
     const isMounted = Boolean(activeMountDef)
     const remoteMountAnim = isMounted && activeMountDef
@@ -1142,8 +1135,6 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       const weaponDrawColor = castingSkill
         ? game.skillVfxColor
         : (equippedWeaponSkin?.primaryColor ?? weapon?.color ?? job.colors.accent)
-      const walkCycleProgress = (game.walkT * 2.15) % 1
-      const idleCycleProgress = (t * 0.6) % 1
       const drawable = resolveHumanDrawable(
         styledColors,
         game.facing,
@@ -1153,17 +1144,12 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         attacking,
         action,
         attacking ? atkFrame : castingSkill ? skillFrame : undefined,
-        {
-          progress: castingSkill ? skillProgress : attacking ? atkProgress : game.moving ? walkCycleProgress : idleCycleProgress,
-          cycleFrames: 8,
-        },
       )
       const isGmEpic = Boolean(drawable.gmReady)
-      const isJobSprite = Boolean(drawable.jobSprite)
-      const drawScale = (isGmEpic ? 50 : isJobSprite ? 41 : 33) / Math.max(1, drawable.height)
+      const drawScale = (isGmEpic ? 50 : 33) / Math.max(1, drawable.height)
       const drawW = drawable.width * drawScale
       const drawH = drawable.height * drawScale
-      const footOffset = isGmEpic ? 10 : isJobSprite ? Math.round(drawH * 0.035) : 2
+      const footOffset = isGmEpic ? 10 : 2
       const stride = game.moving ? Math.sin(game.walkT * 11 * Math.PI / 3) : 0
       const lungeDist = attacking ? Math.sin(atkProgress * Math.PI) * 3.5 : 0
       let ox = 0

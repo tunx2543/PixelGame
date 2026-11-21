@@ -314,9 +314,6 @@ export function EncounterStageCanvas({
                 ? -1
                 : Math.floor(t * (ph === 'FIGHTING' ? 3.2 : 2.2)) % 4
           const styledJobColors = jobHumanColors(job.id, job.colors, false)
-          const heroStrikeProg = heroStrike ? Math.max(0, Math.min(1, (pAtkAge - 0.2) / 0.8)) : 0
-          const heroWalkProg = heroStepIn ? (pAtkAge / 0.25) % 1 : 0
-          const heroIdleProg = (t * 0.6) % 1
           const heroDrawable = resolveHumanDrawable(
             styledJobColors,
             'right',
@@ -326,21 +323,16 @@ export function EncounterStageCanvas({
             heroStrike,
             heroAction,
             heroAttackFrame,
-            {
-              progress: heroStrike ? heroStrikeProg : heroStepIn ? heroWalkProg : heroIdleProg,
-              cycleFrames: 8,
-            },
           )
           const isGmEpic = Boolean(heroDrawable.gmReady)
-          const isJobSprite = Boolean(heroDrawable.jobSprite)
           const heroHd = heroDrawable.hdScale
-          const heroTargetHeight = isGmEpic ? 112 : isJobSprite ? 96 : 82
+          const heroTargetHeight = isGmEpic ? 112 : 82
           const heroScale = isGmEpic
             ? Math.max(1.5, Math.min(3.0, heroTargetHeight / Math.max(1, heroDrawable.height)))
             : heroTargetHeight / Math.max(1, heroDrawable.height)
           const hw = heroDrawable.width * heroScale
           const hh = heroDrawable.height * heroScale
-          const heroFootOffset = isGmEpic ? 9 * heroScale : isJobSprite ? Math.round(hh * 0.035) : 2 * heroScale * heroHd
+          const heroFootOffset = isGmEpic ? 9 * heroScale : 2 * heroScale * heroHd
 
           // Hero shadow
           ctx.fillStyle = 'rgba(0,0,0,0.36)'
