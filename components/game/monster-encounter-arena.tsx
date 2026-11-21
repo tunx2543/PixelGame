@@ -919,7 +919,7 @@ export function MonsterEncounterArena() {
         handleGuardAction()
         return
       }
-      if (key === '1' || key === '2' || key === '3') {
+      if (key === '1' || key === '2' || key === '3' || key === '4') {
         const s = saveRef.current
         if (!s) return
         const job = JOBS[normalizeJobId(s.jobId)]
@@ -1243,7 +1243,7 @@ export function MonsterEncounterArena() {
             </div>
 
             {/* Action Combat Controls */}
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-[0.9fr_1fr_1fr_1fr]">
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
               <button
                 type="button"
                 onClick={() => executeHeroAttack()}
@@ -1256,7 +1256,7 @@ export function MonsterEncounterArena() {
                 </span>
               </button>
 
-              {job.skills.slice(0, 3).map((skill, idx) => {
+              {job.skills.slice(0, 4).map((skill, idx) => {
                 const cd = skillCds[skill.id] ?? 0
                 const noMp = save.mp < skill.mp
                 const vfx = getSkillVfxSpec(skill.id, skill.color, skill.kind, job.weaponTypes[0])
@@ -1264,7 +1264,7 @@ export function MonsterEncounterArena() {
                   <button
                     key={skill.id}
                     type="button"
-                    title={vfx.effectLabel}
+                    title={`${skill.name} · ${skill.effectSummary ?? vfx.effectLabel} (${skill.mp} MP · CD ${skill.cooldown}s)`}
                     onClick={() => executeHeroAttack(skill)}
                     disabled={cd > 0 || noMp || phase === 'VICTORY' || phase === 'DEFEAT'}
                     className="pixel-btn flex min-h-11 items-center justify-start gap-1.5 bg-secondary px-2 py-1.5 text-left text-xs text-foreground hover:brightness-110 disabled:opacity-45"
@@ -1281,8 +1281,8 @@ export function MonsterEncounterArena() {
                       <span className="block truncate text-[11px] font-semibold" style={{ color: vfx.primaryColor }}>
                         [{idx + 1}] {skill.name}
                       </span>
-                      <span className="block text-[10px] text-muted-foreground tabular-nums">
-                        {cd > 0 ? `CD ${cd.toFixed(1)}s` : `${skill.mp} MP · ${skill.mult}x`}
+                      <span className="block truncate text-[10px] text-muted-foreground tabular-nums">
+                        {cd > 0 ? `CD ${cd.toFixed(1)}s` : `${skill.mp} MP · ${skill.mult > 0 ? `${skill.mult}x` : 'ฮีล/บัฟ'}`}
                       </span>
                     </span>
                   </button>

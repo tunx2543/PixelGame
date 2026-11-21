@@ -173,8 +173,8 @@ export function AutoFarmWidget({ compactTouchMode = false }: { compactTouchMode?
               type="button"
               onClick={() => castSkill(i)}
               disabled={lowMp && cd <= 0}
-              title={`${sk.name} (MP ${sk.mp}) [${i + 1}]`}
-              className="pixel-btn relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border-[#d4a348]/80 bg-[#2b1f1c] hover:brightness-110 disabled:opacity-45"
+              title={`${sk.name}${sk.effectSummary ? ` · ${sk.effectSummary}` : ''} (MP ${sk.mp} · CD ${sk.cooldown}s) [${i + 1}]`}
+              className="pixel-btn relative flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-lg border-[#d4a348]/80 bg-[#2b1f1c] hover:brightness-110 disabled:opacity-45 sm:size-8"
             >
               {getSkillIconPath(sk.id) ? (
                 <img src={getSkillIconPath(sk.id)} alt={sk.name} className="size-6 rounded object-cover" />

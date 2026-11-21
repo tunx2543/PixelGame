@@ -19,7 +19,7 @@ import { findNearbyGatheringNode } from '@/lib/game/extended-systems'
 import { sanitizeMountState } from '@/lib/game/mounts'
 import { useUiLayout } from '@/lib/game/ui-layout'
 import { useGame } from '@/lib/game/use-game'
-import { getSkillIconPath } from '@/lib/game/vfx-specs'
+import { getSkillIconPath, getSkillVfxSpec } from '@/lib/game/vfx-specs'
 import { cn } from '@/lib/utils'
 
 export function SkillBar({ compactTouchMode = false }: { compactTouchMode?: boolean }) {
@@ -65,41 +65,88 @@ export function SkillBar({ compactTouchMode = false }: { compactTouchMode?: bool
         const lowMp = p.mp < sk.mp
         const ready = cd <= 0 && !lowMp
         const hotkeyLabel = useFKeys ? `F${i + 1}` : String(i + 1)
+        const vfxSpec = getSkillVfxSpec(sk.id, sk.color, sk.kind, job.weaponTypes[0])
+        const statParts = [
+          `${sk.mp} MP`,
+          `CD ${sk.cooldown}s`,
+          `${sk.mult > 0 ? `${sk.mult}x` : 'ฟื้นฟู/บัฟ'}`,
+          sk.radius > 0 ? `รัศมี ${sk.radius}px` : 'เป้าหมายเดี่ยว',
+          (sk.hits ?? 1) > 1 ? `${sk.hits} ฮิต` : null,
+        ].filter(Boolean)
 
         return (
-          <button
-            key={sk.id}
-            type="button"
-            onClick={() => castSkill(i)}
-            disabled={lowMp && cd <= 0}
-            title={`${sk.name} · ใช้ ${sk.mp} MP · คูลดาวน์ ${sk.cooldown}s [${hotkeyLabel}]`}
-            aria-label={`${sk.name} (${hotkeyLabel}) ใช้ ${sk.mp} MP`}
-            className={cn(
-              'pixel-btn relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#2b1f1c] transition hover:brightness-110 disabled:opacity-45',
-              ready
-                ? 'border-[#e8b84e] shadow-[0_0_8px_rgba(232,184,78,0.28)]'
-                : 'border-border/70',
-            )}
-          >
-            {getSkillIconPath(sk.id) ? (
-              <img src={getSkillIconPath(sk.id)} alt="" className="size-7 rounded object-cover" />
-            ) : (
-              <span className="text-[10px] font-bold" style={{ color: sk.color }}>
-                {sk.name.slice(0, 2)}
+          <div key={sk.id} className="group/skill relative shrink-0">
+            <button
+              type="button"
+              onClick={() => castSkill(i)}
+              disabled={lowMp && cd <= 0}
+              title={`${sk.name} · ${sk.effectSummary ?? vfxSpec.effectLabel} (${sk.mp} MP · CD ${sk.cooldown}s) [${hotkeyLabel}]`}
+              aria-label={`${sk.name} (${hotkeyLabel}) ${sk.effectSummary ?? ''} ใช้ ${sk.mp} MP`}
+              className={cn(
+                'pixel-btn relative flex size-10 items-center justify-center overflow-hidden rounded-lg bg-[#2b1f1c] transition hover:brightness-110 disabled:opacity-45',
+                ready
+                  ? 'border-[#e8b84e] shadow-[0_0_8px_rgba(232,184,78,0.28)]'
+                  : 'border-border/70',
+              )}
+            >
+              {getSkillIconPath(sk.id) ? (
+                <img src={getSkillIconPath(sk.id)} alt="" className="size-7 rounded object-cover" />
+              ) : (
+                <span className="text-[10px] font-bold" style={{ color: sk.color }}>
+                  {sk.name.slice(0, 2)}
+                </span>
+              )}
+              <span className="absolute left-0.5 top-0 font-mono text-[8px] font-bold text-white/95 drop-shadow">
+                {hotkeyLabel}
               </span>
-            )}
-            <span className="absolute left-0.5 top-0 font-mono text-[8px] font-bold text-white/95 drop-shadow">
-              {hotkeyLabel}
-            </span>
-            <span className="absolute bottom-0 right-0.5 rounded bg-black/75 px-0.5 font-mono text-[8px] font-semibold text-sky-300 tabular-nums">
-              {sk.mp}
-            </span>
-            {cd > 0 && (
-              <span className="absolute inset-0 grid place-items-center bg-black/75 font-mono text-[10px] font-bold text-amber-200 tabular-nums">
-                {cd.toFixed(1)}
+              <span className="absolute bottom-0 right-0.5 rounded bg-black/75 px-0.5 font-mono text-[8px] font-semibold text-sky-300 tabular-nums">
+                {sk.mp}
               </span>
-            )}
-          </button>
+              {cd > 0 && (
+                <span className="absolute inset-0 grid place-items-center bg-black/75 font-mono text-[10px] font-bold text-amber-200 tabular-nums">
+                  {cd.toFixed(1)}
+                </span>
+              )}
+            </button>
+
+            <div
+              role="tooltip"
+              className="pointer-events-none invisible absolute bottom-full left-1/2 z-50 mb-2 hidden w-64 -translate-x-1/2 rounded-lg border border-[#d4a348]/85 bg-[#12101a]/95 p-2.5 text-left opacity-0 shadow-2xl transition duration-150 sm:block group-hover/skill:visible group-hover/skill:opacity-100 group-focus-within/skill:visible group-focus-within/skill:opacity-100"
+            >
+              <div className="flex items-start gap-2 border-b border-white/10 pb-1.5">
+                <img
+                  src={getSkillIconPath(sk.id)}
+                  alt=""
+                  className="size-8 shrink-0 rounded border border-white/20 bg-black/60 object-cover"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-1.5">
+                    <p className="truncate text-xs font-bold" style={{ color: vfxSpec.primaryColor }}>
+                      {sk.name}
+                    </p>
+                    <span className="shrink-0 font-mono text-[10px] text-white/70">[{hotkeyLabel}]</span>
+                  </div>
+                  {sk.tag && (
+                    <p className="text-[10px] font-medium text-amber-200/90">{sk.tag}</p>
+                  )}
+                </div>
+              </div>
+              <p className="mt-1.5 font-mono text-[10px] font-semibold text-sky-200 tabular-nums">
+                {statParts.join(' · ')}
+              </p>
+              {sk.effectSummary && (
+                <p className="mt-1 text-[10.5px] font-semibold text-emerald-300">
+                  ผลสกิล: {sk.effectSummary}
+                </p>
+              )}
+              <p className="mt-1 text-[10.5px] leading-snug text-slate-200/90">
+                {sk.description}
+              </p>
+              <p className="mt-1 border-t border-white/10 pt-1 text-[9.5px] text-slate-400">
+                VFX: {vfxSpec.effectLabel}
+              </p>
+            </div>
+          </div>
         )
       })}
 

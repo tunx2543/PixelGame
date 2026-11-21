@@ -458,7 +458,7 @@ export function CharacterClassSelector({
           </div>
 
           <div className="grid gap-2.5 sm:grid-cols-2">
-            {activeRole.job.skills.map((skill) => {
+            {activeRole.job.skills.map((skill, idx) => {
               const spec = getSkillVfxSpec(skill.id, skill.color, skill.kind, activeRole.job.weaponTypes[0])
               const isSelected = activeSkill?.id === skill.id
               return (
@@ -470,7 +470,7 @@ export function CharacterClassSelector({
                     setSelectedSkillId(skill.id)
                     setVfxNonce((n) => n + 1)
                   }}
-                  className={`flex items-center gap-2 border p-2 text-left transition-colors ${
+                  className={`flex items-start gap-2.5 border p-2.5 text-left transition-colors ${
                     isSelected
                       ? 'border-primary bg-primary/12 text-foreground'
                       : 'border-border bg-background/70 text-foreground hover:border-primary/60'
@@ -479,44 +479,70 @@ export function CharacterClassSelector({
                   <img
                     src={getSkillIconPath(skill.id)}
                     alt=""
-                    width={24}
-                    height={24}
-                    className="pixelated size-6 shrink-0 border border-border/80 bg-[#0e0f1a]"
+                    width={32}
+                    height={32}
+                    className="pixelated size-8 shrink-0 rounded border border-border/80 bg-[#0e0f1a] object-cover"
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-1 text-xs font-bold">
                       <span className="truncate" style={{ color: spec.primaryColor }}>
-                        {skill.name}
+                        {idx + 1}. {skill.name}
                       </span>
                       <span className="shrink-0 font-mono text-[10px] text-muted-foreground tabular-nums">
-                        {skill.mp} MP · {skill.mult}x
+                        {skill.mp} MP · {skill.cooldown}s
                       </span>
                     </div>
-                    <p className="truncate text-[10px] text-muted-foreground">{spec.effectLabel}</p>
+                    {skill.tag && (
+                      <p className="text-[10px] font-semibold text-amber-300/90">{skill.tag}</p>
+                    )}
+                    <p className="truncate text-[10.5px] font-medium text-emerald-300">
+                      {skill.effectSummary ?? spec.effectLabel}
+                    </p>
                   </div>
                 </button>
               )
             })}
           </div>
 
-          <div className="mt-2.5 grid gap-2 border border-border/80 bg-[#0a0d1c]/70 p-2 sm:grid-cols-[1fr_auto] sm:items-center">
+          <div className="mt-2.5 grid gap-3 border border-border/80 bg-[#0a0d1c]/70 p-2.5 sm:grid-cols-[1fr_14.5rem] sm:items-center">
             <SkillVfxPreview
               jobId={activeRole.id}
               skillId={activeSkill?.id ?? null}
               rebirthCount={previewRebirth}
               playNonce={vfxNonce}
               width={320}
-              height={128}
+              height={132}
               label={`จำลองเอฟเฟค ${activeSkill?.name ?? activeRole.thaiName}`}
             />
-            <div className="flex flex-col justify-between gap-1.5 text-[11px] sm:w-44">
+            <div className="flex flex-col justify-between gap-1.5 text-[11px]">
               <div>
                 <p className="font-bold text-foreground">
                   {activeSkill ? activeSkill.name : activeRole.thaiName}
                 </p>
+                {activeSkill?.tag && (
+                  <p className="text-[10px] font-semibold text-amber-300/90">{activeSkill.tag}</p>
+                )}
+                {activeSkill && (
+                  <p className="mt-0.5 font-mono text-[10px] text-sky-300 tabular-nums">
+                    {activeSkill.mp} MP · CD {activeSkill.cooldown}s ·{' '}
+                    {activeSkill.mult > 0 ? `${activeSkill.mult}x` : 'ฟื้นฟู/บัฟ'}
+                    {activeSkill.radius > 0 ? ` · รัศมี ${activeSkill.radius}px` : ''}
+                    {(activeSkill.hits ?? 1) > 1 ? ` · ${activeSkill.hits} ฮิต` : ''}
+                  </p>
+                )}
+                {activeSkill?.effectSummary && (
+                  <p className="mt-1 text-[10.5px] font-semibold text-emerald-300">
+                    {activeSkill.effectSummary}
+                  </p>
+                )}
+                {activeSkill?.description && (
+                  <p className="mt-1 text-[10.5px] leading-snug text-slate-200/90">
+                    {activeSkill.description}
+                  </p>
+                )}
                 {activeSkillSpec && (
-                  <p className="text-[10px] leading-snug" style={{ color: activeSkillSpec.primaryColor }}>
-                    {activeSkillSpec.effectLabel}
+                  <p className="mt-1 text-[10px] leading-snug" style={{ color: activeSkillSpec.primaryColor }}>
+                    VFX: {activeSkillSpec.effectLabel}
                   </p>
                 )}
               </div>

@@ -222,11 +222,13 @@ export function SpriteModelCanvas({
       const throttleMs =
         variant === 'portrait' && effectiveAction === 'idle'
           ? 240
-          : mode === 'monster' && effectiveAction === 'walk'
-            ? 40
-            : effectiveAction === 'idle'
-              ? 120
-              : 75
+          : mode === 'job'
+            ? (effectiveAction === 'idle' ? 95 : 42)
+            : mode === 'monster' && effectiveAction === 'walk'
+              ? 40
+              : effectiveAction === 'idle'
+                ? 120
+                : 75
       if (!reducedMotion && lastDrawAt > 0 && now - lastDrawAt < throttleMs) {
         rafId = requestAnimationFrame(renderFrame)
         return
@@ -238,13 +240,19 @@ export function SpriteModelCanvas({
       const isAttack = effectiveAction === 'attack'
       const isSkill = effectiveAction === 'skill'
       const isMountHop = effectiveAction === 'mount' || effectiveAction === 'dismount'
-      const atkCount = isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'attack') : 4
-      const skillCount = isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'skill') : 4
-      const walkMod = mode === 'job' ? 4 : isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'walk') : 6
-      const idleCount = isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'idle') : 4
+      const atkCount = mode === 'job' ? 12 : isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'attack') : 4
+      const skillCount = mode === 'job' ? 12 : isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'skill') : 4
+      const walkMod = mode === 'job' ? 10 : isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'walk') : 6
+      const idleCount = mode === 'job' ? 8 : isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'idle') : 4
       const attackFrame = isAttack ? Math.min(atkCount - 1, Math.floor(attackProgress * atkCount)) : 0
       const skillFrame = isSkill ? Math.min(skillCount - 1, Math.floor(attackProgress * skillCount)) : 0
       const hopFrame = isMountHop ? Math.min(3, Math.floor(attackProgress * 4)) : 0
+      const jobLoopProg =
+        effectiveAction === 'run'
+          ? (elapsed * 2.2) % 1
+          : effectiveAction === 'walk' || effectiveAction === 'follow'
+            ? (elapsed * 1.45) % 1
+            : (elapsed * 0.55) % 1
       const frame = isSkill
         ? skillFrame
         : isAttack
@@ -252,13 +260,13 @@ export function SpriteModelCanvas({
           : isMountHop
             ? hopFrame
             : effectiveAction === 'run'
-              ? Math.floor(elapsed * 12) % walkMod
+              ? Math.floor((mode === 'job' ? jobLoopProg * walkMod : elapsed * 12)) % walkMod
               : effectiveAction === 'follow'
-                ? Math.floor(elapsed * 9.5) % walkMod
+                ? Math.floor((mode === 'job' ? jobLoopProg * walkMod : elapsed * 9.5)) % walkMod
                 : effectiveAction === 'walk'
-                  ? Math.floor(elapsed * (mode === 'job' ? 8.5 : isCatalogMonster ? 7.5 : 8.5)) % walkMod
-                  : mode === 'job' && !reducedMotion && Math.sin(elapsed * 1.4) > 0.96
-                    ? -1
+                  ? Math.floor((mode === 'job' ? jobLoopProg * walkMod : elapsed * (isCatalogMonster ? 7.5 : 8.5))) % walkMod
+                  : mode === 'job'
+                    ? Math.floor(jobLoopProg * idleCount) % idleCount
                     : Math.floor(elapsed * (isCatalogMonster ? 5.0 : 2.6)) % idleCount
 
       let drawable: ResolvedDrawable
@@ -283,6 +291,8 @@ export function SpriteModelCanvas({
         }
         const weapon = weaponOverride !== undefined ? weaponOverride : (jobDef.weaponTypes[0] ?? 'stick')
         const wColor = weaponSkinDef?.primaryColor ?? weaponColorOverride ?? jobDef.colors.accent
+        const cycleFrames = isAttack ? atkCount : isSkill ? skillCount : effectiveAction === 'idle' ? idleCount : walkMod
+        const animProgress = isAttack || isSkill ? attackProgress : reducedMotion ? 0 : jobLoopProg
         drawable = resolveHumanDrawable(
           colors,
           dir,
@@ -292,6 +302,7 @@ export function SpriteModelCanvas({
           isAttack,
           effectiveAction,
           isAttack ? attackFrame : isSkill ? skillFrame : undefined,
+          { progress: animProgress, cycleFrames },
         )
         auraColor = auraDef?.primaryColor ?? spec.auraColor
       } else if (mode === 'pet') {
@@ -346,9 +357,11 @@ export function SpriteModelCanvas({
           ? Math.round(elapsed * 24)
           : 0
       const sheetId = drawable.sheetId ?? ''
-      const sourceReady = drawable.sheetSpec
-        ? drawable.sheetSpec.image.complete && drawable.sheetSpec.image.naturalWidth > 0
-        : Boolean(drawable.canvas && drawable.canvas.width > 0 && drawable.canvas.height > 0)
+      const sourceReady = drawable.jobSprite
+        ? drawable.jobSprite.image.complete && drawable.jobSprite.image.naturalWidth > 0
+        : drawable.sheetSpec
+          ? drawable.sheetSpec.image.complete && drawable.sheetSpec.image.naturalWidth > 0
+          : Boolean(drawable.canvas && drawable.canvas.width > 0 && drawable.canvas.height > 0)
       const fashionSig = mode === 'job' ? getFashionRenderSignature(fashion) : ''
       const mountSig = mode === 'mount' ? `m${mountLevel}|${mountSkinId ?? ''}|${showRider ? riderJobId : ''}` : ''
       const petSig = mode === 'pet' ? `p${getPetVisualTier(petLevel, petStars)}` : ''
@@ -363,8 +376,9 @@ export function SpriteModelCanvas({
         const hdScale = drawable.hdScale
         if (variant === 'portrait' && mode === 'job') {
           const isSheet = Boolean(drawable.sheetId)
-          const baseCropW = gmReady ? 30 : isSheet ? 30 : 28
-          const baseCropH = gmReady ? 26 : isSheet ? 28 : 24
+          const isJobSprite = Boolean(drawable.jobSprite)
+          const baseCropW = gmReady ? 30 : isJobSprite ? 34 : isSheet ? 30 : 28
+          const baseCropH = gmReady ? 26 : isJobSprite ? 30 : isSheet ? 28 : 24
           const cropW = Math.min(drawable.width, Math.round(baseCropW * hdScale))
           const cropH = Math.min(drawable.height, Math.round(baseCropH * hdScale))
           const sx = Math.max(0, Math.round((drawable.width - cropW) / 2))
@@ -378,7 +392,7 @@ export function SpriteModelCanvas({
                 fashion.back ||
                 fashion.aura),
           )
-          const rawSy = gmReady ? 7 : Math.round((isSheet ? 5 : 3) * hdScale)
+          const rawSy = gmReady ? 7 : isJobSprite ? 14 : Math.round((isSheet ? 5 : 3) * hdScale)
           const sy = hasWearableFashion ? Math.max(0, rawSy - Math.round(1.5 * hdScale)) : rawSy
 
           if (hasWearableFashion && typeof document !== 'undefined') {
@@ -447,11 +461,13 @@ export function SpriteModelCanvas({
           const centerX = Math.round(canvas.width / 2)
           const baseFloorY = Math.round(canvas.height * (hasRebirth && showAura ? (rebirthCount >= 5 ? 0.81 : 0.84) : 0.89))
           const footPad =
-            drawable.sheetSpec?.footPadFrac !== undefined
-              ? Math.round(drawable.sheetSpec.footPadFrac * drawH)
-              : gmReady
-                ? Math.round(9 * computedScale)
-                : Math.round(2 * computedScale)
+            drawable.jobSprite
+              ? Math.round(drawH * 0.035)
+              : drawable.sheetSpec?.footPadFrac !== undefined
+                ? Math.round(drawable.sheetSpec.footPadFrac * drawH)
+                : gmReady
+                  ? Math.round(9 * computedScale)
+                  : Math.round(2 * computedScale)
           const auraRadiusX = Math.max(11, Math.round(drawW * (rebirthCount >= 5 ? 0.48 : 0.45)))
 
           if (showShadow) {
@@ -538,11 +554,12 @@ export function SpriteModelCanvas({
             const worldToPreviewScale = drawW / Math.max(1, drawable.width / Math.max(1, drawable.hdScale))
             const seatPxX = Math.round(seat.x * worldToPreviewScale)
             const seatPxY = Math.round(-footPad + seat.y * worldToPreviewScale)
-            const riderH = Math.round(33 * worldToPreviewScale)
+            const riderH = Math.round((riderDrawable.jobSprite ? 40 : 33) * worldToPreviewScale)
             const riderW = Math.round(riderH * (riderDrawable.width / Math.max(1, riderDrawable.height)))
             const riderClip = Math.round(riderH * seat.legClipRatio)
+            const riderFootOffset = riderDrawable.jobSprite ? Math.round(riderH * 0.035) : Math.round(2 * worldToPreviewScale)
             const riderDx = Math.round(seatPxX - riderW / 2)
-            const riderDy = Math.round(seatPxY - riderH + 2 * worldToPreviewScale)
+            const riderDy = Math.round(seatPxY - riderH + riderFootOffset)
             ctx.save()
             ctx.beginPath()
             ctx.rect(riderDx - 8, riderDy - 8, riderW + 16, riderH - riderClip + 10)

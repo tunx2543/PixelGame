@@ -1087,6 +1087,264 @@ function drawStyleEffect(
       }
       break
     }
+
+    case 'iaijutsu_wave': {
+      // High-velocity razor crescent wave + after-slash horizontal sheen
+      const sweepX = sourceX + (targetX - sourceX) * Math.min(1, k * 1.45)
+      const sweepY = sourceY + (targetY - sourceY) * Math.min(1, k * 1.45)
+      ctx.globalAlpha = alpha
+      ctx.strokeStyle = primaryColor
+      ctx.lineWidth = 3.6 * s
+      ctx.beginPath()
+      ctx.arc(sweepX - 8 * s, sweepY, (16 + k * 12) * s, -Math.PI * 0.42, Math.PI * 0.42)
+      ctx.stroke()
+      ctx.strokeStyle = secondaryColor
+      ctx.lineWidth = 1.6 * s
+      ctx.beginPath()
+      ctx.arc(sweepX - 6 * s, sweepY, (12 + k * 11) * s, -Math.PI * 0.36, Math.PI * 0.36)
+      ctx.stroke()
+      // Razor dash line across target
+      ctx.globalAlpha = alpha * 0.9
+      ctx.strokeStyle = secondaryColor
+      ctx.lineWidth = 2.2 * s
+      ctx.beginPath()
+      ctx.moveTo(targetX - 24 * s, targetY + 6 * s)
+      ctx.lineTo(targetX + 24 * s, targetY - 6 * s)
+      ctx.stroke()
+      break
+    }
+
+    case 'fist_shockwave': {
+      // Heavy gauntlet punch cone + concentric ground fracture shockwave
+      const impactX = sourceX + (targetX - sourceX) * Math.min(1, k * 1.6)
+      ctx.globalAlpha = alpha
+      ctx.fillStyle = primaryColor
+      ctx.beginPath()
+      ctx.arc(impactX, targetY, (6 + k * 6) * s, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.fillStyle = secondaryColor
+      ctx.beginPath()
+      ctx.arc(impactX, targetY, (3 + k * 3) * s, 0, Math.PI * 2)
+      ctx.fill()
+      // Shockwave rings on floor
+      for (let r = 0; r < 2; r++) {
+        ctx.globalAlpha = alpha * (0.85 - r * 0.25)
+        ctx.strokeStyle = r === 0 ? primaryColor : secondaryColor
+        ctx.lineWidth = (2.4 - r * 0.8) * s
+        ctx.beginPath()
+        ctx.ellipse(targetX, floorY, (10 + r * 6 + k * 24) * s, (4 + r * 2 + k * 8) * s, 0, 0, Math.PI * 2)
+        ctx.stroke()
+      }
+      // Flying ground debris chunks
+      for (let i = 0; i < 6; i++) {
+        const ang = (i * Math.PI) / 3 + 0.3
+        const dist = (6 + k * 20) * s
+        ctx.fillStyle = i % 2 === 0 ? primaryColor : secondaryColor
+        ctx.fillRect(
+          Math.round(targetX + Math.cos(ang) * dist),
+          Math.round(floorY - Math.sin(k * Math.PI) * 14 * s - (i % 3) * 3 * s),
+          Math.round(2.5 * s),
+          Math.round(2.5 * s),
+        )
+      }
+      break
+    }
+
+    case 'alchemy_flask_burst': {
+      // Arcing flask projectile then effervescent bubbling puddle + splash
+      const flight = Math.min(1, k * 1.7)
+      if (k < 0.58) {
+        const fx = sourceX + (targetX - sourceX) * flight
+        const fy = sourceY + (targetY - sourceY) * flight - Math.sin(flight * Math.PI) * 24 * s
+        ctx.globalAlpha = alpha
+        ctx.fillStyle = primaryColor
+        ctx.beginPath()
+        ctx.arc(fx, fy, 4.8 * s, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.fillStyle = secondaryColor
+        ctx.fillRect(Math.round(fx - 1.5 * s), Math.round(fy - 7 * s), Math.round(3 * s), Math.round(3 * s))
+      } else {
+        const bk = (k - 0.58) / 0.42
+        ctx.globalAlpha = Math.max(0, 1 - bk * 0.85)
+        ctx.fillStyle = primaryColor
+        ctx.beginPath()
+        ctx.ellipse(targetX, floorY, (10 + bk * 18) * s, (4 + bk * 7) * s, 0, 0, Math.PI * 2)
+        ctx.fill()
+        for (let b = 0; b < 6; b++) {
+          const bx = targetX + Math.sin(b * 2.1 + bk * 4) * (10 + b * 2) * s
+          const by = floorY - bk * (12 + (b % 3) * 8) * s
+          ctx.strokeStyle = b % 2 === 0 ? secondaryColor : primaryColor
+          ctx.lineWidth = 1.4 * s
+          ctx.beginPath()
+          ctx.arc(bx, by, (2 + (b % 2) * 1.4) * s, 0, Math.PI * 2)
+          ctx.stroke()
+        }
+      }
+      break
+    }
+
+    case 'venom_fang_strike': {
+      // Twin emerald snake fangs chomp + toxic mist droplets
+      const pinch = Math.max(0, 1 - Math.min(1, k * 1.9))
+      ctx.globalAlpha = alpha
+      ctx.strokeStyle = primaryColor
+      ctx.lineWidth = 2.6 * s
+      for (const side of [-1, 1] as const) {
+        const fy = targetY + side * (5 + pinch * 9) * s
+        ctx.beginPath()
+        ctx.moveTo(targetX - 10 * s, fy)
+        ctx.lineTo(targetX + 2 * s, targetY + side * 2 * s)
+        ctx.lineTo(targetX + 12 * s, fy - side * 3 * s)
+        ctx.stroke()
+      }
+      ctx.globalAlpha = alpha * 0.78
+      for (let i = 0; i < 7; i++) {
+        const ang = k * 4.5 + (i * Math.PI * 2) / 7
+        const rx = Math.cos(ang) * (8 + k * 14) * s
+        const ry = Math.sin(ang) * (5 + k * 7) * s
+        ctx.fillStyle = i % 2 === 0 ? primaryColor : secondaryColor
+        ctx.fillRect(Math.round(targetX + rx), Math.round(targetY + ry), Math.round(2.6 * s), Math.round(2.6 * s))
+      }
+      break
+    }
+
+    case 'shadow_skull_mist': {
+      // Floating spectral skull orb + swirling violet mist
+      ctx.globalAlpha = alpha * 0.75
+      ctx.strokeStyle = primaryColor
+      ctx.lineWidth = 1.8 * s
+      ctx.beginPath()
+      ctx.ellipse(targetX, floorY, (10 + k * 16) * s, (4 + k * 6) * s, 0, 0, Math.PI * 2)
+      ctx.stroke()
+      for (let i = 0; i < 3; i++) {
+        const ang = k * 3.5 + (i * Math.PI * 2) / 3
+        const sx = targetX + Math.cos(ang) * (8 + k * 8) * s
+        const sy = targetY - 6 * s + Math.sin(ang) * 6 * s - k * 8 * s
+        ctx.globalAlpha = alpha
+        ctx.fillStyle = i === 0 ? secondaryColor : primaryColor
+        ctx.beginPath()
+        ctx.arc(sx, sy, 4.2 * s, 0, Math.PI * 2)
+        ctx.fill()
+        // Skull jaw + eyes
+        ctx.fillRect(Math.round(sx - 2 * s), Math.round(sy + 3 * s), Math.round(4 * s), Math.round(2.4 * s))
+        ctx.fillStyle = '#1e1b4b'
+        ctx.fillRect(Math.round(sx - 2.2 * s), Math.round(sy - 1 * s), Math.round(1.5 * s), Math.round(1.5 * s))
+        ctx.fillRect(Math.round(sx + 0.8 * s), Math.round(sy - 1 * s), Math.round(1.5 * s), Math.round(1.5 * s))
+      }
+      break
+    }
+
+    case 'demon_pentagram': {
+      // Crimson demonic pentagram seal on ground + erupting blood spikes
+      ctx.globalAlpha = alpha
+      ctx.strokeStyle = primaryColor
+      ctx.lineWidth = 1.8 * s
+      const rx = (14 + k * 10) * s
+      const ry = (6 + k * 4) * s
+      ctx.beginPath()
+      ctx.ellipse(targetX, floorY, rx, ry, 0, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.beginPath()
+      for (let i = 0; i <= 5; i++) {
+        const idx = (i * 2) % 5
+        const ang = (idx * Math.PI * 2) / 5 - Math.PI / 2 + k * 1.2
+        const px = targetX + Math.cos(ang) * rx
+        const py = floorY + Math.sin(ang) * ry
+        if (i === 0) ctx.moveTo(px, py)
+        else ctx.lineTo(px, py)
+      }
+      ctx.stroke()
+      // Erupting crimson spikes
+      for (const offX of [-8 * s, 0, 8 * s]) {
+        const h = (14 + Math.sin(k * Math.PI) * 18) * s
+        ctx.fillStyle = offX === 0 ? secondaryColor : primaryColor
+        ctx.beginPath()
+        ctx.moveTo(targetX + offX - 3 * s, floorY)
+        ctx.lineTo(targetX + offX, floorY - h)
+        ctx.lineTo(targetX + offX + 3 * s, floorY)
+        ctx.closePath()
+        ctx.fill()
+      }
+      break
+    }
+
+    case 'arcane_rune_pulse': {
+      // Expanding concentric arcane rings + orbiting 8 star motes
+      ctx.globalAlpha = alpha
+      ctx.strokeStyle = primaryColor
+      ctx.lineWidth = 2.1 * s
+      ctx.beginPath()
+      ctx.arc(targetX, targetY, (8 + k * 20) * s, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.strokeStyle = secondaryColor
+      ctx.lineWidth = 1.4 * s
+      ctx.beginPath()
+      ctx.ellipse(targetX, floorY, (12 + k * 18) * s, (4.5 + k * 6) * s, 0, 0, Math.PI * 2)
+      ctx.stroke()
+      for (let i = 0; i < 8; i++) {
+        const ang = k * 4.2 + (i * Math.PI) / 4
+        const dist = (10 + k * 16) * s
+        const px = targetX + Math.cos(ang) * dist
+        const py = targetY + Math.sin(ang) * dist * 0.65
+        ctx.fillStyle = i % 2 === 0 ? secondaryColor : primaryColor
+        ctx.fillRect(Math.round(px - 1.5 * s), Math.round(py - 1.5 * s), Math.round(3 * s), Math.round(3 * s))
+      }
+      break
+    }
+
+    case 'coin_rain': {
+      // Shower of gleaming gold coins + market burst ring on impact
+      ctx.globalAlpha = alpha
+      for (let i = 0; i < 9; i++) {
+        const localK = (k * 1.4 + i * 0.13) % 1
+        const cx = targetX + ((i % 5) - 2) * 8 * s
+        const cy = targetY - 36 * s + localK * 44 * s
+        ctx.fillStyle = i % 2 === 0 ? primaryColor : secondaryColor
+        ctx.beginPath()
+        ctx.arc(cx, cy, 3 * s, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(Math.round(cx - 1 * s), Math.round(cy - 1 * s), Math.round(1.4 * s), Math.round(1.4 * s))
+      }
+      ctx.globalAlpha = alpha * 0.8
+      ctx.strokeStyle = primaryColor
+      ctx.lineWidth = 1.8 * s
+      ctx.beginPath()
+      ctx.ellipse(targetX, floorY, (10 + k * 18) * s, (4 + k * 6) * s, 0, 0, Math.PI * 2)
+      ctx.stroke()
+      break
+    }
+
+    case 'aegis_shield_slam': {
+      // Radiant golden crest shield silhouette + sapphire shockwave slam
+      const drop = Math.min(1, k * 1.9)
+      const sy = targetY - (1 - drop) * 20 * s
+      ctx.globalAlpha = alpha
+      ctx.fillStyle = primaryColor
+      ctx.beginPath()
+      ctx.moveTo(targetX - 9 * s, sy - 10 * s)
+      ctx.lineTo(targetX + 9 * s, sy - 10 * s)
+      ctx.lineTo(targetX + 7 * s, sy + 2 * s)
+      ctx.lineTo(targetX, sy + 10 * s)
+      ctx.lineTo(targetX - 7 * s, sy + 2 * s)
+      ctx.closePath()
+      ctx.fill()
+      ctx.strokeStyle = secondaryColor
+      ctx.lineWidth = 1.8 * s
+      ctx.stroke()
+      // Cross emblem on shield
+      ctx.fillStyle = secondaryColor
+      ctx.fillRect(Math.round(targetX - 1 * s), Math.round(sy - 6 * s), Math.round(2 * s), Math.round(11 * s))
+      ctx.fillRect(Math.round(targetX - 4.5 * s), Math.round(sy - 2 * s), Math.round(9 * s), Math.round(2 * s))
+      // Impact shockwave on floor
+      ctx.globalAlpha = alpha * 0.85
+      ctx.strokeStyle = secondaryColor
+      ctx.lineWidth = 2 * s
+      ctx.beginPath()
+      ctx.ellipse(targetX, floorY, (10 + k * 22) * s, (4 + k * 7) * s, 0, 0, Math.PI * 2)
+      ctx.stroke()
+      break
+    }
   }
 
   ctx.restore()

@@ -21,6 +21,7 @@ import {
 } from '@/lib/game/extended-systems'
 import { playEnhanceSfx, playQuestClaimSfx } from '@/lib/game/sfx'
 import { useGame } from '@/lib/game/use-game'
+import { getSkillIconPath, getSkillVfxSpec } from '@/lib/game/vfx-specs'
 import { formatNum } from '../format'
 import { PanelFrame, PxButton } from './panels'
 
@@ -143,25 +144,45 @@ export function TalentsPanel() {
           <p className="text-xs text-muted-foreground">
             อาชีพปัจจุบัน: <strong className="text-primary">{job.name}</strong> — การอัปเกรดสกิลเพิ่มความแรงสกิล +15% ต่อขั้นและลดคูลดาวน์
           </p>
-          <div className="grid gap-2.5 sm:grid-cols-3">
+          <div className="grid gap-2.5 sm:grid-cols-2">
             {job.skills.map((sk, idx) => {
               const lv = p.skillLevels?.[sk.id] ?? 1
               const maxed = lv >= MAX_SKILL_UPGRADE
               const cost = skillUpgradeCost(lv)
+              const vfx = getSkillVfxSpec(sk.id, sk.color, sk.kind, job.weaponTypes[0])
               return (
                 <div key={sk.id} className="flex flex-col justify-between gap-2 border border-border/80 bg-background/60 p-3 text-xs">
                   <div>
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold" style={{ color: sk.color }}>
-                        [{idx + 1}] {sk.name}
-                      </span>
-                      <span className="font-bold text-primary tabular-nums">Lv.{lv}/{MAX_SKILL_UPGRADE}</span>
+                    <div className="flex items-start gap-2">
+                      <img
+                        src={getSkillIconPath(sk.id)}
+                        alt=""
+                        width={32}
+                        height={32}
+                        className="pixelated size-8 shrink-0 rounded border border-border/80 bg-[#0e0f1a] object-cover"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="truncate font-bold" style={{ color: vfx.primaryColor }}>
+                            [{idx + 1}] {sk.name}
+                          </span>
+                          <span className="shrink-0 font-bold text-primary tabular-nums">
+                            Lv.{lv}/{MAX_SKILL_UPGRADE}
+                          </span>
+                        </div>
+                        {sk.tag && <p className="text-[10px] font-semibold text-amber-300/90">{sk.tag}</p>}
+                      </div>
                     </div>
-                    <p className="mt-1 text-[11px] text-muted-foreground tabular-nums">
-                      ใช้ {sk.mp} MP · รูปแบบ {sk.kind === 'heal' ? 'ฟื้นฟูพลังชีวิต' : sk.kind === 'aoe-self' || sk.kind === 'aoe-target' ? 'โจมตีวงกว้าง' : sk.kind === 'multi' ? `โจมตีต่อเนื่อง ${sk.hits ?? 2} ครั้ง` : 'โจมตีเป้าหมายเดี่ยว'}
+                    <p className="mt-1.5 text-[10.5px] font-medium text-muted-foreground tabular-nums">
+                      ใช้ {sk.mp} MP · ตัวคูณ x{(sk.mult * (1 + (lv - 1) * 0.15)).toFixed(2)} · CD {Math.max(1.2, sk.cooldown - (lv - 1) * 0.2).toFixed(1)}s
+                      {sk.radius > 0 ? ` · รัศมี ${sk.radius}px` : ''}
                     </p>
-                    <p className="mt-1.5 text-[10px] text-amber-200 tabular-nums">
-                      ตัวคูณปัจจุบัน: x{(sk.mult * (1 + (lv - 1) * 0.15)).toFixed(2)} · CD {Math.max(1.2, sk.cooldown - (lv - 1) * 0.2).toFixed(1)}s
+                    {sk.effectSummary && (
+                      <p className="mt-1 text-[10.5px] font-semibold text-emerald-300">{sk.effectSummary}</p>
+                    )}
+                    <p className="mt-1 text-[10.5px] leading-snug text-slate-200/90">{sk.description}</p>
+                    <p className="mt-1 text-[10px]" style={{ color: vfx.primaryColor }}>
+                      VFX: {vfx.effectLabel}
                     </p>
                   </div>
                   <PxButton

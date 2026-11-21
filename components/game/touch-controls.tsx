@@ -96,16 +96,16 @@ export function TouchControls() {
               <span>คุยกับ {nearNpc.name}</span>
             </HoldButton>
           )}
-          <div className="flex items-center gap-1 lg:gap-1.5">
+          <div className="flex max-w-[13.5rem] flex-wrap items-center justify-end gap-1 sm:max-w-none lg:gap-1.5">
             <HoldButton
               label="ป้องกัน (การ์ด)"
               onDown={() => triggerOpenWorldGuard()}
               className={cn(
-                'size-9 rounded-lg border-2 border-sky-300/50 bg-[#1c2b42]/90 text-sky-200 shadow-md lg:size-11 lg:rounded-xl',
+                'size-8 rounded-lg border-2 border-sky-300/50 bg-[#1c2b42]/90 text-sky-200 shadow-md sm:size-9 lg:size-11 lg:rounded-xl',
                 game.guardCd > 0 && 'opacity-50',
               )}
             >
-              <Shield className="size-4" aria-hidden />
+              <Shield className="size-3.5 sm:size-4" aria-hidden />
             </HoldButton>
             {job.skills.map((sk, i) => (
               <HoldButton
@@ -113,7 +113,7 @@ export function TouchControls() {
                 label={sk.name}
                 onDown={() => castSkill(i)}
                 className={cn(
-                  'relative size-9 overflow-hidden rounded-lg border-2 border-[#d4a348] bg-[#241a18]/95 p-0.5 text-[8px] leading-tight shadow-lg lg:size-11 lg:rounded-xl lg:p-1 lg:text-[9px]',
+                  'relative size-8 overflow-hidden rounded-lg border-2 border-[#d4a348] bg-[#241a18]/95 p-0.5 text-[8px] leading-tight shadow-lg sm:size-9 lg:size-11 lg:rounded-xl lg:p-1 lg:text-[9px]',
                   g.p && g.p.mp < sk.mp && 'opacity-50',
                 )}
               >

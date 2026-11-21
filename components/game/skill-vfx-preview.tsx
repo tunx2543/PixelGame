@@ -143,6 +143,8 @@ export function SkillVfxPreview({
       const heroSkillFrame = isHeroCasting ? Math.min(3, Math.floor((vfxProgress / 0.78) * 4)) : 0
       const heroIdleFrame = Math.floor(timeSec * 3) % 4
       const lungeX = isHeroCasting ? Math.round(Math.sin((vfxProgress / 0.78) * Math.PI) * 8) : 0
+      const heroSkillProg = isHeroCasting ? Math.max(0, Math.min(1, vfxProgress / 0.78)) : 0
+      const heroIdleProg = (timeSec * 0.6) % 1
       const heroDrawable = resolveHumanDrawable(
         jobHumanColors(job.id, job.colors, false),
         'right',
@@ -151,13 +153,23 @@ export function SkillVfxPreview({
         job.colors.accent,
         false,
         isHeroCasting ? 'skill' : 'idle',
+        isHeroCasting ? heroSkillFrame : undefined,
+        {
+          progress: isHeroCasting ? heroSkillProg : heroIdleProg,
+          cycleFrames: 8,
+        },
       )
       const isGmEpic = Boolean(heroDrawable.gmReady)
+      const isJobSprite = Boolean(heroDrawable.jobSprite)
       const heroHd = heroDrawable.hdScale
-      const heroScale = isGmEpic ? 2.35 : 1.95 / Math.max(1, heroHd)
+      const heroScale = isGmEpic
+        ? 2.35
+        : isJobSprite
+          ? Math.min(Math.round(h * 0.68), 78) / Math.max(1, heroDrawable.height)
+          : 1.95 / Math.max(1, heroHd)
       const hw = Math.round(heroDrawable.width * heroScale)
       const hh = Math.round(heroDrawable.height * heroScale)
-      const footOffset = isGmEpic ? 18 : 4
+      const footOffset = isGmEpic ? 18 : isJobSprite ? Math.round(hh * 0.035) : 4
       drawResolvedDrawable(ctx, heroDrawable, Math.round(heroX + lungeX - hw / 2), Math.round(floorY - hh + footOffset), hw, hh)
 
       // Front layer of rebirth aura (floating crown halo / orbiting star shards / rising motes)

@@ -483,34 +483,59 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                 </span>
               </div>
 
-              {selectedJobEntry.job.skills.length > 0 && activeJobSkill && (
-                <div className="mt-2 grid gap-2 border border-border/70 bg-[#0a0d1c]/70 p-2 sm:grid-cols-[17rem_1fr] sm:items-center">
-                  <SkillVfxPreview
-                    jobId={selectedJobEntry.job.id}
-                    skillId={activeJobSkill.id}
-                    rebirthCount={previewRebirth}
-                    playNonce={vfxNonce}
-                    width={272}
-                    height={112}
-                    label={`ตัวอย่างเอฟเฟคสกิล ${activeJobSkill.name}`}
-                  />
-                  <div className="flex flex-col gap-1 text-[11px]">
-                    <p className="font-bold text-foreground">{activeJobSkill.name}</p>
-                    <p className="text-[10px]" style={{ color: getSkillVfxSpec(activeJobSkill.id, activeJobSkill.color).primaryColor }}>
-                      {getSkillVfxSpec(activeJobSkill.id, activeJobSkill.color).effectLabel}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">{activeRebirthSpec.subtitle}</p>
-                    <button
-                      type="button"
-                      onClick={() => setVfxNonce((n) => n + 1)}
-                      className="pixel-btn mt-1 inline-flex w-fit items-center gap-1 bg-accent px-2.5 py-1 text-[10px] font-bold text-accent-foreground hover:brightness-110"
-                    >
-                      <Play className="size-3" aria-hidden />
-                      ทดสอบเอฟเฟคสกิล
-                    </button>
+              {selectedJobEntry.job.skills.length > 0 && activeJobSkill && (() => {
+                const activeSpec = getSkillVfxSpec(
+                  activeJobSkill.id,
+                  activeJobSkill.color,
+                  activeJobSkill.kind,
+                  selectedJobEntry.job.weaponTypes[0],
+                )
+                return (
+                  <div className="mt-2 grid gap-2.5 border border-border/70 bg-[#0a0d1c]/70 p-2.5 sm:grid-cols-[17rem_1fr] sm:items-center">
+                    <SkillVfxPreview
+                      jobId={selectedJobEntry.job.id}
+                      skillId={activeJobSkill.id}
+                      rebirthCount={previewRebirth}
+                      playNonce={vfxNonce}
+                      width={272}
+                      height={116}
+                      label={`ตัวอย่างเอฟเฟคสกิล ${activeJobSkill.name}`}
+                    />
+                    <div className="flex flex-col gap-1 text-[11px]">
+                      <div className="flex flex-wrap items-center justify-between gap-1.5">
+                        <p className="font-bold text-foreground">{activeJobSkill.name}</p>
+                        {activeJobSkill.tag && (
+                          <span className="text-[10px] font-semibold text-amber-300/90">{activeJobSkill.tag}</span>
+                        )}
+                      </div>
+                      <p className="font-mono text-[10px] text-sky-300 tabular-nums">
+                        {activeJobSkill.mp} MP · CD {activeJobSkill.cooldown}s ·{' '}
+                        {activeJobSkill.mult > 0 ? `${activeJobSkill.mult}x` : 'ฟื้นฟู/บัฟ'}
+                        {activeJobSkill.radius > 0 ? ` · รัศมี ${activeJobSkill.radius}px` : ' · เป้าหมายเดี่ยว'}
+                        {(activeJobSkill.hits ?? 1) > 1 ? ` · ${activeJobSkill.hits} ฮิต` : ''}
+                      </p>
+                      {activeJobSkill.effectSummary && (
+                        <p className="text-[10.5px] font-semibold text-emerald-300">
+                          ผลสกิล: {activeJobSkill.effectSummary}
+                        </p>
+                      )}
+                      <p className="text-[10.5px] leading-snug text-slate-200/90">{activeJobSkill.description}</p>
+                      <p className="text-[10px]" style={{ color: activeSpec.primaryColor }}>
+                        VFX: {activeSpec.effectLabel}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">{activeRebirthSpec.subtitle}</p>
+                      <button
+                        type="button"
+                        onClick={() => setVfxNonce((n) => n + 1)}
+                        className="pixel-btn mt-1 inline-flex w-fit items-center gap-1 bg-accent px-2.5 py-1 text-[10px] font-bold text-accent-foreground hover:brightness-110"
+                      >
+                        <Play className="size-3" aria-hidden />
+                        ทดสอบเอฟเฟคสกิล
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
+                )
+              })()}
             </div>
           </div>
         </section>

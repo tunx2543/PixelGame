@@ -41,6 +41,7 @@ import {
   preloadPetSpriteSheet,
   type SheetFrameDrawSpec,
 } from './sprite-sheets'
+import { drawArticulatedJobSprite } from './job-rig'
 
 const OUTLINE = '#1a1423'
 
@@ -511,6 +512,60 @@ function cached(key: string, make: () => HTMLCanvasElement) {
   return c
 }
 
+export const JOB_SPRITE_IDS = [
+  'novice',
+  'swordsman',
+  'mage',
+  'archer',
+  'cleric',
+  'merchant',
+  'thief',
+  'kensei',
+  'iron_fist',
+  'wicked_necromancer',
+  'the_king',
+  'sinister',
+  'templar',
+  'nekobaku',
+  'mamushi',
+] as const
+
+const jobSpriteImageCache = new Map<string, HTMLImageElement>()
+
+export function getJobSpriteImage(jobId: string): HTMLImageElement | null {
+  if (typeof window === 'undefined') return null
+  const canonical = normalizeJobId(jobId)
+  let image = jobSpriteImageCache.get(canonical)
+  if (!image) {
+    image = new Image()
+    image.src = `/assets/jobs/${canonical}.png`
+    jobSpriteImageCache.set(canonical, image)
+  }
+  return image.complete && image.naturalWidth > 0 ? image : null
+}
+
+export function preloadAllJobSprites(): void {
+  if (typeof window === 'undefined') return
+  for (const id of JOB_SPRITE_IDS) {
+    getJobSpriteImage(id)
+  }
+}
+
+export interface JobSpriteDrawSpec {
+  jobId: string
+  image: HTMLImageElement
+  flipX: boolean
+  dir: Dir
+  action: SpriteAction
+  frame: number
+  cycleFrames: number
+  progress: number
+  weapon: WeaponType | null
+  accentColor: string
+  width: number
+  height: number
+}
+
 export interface ResolvedDrawable {
   width: number
   height: number
@@ -519,6 +574,7 @@ export interface ResolvedDrawable {
   gmReady?: boolean
   canvas?: HTMLCanvasElement
   sheetSpec?: SheetFrameDrawSpec
+  jobSprite?: JobSpriteDrawSpec
 }
 
 export function canvasToResolvedDrawable(canvas: HTMLCanvasElement): ResolvedDrawable {
@@ -550,6 +606,11 @@ export function drawResolvedDrawable(
   dw: number,
   dh: number,
 ): void {
+  if (drawable.jobSprite) {
+    drawArticulatedJobSprite(ctx, drawable.jobSprite, dx, dy, dw, dh)
+    return
+  }
+
   if (drawable.sheetSpec) {
     drawSheetFrameSpec(ctx, drawable.sheetSpec, dx, dy, dw, dh)
     return
@@ -571,6 +632,20 @@ export function drawResolvedPortrait(
   dw: number,
   dh: number,
 ): void {
+  if (drawable.jobSprite) {
+    const { image, flipX, width } = drawable.jobSprite
+    if (!image.complete || image.naturalWidth <= 0) return
+    if (!flipX) {
+      ctx.drawImage(image, sxCrop, syCrop, swCrop, shCrop, dx, dy, dw, dh)
+      return
+    }
+    ctx.save()
+    ctx.translate(dx + dw, dy)
+    ctx.scale(-1, 1)
+    ctx.drawImage(image, width - sxCrop - swCrop, syCrop, swCrop, shCrop, 0, 0, dw, dh)
+    ctx.restore()
+    return
+  }
   if (drawable.sheetSpec) {
     const spec = drawable.sheetSpec
     if (!spec.image.complete || spec.image.naturalWidth <= 0) return
@@ -599,9 +674,45 @@ export function resolveHumanDrawable(
   attacking = false,
   actionOverride?: SpriteAction,
   attackFrameOverride?: number,
+  animCycle?: { progress?: number; cycleFrames?: number },
 ): ResolvedDrawable {
   const requestedAction: SpriteAction = attacking ? 'attack' : actionOverride ?? (frame > 0 ? 'walk' : 'idle')
   if (typeof document !== 'undefined' && colors.jobId && !colors.skeleton && !colors.goblinEars) {
+    const canonicalJob = normalizeJobId(colors.jobId)
+    const jobImg = getJobSpriteImage(canonicalJob)
+    if (jobImg) {
+      const animFrame =
+        requestedAction === 'attack' || requestedAction === 'skill'
+          ? (attackFrameOverride ?? frame)
+          : frame
+      const cycleFrames = Math.max(1, animCycle?.cycleFrames ?? 4)
+      const progress =
+        animCycle?.progress !== undefined
+          ? Math.max(0, Math.min(1, animCycle.progress))
+          : animFrame < 0
+            ? 0
+            : (animFrame % cycleFrames) / cycleFrames
+      return {
+        width: 256,
+        height: 256,
+        hdScale: 4,
+        sheetId: `job_${canonicalJob}`,
+        jobSprite: {
+          jobId: canonicalJob,
+          image: jobImg,
+          flipX: dir === 'left',
+          dir,
+          action: requestedAction,
+          frame: animFrame,
+          cycleFrames,
+          progress,
+          weapon,
+          accentColor: colors.accent || '#38bdf8',
+          width: 256,
+          height: 256,
+        },
+      }
+    }
     const sheetFrameIdx = requestedAction === 'attack' ? (attackFrameOverride ?? frame) : frame
     const spec = getHeroSheetFrameSpec(colors.jobId, dir, requestedAction, sheetFrameIdx)
     if (spec) return sheetSpecToResolvedDrawable(spec)
