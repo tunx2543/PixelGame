@@ -43,7 +43,9 @@ import { preloadMountSpriteSheet, preloadPetSpriteSheet } from './sprite-sheets'
 import { resolvePetAnimationFrame } from './pet-follow'
 import { TITLE_DEFS } from './rpg-systems'
 import { GATHERING_NODES, getCosmeticDef, getWorldTimePhase, sanitizeExtV2 } from './extended-systems'
-import { drawOverworldSkillEffect, drawRebirthAura } from './vfx-canvas'
+import { drawOverworldSkillEffect, drawRebirthAura, drawSpiritAwakeningAura } from './vfx-canvas'
+import { getMenuIconCanvas, type MenuIconId } from './menu-icons'
+import { computeWorldFloatTransform } from './floating-damage'
 import {
   drawCharacterFashionLayers,
   getFashionLayerImage,
@@ -641,6 +643,22 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         const hitShake = m.hitFlash > 0 ? Math.sin(m.hitFlash * 95) * 2.2 : 0
 
         shadow(ctx, m.x + hoverX, m.y, (5.5 - (flying ? Math.sin(m.animT * 4.2) * 0.4 : 0)) * (def.boss ? 1.55 : 1))
+        if (m.uid === game.targetMonsterUid && !dying) {
+          const pulse = 0.72 + Math.sin(t * 7) * 0.22
+          ctx.save()
+          ctx.strokeStyle = '#fb7185'
+          ctx.lineWidth = 1.6
+          ctx.globalAlpha = pulse
+          ctx.beginPath()
+          ctx.ellipse(m.x, m.y + 0.5, Math.max(10, w * 0.42), Math.max(4, w * 0.16), 0, 0, Math.PI * 2)
+          ctx.stroke()
+          ctx.strokeStyle = '#fde047'
+          ctx.lineWidth = 0.9
+          ctx.beginPath()
+          ctx.ellipse(m.x, m.y + 0.5, Math.max(7.5, w * 0.32), Math.max(3, w * 0.11), 0, 0, Math.PI * 2)
+          ctx.stroke()
+          ctx.restore()
+        }
         if (def.boss || mSpec.auraColor || m.isWorldBoss) {
           ctx.save()
           ctx.strokeStyle = m.isWorldBoss ? '#fde047' : mSpec.auraColor ?? def.color
@@ -1271,6 +1289,18 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           disableGlow,
         })
       }
+      if ((extV2.spiritAwakening?.awakeningStage ?? 0) > 0) {
+        drawSpiritAwakeningAura(ctx, {
+          x: p.x,
+          y: p.y,
+          timeSec: t,
+          stage: extV2.spiritAwakening?.awakeningStage ?? 0,
+          radiusX: 12,
+          spriteHeight: drawH,
+          alphaScale: p.invisible ? 0.22 : 1,
+          disableGlow,
+        })
+      }
 
       const drawSummonedCompanionMount = () => {
         if (!isSummonedCompanion || !activeMount || !mountAnimState) return
@@ -1816,6 +1846,15 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     text(`${arrow} ${pt.label}`, x, y, '#caf0f8', 9)
   }
 
+  const npcRoleIconMap: Record<string, MenuIconId> = {
+    enhance: 'npc-anvil',
+    storage: 'npc-chest',
+    shop: 'npc-pouch',
+    job: 'npc-job',
+    gacha: 'npc-gacha',
+    rebirth: 'npc-rebirth',
+  }
+
   for (const n of map.npcs) {
     const npcOffset = 35
     const npcWorldX = n.x * TILE
@@ -1858,6 +1897,39 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       ctx.fillStyle = '#181424'
       ctx.fillText(label, x, by + bh / 2, maxBubbleW)
       ctx.restore()
+    } else if (!game.panel) {
+      // Asura-inspired floating NPC service tool bubble when player is outside greeting radius
+      const iconId = npcRoleIconMap[n.role] ?? 'npc-pouch'
+      const iconCanvas = getMenuIconCanvas(iconId)
+      if (iconCanvas) {
+        const bob = Math.sin(t * 3 + n.x) * 1.4 * dpr
+        const boxW = 20 * dpr
+        const boxH = 16 * dpr
+        const bx = x - boxW / 2
+        const by = y - 38 * dpr + bob
+        ctx.save()
+        ctx.fillStyle = '#141926'
+        ctx.strokeStyle = '#7eb0ee'
+        ctx.lineWidth = Math.max(1, 1.1 * dpr)
+        ctx.beginPath()
+        ctx.roundRect(bx, by, boxW, boxH, 6 * dpr)
+        ctx.fillStyle = 'rgba(252, 249, 240, 0.95)'
+        ctx.fill()
+        ctx.strokeStyle = '#1e293b'
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.moveTo(x - 3 * dpr, by + boxH - 0.5 * dpr)
+        ctx.lineTo(x + 3 * dpr, by + boxH - 0.5 * dpr)
+        ctx.lineTo(x, by + boxH + 3.5 * dpr)
+        ctx.closePath()
+        ctx.fillStyle = 'rgba(252, 249, 240, 0.95)'
+        ctx.fill()
+        ctx.imageSmoothingEnabled = false
+        const iw = 12 * dpr
+        const ih = Math.max(8, Math.round((iconCanvas.height / Math.max(1, iconCanvas.width)) * iw))
+        ctx.drawImage(iconCanvas, Math.round(x - iw / 2), Math.round(by + (boxH - ih) / 2), iw, ih)
+        ctx.restore()
+      }
     }
 
     text(`[${n.title}]`, x, y - 12 * dpr, '#f2c94c', 8.5)
@@ -1903,13 +1975,30 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       : Math.round(mSpec.canvasSize.height * mScale * 0.78) + (mSpec.flying ? 5 : 0)
     const [x, y] = toS(m.x, m.y - h)
     const isAnyBoss = Boolean(def.boss || m.isWorldBoss)
-    const color = m.isWorldBoss ? '#fde047' : def.boss ? '#ff6b6b' : def.level > p.level + 5 ? '#ff8fa3' : def.level < p.level - 5 ? '#a0a0a0' : '#ffffff'
+    const isTargeted = m.uid === game.targetMonsterUid
+    const color = m.isWorldBoss ? '#fde047' : def.boss ? '#ff6b6b' : isTargeted ? '#fde68a' : def.level > p.level + 5 ? '#ff8fa3' : def.level < p.level - 5 ? '#a0a0a0' : '#ffffff'
     const label = m.isWorldBoss ? `[บอสโลก] ${m.worldBossName ?? def.name}` : `${def.boss ? '★ ' : ''}${def.name} Lv.${def.level}`
     text(label, x, y - 8 * dpr, color, isAnyBoss ? 10 : 8)
-    if (m.hp < m.maxHp || isAnyBoss) {
-      const bw = (m.isWorldBoss ? 48 : def.boss ? 40 : 18) * s
-      const bh = (m.isWorldBoss ? 2.5 : 2) * s
-      ctx.fillStyle = isAnyBoss ? '#f5c441' : 'rgba(10,8,20,0.9)'
+    if (isTargeted) {
+      const bob = Math.sin(t * 7) * 2.2 * dpr
+      const ay = y - 19 * dpr + bob
+      ctx.save()
+      ctx.fillStyle = '#f43f5e'
+      ctx.strokeStyle = '#fde047'
+      ctx.lineWidth = Math.max(1, 1.1 * dpr)
+      ctx.beginPath()
+      ctx.moveTo(x - 4.5 * dpr, ay - 4 * dpr)
+      ctx.lineTo(x + 4.5 * dpr, ay - 4 * dpr)
+      ctx.lineTo(x, ay + 2.5 * dpr)
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+      ctx.restore()
+    }
+    if (m.hp < m.maxHp || isAnyBoss || isTargeted) {
+      const bw = (m.isWorldBoss ? 48 : def.boss ? 40 : isTargeted ? 24 : 18) * s
+      const bh = (m.isWorldBoss ? 2.5 : isTargeted ? 2.2 : 2) * s
+      ctx.fillStyle = isAnyBoss ? '#f5c441' : isTargeted ? '#fbbf24' : 'rgba(10,8,20,0.9)'
       ctx.fillRect(x - bw / 2 - dpr, y - dpr, bw + 2 * dpr, bh + 2 * dpr)
       ctx.fillStyle = '#3a0d12'
       ctx.fillRect(x - bw / 2, y, bw, bh)
@@ -2070,10 +2159,52 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   }
 
   for (const f of game.floats) {
-    const [x, y] = toS(f.x, f.y)
-    ctx.globalAlpha = Math.min(1, f.life / f.max + 0.2)
-    text(f.text, x, y, f.color, f.size)
-    ctx.globalAlpha = 1
+    const kind = f.kind ?? 'damage'
+    const motion = computeWorldFloatTransform(f.life, f.max, kind, f.arcDrift ?? 0)
+    const [x, y] = toS(f.x + motion.dxWorld, f.y + motion.dyWorld)
+    const isCrit = kind === 'crit' || kind === 'soulCrit'
+    const fontPx = Math.max(10, Math.round(f.size * dpr * (zoom / 3) * 1.18 * motion.scale))
+    ctx.save()
+    ctx.globalAlpha = motion.alpha
+    if (f.badge) {
+      const badgeSize = Math.max(8, Math.round(fontPx * 0.48))
+      ctx.font = `900 ${badgeSize}px ${font}`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      const badgeText = f.badge
+      const bw = ctx.measureText(badgeText).width + 10 * dpr
+      const bh = badgeSize + 4 * dpr
+      const by = y - fontPx * 0.72 - bh / 2
+      if (isCrit) {
+        ctx.fillStyle = kind === 'soulCrit' ? 'rgba(22, 78, 99, 0.92)' : 'rgba(120, 53, 15, 0.92)'
+        ctx.strokeStyle = f.color
+        ctx.lineWidth = Math.max(1, 1.1 * dpr)
+        ctx.beginPath()
+        ctx.roundRect(x - bw / 2, by - bh / 2, bw, bh, 3 * dpr)
+        ctx.fill()
+        ctx.stroke()
+      }
+      ctx.lineWidth = 2.6 * dpr
+      ctx.strokeStyle = f.outlineColor ?? '#0e1320'
+      ctx.lineJoin = 'round'
+      ctx.strokeText(badgeText, x, by)
+      ctx.fillStyle = kind === 'soulCrit' ? '#cffafe' : kind === 'crit' ? '#fef08a' : f.color
+      ctx.fillText(badgeText, x, by)
+    }
+
+    ctx.font = `900 ${fontPx}px ${font}`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.lineJoin = 'round'
+    // Crisp extruded drop shadow + thick dark outline for Asura-grade legibility
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.72)'
+    ctx.fillText(f.text, x, y + Math.max(1.5, 1.8 * dpr))
+    ctx.lineWidth = Math.max(2.5, (isCrit ? 4.4 : 3.4) * dpr)
+    ctx.strokeStyle = f.outlineColor ?? '#0b101b'
+    ctx.strokeText(f.text, x, y)
+    ctx.fillStyle = f.color
+    ctx.fillText(f.text, x, y)
+    ctx.restore()
   }
 }
 

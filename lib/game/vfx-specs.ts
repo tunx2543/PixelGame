@@ -1,4 +1,5 @@
 import { normalizeJobId, normalizeSkillId, type JobId, type SkillKind, type WeaponType } from './data'
+import { renderSkillIconBmpDataUrl } from './skill-icon-bmp'
 
 export type RebirthVisualStyle =
   | 'none'
@@ -823,7 +824,11 @@ export function getSkillVfxSpec(
   const canonicalSkillId = normalizeSkillId(skillId)
   const entry = SKILL_VFX_TABLE[canonicalSkillId] ?? SKILL_VFX_TABLE[skillId]
   if (entry) {
-    return { skillId, ...entry }
+    return {
+      skillId,
+      ...entry,
+      iconPath: renderSkillIconBmpDataUrl(entry.style, entry.primaryColor, entry.secondaryColor),
+    }
   }
   const style: SkillVfxStyle =
     fallbackKind === 'heal'
@@ -845,11 +850,11 @@ export function getSkillVfxSpec(
     effectLabel: 'พลังโจมตีประจำสายอาชีพ',
     primaryColor: fallbackColor,
     secondaryColor: '#ffffff',
-    iconPath: '/images/skills/whirl.png',
+    iconPath: renderSkillIconBmpDataUrl(style, fallbackColor, '#ffffff'),
   }
 }
 
 export function getSkillIconPath(skillId: string): string {
-  const canonicalSkillId = normalizeSkillId(skillId)
-  return (SKILL_VFX_TABLE[canonicalSkillId] ?? SKILL_VFX_TABLE[skillId])?.iconPath ?? '/images/skills/whirl.png'
+  const spec = getSkillVfxSpec(skillId)
+  return spec.iconPath
 }

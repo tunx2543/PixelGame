@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Crown, Hammer, LogOut, Star, Store, Warehouse, Weight } from 'lucide-react'
+import { Crown, Hammer, LogOut, Store, Warehouse, Weight } from 'lucide-react'
 import {
   currentJob,
   getActiveAccountGameUid,
@@ -17,6 +17,7 @@ import { PERMANENT_GM_GAME_UID } from '@/lib/game/permissions'
 import { formatVipRemaining, getEffectiveVipBonuses } from '@/lib/game/premium/vip'
 import { useGame } from '@/lib/game/use-game'
 import { formatNum } from './format'
+import { GameArtIcon } from './game-badge-icon'
 import { SpriteModelCanvas } from './sprite-model-canvas'
 
 export function CharacterBar({ compact = false }: { compact?: boolean; layout?: 'desktop' | 'mobile' }) {
@@ -55,6 +56,7 @@ export function CharacterBar({ compact = false }: { compact?: boolean; layout?: 
   const hpPct = Math.max(0, Math.min(100, (p.hp / Math.max(1, s.maxHp)) * 100))
   const mpPct = Math.max(0, Math.min(100, (p.mp / Math.max(1, s.maxMp)) * 100))
   const jobLevel = Math.max(1, p.jobLevel ?? 1)
+  const spiritStage = s.spiritStage ?? 0
 
   const openRemote = (panel: PanelId) => {
     openPanel(panel)
@@ -114,9 +116,15 @@ export function CharacterBar({ compact = false }: { compact?: boolean; layout?: 
       <div className="flex min-w-0 flex-1 flex-col gap-0.5 pt-0.5">
         <div className="flex items-center justify-between gap-1">
           <div className="flex min-w-0 items-center gap-1 text-[11px] font-bold text-white [text-shadow:0_1px_3px_#000] sm:text-xs">
-            <span className="grid size-4 shrink-0 place-items-center rounded-full border border-amber-300/70 bg-amber-500/20">
-              <Star className="size-2.5 text-amber-300" aria-hidden />
-            </span>
+            <GameArtIcon iconId="class-star" size={16} />
+            {spiritStage > 0 && (
+              <span
+                title={`จุจิตขั้น ${spiritStage}`}
+                className="shrink-0 rounded border border-cyan-300/75 bg-cyan-950/90 px-1 py-0 font-mono text-[8px] font-extrabold text-cyan-200 tabular-nums"
+              >
+                จิต{spiritStage}
+              </span>
+            )}
             {isGmDev && <span className="shrink-0 text-gold">[GM]</span>}
             {vipBonus.active && vipBonus.tierDef && (
               <button

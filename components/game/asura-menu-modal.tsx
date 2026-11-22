@@ -2,39 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import {
-  Award,
-  Backpack,
-  BookOpen,
-  CalendarCheck,
-  Camera,
-  Castle,
-  ClipboardCheck,
-  Compass,
-  Crown,
-  Flame,
-  Gem,
-  Hammer,
-  Info,
-  Layers,
-  LogOut,
-  Mail,
-  PawPrint,
-  Pickaxe,
-  ScrollText,
-  Settings,
-  Shield,
-  Sparkles,
-  Star,
-  Store,
-  Swords,
-  Terminal,
-  User,
-  UserPlus,
-  Users,
-  X,
-  Zap,
-} from 'lucide-react'
+import { Star, X } from 'lucide-react'
 import { useDailyMissions } from '@/lib/game/daily-missions'
 import {
   ensurePremiumState,
@@ -45,16 +13,18 @@ import {
   say,
   type PanelId,
 } from '@/lib/game/engine'
+import type { MenuIconId } from '@/lib/game/menu-icons'
 import { TOPUP_MILESTONES } from '@/lib/game/premium/topup'
 import { todayIsoDate } from '@/lib/game/rpg-systems'
 import { countClaimableQuests } from '@/lib/game/systems'
 import { useGame } from '@/lib/game/use-game'
 import { cn } from '@/lib/utils'
+import { GameArtIcon, GameBadgeMedallion } from './game-badge-icon'
 
 interface MenuGridEntry {
   id: string
   label: string
-  icon: typeof User
+  iconId: MenuIconId
   tone: string
   panel?: PanelId
   href?: string
@@ -64,25 +34,16 @@ interface MenuGridEntry {
 }
 
 function MenuCircleButton({ entry }: { entry: MenuGridEntry }) {
-  const Icon = entry.icon
-  const badgeVal = entry.badgeCount ?? 0
-  const showAlert = Boolean(entry.badgeAlert || badgeVal > 0)
-
   const inner = (
     <>
-      <span
-        className={cn(
-          'relative grid size-11 place-items-center rounded-full border-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.28),0_4px_10px_rgba(0,0,0,0.45)] transition-transform duration-150 group-hover:scale-105 sm:size-12',
-          entry.tone,
-        )}
-      >
-        <Icon className="size-5 text-white drop-shadow sm:size-6" aria-hidden />
-        {showAlert && (
-          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full border border-white/90 bg-rose-600 px-1 font-mono text-[9px] font-extrabold leading-none text-white shadow tabular-nums">
-            {badgeVal > 0 ? (badgeVal > 9 ? '9+' : badgeVal) : '!'}
-          </span>
-        )}
-      </span>
+      <GameBadgeMedallion
+        iconId={entry.iconId}
+        tone={entry.tone}
+        size="md"
+        badgeCount={entry.badgeCount}
+        badgeAlert={entry.badgeAlert}
+        className="group-hover:scale-105"
+      />
       <span className="w-full truncate text-center text-[10.5px] font-bold text-slate-100 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
         {entry.label}
       </span>
@@ -93,6 +54,7 @@ function MenuCircleButton({ entry }: { entry: MenuGridEntry }) {
     return (
       <Link
         href={entry.href}
+        prefetch={false}
         onClick={() => {
           saveGame()
           entry.onClick?.()
@@ -147,7 +109,7 @@ export function AsuraDailyHelperModal({
       role="dialog"
       aria-modal="true"
       aria-label="ตัวช่วยภารกิจประจำวัน"
-      className="pointer-events-auto fixed inset-0 z-[75] flex items-center justify-center bg-black/70 p-3 backdrop-blur-xs"
+      className="pointer-events-auto fixed inset-0 z-[75] flex items-center justify-center bg-black/75 p-3"
       onPointerDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
@@ -155,7 +117,7 @@ export function AsuraDailyHelperModal({
       <div className="asura-panel relative w-full max-w-lg overflow-hidden p-4 shadow-2xl">
         <div className="flex items-center justify-between border-b border-[#295596] pb-2.5">
           <div className="flex items-center gap-2">
-            <ClipboardCheck className="size-5 text-amber-300" aria-hidden />
+            <GameArtIcon iconId="helper" size={24} />
             <div>
               <h3 className="text-sm font-bold text-white">ตัวช่วยอสุราประจำวัน</h3>
               <p className="text-[10.5px] text-sky-300">เช็กรายการรับรางวัลฟรีและโบนัสรายวัน ({today})</p>
@@ -321,66 +283,74 @@ export function AsuraMenuModal({
     {
       id: 'inventory',
       label: 'สัมภาระ',
-      icon: Backpack,
-      tone: 'border-amber-300/75 bg-gradient-to-b from-amber-600/80 to-amber-900/90',
+      iconId: 'inventory',
+      tone: 'border-amber-300/80 bg-[radial-gradient(circle_at_35%_28%,#85581e_0%,#422b0e_65%,#1f1306_100%)]',
       onClick: () => openAndClose('inventory'),
     },
     {
       id: 'character',
       label: 'สถานะ',
-      icon: User,
-      tone: 'border-sky-300/75 bg-gradient-to-b from-sky-600/80 to-blue-900/90',
+      iconId: 'status',
+      tone: 'border-sky-300/80 bg-[radial-gradient(circle_at_35%_28%,#2f68a6_0%,#153459_65%,#0a192e_100%)]',
       badgeCount: p.statPoints ?? 0,
       onClick: () => openAndClose('character'),
     },
     {
       id: 'job',
       label: 'อาชีพ',
-      icon: Crown,
-      tone: 'border-indigo-300/75 bg-gradient-to-b from-indigo-600/80 to-indigo-950/90',
+      iconId: 'job',
+      tone: 'border-indigo-300/80 bg-[radial-gradient(circle_at_35%_28%,#4353a3_0%,#202857_65%,#0e122b_100%)]',
       onClick: () => openAndClose('job'),
     },
     {
       id: 'talents',
       label: 'ทักษะ',
-      icon: Zap,
-      tone: 'border-violet-300/75 bg-gradient-to-b from-violet-600/80 to-purple-950/90',
+      iconId: 'skills',
+      tone: 'border-violet-300/80 bg-[radial-gradient(circle_at_35%_28%,#663da3_0%,#341d59_65%,#190d2e_100%)]',
       badgeCount: p.skillPoints ?? 0,
       onClick: () => openAndClose('talents'),
     },
     {
+      id: 'spirit',
+      label: 'จุติ/จุจิต',
+      iconId: 'spirit',
+      tone: 'border-cyan-300/85 bg-[radial-gradient(circle_at_35%_28%,#236d8c_0%,#113a4f_65%,#081c29_100%)]',
+      badgeAlert: p.level >= 70 && (p.rebirthCount ?? 0) < 6,
+      onClick: () => openAndClose('rebirth'),
+    },
+    {
       id: 'codex',
       label: 'ฉายา/สมุด',
-      icon: BookOpen,
-      tone: 'border-teal-300/75 bg-gradient-to-b from-teal-600/80 to-teal-950/90',
+      iconId: 'codex',
+      tone: 'border-teal-300/80 bg-[radial-gradient(circle_at_35%_28%,#1d736e_0%,#0e3b38_65%,#061c1b_100%)]',
       onClick: () => openAndClose('codex'),
     },
     {
       id: 'wardrobe',
       label: 'แฟชั่น',
-      icon: Sparkles,
-      tone: 'border-pink-300/75 bg-gradient-to-b from-pink-600/80 to-rose-950/90',
+      iconId: 'wardrobe',
+      tone: 'border-pink-300/80 bg-[radial-gradient(circle_at_35%_28%,#913764_0%,#4d1934_65%,#240b18_100%)]',
       onClick: () => openAndClose('wardrobe'),
     },
     {
       id: 'pets',
       label: 'สัตว์เลี้ยง',
-      icon: PawPrint,
-      tone: 'border-emerald-300/75 bg-gradient-to-b from-emerald-600/80 to-emerald-950/90',
+      iconId: 'pets',
+      tone: 'border-emerald-300/80 bg-[radial-gradient(circle_at_35%_28%,#23734e_0%,#103b27_65%,#071c12_100%)]',
       onClick: () => openAndClose('pets'),
     },
     {
       id: 'arena',
       label: 'อารีน่า',
-      icon: Swords,
-      tone: 'border-rose-300/75 bg-gradient-to-b from-rose-600/80 to-red-950/90',
+      iconId: 'arena',
+      tone: 'border-rose-300/80 bg-[radial-gradient(circle_at_35%_28%,#91343d_0%,#4a171c_65%,#240a0d_100%)]',
       onClick: () => openAndClose('arena'),
     },
     {
       id: 'lifeskills',
       label: 'ทักษะชีวิต',
-      icon: Pickaxe,
-      tone: 'border-lime-300/75 bg-gradient-to-b from-lime-600/80 to-green-950/90',
+      iconId: 'lifeskills',
+      tone: 'border-lime-300/80 bg-[radial-gradient(circle_at_35%_28%,#3b7525_0%,#1c3b11_65%,#0c1c07_100%)]',
       onClick: () => openAndClose('lifeskills'),
     },
   ]
@@ -389,16 +359,16 @@ export function AsuraMenuModal({
     {
       id: 'quests',
       label: 'ภารกิจ',
-      icon: ScrollText,
-      tone: 'border-amber-300/75 bg-gradient-to-b from-amber-500/85 to-orange-900/90',
+      iconId: 'quests',
+      tone: 'border-amber-300/80 bg-[radial-gradient(circle_at_35%_28%,#8a591c_0%,#472b0c_65%,#211305_100%)]',
       badgeCount: claimableQuests,
       onClick: () => openAndClose('quests'),
     },
     {
       id: 'checkin',
       label: 'แสตมป์',
-      icon: CalendarCheck,
-      tone: 'border-yellow-300/75 bg-gradient-to-b from-yellow-500/85 to-amber-900/90',
+      iconId: 'checkin',
+      tone: 'border-yellow-300/80 bg-[radial-gradient(circle_at_35%_28%,#876d1d_0%,#47380d_65%,#211a05_100%)]',
       onClick: () => {
         onClose()
         onOpenCheckin?.()
@@ -407,66 +377,66 @@ export function AsuraMenuModal({
     {
       id: 'tower',
       label: 'อันดับ/หอคอย',
-      icon: Castle,
-      tone: 'border-cyan-300/75 bg-gradient-to-b from-cyan-600/80 to-blue-950/90',
+      iconId: 'tower',
+      tone: 'border-cyan-300/80 bg-[radial-gradient(circle_at_35%_28%,#226b82_0%,#0f3747_65%,#071b24_100%)]',
       href: '/tower',
       onClick: onClose,
     },
     {
       id: 'enhance',
       label: 'ตีบวก',
-      icon: Flame,
-      tone: 'border-orange-300/75 bg-gradient-to-b from-orange-600/80 to-red-950/90',
+      iconId: 'enhance',
+      tone: 'border-orange-300/80 bg-[radial-gradient(circle_at_35%_28%,#8c461f_0%,#4a220e_65%,#241006_100%)]',
       onClick: () => openAndClose('enhance'),
     },
     {
       id: 'craft',
       label: 'คราฟต์',
-      icon: Hammer,
-      tone: 'border-stone-300/75 bg-gradient-to-b from-stone-600/80 to-slate-900/90',
+      iconId: 'craft',
+      tone: 'border-stone-300/80 bg-[radial-gradient(circle_at_35%_28%,#5e6673_0%,#2f343d_65%,#171a21_100%)]',
       onClick: () => openAndClose('craft'),
     },
     {
       id: 'market',
       label: 'ตลาดกลาง',
-      icon: Store,
-      tone: 'border-emerald-300/75 bg-gradient-to-b from-emerald-600/80 to-teal-950/90',
+      iconId: 'market',
+      tone: 'border-emerald-300/80 bg-[radial-gradient(circle_at_35%_28%,#1d755c_0%,#0d3d2f_65%,#061f18_100%)]',
       onClick: () => openAndClose('market'),
     },
     {
       id: 'guild',
       label: 'กิลด์ & บอส',
-      icon: Shield,
-      tone: 'border-blue-300/75 bg-gradient-to-b from-blue-600/80 to-slate-900/90',
+      iconId: 'guild',
+      tone: 'border-blue-300/80 bg-[radial-gradient(circle_at_35%_28%,#2b578f_0%,#152d4d_65%,#0a1629_100%)]',
       onClick: () => openAndClose('guild'),
     },
     {
       id: 'dungeon',
       label: 'ดันเจี้ยน',
-      icon: Compass,
-      tone: 'border-purple-300/75 bg-gradient-to-b from-purple-600/80 to-indigo-950/90',
+      iconId: 'dungeon',
+      tone: 'border-purple-300/80 bg-[radial-gradient(circle_at_35%_28%,#5b3c8c_0%,#2e1c4a_65%,#160d24_100%)]',
       onClick: () => openAndClose('dungeon'),
     },
     {
       id: 'mail',
       label: 'จดหมาย',
-      icon: Mail,
-      tone: 'border-sky-300/75 bg-gradient-to-b from-sky-500/80 to-blue-950/90',
+      iconId: 'mail',
+      tone: 'border-sky-300/80 bg-[radial-gradient(circle_at_35%_28%,#266891_0%,#12364d_65%,#081a26_100%)]',
       onClick: () => openAndClose('mail'),
     },
     {
       id: 'gem-shop',
       label: 'ร้านค้าโซล',
-      icon: Gem,
-      tone: 'border-fuchsia-300/75 bg-gradient-to-b from-fuchsia-600/80 to-purple-950/90',
+      iconId: 'soul-shop',
+      tone: 'border-fuchsia-300/80 bg-[radial-gradient(circle_at_35%_28%,#7a368a_0%,#3e1947_65%,#1e0b24_100%)]',
       badgeCount: gemShopBadge,
       onClick: () => openAndClose('gem-shop'),
     },
     {
       id: 'pass',
       label: 'Battle Pass',
-      icon: Award,
-      tone: 'border-amber-300/75 bg-gradient-to-b from-amber-600/80 to-rose-900/90',
+      iconId: 'bp-wings',
+      tone: 'border-amber-300/80 bg-[radial-gradient(circle_at_35%_28%,#874539_0%,#47221c_65%,#24100d_100%)]',
       onClick: () => openAndClose('pass'),
     },
   ]
@@ -475,23 +445,23 @@ export function AsuraMenuModal({
     {
       id: 'party',
       label: 'ปาร์ตี้',
-      icon: Users,
-      tone: 'border-cyan-300/75 bg-gradient-to-b from-cyan-600/80 to-blue-950/90',
+      iconId: 'party',
+      tone: 'border-cyan-300/80 bg-[radial-gradient(circle_at_35%_28%,#226d8a_0%,#10394a_65%,#071b24_100%)]',
       badgeCount: partyInvites.length,
       onClick: () => openAndClose('party'),
     },
     {
       id: 'friends',
       label: 'เพื่อน',
-      icon: UserPlus,
-      tone: 'border-emerald-300/75 bg-gradient-to-b from-emerald-600/80 to-green-950/90',
+      iconId: 'friends',
+      tone: 'border-emerald-300/80 bg-[radial-gradient(circle_at_35%_28%,#227553_0%,#103b29_65%,#071c13_100%)]',
       onClick: () => openAndClose('friends'),
     },
     {
       id: 'helper',
       label: 'ตัวช่วย',
-      icon: ClipboardCheck,
-      tone: 'border-amber-300/75 bg-gradient-to-b from-amber-600/80 to-amber-950/90',
+      iconId: 'helper',
+      tone: 'border-amber-300/80 bg-[radial-gradient(circle_at_35%_28%,#85581e_0%,#422b0e_65%,#1f1306_100%)]',
       badgeAlert: claimableQuests > 0,
       onClick: () => {
         onClose()
@@ -501,43 +471,43 @@ export function AsuraMenuModal({
     {
       id: 'rate',
       label: 'ให้คะแนน',
-      icon: Star,
-      tone: 'border-yellow-300/75 bg-gradient-to-b from-yellow-500/80 to-orange-900/90',
+      iconId: 'rate',
+      tone: 'border-yellow-300/80 bg-[radial-gradient(circle_at_35%_28%,#8a671c_0%,#47340c_65%,#241a05_100%)]',
       onClick: () => setRatingOpen(true),
     },
     {
       id: 'screenshot',
       label: 'ถ่ายภาพ',
-      icon: Camera,
-      tone: 'border-sky-300/75 bg-gradient-to-b from-sky-600/80 to-slate-900/90',
+      iconId: 'camera',
+      tone: 'border-sky-300/80 bg-[radial-gradient(circle_at_35%_28%,#2b628c_0%,#14324a_65%,#091826_100%)]',
       onClick: handleCaptureScreenshot,
     },
     {
       id: 'settings',
       label: 'ตั้งค่า',
-      icon: Settings,
-      tone: 'border-slate-300/75 bg-gradient-to-b from-slate-600/80 to-slate-900/90',
+      iconId: 'settings',
+      tone: 'border-slate-300/80 bg-[radial-gradient(circle_at_35%_28%,#4c586b_0%,#252c38_65%,#12161c_100%)]',
       onClick: () => openAndClose('settings'),
     },
     {
       id: 'models',
       label: 'คลังโมเดล',
-      icon: Layers,
-      tone: 'border-indigo-300/75 bg-gradient-to-b from-indigo-600/80 to-slate-900/90',
+      iconId: 'models',
+      tone: 'border-indigo-300/80 bg-[radial-gradient(circle_at_35%_28%,#414b8c_0%,#20254a_65%,#0e1124_100%)]',
       onClick: () => openAndClose('models'),
     },
     {
       id: 'guide',
       label: 'คู่มือเกม',
-      icon: Info,
-      tone: 'border-teal-300/75 bg-gradient-to-b from-teal-600/80 to-slate-900/90',
+      iconId: 'guide',
+      tone: 'border-teal-300/80 bg-[radial-gradient(circle_at_35%_28%,#1d706b_0%,#0e3836_65%,#061a19_100%)]',
       onClick: () => openAndClose('guide'),
     },
     {
       id: 'switch-char',
       label: 'สลับตัว',
-      icon: LogOut,
-      tone: 'border-rose-300/75 bg-gradient-to-b from-rose-600/80 to-rose-950/90',
+      iconId: 'more',
+      tone: 'border-rose-300/80 bg-[radial-gradient(circle_at_35%_28%,#85323d_0%,#45181e_65%,#210a0d_100%)]',
       onClick: () => {
         onClose()
         quitToTitle()
@@ -549,8 +519,8 @@ export function AsuraMenuModal({
     helperEntries.push({
       id: 'dev-tools',
       label: 'Dev Console',
-      icon: Terminal,
-      tone: 'border-amber-300/80 bg-gradient-to-b from-amber-500/85 to-red-900/90',
+      iconId: 'dev-tools',
+      tone: 'border-amber-300/85 bg-[radial-gradient(circle_at_35%_28%,#8c4120_0%,#471d0c_65%,#240d05_100%)]',
       onClick: () => openAndClose('dev-tools'),
     })
   }
@@ -560,18 +530,16 @@ export function AsuraMenuModal({
       role="dialog"
       aria-modal="true"
       aria-label="เมนูอสุรา"
-      className="pointer-events-auto fixed inset-0 z-[70] flex items-center justify-center bg-black/65 p-3 backdrop-blur-xs"
+      className="pointer-events-auto fixed inset-0 z-[70] flex items-center justify-center bg-black/72 p-3"
       onPointerDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="asura-panel relative flex max-h-[88dvh] w-full max-w-3xl flex-col overflow-hidden shadow-2xl">
+      <div className="asura-panel relative flex max-h-[88dvh] w-full max-w-4xl flex-col overflow-hidden shadow-2xl">
         <header className="flex items-center justify-between border-b border-[#295596] bg-[#162336]/95 px-4 py-2.5">
           <div className="flex items-center gap-2">
-            <span className="grid size-7 place-items-center rounded-full border border-sky-300/60 bg-sky-600/40 text-xs font-bold text-amber-300">
-              อ
-            </span>
-            <h2 className="text-sm font-bold text-white sm:text-base">เมนูระบบหลัก (อสุราออนไลน์)</h2>
+            <GameArtIcon iconId="menu-castle" size={26} />
+            <h2 className="text-sm font-bold text-white sm:text-base">เมนูระบบหลัก (LUMIVARA)</h2>
           </div>
           <button
             type="button"
@@ -616,7 +584,7 @@ export function AsuraMenuModal({
             <h3 className="border-b border-[#26446e]/60 pb-1 text-xs font-bold tracking-wide text-sky-300">
               หมวดตัวละคร
             </h3>
-            <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6 md:grid-cols-9">
+            <div className="grid grid-cols-5 gap-1.5 sm:grid-cols-6 md:grid-cols-10">
               {charEntries.map((entry) => (
                 <MenuCircleButton key={entry.id} entry={entry} />
               ))}

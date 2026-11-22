@@ -37,6 +37,7 @@ import { QuestTrackerWidget } from './quest-tracker-widget'
 import { SkillBar } from './skill-bar'
 import { SocialNotifications } from './social-notifications'
 import { SocialPopover } from './social-popover'
+import { TargetMonsterBar } from './target-monster-bar'
 import { TitleScreen } from './title-screen'
 import { TouchControls } from './touch-controls'
 import { TopAnnouncementTicker, WorldBanner } from './world-banner'
@@ -235,6 +236,8 @@ export function Game() {
             >
               <AsuraExpStrip />
             </div>
+
+            <TargetMonsterBar offsetTouch={showTouch} />
 
             <ChatBox offsetTouch={showTouch} />
 

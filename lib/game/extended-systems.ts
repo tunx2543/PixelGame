@@ -1,4 +1,9 @@
 import { ITEMS, type EquipmentSlot, type ItemDef } from './data'
+import {
+  createDefaultSpiritAwakeningState,
+  sanitizeSpiritAwakeningState,
+  type SpiritAwakeningState,
+} from './spirit-system'
 
 /* ========================================================================== */
 /* 1. LIFE SKILLS, GATHERING NODES & COOKING                                  */
@@ -757,6 +762,7 @@ export interface PlayerExtensionV2 {
   invasionWavesCleared: number
   coopClears: number
   quickSlots: Array<string | null>
+  spiritAwakening?: SpiritAwakeningState
 }
 
 export function createDefaultExtV2(): PlayerExtensionV2 {
@@ -797,6 +803,7 @@ export function createDefaultExtV2(): PlayerExtensionV2 {
     invasionWavesCleared: 0,
     coopClears: 0,
     quickSlots: [...DEFAULT_QUICK_SLOTS],
+    spiritAwakening: createDefaultSpiritAwakeningState(),
   }
 }
 
@@ -977,6 +984,7 @@ export function sanitizeExtV2(raw: unknown): PlayerExtensionV2 {
     invasionWavesCleared: Math.max(0, Math.floor(Number(obj.invasionWavesCleared ?? 0) || 0)),
     coopClears: Math.max(0, Math.floor(Number(obj.coopClears ?? 0) || 0)),
     quickSlots: sanitizeQuickSlots(obj.quickSlots),
+    spiritAwakening: sanitizeSpiritAwakeningState(obj.spiritAwakening),
   }
 }
 

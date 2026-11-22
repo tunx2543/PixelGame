@@ -1,17 +1,12 @@
 'use client'
 
 import {
-  Award,
   Flame,
-  Gem,
   Megaphone,
   Moon,
   Shield,
-  Sparkles,
   Sun,
-  Trophy,
   Users,
-  Zap,
 } from 'lucide-react'
 import { useDailyMissions } from '@/lib/game/daily-missions'
 import { ensurePremiumState, game, isCurrentAccountGm, notify, openPanel } from '@/lib/game/engine'
@@ -22,6 +17,7 @@ import { getActiveWorldBoss, todayIsoDate } from '@/lib/game/rpg-systems'
 import { countClaimableQuests } from '@/lib/game/systems'
 import { useGame } from '@/lib/game/use-game'
 import { cn } from '@/lib/utils'
+import { GameBadgeMedallion } from './game-badge-icon'
 import { MapMinimap } from './map-minimap'
 import { OnlinePlayersPopover } from './online-players-popover'
 import { SocialBar } from './social-bar'
@@ -55,7 +51,7 @@ export function TopAnnouncementTicker() {
       type="button"
       onClick={() => openPanel('guild')}
       aria-label="ประกาศกิจกรรมเซิร์ฟเวอร์"
-      className="pointer-events-auto fixed left-1/2 top-0.5 z-20 flex max-w-[min(92vw,34rem)] -translate-x-1/2 items-center gap-2 rounded-b-md border border-t-0 border-[#3b6bb3]/65 bg-[#09101c]/82 px-3 py-1 text-left shadow-lg backdrop-blur-[2px] transition-colors hover:border-amber-300/70"
+      className="pointer-events-auto fixed left-1/2 top-0.5 z-20 flex max-w-[min(92vw,34rem)] -translate-x-1/2 items-center gap-2 rounded-b-md border border-t-0 border-[#3b6bb3]/75 bg-[#09101c]/94 px-3 py-1 text-left shadow-lg transition-colors hover:border-amber-300/75"
     >
       <span className="grid size-4 shrink-0 place-items-center rounded bg-sky-500/25 text-amber-300">
         {iconKind === 'megaphone' ? (
@@ -118,14 +114,12 @@ export function WorldBanner() {
           title="กิจกรรม & เควสต์รายวัน"
           className="group relative flex flex-col items-center gap-0.5"
         >
-          <span className="relative grid size-8 place-items-center rounded-full border-2 border-amber-300/85 bg-gradient-to-b from-[#3d311a] to-[#1a150b] shadow-md transition-transform group-hover:scale-105 sm:size-9">
-            <Zap className="size-3.5 text-amber-300 sm:size-4" aria-hidden />
-            {(questAlert || game.invasion?.active) && (
-              <span className="absolute -right-1 -top-1 grid size-3.5 place-items-center rounded-full border border-white bg-rose-600 text-[8px] font-extrabold text-white">
-                !
-              </span>
-            )}
-          </span>
+          <GameBadgeMedallion
+            iconId="event-flash"
+            size="sm"
+            tone="border-amber-300/85 bg-[radial-gradient(circle_at_35%_28%,#62471d_0%,#2d210e_60%,#140e06_100%)] group-hover:scale-105"
+            badgeAlert={Boolean(questAlert || game.invasion?.active)}
+          />
           <span className="font-mono text-[8.5px] font-bold text-white [text-shadow:0_1px_2px_#000] tabular-nums">
             {wbMin}m
           </span>
@@ -137,14 +131,12 @@ export function WorldBanner() {
           title="แพ็กเกจสุดคุ้ม & ร้านโซล"
           className="group relative flex flex-col items-center gap-0.5"
         >
-          <span className="relative grid size-8 place-items-center rounded-full border-2 border-amber-200/85 bg-gradient-to-b from-[#453118] to-[#1c130a] shadow-md transition-transform group-hover:scale-105 sm:size-9">
-            <Gem className="size-3.5 text-cyan-300 sm:size-4" aria-hidden />
-            {shopAlert && (
-              <span className="absolute -right-1 -top-1 grid size-3.5 place-items-center rounded-full border border-white bg-rose-600 text-[8px] font-extrabold text-white">
-                !
-              </span>
-            )}
-          </span>
+          <GameBadgeMedallion
+            iconId="soul-shop"
+            size="sm"
+            tone="border-amber-200/85 bg-[radial-gradient(circle_at_35%_28%,#69481e_0%,#31210e_60%,#150e06_100%)] group-hover:scale-105"
+            badgeAlert={shopAlert}
+          />
           <span className="whitespace-nowrap text-[8.5px] font-bold text-white [text-shadow:0_1px_2px_#000]">
             สุดคุ้ม
           </span>
@@ -156,14 +148,12 @@ export function WorldBanner() {
           title="กิลด์พ้อยต์ & เวิลด์บอส (GP)"
           className="group relative flex flex-col items-center gap-0.5"
         >
-          <span className="relative grid size-8 place-items-center rounded-full border-2 border-sky-300/85 bg-gradient-to-b from-[#1f3959] to-[#0e1b2c] shadow-md transition-transform group-hover:scale-105 sm:size-9">
-            <Trophy className="size-3.5 text-sky-200 sm:size-4" aria-hidden />
-            {fieldBoss && (
-              <span className="absolute -right-1 -top-1 grid size-3.5 place-items-center rounded-full border border-white bg-rose-600 text-[8px] font-extrabold text-white">
-                !
-              </span>
-            )}
-          </span>
+          <GameBadgeMedallion
+            iconId="gp-trophy"
+            size="sm"
+            tone="border-sky-300/85 bg-[radial-gradient(circle_at_35%_28%,#2f5487_0%,#172c4a_60%,#0c1626_100%)] group-hover:scale-105"
+            badgeAlert={Boolean(fieldBoss)}
+          />
           <span className="whitespace-nowrap text-[8.5px] font-bold text-white [text-shadow:0_1px_2px_#000]">
             GP
           </span>
@@ -175,14 +165,12 @@ export function WorldBanner() {
           title="Battle Pass (BP)"
           className="group relative flex flex-col items-center gap-0.5"
         >
-          <span className="relative grid size-8 place-items-center rounded-full border-2 border-cyan-300/85 bg-gradient-to-b from-[#1c384a] to-[#0c1a24] shadow-md transition-transform group-hover:scale-105 sm:size-9">
-            <Award className="size-3.5 text-amber-300 sm:size-4" aria-hidden />
-            {bpArchiveCount > 0 && (
-              <span className="absolute -right-1 -top-1 grid size-3.5 place-items-center rounded-full border border-white bg-rose-600 text-[8px] font-extrabold text-white">
-                !
-              </span>
-            )}
-          </span>
+          <GameBadgeMedallion
+            iconId="bp-wings"
+            size="sm"
+            tone="border-cyan-300/85 bg-[radial-gradient(circle_at_35%_28%,#255269_0%,#122b38_60%,#09151c_100%)] group-hover:scale-105"
+            badgeAlert={bpArchiveCount > 0}
+          />
           <span className="whitespace-nowrap text-[8.5px] font-bold text-white [text-shadow:0_1px_2px_#000]">
             BP
           </span>

@@ -173,7 +173,7 @@ export function ChatBox({ offsetTouch = false }: { offsetTouch?: boolean }) {
       data-testid="chat-box"
       onPointerDown={(event) => event.stopPropagation()}
       className={cn(
-        'pointer-events-auto fixed left-1/2 flex -translate-x-1/2 flex-col overflow-hidden rounded border border-[#2c4e7c]/80 bg-[#080d15]/88 shadow-xl backdrop-blur-[2px] transition-all',
+        'pointer-events-auto fixed left-1/2 flex -translate-x-1/2 flex-col overflow-hidden rounded border border-[#2c4e7c]/85 bg-[#080d15]/92 shadow-xl transition-all',
         isOpen
           ? 'z-40 w-[min(24rem,calc(100vw-1rem))]'
           : 'z-20 w-[min(17.5rem,44vw)] sm:w-[21rem]',

@@ -2,12 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import {
-  ClipboardCheck,
   EyeOff,
   Gamepad2,
-  Home,
   RotateCcw,
-  ShoppingBag,
   Volume2,
   VolumeX,
 } from 'lucide-react'
@@ -26,6 +23,7 @@ import { resetUiLayout } from '@/lib/game/ui-layout'
 import { useGame } from '@/lib/game/use-game'
 import { cn } from '@/lib/utils'
 import { AsuraDailyHelperModal, AsuraMenuModal } from './asura-menu-modal'
+import { GameBadgeMedallion } from './game-badge-icon'
 
 export function MenuDock({
   showTouch = false,
@@ -82,14 +80,11 @@ export function MenuDock({
             title="ตัวช่วยภารกิจประจำวัน"
             className="group relative flex flex-col items-center gap-0.5 transition-transform hover:-translate-y-0.5"
           >
-            <span className="relative grid size-9 place-items-center rounded-full border-2 border-[#7eb0ee]/90 bg-gradient-to-b from-[#274166] to-[#111e33] shadow-[0_3px_10px_rgba(0,0,0,0.55)] sm:size-11">
-              <ClipboardCheck className="size-4 text-amber-200 sm:size-5" aria-hidden />
-              {claimableQuests > 0 && (
-                <span className="absolute -right-1 -top-1 grid size-4 place-items-center rounded-full border border-white bg-rose-600 text-[9px] font-extrabold text-white shadow">
-                  !
-                </span>
-              )}
-            </span>
+            <GameBadgeMedallion
+              iconId="helper"
+              tone="border-[#84b9ff]/90 bg-[radial-gradient(circle_at_35%_28%,#39649c_0%,#1c3254_60%,#0d182b_100%)]"
+              badgeAlert={claimableQuests > 0}
+            />
             <span className="whitespace-nowrap text-[9.5px] font-bold text-white [text-shadow:0_1px_3px_#000,0_0_4px_#000] sm:text-[10.5px]">
               ตัวช่วย
             </span>
@@ -102,14 +97,11 @@ export function MenuDock({
             title="ร้านค้าโซล"
             className="group relative flex flex-col items-center gap-0.5 transition-transform hover:-translate-y-0.5"
           >
-            <span className="relative grid size-9 place-items-center rounded-full border-2 border-amber-300/90 bg-gradient-to-b from-[#2f496f] to-[#132036] shadow-[0_3px_10px_rgba(0,0,0,0.55)] sm:size-11">
-              <ShoppingBag className="size-4 text-amber-300 sm:size-5" aria-hidden />
-              {gemShopBadge > 0 && (
-                <span className="absolute -right-1 -top-1 grid size-4 place-items-center rounded-full border border-white bg-rose-600 text-[9px] font-extrabold text-white shadow">
-                  !
-                </span>
-              )}
-            </span>
+            <GameBadgeMedallion
+              iconId="soul-shop"
+              tone="border-amber-300/90 bg-[radial-gradient(circle_at_35%_28%,#66491f_0%,#33240f_60%,#160f06_100%)]"
+              badgeAlert={gemShopBadge > 0}
+            />
             <span className="whitespace-nowrap text-[9.5px] font-bold text-white [text-shadow:0_1px_3px_#000,0_0_4px_#000] sm:text-[10.5px]">
               ร้าน
             </span>
@@ -123,14 +115,11 @@ export function MenuDock({
             title="เปิดเมนูระบบเกมทั้งหมด"
             className="group relative flex flex-col items-center gap-0.5 transition-transform hover:-translate-y-0.5"
           >
-            <span className="relative grid size-9 place-items-center rounded-full border-2 border-[#7eb0ee]/90 bg-gradient-to-b from-[#274166] to-[#111e33] shadow-[0_3px_10px_rgba(0,0,0,0.55)] sm:size-11">
-              <Home className="size-4 text-sky-200 sm:size-5" aria-hidden />
-              {menuBadgeCount > 0 && (
-                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full border border-white bg-rose-600 px-1 font-mono text-[8.5px] font-extrabold text-white shadow tabular-nums">
-                  {menuBadgeCount > 99 ? '99+' : '!'}
-                </span>
-              )}
-            </span>
+            <GameBadgeMedallion
+              iconId="menu-castle"
+              tone="border-[#8ec5ff]/90 bg-[radial-gradient(circle_at_35%_28%,#355d94_0%,#193052_60%,#0c1729_100%)]"
+              badgeCount={menuBadgeCount}
+            />
             <span className="whitespace-nowrap text-[9.5px] font-bold text-white [text-shadow:0_1px_3px_#000,0_0_4px_#000] sm:text-[10.5px]">
               เมนู
             </span>

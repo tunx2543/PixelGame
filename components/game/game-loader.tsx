@@ -1,7 +1,7 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { Component, useCallback, useEffect, useState, type ErrorInfo, type ReactNode } from 'react'
+import { Component, useCallback, useEffect, type ErrorInfo, type ReactNode } from 'react'
 import { AlertTriangle, Home, RotateCcw } from 'lucide-react'
 import { quitToTitle } from '@/lib/game/engine'
 import {
@@ -96,7 +96,6 @@ class GameErrorBoundary extends Component<{ children: ReactNode }, BoundaryState
 
 export function GameLoader() {
   const versionInfo = useVersionUpdate()
-  const [autoDismissed, setAutoDismissed] = useState(false)
 
   useEffect(() => {
     setExternalChangelogHost(true)
@@ -106,18 +105,14 @@ export function GameLoader() {
   }, [])
 
   const handleClosePatchNotes = useCallback(() => {
-    setAutoDismissed(true)
     closeChangelogModal()
   }, [])
-
-  const isPatchNotesOpen =
-    versionInfo.changelogOpen || (!autoDismissed && versionInfo.unseenUpdate)
 
   return (
     <GameErrorBoundary>
       <Game />
       <PatchNotesModal
-        open={isPatchNotesOpen}
+        open={versionInfo.changelogOpen}
         onClose={handleClosePatchNotes}
         isNewUpdateBanner={versionInfo.unseenUpdate}
       />

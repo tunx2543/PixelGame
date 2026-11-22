@@ -638,22 +638,34 @@ export function EncounterStageCanvas({
                   top: isEnemyTarget ? '42%' : '45%',
                   color: pop.color,
                   textShadow:
-                    '-2px -2px 0 #0e0f1a, 2px -2px 0 #0e0f1a, -2px 2px 0 #0e0f1a, 2px 2px 0 #0e0f1a, 0 -2px 0 #0e0f1a, 0 2px 0 #0e0f1a, -2px 0 0 #0e0f1a, 2px 0 0 #0e0f1a, 0 4px 0 rgba(0,0,0,0.65)',
+                    `-2px -2px 0 ${pop.outlineColor || '#0e0f1a'}, 2px -2px 0 ${pop.outlineColor || '#0e0f1a'}, -2px 2px 0 ${pop.outlineColor || '#0e0f1a'}, 2px 2px 0 ${pop.outlineColor || '#0e0f1a'}, 0 -2px 0 ${pop.outlineColor || '#0e0f1a'}, 0 2px 0 ${pop.outlineColor || '#0e0f1a'}, -2px 0 0 ${pop.outlineColor || '#0e0f1a'}, 2px 0 0 ${pop.outlineColor || '#0e0f1a'}, 0 4px 0 rgba(0,0,0,0.7)`,
                 }}
                 className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center whitespace-nowrap font-bold leading-none"
               >
                 {pop.badge && (
-                  <span className="mb-0.5 text-[10px] tracking-wider uppercase sm:text-[11px]">
+                  <span
+                    className={`mb-1 rounded-sm px-1.5 py-0.5 text-[9px] font-black tracking-wider uppercase shadow sm:text-[10px] ${
+                      pop.soulCrit
+                        ? 'border border-cyan-300 bg-cyan-950/95 text-cyan-200'
+                        : pop.crit
+                          ? 'border border-amber-300 bg-amber-950/95 text-amber-200'
+                          : pop.kind === 'skill'
+                            ? 'border border-orange-400/80 bg-orange-950/90 text-orange-200'
+                            : 'border border-slate-500/70 bg-slate-950/90 text-slate-200'
+                    }`}
+                  >
                     {pop.badge}
                   </span>
                 )}
                 <span
                   className={
-                    pop.crit
-                      ? 'text-2xl tabular-nums sm:text-3xl'
-                      : pop.kind === 'pet'
-                        ? 'text-base tabular-nums sm:text-lg'
-                        : 'text-lg tabular-nums sm:text-2xl'
+                    pop.soulCrit
+                      ? 'text-3xl font-black tracking-tight tabular-nums sm:text-4xl'
+                      : pop.crit
+                        ? 'text-2xl font-black tracking-tight tabular-nums sm:text-3xl'
+                        : pop.kind === 'pet'
+                          ? 'text-base tabular-nums sm:text-lg'
+                          : 'text-lg font-extrabold tabular-nums sm:text-2xl'
                   }
                 >
                   {pop.text}

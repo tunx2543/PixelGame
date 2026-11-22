@@ -5,10 +5,8 @@ import {
   ArrowLeftRight,
   Backpack,
   Check,
-  Coins,
   Crown,
   Feather,
-  Gem,
   GripHorizontal,
   Info,
   Layers,
@@ -28,7 +26,6 @@ import {
   Swords,
   Trash2,
   User,
-  Wand2,
   Weight,
   X,
   Zap,
@@ -108,10 +105,12 @@ import { useGame } from '@/lib/game/use-game'
 import { getSkillIconPath, getSkillVfxSpec, resolveRebirthAuraSpec } from '@/lib/game/vfx-specs'
 import { cn } from '@/lib/utils'
 import { formatNum, formatPlayTime } from '../format'
+import { GameArtIcon } from '../game-badge-icon'
 import { ItemIcon, ItemSlot } from '../item-icon'
 import { SkillVfxPreview } from '../skill-vfx-preview'
 import { SpriteModelCanvas } from '../sprite-model-canvas'
 import { useWindowContext } from '../window-context'
+import { SpiritAwakeningSection } from './spirit-awakening-section'
 
 export type AsuraHubTab = 'inventory' | 'status' | 'job' | 'skills' | 'training' | 'spirit'
 
@@ -157,32 +156,14 @@ const WEAPON_LABELS: Record<string, string> = {
 
 function AsuraMandalaWatermark() {
   return (
-    <svg
+    <div
       aria-hidden
-      viewBox="0 0 260 260"
-      className="pointer-events-none absolute -bottom-12 -left-10 size-72 text-sky-400/[0.06] select-none"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
+      className="pointer-events-none absolute -bottom-16 -left-14 size-72 select-none rounded-full border border-sky-400/10"
     >
-      <circle cx="130" cy="130" r="112" />
-      <circle cx="130" cy="130" r="88" strokeDasharray="6 4" />
-      <circle cx="130" cy="130" r="62" />
-      <circle cx="130" cy="130" r="32" />
-      {Array.from({ length: 12 }).map((_, idx) => {
-        const angle = (idx * 30 * Math.PI) / 180
-        const x1 = 130 + Math.cos(angle) * 32
-        const y1 = 130 + Math.sin(angle) * 32
-        const x2 = 130 + Math.cos(angle) * 112
-        const y2 = 130 + Math.sin(angle) * 112
-        return (
-          <g key={idx}>
-            <line x1={x1} y1={y1} x2={x2} y2={y2} />
-            <circle cx={130 + Math.cos(angle) * 88} cy={130 + Math.sin(angle) * 88} r="7" />
-          </g>
-        )
-      })}
-    </svg>
+      <div className="absolute inset-5 rounded-full border border-dashed border-sky-300/10" />
+      <div className="absolute inset-12 rounded-full border border-amber-300/10" />
+      <div className="absolute inset-20 rounded-full border border-sky-400/10 bg-[radial-gradient(circle,rgba(56,189,248,0.06)_0%,transparent_70%)]" />
+    </div>
   )
 }
 
@@ -409,12 +390,12 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
           )}
           <div className="hidden items-center gap-2 rounded border border-[#2d4e80] bg-[#0f1724] px-2.5 py-1 text-[11px] tabular-nums sm:flex">
             <span className="flex items-center gap-1 font-semibold text-amber-300">
-              <Coins className="size-3.5 text-amber-400" aria-hidden />
+              <GameArtIcon iconId="gold-coin" size={14} />
               {formatNum(p.gold)}
             </span>
             <span className="text-slate-600">|</span>
             <span className="flex items-center gap-1 font-semibold text-sky-300">
-              <Gem className="size-3.5 text-sky-400" aria-hidden />
+              <GameArtIcon iconId="soul-gem" size={14} />
               {formatNum(p.diamonds ?? 0)}
             </span>
           </div>
@@ -610,6 +591,7 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                               size={84}
                               isGm={p.gm}
                               rebirthCount={p.rebirthCount ?? 0}
+                              spiritStage={extV2.spiritAwakening?.awakeningStage ?? 0}
                               label={p.name}
                             />
                           </div>
@@ -1006,12 +988,12 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
 
                 {/* Currencies Row */}
                 <div className="flex flex-wrap items-center justify-end gap-5 rounded border border-[#233d60] bg-[#111a28] px-3 py-1.5 text-xs tabular-nums">
-                  <span className="flex items-center gap-1.5 font-bold text-slate-100">
-                    <span className="inline-block size-3.5 rounded-full border border-slate-300 bg-gradient-to-br from-slate-100 to-slate-400" />
+                  <span className="flex items-center gap-1.5 font-bold text-amber-300">
+                    <GameArtIcon iconId="gold-coin" size={14} />
                     {formatNum(p.gold)}
                   </span>
-                  <span className="flex items-center gap-1.5 font-bold text-amber-300">
-                    <Coins className="size-3.5 text-amber-400" aria-hidden />
+                  <span className="flex items-center gap-1.5 font-bold text-cyan-200">
+                    <GameArtIcon iconId="soul-gem" size={14} />
                     {formatNum(p.diamonds ?? 0)}
                   </span>
                 </div>
@@ -1221,15 +1203,11 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                 <div className="flex items-start justify-between gap-2">
                   <div className="space-y-1 text-xs">
                     <div className="flex items-center gap-2">
-                      <span className="grid size-5 place-items-center rounded-full bg-sky-600/80 text-[10px] font-bold text-white">
-                        人
-                      </span>
+                      <GameArtIcon iconId="race-human" size={20} />
                       <span className="font-semibold text-slate-200">เผ่ามนุษย์</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="grid size-5 place-items-center rounded-full bg-amber-500/80 text-[10px] font-bold text-slate-950">
-                        ★
-                      </span>
+                      <GameArtIcon iconId="class-star" size={20} />
                       <span className="font-semibold text-amber-300">{job.name}</span>
                       <span
                         className={cn(
@@ -1244,7 +1222,13 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
+                    {(extV2.spiritAwakening?.awakeningStage ?? 0) > 0 && (
+                      <span className="flex items-center gap-1 rounded border border-cyan-400/50 bg-cyan-950/60 px-2 py-0.5 text-xs font-bold text-cyan-200 tabular-nums">
+                        <GameArtIcon iconId="spirit" size={14} />
+                        จิต {extV2.spiritAwakening?.awakeningStage}
+                      </span>
+                    )}
                     <span className="flex items-center gap-1 rounded border border-amber-400/40 bg-amber-500/10 px-2 py-0.5 text-xs font-bold text-amber-300 tabular-nums">
                       <Crown className="size-3.5" aria-hidden />
                       จุติ {p.rebirthCount ?? 0}
@@ -1265,6 +1249,7 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                         fashion={fashionLoadout}
                         isGm={p.gm}
                         rebirthCount={p.rebirthCount ?? 0}
+                        spiritStage={extV2.spiritAwakening?.awakeningStage ?? 0}
                         label={p.name}
                       />
                     </div>
@@ -1283,10 +1268,11 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                     <div>ATK: <b className="text-rose-300">{formatNum(stats.atk)}</b></div>
                     <div>DEF: <b className="text-indigo-300">{formatNum(stats.def)}</b></div>
                     <div>CRIT: <b className="text-amber-200">{Math.round(stats.crit * 100)}%</b></div>
+                    <div>SOUL CRIT: <b className="text-fuchsia-300">{((stats.soulCritChance ?? 0) * 100).toFixed(1)}% (x{(stats.soulCritMult ?? 2).toFixed(2)})</b></div>
                     <div>ความเร็ว: <b className="text-cyan-300">{Math.round(stats.speed)}</b></div>
-                    <div>สังหาร: <b className="text-slate-200">{formatNum(p.kills)}</b></div>
                     <div>ดูดเลือด: <b className="text-pink-300">{(stats.lifestealPct * 100).toFixed(1)}%</b></div>
-                    <div className="col-span-2">เวลาเล่น: <b className="text-slate-300">{formatPlayTime(p.playTime)}</b></div>
+                    <div>สังหาร: <b className="text-slate-200">{formatNum(p.kills)}</b></div>
+                    <div>เวลาเล่น: <b className="text-slate-300">{formatPlayTime(p.playTime)}</b></div>
                   </div>
                 )}
 
@@ -2015,113 +2001,118 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
             </div>
           )}
 
-          {/* ================= TAB 6: SPIRIT (REBIRTH & COMPANIONS) ================= */}
+          {/* ================= TAB 6: SPIRIT (SOUL AWAKENING, REBIRTH & COMPANIONS) ================= */}
           {activeTab === 'spirit' && (
-            <div className="grid gap-3 md:grid-cols-[15rem_1fr]">
-              <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-[#243d63] bg-[#101824] p-3">
-                {(() => {
-                  const tier = rebirthPreviewTier ?? Math.max(1, p.rebirthCount ?? 0)
-                  const spec = resolveRebirthAuraSpec(tier)
-                  return (
-                    <>
-                      <div className="grid size-36 place-items-center rounded-xl border border-[#2c4b76] bg-[#0b121d]">
-                        <SpriteModelCanvas
-                          mode="job"
-                          id={p.jobId}
-                          action="idle"
-                          dir="down"
-                          size={126}
-                          fashion={fashionLoadout}
-                          rebirthCount={tier}
-                          label={spec.title}
-                        />
-                      </div>
-                      <span className="text-xs font-bold" style={{ color: spec.primaryColor }}>
-                        จุติระดับ {tier} · {spec.shortTitle}
-                      </span>
-                      <div className="flex flex-wrap justify-center gap-1">
-                        {[1, 2, 3, 4, 5, 6].map((t) => (
-                          <button
-                            key={t}
-                            type="button"
-                            onClick={() => setRebirthPreviewTier(t)}
-                            className={cn(
-                              'px-2 py-0.5 text-[10px] font-bold',
-                              tier === t ? 'asura-tab-active' : 'asura-tab',
-                            )}
-                          >
-                            {t}
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )
-                })()}
-              </div>
+            <div className="space-y-3">
+              <SpiritAwakeningSection onNotice={setNotice} compactPreview />
 
-              <div className="flex flex-col justify-between gap-3 rounded-lg border border-[#243d63] bg-[#101824] p-3 text-xs">
-                <div className="space-y-2">
-                  <h3 className="flex items-center gap-1.5 text-sm font-bold text-amber-300">
-                    <Wand2 className="size-4" aria-hidden />
-                    จิตวิญญาณแห่งการจุติ & พันธะคู่หู
-                  </h3>
-                  <p className="text-slate-300">
-                    จุติได้ที่ Lv.70 (สูงสุด 6 ครั้ง) เพื่อรีเซ็ตกลับสู่ผู้ฝึกหัดพร้อมเก็บค่าพลังและอุปกรณ์ทั้งหมดไว้
-                    พร้อมรับออร่าจิตวิญญาณระดับสูงขึ้น
-                  </p>
-                  <div className="grid grid-cols-3 gap-2 tabular-nums">
-                    <div className="rounded border border-[#213859] bg-[#0b121c] p-2">
-                      <span className="block text-[10px] text-slate-400">เลเวลปัจจุบัน</span>
-                      <b className="text-sm text-amber-300">{p.level} / 70</b>
-                    </div>
-                    <div className="rounded border border-[#213859] bg-[#0b121c] p-2">
-                      <span className="block text-[10px] text-slate-400">จำนวนครั้งจุติ</span>
-                      <b className="text-sm text-sky-300">{p.rebirthCount ?? 0} / 6</b>
-                    </div>
-                    <div className="rounded border border-[#213859] bg-[#0b121c] p-2">
-                      <span className="block text-[10px] text-slate-400">คู่หูที่เรียกใช้</span>
-                      <b className="block truncate text-sm text-pink-300">
-                        {activePetDef?.name ?? 'ยังไม่เรียก'}
-                      </b>
-                    </div>
-                  </div>
+              <div className="grid gap-3 md:grid-cols-[13.5rem_1fr]">
+                <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-[#243d63] bg-[#101824] p-3">
+                  {(() => {
+                    const tier = rebirthPreviewTier ?? Math.max(1, p.rebirthCount ?? 0)
+                    const spec = resolveRebirthAuraSpec(tier)
+                    return (
+                      <>
+                        <div className="grid size-32 place-items-center rounded-xl border border-[#2c4b76] bg-[#0b121d]">
+                          <SpriteModelCanvas
+                            mode="job"
+                            id={p.jobId}
+                            action="idle"
+                            dir="down"
+                            size={112}
+                            fashion={fashionLoadout}
+                            rebirthCount={tier}
+                            spiritStage={extV2.spiritAwakening?.awakeningStage ?? 0}
+                            label={spec.title}
+                          />
+                        </div>
+                        <span className="text-xs font-bold" style={{ color: spec.primaryColor }}>
+                          จุติระดับ {tier} · {spec.shortTitle}
+                        </span>
+                        <div className="flex flex-wrap justify-center gap-1">
+                          {[1, 2, 3, 4, 5, 6].map((t) => (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => setRebirthPreviewTier(t)}
+                              className={cn(
+                                'px-2 py-0.5 text-[10px] font-bold',
+                                tier === t ? 'asura-tab-active' : 'asura-tab',
+                              )}
+                            >
+                              {t}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )
+                  })()}
                 </div>
 
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    disabled={p.level < 70 || (p.rebirthCount ?? 0) >= 6}
-                    onClick={() => rebirth()}
-                    className="asura-tab-active px-4 py-2 font-bold disabled:opacity-40"
-                  >
-                    ทำพิธีจุติทันที
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openPanel('pets')}
-                    className="asura-tab px-4 py-2 font-bold"
-                  >
-                    จัดการผอบ & สัตว์ขี่
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openPanel('codex')}
-                    className="asura-tab px-4 py-2 font-bold"
-                  >
-                    สมุดภาพ & ฉายา
-                  </button>
-                  {Object.keys(petState.ownedPets).length > 0 && (
+                <div className="flex flex-col justify-between gap-3 rounded-lg border border-[#243d63] bg-[#101824] p-3 text-xs">
+                  <div className="space-y-2">
+                    <h3 className="flex items-center gap-1.5 text-sm font-bold text-amber-300">
+                      <GameArtIcon iconId="rebirth" size={18} />
+                      การจุติ 6 ขั้น & พันธะผอบคู่หู
+                    </h3>
+                    <p className="text-slate-300">
+                      จุติได้ที่ Lv.70 (สูงสุด 6 ครั้ง) เพื่อรีเซ็ตกลับสู่ผู้ฝึกหัดพร้อมเก็บค่าพลังและอุปกรณ์ทั้งหมดไว้
+                      และปลดล็อกเงื่อนไขเบิกเนตรจุจิตขั้นสูง
+                    </p>
+                    <div className="grid grid-cols-3 gap-2 tabular-nums">
+                      <div className="rounded border border-[#213859] bg-[#0b121c] p-2">
+                        <span className="block text-[10px] text-slate-400">เลเวลปัจจุบัน</span>
+                        <b className="text-sm text-amber-300">{p.level} / 70</b>
+                      </div>
+                      <div className="rounded border border-[#213859] bg-[#0b121c] p-2">
+                        <span className="block text-[10px] text-slate-400">จำนวนครั้งจุติ</span>
+                        <b className="text-sm text-sky-300">{p.rebirthCount ?? 0} / 6</b>
+                      </div>
+                      <div className="rounded border border-[#213859] bg-[#0b121c] p-2">
+                        <span className="block text-[10px] text-slate-400">คู่หูที่เรียกใช้</span>
+                        <b className="block truncate text-sm text-pink-300">
+                          {activePetDef?.name ?? 'ยังไม่เรียก'}
+                        </b>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        const firstPet = Object.keys(petState.ownedPets)[0]
-                        equipCombatPet(petState.activePetId ? null : firstPet)
-                      }}
-                      className="asura-tab px-3 py-2 font-bold"
+                      disabled={p.level < 70 || (p.rebirthCount ?? 0) >= 6}
+                      onClick={() => rebirth()}
+                      className="asura-tab-active px-4 py-2 font-bold disabled:opacity-40"
                     >
-                      {petState.activePetId ? 'เก็บผอบ' : 'เรียกผอบ'}
+                      ทำพิธีจุติทันที
                     </button>
-                  )}
+                    <button
+                      type="button"
+                      onClick={() => openPanel('pets')}
+                      className="asura-tab px-4 py-2 font-bold"
+                    >
+                      จัดการผอบ & สัตว์ขี่
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openPanel('codex')}
+                      className="asura-tab px-4 py-2 font-bold"
+                    >
+                      สมุดภาพ & ฉายา
+                    </button>
+                    {Object.keys(petState.ownedPets).length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const firstPet = Object.keys(petState.ownedPets)[0]
+                          equipCombatPet(petState.activePetId ? null : firstPet)
+                        }}
+                        className="asura-tab px-3 py-2 font-bold"
+                      >
+                        {petState.activePetId ? 'เก็บผอบ' : 'เรียกผอบ'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

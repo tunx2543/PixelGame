@@ -10,7 +10,6 @@ import {
   MessageCircle,
   MessageSquare,
   Shield,
-  Swords,
   Wind,
   Zap,
 } from 'lucide-react'
@@ -36,6 +35,7 @@ import { useUiLayout } from '@/lib/game/ui-layout'
 import { useGame } from '@/lib/game/use-game'
 import { getSkillIconPath, getSkillVfxSpec } from '@/lib/game/vfx-specs'
 import { cn } from '@/lib/utils'
+import { GameArtIcon } from './game-badge-icon'
 import { QuickItemBar } from './quick-item-bar'
 
 export function SkillBar({ compactTouchMode = false }: { compactTouchMode?: boolean }) {
@@ -263,7 +263,7 @@ export function SkillBar({ compactTouchMode = false }: { compactTouchMode?: bool
           {game.nearNpc && !game.panel ? (
             <MessageCircle className="size-5" aria-hidden />
           ) : (
-            <Swords className="size-5" aria-hidden />
+            <GameArtIcon iconId="pk-swords" size={24} />
           )}
         </button>
       </div>

@@ -29,7 +29,7 @@ import {
   type FashionLoadout,
 } from '@/lib/game/fashion-renderer'
 import { getFashionItemDef } from '@/lib/game/premium/fashion-pet'
-import { drawRebirthAura } from '@/lib/game/vfx-canvas'
+import { drawRebirthAura, drawSpiritAwakeningAura } from '@/lib/game/vfx-canvas'
 
 export type PreviewAction = SpriteAction | 'auto'
 
@@ -44,6 +44,7 @@ export interface SpriteModelCanvasProps {
   scale?: number
   isGm?: boolean
   rebirthCount?: number
+  spiritStage?: number
   showShadow?: boolean
   showAura?: boolean
   variant?: 'full' | 'portrait'
@@ -70,6 +71,7 @@ export function SpriteModelCanvas({
   scale,
   isGm,
   rebirthCount = 0,
+  spiritStage = 0,
   showShadow = true,
   showAura = true,
   variant = 'full',
@@ -336,8 +338,9 @@ export function SpriteModelCanvas({
           : 0
       const slashBucket = isAttack && attackProgress > 0.2 && attackProgress < 0.85 ? Math.round(attackProgress * 6) : -1
       const hasRebirth = mode === 'job' && rebirthCount > 0
+      const hasSpirit = mode === 'job' && spiritStage > 0
       const auraBucket =
-        showAura && (auraColor || hasRebirth) && !reducedMotion
+        showAura && (auraColor || hasRebirth || hasSpirit) && !reducedMotion
           ? Math.round(elapsed * 8)
           : 0
       const gmReady = Boolean(drawable.gmReady)
@@ -352,7 +355,7 @@ export function SpriteModelCanvas({
       const fashionSig = mode === 'job' ? getFashionRenderSignature(fashion) : ''
       const mountSig = mode === 'mount' ? `m${mountLevel}|${mountSkinId ?? ''}|${showRider ? riderJobId : ''}` : ''
       const petSig = mode === 'pet' ? `p${getPetVisualTier(petLevel, petStars)}` : ''
-      const sig = `${effectiveAction}|${frame}|${hoverY}|${lungeOffset}|${slashBucket}|${auraBucket}|${rebirthCount}|${gmReady ? '1' : '0'}|${sheetId}|${sourceReady ? '1' : '0'}|${mMotionBucket}|${fashionSig}|${mountSig}|${petSig}|${canvas.width}x${canvas.height}`
+      const sig = `${effectiveAction}|${frame}|${hoverY}|${lungeOffset}|${slashBucket}|${auraBucket}|${rebirthCount}|${spiritStage}|${gmReady ? '1' : '0'}|${sheetId}|${sourceReady ? '1' : '0'}|${mMotionBucket}|${fashionSig}|${mountSig}|${petSig}|${canvas.width}x${canvas.height}`
 
       if (sig !== lastSig) {
         lastSig = sig
@@ -486,6 +489,16 @@ export function SpriteModelCanvas({
             ctx.ellipse(centerX + lungeOffset, baseFloorY - 1, auraRx, auraRy, 0, 0, Math.PI * 2)
             ctx.stroke()
             ctx.restore()
+          }
+          if (showAura && hasSpirit) {
+            drawSpiritAwakeningAura(ctx, {
+              x: centerX + lungeOffset,
+              y: baseFloorY,
+              timeSec: elapsed,
+              stage: spiritStage,
+              radiusX: auraRadiusX,
+              spriteHeight: drawH,
+            })
           }
 
           ctx.save()
@@ -646,7 +659,7 @@ export function SpriteModelCanvas({
       observer?.disconnect()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, id, action, dir, weaponOverride, weaponColorOverride, size, scale, isGm, rebirthCount, showShadow, showAura, variant, fashionDep, mountLevel, mountSkinId, petLevel, petStars, showRider, riderJobId])
+  }, [mode, id, action, dir, weaponOverride, weaponColorOverride, size, scale, isGm, rebirthCount, spiritStage, showShadow, showAura, variant, fashionDep, mountLevel, mountSkinId, petLevel, petStars, showRider, riderJobId])
 
   return (
     <canvas

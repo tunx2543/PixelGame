@@ -2,21 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import {
-  Bot,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Crown,
   Leaf,
-  Magnet,
   MessageCircle,
   ScrollText,
-  Sparkles,
-  Swords,
   Users,
-  Utensils,
-  Wind,
-  Zap,
 } from 'lucide-react'
 import { expToNext } from '@/lib/game/data'
 import {
@@ -39,8 +31,10 @@ import { sanitizeMountState } from '@/lib/game/mounts'
 import { getEffectiveVipBonuses } from '@/lib/game/premium/vip'
 import { updateUiPref, useUiLayout } from '@/lib/game/ui-layout'
 import { useGame } from '@/lib/game/use-game'
+import type { MenuIconId } from '@/lib/game/menu-icons'
 import { cn } from '@/lib/utils'
 import { formatCompactNum } from './format'
+import { GameArtIcon } from './game-badge-icon'
 
 function formatBuffRemain(remainMs: number): string {
   const sec = Math.max(1, Math.ceil(remainMs / 1000))
@@ -112,7 +106,7 @@ export function Hud({ compact = false, slim = false }: { compact?: boolean; slim
             onClick={() => openPanel('inventory')}
             className="flex items-center gap-1 whitespace-nowrap text-gold tabular-nums hover:brightness-110"
           >
-            <img src="/assets/hd/ui/coin_gold.png" alt="" width={12} height={12} className="size-3 shrink-0 object-contain" />
+            <GameArtIcon iconId="gold-coin" size={14} />
             <span>{formatCompactNum(p.gold)} G</span>
           </button>
           <button
@@ -120,7 +114,7 @@ export function Hud({ compact = false, slim = false }: { compact?: boolean; slim
             onClick={() => openPanel('gem-shop')}
             className="flex items-center gap-1 whitespace-nowrap text-cyan-200 tabular-nums hover:brightness-110"
           >
-            <img src="/assets/hd/ui/gem_blue.png" alt="" width={12} height={12} className="size-3 shrink-0 object-contain" />
+            <GameArtIcon iconId="soul-gem" size={14} />
             <span>{formatCompactNum(p.diamonds ?? 0)} โซล</span>
           </button>
         </div>
@@ -165,7 +159,7 @@ export function AsuraBuffAndToggleStrip() {
     title: string
     remain: string
     tone: string
-    kind: 'boost' | 'food' | 'vip' | 'magnet'
+    iconId: MenuIconId
   }> = []
 
   for (const b of boostSummary.activeList) {
@@ -178,20 +172,21 @@ export function AsuraBuffAndToggleStrip() {
       stat: 'ALL',
     }
     const toneMap: Record<string, string> = {
-      exp: 'border-amber-300/80 bg-amber-900/85 text-amber-200',
-      jp: 'border-orange-300/80 bg-orange-900/85 text-orange-200',
-      lifeskill: 'border-emerald-300/80 bg-emerald-900/85 text-emerald-200',
-      speed: 'border-cyan-300/80 bg-cyan-900/85 text-cyan-200',
-      weight: 'border-sky-300/80 bg-sky-900/85 text-sky-200',
-      stat: 'border-fuchsia-300/80 bg-fuchsia-900/85 text-fuchsia-200',
+      exp: 'border-amber-300/85 bg-amber-950/90 text-amber-200',
+      jp: 'border-orange-300/85 bg-orange-950/90 text-orange-200',
+      lifeskill: 'border-emerald-300/85 bg-emerald-950/90 text-emerald-200',
+      speed: 'border-cyan-300/85 bg-cyan-950/90 text-cyan-200',
+      weight: 'border-sky-300/85 bg-sky-950/90 text-sky-200',
+      stat: 'border-fuchsia-300/85 bg-fuchsia-950/90 text-fuchsia-200',
     }
+    const iconId: MenuIconId = b.kind === 'jp' ? 'buff-jp' : b.kind === 'speed' ? 'mount-wind' : 'buff-xp'
     buffBadges.push({
       key: `boost_${b.id}`,
       tag: b.shortTag || tagMap[b.kind] || 'BUF',
       title: `${b.label} (${formatBuffRemain(b.expiresAtMs - nowMs)})`,
       remain: formatBuffRemain(b.expiresAtMs - nowMs),
       tone: toneMap[b.kind] ?? 'border-sky-300/80 bg-slate-900/90 text-white',
-      kind: 'boost',
+      iconId,
     })
   }
 
@@ -201,8 +196,8 @@ export function AsuraBuffAndToggleStrip() {
       tag: 'FOOD',
       title: `${extV2.activeFoodBuff.name} (${foodBuff.remainingSec}s)`,
       remain: formatBuffRemain(foodBuff.remainingSec * 1000),
-      tone: 'border-lime-300/80 bg-lime-950/85 text-lime-200',
-      kind: 'food',
+      tone: 'border-lime-300/85 bg-lime-950/90 text-lime-200',
+      iconId: 'buff-food',
     })
   }
 
@@ -213,7 +208,7 @@ export function AsuraBuffAndToggleStrip() {
       title: `${vipBonus.tierDef.name} (+EXP ${vipBonus.expBonusPct}%)`,
       remain: `${Math.max(1, Math.ceil(vipBonus.remainingMs / 86400000))}d`,
       tone: 'border-yellow-300/85 bg-yellow-950/90 text-yellow-200',
-      kind: 'vip',
+      iconId: 'buff-vip',
     })
   }
 
@@ -224,7 +219,7 @@ export function AsuraBuffAndToggleStrip() {
       title: 'แม่เหล็กดูดไอเทมอัตโนมัติ',
       remain: formatBuffRemain((p.lootMagnetUntil ?? 0) - nowMs),
       tone: 'border-cyan-300/85 bg-cyan-950/90 text-cyan-200',
-      kind: 'magnet',
+      iconId: 'buff-magnet',
     })
   }
 
@@ -251,19 +246,11 @@ export function AsuraBuffAndToggleStrip() {
               key={b.key}
               title={b.title}
               className={cn(
-                'relative flex size-6 flex-col items-center justify-between rounded border px-0.5 py-px shadow-md sm:size-7',
+                'relative flex size-7 flex-col items-center justify-between rounded border px-0.5 py-0.5 shadow-md sm:size-7',
                 b.tone,
               )}
             >
-              {b.kind === 'vip' ? (
-                <Crown className="size-3" aria-hidden />
-              ) : b.kind === 'food' ? (
-                <Utensils className="size-3" aria-hidden />
-              ) : b.kind === 'magnet' ? (
-                <Magnet className="size-3" aria-hidden />
-              ) : (
-                <Sparkles className="size-2.5" aria-hidden />
-              )}
+              <GameArtIcon iconId={b.iconId} size={14} />
               <span className="font-mono text-[7.5px] font-extrabold leading-none text-white tabular-nums">
                 {b.remain}
               </span>
@@ -284,13 +271,13 @@ export function AsuraBuffAndToggleStrip() {
           }}
           title="สลับใช้ออโต้สกิล"
           className={cn(
-            'grid size-7 place-items-center rounded border shadow transition-colors',
+            'grid size-7 place-items-center rounded border shadow transition-all hover:brightness-115',
             game.autoSkills && game.autoFarm
-              ? 'border-purple-300 bg-purple-700/85 text-white'
-              : 'border-[#3b6bb3]/75 bg-[#0d1726]/85 text-slate-300 hover:text-white',
+              ? 'border-purple-300 bg-purple-700/90 text-white'
+              : 'border-[#3b6bb3]/80 bg-[#0d1726]/92 text-slate-300',
           )}
         >
-          <Zap className="size-3.5" aria-hidden />
+          <GameArtIcon iconId="auto-skill" size={18} />
         </button>
 
         <button
@@ -302,13 +289,13 @@ export function AsuraBuffAndToggleStrip() {
           }}
           title={game.autoFarm ? 'ปิดออโต้ฟาร์ม' : 'เปิดออโต้ฟาร์ม'}
           className={cn(
-            'grid size-7 place-items-center rounded border shadow transition-colors',
+            'grid size-7 place-items-center rounded border shadow transition-all hover:brightness-115',
             game.autoFarm
-              ? 'border-emerald-300 bg-emerald-700/85 text-white'
-              : 'border-[#3b6bb3]/75 bg-[#0d1726]/85 text-slate-300 hover:text-white',
+              ? 'border-emerald-300 bg-emerald-700/90 text-white'
+              : 'border-[#3b6bb3]/80 bg-[#0d1726]/92 text-slate-300',
           )}
         >
-          <Bot className="size-3.5" aria-hidden />
+          <GameArtIcon iconId="auto-farm" size={18} />
         </button>
 
         <button
@@ -317,13 +304,13 @@ export function AsuraBuffAndToggleStrip() {
           onClick={() => togglePkModeAction()}
           title={extV2.pkEnabled ? 'สถานะ PK เปิดอยู่ (คลิกเพื่อปิด)' : 'สถานะ PK ปิดอยู่ (คลิกเพื่อเปิดโหมดท้าสู้)'}
           className={cn(
-            'flex h-7 min-w-7 items-center justify-center gap-0.5 rounded border px-1.5 font-mono text-[9.5px] font-extrabold shadow transition-colors',
+            'flex h-7 min-w-7 items-center justify-center gap-0.5 rounded border px-1.5 font-mono text-[9.5px] font-extrabold shadow transition-all hover:brightness-115',
             extV2.pkEnabled
-              ? 'border-rose-300 bg-rose-700/90 text-white shadow-[0_0_8px_rgba(244,63,94,0.6)]'
-              : 'border-[#3b6bb3]/75 bg-[#0d1726]/85 text-slate-300 hover:border-rose-300/60 hover:text-white',
+              ? 'border-rose-300 bg-rose-700/95 text-white shadow-[0_0_8px_rgba(244,63,94,0.5)]'
+              : 'border-[#3b6bb3]/80 bg-[#0d1726]/92 text-slate-300 hover:border-rose-300/60 hover:text-white',
           )}
         >
-          <Swords className="size-3" aria-hidden />
+          <GameArtIcon iconId="pk-swords" size={15} />
           <span>PK</span>
         </button>
 
@@ -334,13 +321,13 @@ export function AsuraBuffAndToggleStrip() {
           onClick={() => (hasMount ? toggleMountRiding() : openPanel('pets'))}
           title={hasMount ? (isMounted ? 'ลงจากสัตว์ขี่ [M]' : 'ขึ้นขี่สัตว์ [M]') : 'ดูสัตว์ขี่และคู่หู'}
           className={cn(
-            'grid size-7 place-items-center rounded border shadow transition-colors',
+            'grid size-7 place-items-center rounded border shadow transition-all hover:brightness-115',
             isMounted
-              ? 'border-amber-300 bg-amber-600/85 text-white'
-              : 'border-[#3b6bb3]/75 bg-[#0d1726]/85 text-cyan-200 hover:border-amber-300/70',
+              ? 'border-amber-300 bg-amber-600/90 text-white'
+              : 'border-[#3b6bb3]/80 bg-[#0d1726]/92 text-cyan-200 hover:border-amber-300/70',
           )}
         >
-          <Wind className="size-3.5" aria-hidden />
+          <GameArtIcon iconId="mount-wind" size={18} />
         </button>
 
         {nearNpc && (

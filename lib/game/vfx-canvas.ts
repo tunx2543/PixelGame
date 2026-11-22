@@ -575,6 +575,93 @@ export function drawRebirthAura(
   ctx.restore()
 }
 
+export interface SpiritAuraDrawOptions {
+  x: number
+  y: number
+  timeSec: number
+  stage: number
+  radiusX?: number
+  spriteHeight?: number
+  alphaScale?: number
+  disableGlow?: boolean
+}
+
+/**
+ * Renders distinct Soul Awakening (ระบบจุจิต) lotus glyph & orbiting spirit orbs.
+ */
+export function drawSpiritAwakeningAura(
+  ctx: CanvasRenderingContext2D,
+  opts: SpiritAuraDrawOptions,
+) {
+  const stage = Math.max(0, Math.min(5, Math.floor(opts.stage)))
+  if (stage <= 0) return
+  const t = opts.timeSec
+  const rx = Math.max(9, opts.radiusX ?? 12)
+  const ry = Math.max(3.5, rx * 0.36)
+  const h = Math.max(20, opts.spriteHeight ?? 32)
+  const aScale = Math.max(0.1, Math.min(1, opts.alphaScale ?? 1))
+  const groundY = opts.y - 1
+
+  const palette =
+    stage >= 5
+      ? { primary: '#fde047', secondary: '#38bdf8', petal: '#fef9c3' }
+      : stage === 4
+        ? { primary: '#f472b6', secondary: '#fde047', petal: '#fbcfe8' }
+        : stage === 3
+          ? { primary: '#c084fc', secondary: '#fb7185', petal: '#f3e8ff' }
+          : stage === 2
+            ? { primary: '#fbbf24', secondary: '#38bdf8', petal: '#fef08a' }
+            : { primary: '#38bdf8', secondary: '#34d399', petal: '#cffafe' }
+
+  ctx.save()
+
+  // Inner spirit rune ring on ground
+  ctx.globalAlpha = (0.38 + Math.sin(t * 3.4) * 0.12) * aScale
+  ctx.strokeStyle = palette.primary
+  ctx.lineWidth = Math.max(1, rx * 0.09)
+  if (!opts.disableGlow) {
+    ctx.shadowColor = palette.primary
+    ctx.shadowBlur = Math.max(4, rx * 0.45)
+  }
+  ctx.beginPath()
+  ctx.ellipse(opts.x, groundY, rx * 0.88, ry * 0.88, 0, 0, Math.PI * 2)
+  ctx.stroke()
+
+  // Orbiting spirit petal nodes around torso
+  const orbCount = Math.min(5, stage + 1)
+  const orbitR = rx * (1.02 + stage * 0.05)
+  for (let i = 0; i < orbCount; i++) {
+    const ang = t * (1.8 + stage * 0.16) + (i * Math.PI * 2) / orbCount
+    const ox = opts.x + Math.cos(ang) * orbitR
+    const oy = opts.y - h * 0.46 + Math.sin(ang) * (ry * 0.9) + Math.sin(t * 3 + i) * 1.4
+    const depthAlpha = 0.55 + (Math.sin(ang) + 1) * 0.22
+    ctx.globalAlpha = depthAlpha * aScale
+    ctx.fillStyle = i % 2 === 0 ? palette.primary : palette.secondary
+    ctx.beginPath()
+    ctx.arc(ox, oy, Math.max(1.3, rx * 0.12), 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.fillStyle = palette.petal
+    ctx.globalAlpha = 0.9 * aScale
+    ctx.beginPath()
+    ctx.arc(ox, oy, Math.max(0.7, rx * 0.055), 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // Stage 3+: rotating spirit crown sigil behind head
+  if (stage >= 3) {
+    const sigilY = opts.y - h * 0.88
+    ctx.globalAlpha = (0.45 + Math.sin(t * 4) * 0.12) * aScale
+    ctx.strokeStyle = palette.secondary
+    ctx.lineWidth = Math.max(0.8, rx * 0.065)
+    ctx.beginPath()
+    ctx.arc(opts.x, sigilY, rx * 0.48, t * 0.8, t * 0.8 + Math.PI * 1.45)
+    ctx.stroke()
+  }
+
+  ctx.restore()
+}
+
 export interface StageSkillVfxOptions {
   heroX: number
   heroY: number

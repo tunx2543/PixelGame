@@ -6,9 +6,7 @@ import { onAuthStateChanged, type User } from 'firebase/auth'
 import {
   AlertTriangle,
   Check,
-  Coins,
   Copy,
-  Gem,
   Plus,
   RefreshCw,
   RotateCw,
@@ -59,6 +57,7 @@ import { MAPS } from '@/lib/game/maps'
 import { cn } from '@/lib/utils'
 import { AccountPanel } from './account-panel'
 import { formatNum } from './format'
+import { GameArtIcon } from './game-badge-icon'
 import { PWAInstallButton } from './pwa-controls'
 import { SpriteModelCanvas, type PreviewAction } from './sprite-model-canvas'
 
@@ -514,7 +513,7 @@ export function TitleScreen() {
       <div className="relative z-10 my-auto grid items-center gap-5 py-2 lg:grid-cols-[17.5rem_1fr]">
         {/* Left Character Card + Bottom-Left Actions */}
         <div className="flex flex-col gap-2.5">
-          <div className="rounded-xl border-2 border-[#325d99]/90 bg-[#151e2c]/90 p-3 text-slate-100 shadow-2xl backdrop-blur-sm">
+          <div className="rounded-xl border-2 border-[#325d99]/90 bg-[#151e2c]/95 p-3 text-slate-100 shadow-2xl">
             {isLoadingSave ? (
               <p role="status" className="py-12 text-center text-xs text-slate-300">
                 กำลังโหลดข้อมูลตัวละคร...
@@ -545,15 +544,11 @@ export function TitleScreen() {
                 {/* Race & Class */}
                 <div className="space-y-1.5 border-b border-[#2a4a78] pb-2">
                   <div className="flex items-center gap-2.5">
-                    <span className="grid size-6 shrink-0 place-items-center rounded-full bg-sky-600 text-[11px] font-bold text-white">
-                      人
-                    </span>
+                    <GameArtIcon iconId="race-human" size={22} />
                     <span className="font-semibold text-slate-100">เผ่ามนุษย์</span>
                   </div>
                   <div className="flex items-center gap-2.5">
-                    <span className="grid size-6 shrink-0 place-items-center rounded-full bg-amber-500 text-[11px] font-bold text-slate-950">
-                      ★
-                    </span>
+                    <GameArtIcon iconId="class-star" size={22} />
                     <span className="font-semibold text-amber-300">
                       {JOBS[normalizeJobId(activeSave.jobId)].name}
                     </span>
@@ -596,10 +591,10 @@ export function TitleScreen() {
                   </div>
                 </div>
 
-                {/* Gold + Delete Character */}
+                {/* Gold + Map Name */}
                 <div className="flex items-center justify-between pt-0.5 tabular-nums">
                   <span className="flex items-center gap-2 font-bold text-white">
-                    <span className="inline-block size-4 rounded-full border border-slate-200 bg-gradient-to-br from-slate-100 to-slate-400" />
+                    <GameArtIcon iconId="gold-coin" size={16} />
                     {formatNum(activeSave.gold)}
                   </span>
                   <span className="text-[10px] text-slate-400">
@@ -721,7 +716,8 @@ export function TitleScreen() {
                           fashion={resolveFashionLoadoutFromSave(slotSave)}
                           isGm={slotSave.gm}
                           rebirthCount={slotSave.rebirthCount ?? 0}
-                          showAura={false}
+                          spiritStage={slotSave.extV2?.spiritAwakening?.awakeningStage ?? 0}
+                          showAura={isSelected && ((slotSave.extV2?.spiritAwakening?.awakeningStage ?? 0) > 0 || (slotSave.rebirthCount ?? 0) > 0)}
                           showShadow={false}
                           label={slotSave.name}
                         />
@@ -783,11 +779,11 @@ export function TitleScreen() {
         <div className="flex flex-col items-end gap-1.5">
           <div className="flex items-center gap-3 rounded-lg border border-[#325d99] bg-[#152030]/92 px-3 py-1.5 text-xs font-bold text-white shadow tabular-nums">
             <span className="flex items-center gap-1.5 text-amber-300">
-              <Coins className="size-3.5 text-amber-400" aria-hidden />
+              <GameArtIcon iconId="gold-coin" size={16} />
               {formatNum(activeSave?.gold ?? 0)}
             </span>
             <span className="flex items-center gap-1.5 text-sky-300">
-              <Gem className="size-3.5 text-sky-400" aria-hidden />
+              <GameArtIcon iconId="soul-gem" size={16} />
               {formatNum(activeSave?.diamonds ?? 0)}
             </span>
             <span className="border-l border-slate-600 pl-2.5 text-slate-200">

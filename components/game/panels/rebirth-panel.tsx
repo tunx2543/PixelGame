@@ -4,11 +4,15 @@ import { useState } from 'react'
 import { Sparkles } from 'lucide-react'
 import { JOBS } from '@/lib/game/data'
 import { rebirth, resolvePlayerFashionLoadout } from '@/lib/game/engine'
+import { sanitizeExtV2 } from '@/lib/game/extended-systems'
+import { sanitizeSpiritAwakeningState } from '@/lib/game/spirit-system'
 import { useGame } from '@/lib/game/use-game'
 import { resolveRebirthAuraSpec } from '@/lib/game/vfx-specs'
 import { cn } from '@/lib/utils'
+import { GameArtIcon } from '../game-badge-icon'
 import { SpriteModelCanvas } from '../sprite-model-canvas'
 import { PanelFrame, PxButton } from './panels'
+import { SpiritAwakeningSection } from './spirit-awakening-section'
 
 const REBIRTH_TIERS = [1, 2, 3, 4, 5, 6] as const
 
@@ -18,7 +22,11 @@ export function RebirthPanel() {
   const count = p?.rebirthCount ?? 0
   const jobId = p?.jobId ?? 'novice'
   const [selectedPreviewTier, setSelectedPreviewTier] = useState<number | null>(null)
+  const [tab, setTab] = useState<'rebirth' | 'spirit'>('rebirth')
+  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null)
 
+  const extV2 = p ? sanitizeExtV2(p.extV2) : null
+  const spiritStage = extV2 ? sanitizeSpiritAwakeningState(extV2.spiritAwakening).awakeningStage : 0
   const defaultTier = count > 0 ? Math.min(6, count) : 1
   const previewTier = selectedPreviewTier ?? defaultTier
   const previewSpec = resolveRebirthAuraSpec(previewTier)
@@ -26,8 +34,55 @@ export function RebirthPanel() {
   const nextSpec = resolveRebirthAuraSpec(Math.min(6, count + 1))
 
   return (
-    <PanelFrame title="การจุติ" subtitle="เทวทูตแห่งการจุติ — ออร่า 6 ระดับพลัง">
-      <div className="mx-auto max-w-3xl space-y-4">
+    <PanelFrame title="การจุติ & ระบบจุจิต" subtitle="วิหารแห่งการจุติ — ออร่า 6 ระดับ & เบิกเนตรวิญญาณ 5 ขั้น">
+      <div className="mx-auto max-w-3xl space-y-3">
+        <div className="grid grid-cols-2 gap-1.5" role="tablist" aria-label="หมวดจุติและจุจิต">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'rebirth'}
+            onClick={() => setTab('rebirth')}
+            className={cn(
+              'flex items-center justify-center gap-1.5 py-2 text-xs font-extrabold',
+              tab === 'rebirth' ? 'asura-tab-active' : 'asura-tab',
+            )}
+          >
+            <GameArtIcon iconId="rebirth" size={16} />
+            การจุติ ({count}/6)
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'spirit'}
+            onClick={() => setTab('spirit')}
+            className={cn(
+              'flex items-center justify-center gap-1.5 py-2 text-xs font-extrabold',
+              tab === 'spirit' ? 'asura-tab-active' : 'asura-tab',
+            )}
+          >
+            <GameArtIcon iconId="spirit" size={16} />
+            ระบบจุจิต (ขั้น {spiritStage}/5)
+          </button>
+        </div>
+
+        {notice && (
+          <p
+            role="status"
+            className={cn(
+              'rounded border px-3 py-1.5 text-xs font-semibold',
+              notice.ok
+                ? 'border-emerald-400/50 bg-emerald-950/70 text-emerald-200'
+                : 'border-rose-400/50 bg-rose-950/70 text-rose-200',
+            )}
+          >
+            {notice.text}
+          </p>
+        )}
+
+        {tab === 'spirit' ? (
+          <SpiritAwakeningSection onNotice={setNotice} />
+        ) : (
+        <div className="space-y-4">
         {/* Top Ascension Stage & Player Status */}
         <div
           className="grid gap-4 border p-4 sm:grid-cols-[152px_1fr] sm:items-center"
@@ -54,6 +109,7 @@ export function RebirthPanel() {
                 size={136}
                 fashion={resolvePlayerFashionLoadout(p)}
                 rebirthCount={previewTier}
+                spiritStage={spiritStage}
                 label={`ตัวอย่างออร่า ${previewSpec.title}`}
               />
             </div>
@@ -184,6 +240,8 @@ export function RebirthPanel() {
             })}
           </div>
         </div>
+        </div>
+        )}
       </div>
     </PanelFrame>
   )

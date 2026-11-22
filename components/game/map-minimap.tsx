@@ -234,7 +234,7 @@ export function MapMinimap() {
   const zoomVal = game.cameraZoomScale ?? 1
 
   return (
-    <div className="pointer-events-auto relative w-full overflow-hidden rounded-md border border-[#3a639a]/80 bg-[#080d16]/78 shadow-xl backdrop-blur-[1px]">
+    <div className="pointer-events-auto relative w-full overflow-hidden rounded-md border border-[#3a639a]/85 bg-[#080d16]/90 shadow-xl">
       {/* Top Bar: Map Name / Toggle & Zoom x 1.0 - + */}
       <div className="flex items-center justify-between gap-1 border-b border-[#264268]/70 bg-[#0d1626]/85 px-1.5 py-0.5 text-[9.5px]">
         <button

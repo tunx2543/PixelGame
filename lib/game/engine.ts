@@ -163,6 +163,19 @@ import {
   type PlayerExtensionV2,
 } from './extended-systems'
 import { MAX_PET_STARS, petEvolveCost } from './systems'
+import {
+  advanceSpiritStageState,
+  computeSpiritAwakeningBonuses,
+  getSpiritStageSpec,
+  sanitizeSpiritAwakeningState,
+  upgradeSpiritCoreState,
+  type SpiritCoreId,
+} from './spirit-system'
+import {
+  formatExactDamage,
+  POPUP_PALETTE,
+  type FloatingPopupKind,
+} from './floating-damage'
 import { stopBgm, syncBgmForMap } from './bgm'
 import {
   EQUIPMENT_RARITY_META,
@@ -660,6 +673,10 @@ export interface FloatText {
   life: number
   max: number
   size: number
+  kind?: FloatingPopupKind
+  badge?: string
+  arcDrift?: number
+  outlineColor?: string
 }
 
 export interface GroundDrop {
@@ -756,6 +773,8 @@ export const game = {
   onlinePlayers: [] as RemotePlayer[],
   presenceError: null as string | null,
   floats: [] as FloatText[],
+  targetMonsterUid: null as string | null,
+  targetMonsterExpiresAt: 0,
   autoFarm: false,
   autoSkills: false,
   autoSkillIndex: 0,
@@ -1049,6 +1068,7 @@ export function getStats(p: SaveData = game.p!) {
   const extV2 = sanitizeExtV2(p.extV2)
   const asuraBoosts = getActiveAsuraBoostSummary(extV2)
   const talentBonus = computeTalentBonuses(extV2.talents)
+  const spiritBonus = computeSpiritAwakeningBonuses(extV2.spiritAwakening)
   const foodBuff = getActiveFoodBuffBonuses(extV2.activeFoodBuff)
   const roleSynergy = p === game.p ? game.partyRoleBuffs : { atkPct: 0, defPct: 0, critBonus: 0 }
 
@@ -1070,7 +1090,8 @@ export function getStats(p: SaveData = game.p!) {
     codexBonus.hpBonus +
     runeBonus.hpBonus +
     setBonus.hpBonus +
-    affixBonus.hpFlat
+    affixBonus.hpFlat +
+    spiritBonus.hpFlat
   const baseAtk =
     Math.floor((8 + L * 2.6 + wAtk) * job.atkMul) +
     strAtkBonus +
@@ -1082,7 +1103,8 @@ export function getStats(p: SaveData = game.p!) {
     codexBonus.atkBonus +
     runeBonus.atkBonus +
     setBonus.atkBonus +
-    affixBonus.atkFlat
+    affixBonus.atkFlat +
+    spiritBonus.atkFlat
   const baseDef =
     Math.floor((3 + L * 1.4) * job.defMul + aDef) +
     vitDefBonus +
@@ -1092,11 +1114,16 @@ export function getStats(p: SaveData = game.p!) {
     codexBonus.defBonus +
     runeBonus.defBonus +
     setBonus.defBonus +
-    affixBonus.defFlat
+    affixBonus.defFlat +
+    spiritBonus.defFlat
 
-  const rawHp = Math.round(baseHp * (1 + (talentBonus.hpPct + asuraBoosts.statBonusPct) / 100))
-  const rawAtk = Math.round(baseAtk * (1 + (talentBonus.atkPct + foodBuff.atkPct + roleSynergy.atkPct + asuraBoosts.statBonusPct) / 100))
-  const rawDef = Math.round(baseDef * (1 + (talentBonus.defPct + foodBuff.defPct + roleSynergy.defPct + asuraBoosts.statBonusPct) / 100))
+  const rawHp = Math.round(baseHp * (1 + (talentBonus.hpPct + spiritBonus.allStatPct + asuraBoosts.statBonusPct) / 100))
+  const rawAtk = Math.round(
+    baseAtk * (1 + (talentBonus.atkPct + spiritBonus.allStatPct + foodBuff.atkPct + roleSynergy.atkPct + asuraBoosts.statBonusPct) / 100),
+  )
+  const rawDef = Math.round(
+    baseDef * (1 + (talentBonus.defPct + spiritBonus.allStatPct + foodBuff.defPct + roleSynergy.defPct + asuraBoosts.statBonusPct) / 100),
+  )
   const mountSpeedMul = mountBonus?.mounted
     ? mountBonus.speedMul
     : p.equippedGemCompanion === 'aurora_cloud_dragon'
@@ -1105,7 +1132,15 @@ export function getStats(p: SaveData = game.p!) {
 
   return {
     maxHp: rawHp,
-    maxMp: Math.floor((30 + L * 7) * job.mpMul) + intMpBonus + (p.rebirthBonus?.maxMp ?? 0) + (petBonus?.mpBonus ?? 0),
+    maxMp:
+      Math.round(
+        (Math.floor((30 + L * 7) * job.mpMul) +
+          intMpBonus +
+          (p.rebirthBonus?.maxMp ?? 0) +
+          (petBonus?.mpBonus ?? 0) +
+          spiritBonus.mpFlat) *
+          (1 + spiritBonus.allStatPct / 100),
+      ),
     atk: guildBuff ? Math.round(rawAtk * (1 + guildBuff.atkPct / 100)) : rawAtk,
     def: guildBuff ? Math.round(rawDef * (1 + guildBuff.defPct / 100)) : rawDef,
     speed:
@@ -1114,7 +1149,7 @@ export function getStats(p: SaveData = game.p!) {
       (p.speed || 1) *
       mountSpeedMul *
       agiSpeedMul *
-      (1 + (talentBonus.speedPct + asuraBoosts.speedBonusPct) / 100),
+      (1 + (talentBonus.speedPct + spiritBonus.speedPct + asuraBoosts.speedBonusPct) / 100),
     crit: Math.min(
       0.85,
       job.crit +
@@ -1123,20 +1158,32 @@ export function getStats(p: SaveData = game.p!) {
         runeBonus.critBonus +
         setBonus.critBonus +
         talentBonus.critBonus +
+        spiritBonus.critBonus +
         foodBuff.critBonus +
         affixBonus.critBonus +
         roleSynergy.critBonus +
         asuraBoosts.critBonus,
     ),
+    soulCritChance: spiritBonus.soulCritChance,
+    soulCritMult: spiritBonus.soulCritMult,
+    spiritStage: spiritBonus.stage,
     attackSpeed: Math.max(0.24, job.attackSpeed * (1 - Math.min(0.32, Math.max(0, attr.agi - 1) * 0.0025))),
-    lifestealPct: runeBonus.lifestealPct + talentBonus.lifestealPct + affixBonus.lifestealPct,
+    lifestealPct: runeBonus.lifestealPct + talentBonus.lifestealPct + spiritBonus.lifestealPct + affixBonus.lifestealPct,
     cdReducePct: affixBonus.cdReducePct,
     affixGoldPct: affixBonus.goldPct + Math.min(35, Math.floor(Math.max(0, attr.luk - 1) * 0.25)),
     affixExpPct: affixBonus.expPct,
   }
 }
 
+export function getTargetMonster(): Monster | null {
+  if (!game.targetMonsterUid) return null
+  if (game.time > game.targetMonsterExpiresAt) return null
+  const found = game.monsters.find((m) => m.uid === game.targetMonsterUid && !m.dead)
+  return found ?? null
+}
+
 let chatId = 0
+let floatSeq = 0
 export function say(
   type: ChatType,
   text: string,
@@ -1147,8 +1194,38 @@ export function say(
   if (game.chat.length > 180) game.chat.splice(0, game.chat.length - 180)
 }
 
-function addFloat(x: number, y: number, text: string, color: string, size = 10) {
-  game.floats.push({ x: x + rand(-4, 4), y, text, color, life: 1, max: 1, size })
+function addFloat(
+  x: number,
+  y: number,
+  text: string,
+  color: string,
+  size = 10,
+  opts?: {
+    kind?: FloatingPopupKind
+    badge?: string
+    arcDrift?: number
+    outlineColor?: string
+    duration?: number
+  },
+) {
+  const seq = ++floatSeq
+  const spreadOffsets = [0, -5, 5, -9, 9, -3, 3]
+  const arcPattern = [3, -12, 12, -8, 8, -15, 15]
+  const slot = seq % spreadOffsets.length
+  const maxLife = opts?.duration ?? 0.96
+  game.floats.push({
+    x: x + spreadOffsets[slot] * 0.65,
+    y: y - (seq % 3) * 2.5,
+    text,
+    color,
+    life: maxLife,
+    max: maxLife,
+    size,
+    kind: opts?.kind,
+    badge: opts?.badge,
+    arcDrift: opts?.arcDrift ?? arcPattern[slot],
+    outlineColor: opts?.outlineColor,
+  })
 }
 
 function addEffect(e: Omit<Effect, 'life'>) {
@@ -1915,6 +1992,8 @@ export function changeMap(rawMapId: string, tx: number, ty: number) {
   game.projectiles = []
   game.effects = []
   game.floats = []
+  game.targetMonsterUid = null
+  game.targetMonsterExpiresAt = 0
   game.panel = null
   game.blockingUi = false
   windowBridge?.closeAll()
@@ -2408,17 +2487,23 @@ function damageMonster(m: Monster, mult: number, skillId?: string) {
   const s = getStats()
   const def = MONSTERS[m.defId]
   if (!def) return
+  game.targetMonsterUid = m.uid
+  game.targetMonsterExpiresAt = game.time + 12
+
   const gmStaff = p.equipment.weapon?.itemId === 'gm_golden_staff' && p.gm
   const atkElem = getAttackElement(skillId, p.rpgExt?.equippedRunes)
   const defElem = getMonsterElement(m.defId)
   const elemMatch = getElementMultiplier(atkElem, defElem)
   let dmg = gmStaff ? 9999999 : dmgFormula(s.atk * mult, def.def) * elemMatch.multiplier * rand(0.9, 1.1)
-  const crit = !gmStaff && Math.random() < s.crit
-  if (crit) dmg *= 1.6
+  const soulCrit = !gmStaff && (s.soulCritChance ?? 0) > 0 && Math.random() < (s.soulCritChance ?? 0)
+  const crit = !gmStaff && !soulCrit && Math.random() < s.crit
+  if (soulCrit) dmg *= s.soulCritMult ?? 2.2
+  else if (crit) dmg *= 1.65
+
   const amount = Math.max(1, Math.round(dmg))
   m.hp -= amount
   m.provoked = true
-  m.hitFlash = 0.15
+  m.hitFlash = soulCrit ? 0.22 : 0.15
   game.combatT = 0
   game.comboCount += 1
   game.comboUntil = game.time + 5
@@ -2427,9 +2512,43 @@ function damageMonster(m: Monster, mult: number, skillId?: string) {
     const heal = Math.max(1, Math.round((amount * s.lifestealPct) / 100))
     p.hp = Math.min(s.maxHp, p.hp + heal)
   }
-  const color = crit ? '#ffd60a' : elemMatch.effectiveness === 'super' ? '#fb923c' : elemMatch.effectiveness === 'resist' ? '#94a3b8' : '#ffffff'
-  const suffix = crit ? '!' : elemMatch.effectiveness === 'super' ? '▲' : ''
-  addFloat(m.x, m.y - 20, `${amount}${suffix}`, color, crit ? 20 : 16)
+
+  const popupKind: FloatingPopupKind = soulCrit
+    ? 'soulCrit'
+    : crit
+      ? 'crit'
+      : skillId
+        ? 'skill'
+        : 'damage'
+  const palette = POPUP_PALETTE[popupKind]
+  const color = soulCrit
+    ? palette.color
+    : crit
+      ? palette.color
+      : elemMatch.effectiveness === 'super'
+        ? '#fb923c'
+        : elemMatch.effectiveness === 'resist'
+          ? '#94a3b8'
+          : skillId
+            ? '#fed7aa'
+            : '#ffffff'
+  const badge = soulCrit
+    ? 'SOUL CRIT!'
+    : crit
+      ? 'CRITICAL!'
+      : elemMatch.effectiveness === 'super'
+        ? 'WEAK!'
+        : undefined
+  const formatted = formatExactDamage(amount)
+  addFloat(m.x, m.y - 22, soulCrit || crit ? `${formatted}!` : formatted, color, soulCrit ? 19 : crit ? 17 : skillId ? 15 : 13.5, {
+    kind: popupKind,
+    badge,
+    outlineColor: palette.outlineColor,
+    duration: soulCrit ? 1.35 : crit ? 1.18 : 0.94,
+  })
+  if (soulCrit) {
+    addEffect({ type: 'spark', x: m.x, y: m.y - 8, r: 16, color: '#67e8f9', max: 0.28 })
+  }
   if (m.isWorldBoss) {
     recordWorldBossDamageAction(amount)
   }
@@ -2995,18 +3114,29 @@ function hurtPlayer(rawAtk: number) {
   const p = player()
   game.combatT = 0
   if (game.invulnUntil > game.time) {
-    addFloat(p.x, p.y - 24, 'DODGE!', '#22d3ee', 10)
+    addFloat(p.x, p.y - 24, 'MISS!', POPUP_PALETTE.miss.color, 11, {
+      kind: 'miss',
+      badge: 'DODGE',
+      outlineColor: POPUP_PALETTE.miss.outlineColor,
+      duration: 0.9,
+    })
     return
   }
   if (p.god) {
-    addFloat(p.x, p.y - 22, 'GOD', '#ffd60a', 9)
+    addFloat(p.x, p.y - 22, 'IMMUNE', '#ffd60a', 10, { kind: 'block', badge: 'GM' })
     return
   }
   const s = getStats()
   const guarded = game.guardUntil > game.time
   const dmg = Math.max(1, Math.round(dmgFormula(rawAtk * 1.5, s.def) * (guarded ? 0.25 : 1) * rand(0.85, 1.15)))
   p.hp -= dmg
-  addFloat(p.x, p.y - 22, guarded ? `-${dmg} [GUARD]` : `-${dmg}`, guarded ? '#60a5fa' : '#ff4d4d', 10)
+  const kind: FloatingPopupKind = guarded ? 'block' : 'incoming'
+  addFloat(p.x, p.y - 22, `-${formatExactDamage(dmg)}`, POPUP_PALETTE[kind].color, guarded ? 10.5 : 11.5, {
+    kind,
+    badge: guarded ? 'GUARD' : undefined,
+    outlineColor: POPUP_PALETTE[kind].outlineColor,
+    duration: 0.95,
+  })
   if (p.hp <= 0) die()
 }
 
@@ -3140,6 +3270,89 @@ export function rebirth() {
   closePanel('rebirth')
   notify()
   return true
+}
+
+export function upgradeSpiritCoreAction(coreId: SpiritCoreId): { ok: boolean; message: string } {
+  const p = game.p
+  if (!p) return { ok: false, message: 'ยังไม่ได้เข้าสู่ระบบตัวละคร' }
+  const extV2 = sanitizeExtV2(p.extV2)
+  const result = upgradeSpiritCoreState(sanitizeSpiritAwakeningState(extV2.spiritAwakening), coreId, p.gold)
+  if (!result.ok) {
+    warn(result.message)
+    notify()
+    return { ok: false, message: result.message }
+  }
+  p.gold = result.nextGold
+  extV2.spiritAwakening = result.nextState
+  p.extV2 = extV2
+  const stats = getStats(p)
+  p.hp = Math.min(stats.maxHp, p.hp + 30)
+  p.mp = Math.min(stats.maxMp, p.mp + 15)
+  addEffect({
+    type: 'burst',
+    x: p.x,
+    y: p.y - 6,
+    r: 24,
+    color: '#38bdf8',
+    secondaryColor: '#c084fc',
+    max: 0.55,
+  })
+  addFloat(p.x, p.y - 34, `จุจิต Lv.${result.newLevel}!`, '#67e8f9', 12, {
+    kind: 'soulCrit',
+    badge: 'SOUL CORE',
+    duration: 1.15,
+  })
+  say('system', result.message)
+  saveGame()
+  notify()
+  return { ok: true, message: result.message }
+}
+
+export function advanceSpiritStageAction(): { ok: boolean; message: string } {
+  const p = game.p
+  if (!p) return { ok: false, message: 'ยังไม่ได้เข้าสู่ระบบตัวละคร' }
+  const extV2 = sanitizeExtV2(p.extV2)
+  const result = advanceSpiritStageState(sanitizeSpiritAwakeningState(extV2.spiritAwakening), p.rebirthCount ?? 0, p.gold)
+  if (!result.ok) {
+    warn(result.message)
+    notify()
+    return { ok: false, message: result.message }
+  }
+  p.gold = result.nextGold
+  extV2.spiritAwakening = result.nextState
+  p.extV2 = extV2
+  const spec = getSpiritStageSpec(result.stage)
+  const stats = getStats(p)
+  p.hp = stats.maxHp
+  p.mp = stats.maxMp
+  addEffect({
+    type: 'levelup',
+    x: p.x,
+    y: p.y,
+    r: 36,
+    color: spec.primaryColor,
+    secondaryColor: spec.secondaryColor,
+    max: 2.2,
+  })
+  addEffect({
+    type: 'burst',
+    x: p.x,
+    y: p.y - 6,
+    r: 40,
+    color: spec.primaryColor,
+    secondaryColor: spec.secondaryColor,
+    vfxStyle: 'light_judgment',
+    max: 1.1,
+  })
+  addFloat(p.x, p.y - 40, `เบิกจิตขั้น ${result.stage}!`, spec.primaryColor, 14, {
+    kind: 'soulCrit',
+    badge: 'AWAKENED',
+    duration: 1.4,
+  })
+  say('system', result.message)
+  saveGame()
+  notify()
+  return { ok: true, message: result.message }
 }
 
 export function action() {
@@ -8110,9 +8323,15 @@ export function update(dt: number) {
 
   for (const f of game.floats) {
     f.life -= dt
-    f.y -= 22 * dt
   }
   game.floats = game.floats.filter((f) => f.life > 0)
+  if (game.targetMonsterUid) {
+    const tgt = game.monsters.find((m) => m.uid === game.targetMonsterUid && !m.dead)
+    if (!tgt || game.time > game.targetMonsterExpiresAt) {
+      game.targetMonsterUid = null
+      uiDirty = true
+    }
+  }
   for (const e of game.effects) e.life -= dt
   game.effects = game.effects.filter((e) => e.life > 0)
   if (game.bubble && game.time > game.bubble.until) game.bubble = null
@@ -8273,7 +8492,13 @@ function updateProjectiles(dt: number) {
             t.hp -= dmg
             t.provoked = true
             t.hitFlash = 0.12
-            addFloat(t.x, t.y - 24, `${dmg}`, pr.color, 13)
+            game.targetMonsterUid = t.uid
+            game.targetMonsterExpiresAt = game.time + 12
+            addFloat(t.x, t.y - 24, formatExactDamage(dmg), pr.color, 12, {
+              kind: 'pet',
+              outlineColor: POPUP_PALETTE.pet.outlineColor,
+              duration: 0.9,
+            })
             if (t.hp <= 0) killMonster(t)
           }
         }

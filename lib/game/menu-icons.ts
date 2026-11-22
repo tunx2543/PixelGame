@@ -31,9 +31,40 @@ export type MenuIconId =
   | 'settings'
   | 'checkin'
   | 'dev-tools'
+  | 'helper'
+  | 'soul-shop'
+  | 'menu-castle'
+  | 'spirit'
+  | 'rebirth'
+  | 'rate'
+  | 'camera'
+  | 'gold-coin'
+  | 'silver-coin'
+  | 'soul-gem'
+  | 'buff-xp'
+  | 'buff-jp'
+  | 'buff-food'
+  | 'buff-vip'
+  | 'buff-magnet'
+  | 'auto-farm'
+  | 'auto-skill'
+  | 'pk-swords'
+  | 'mount-wind'
+  | 'gp-trophy'
+  | 'bp-wings'
+  | 'event-flash'
+  | 'race-human'
+  | 'class-star'
+  | 'npc-anvil'
+  | 'npc-chest'
+  | 'npc-pouch'
+  | 'npc-job'
+  | 'npc-gacha'
+  | 'npc-rebirth'
 
-const OUTLINE = '#16111d'
+const OUTLINE = '#131726'
 const iconDataCache = new Map<MenuIconId, string>()
+const iconCanvasCache = new Map<MenuIconId, HTMLCanvasElement>()
 
 interface IconTemplate {
   rows: string[]
@@ -770,9 +801,630 @@ const TEMPLATES: Record<MenuIconId, IconTemplate> = {
       Y: '#fde047',
     },
   },
+
+  // ตัวช่วยประจำวัน: กระดานภารกิจกับขนนกเช็กถูก
+  helper: {
+    rows: [
+      '.....gggggg.......',
+      '....gGGGGGGg..cc..',
+      '...ppppppppppcCCc.',
+      '..pWWWWWWWWWWcCCc.',
+      '..pWggWWWWWWcCCc..',
+      '..pWGGWdddddccc...',
+      '..pWWWWWWWWWWp....',
+      '..pWggWWdddddW....',
+      '..pWGGWWWWWWWW....',
+      '..pWWWWdddddWp....',
+      '..ppppppppppp.....',
+    ],
+    palette: {
+      g: '#15803d',
+      G: '#4ade80',
+      p: '#c29b61',
+      W: '#fef9e7',
+      d: '#64748b',
+      c: '#0284c7',
+      C: '#7dd3fc',
+    },
+  },
+
+  // ร้านโซล / Premium Shop: ถุงสมบัติปักตราเพชรฟ้า
+  'soul-shop': {
+    rows: [
+      '....ggGGGGgg......',
+      '.....gGGGGg.......',
+      '....rrrrrrrr......',
+      '...nNNNNNNNNn.....',
+      '..nNNllllllNNn....',
+      '..nNNcCCCCcNNn....',
+      '..nNcCCllCCcNn....',
+      '..nNNcCCCCcNNn....',
+      '..nNNNccccNNNn....',
+      '...dddddddddd.....',
+    ],
+    palette: {
+      g: '#b45309',
+      G: '#fde047',
+      r: '#e11d48',
+      n: '#9a3412',
+      N: '#f59e0b',
+      l: '#fef3c7',
+      c: '#0284c7',
+      C: '#38bdf8',
+      d: '#7c2d12',
+    },
+  },
+
+  // ปุ่มเมนูหลัก: หอปราสาทศิลาน้ำเงินหลังคาทอง
+  'menu-castle': {
+    rows: [
+      '.......gg.........',
+      '......bBBb........',
+      '.....bBllBb.......',
+      '....bBBBBBBb......',
+      '...bBBBBBBBBb.....',
+      '..bbbbbbbbbbbb....',
+      '...sSSsSSsSSs.....',
+      '...sSSsGGsSSs.....',
+      '...sSSgGGgSSs.....',
+      '...sSSgYYgSSs.....',
+      '..ssssssssssss....',
+    ],
+    palette: {
+      g: '#b45309',
+      G: '#fbbf24',
+      Y: '#fef08a',
+      b: '#1d4ed8',
+      B: '#38bdf8',
+      l: '#e0f2fe',
+      s: '#475569',
+      S: '#cbd5e1',
+    },
+  },
+
+  // จิต & จุจิต: ดอกบัวจิตวิญญาณเรืองแสง
+  spirit: {
+    rows: [
+      '.......ll.........',
+      '......lCCc........',
+      '..pp..cCCc..pp....',
+      '.pPPp.cCCc.pPPp...',
+      '.pPPpcCCCCcpPPp...',
+      '..pPpcCllCcPPp....',
+      '...ppcCCCCcpp.....',
+      '...ggGGGGGGgg.....',
+      '....gGGGGGGg......',
+      '.....gggggg.......',
+    ],
+    palette: {
+      l: '#ffffff',
+      c: '#0284c7',
+      C: '#67e8f9',
+      p: '#9333ea',
+      P: '#e879f9',
+      g: '#b45309',
+      G: '#fde047',
+    },
+  },
+
+  // จุติ: ปีกวิหคทองคำแห่งการกำเนิดใหม่
+  rebirth: {
+    rows: [
+      '.gg............gg.',
+      'gGGg....ll....gGGg',
+      'gGllg..gGGg..gllGg',
+      '.gGGg.gGllGg.gGGg.',
+      '..gGGgGGGGGGgGGg..',
+      '...gGGGGccGGGGg...',
+      '....gGGGccGGGg....',
+      '.....ggGGGGgg.....',
+      '.......gggg.......',
+    ],
+    palette: {
+      g: '#b45309',
+      G: '#fbbf24',
+      l: '#fffbeb',
+      c: '#38bdf8',
+    },
+  },
+
+  // ให้คะแนน: เหรียญดาวทองมีประกาย
+  rate: {
+    rows: [
+      '.......GG.........',
+      '......gGGg........',
+      '..ggggGGGGgggg....',
+      '.gGGGGllllGGGGg...',
+      '..gGGGGGGGGGGg....',
+      '...gGGGGGGGGg.....',
+      '..gGGGggggGGGg....',
+      '..gGGg....gGGg....',
+      '...gg......gg.....',
+    ],
+    palette: {
+      g: '#b45309',
+      G: '#fbbf24',
+      l: '#fef9c3',
+    },
+  },
+
+  // ถ่ายภาพ: กล้องบันทึกภาพผจญภัย
+  camera: {
+    rows: [
+      '.....ssssss.......',
+      '..ssssssssssss....',
+      '.sSSSSSSSSSSSSs...',
+      '.sSSbbbbbbSSrrs...',
+      '.sSbBBllBBbSSSs...',
+      '.sSbBBBBBBbSSSs...',
+      '.sSSbbbbbbSSSSs...',
+      '.sSSSSSSSSSSSSs...',
+      '..dddddddddddd....',
+    ],
+    palette: {
+      s: '#334155',
+      S: '#cbd5e1',
+      d: '#1e293b',
+      b: '#0284c7',
+      B: '#38bdf8',
+      l: '#ffffff',
+      r: '#ef4444',
+    },
+  },
+
+  // เหรียญทอง
+  'gold-coin': {
+    rows: [
+      '....gggggg........',
+      '..ggGGllGGgg......',
+      '.gGGllGGGGGGg.....',
+      '.gGGgYYYYgGGg.....',
+      '.gGGgYYYYgGGg.....',
+      '.gGGGGGGGGGGg.....',
+      '..ggGGGGGGgg......',
+      '....gggggg........',
+    ],
+    palette: {
+      g: '#b45309',
+      G: '#fbbf24',
+      l: '#fffbeb',
+      Y: '#fde047',
+    },
+  },
+
+  // เหรียญเงิน
+  'silver-coin': {
+    rows: [
+      '....ssssss........',
+      '..ssSSllSSss......',
+      '.sSSllSSSSSSs.....',
+      '.sSSsWWWWsSSs.....',
+      '.sSSsWWWWsSSs.....',
+      '.sSSSSSSSSSSs.....',
+      '..ssSSSSSSss......',
+      '....ssssss........',
+    ],
+    palette: {
+      s: '#475569',
+      S: '#cbd5e1',
+      l: '#ffffff',
+      W: '#f1f5f9',
+    },
+  },
+
+  // โซลเจม / คริสตัลสีฟ้า
+  'soul-gem': {
+    rows: [
+      '......cc..........',
+      '.....cCCc.........',
+      '...ccCllCcc.......',
+      '..cCCCCCCCCc......',
+      '..cCCCCCCCCc......',
+      '...cCCCCCCc.......',
+      '....cCCCCc........',
+      '.....cCCc.........',
+      '......cc..........',
+    ],
+    palette: {
+      c: '#0369a1',
+      C: '#38bdf8',
+      l: '#e0f2fe',
+    },
+  },
+
+  // บัฟ EXP
+  'buff-xp': {
+    rows: [
+      '..gggggggggg......',
+      '.gGGllGGGGGGg.....',
+      '.gGbbGGGGbbGg.....',
+      '.gGGbbGGbbGGg.....',
+      '.gGGGbbbbGGGg.....',
+      '.gGGbbGGbbGGg.....',
+      '.gGbbGGGGbbGg.....',
+      '..gggggggggg......',
+    ],
+    palette: {
+      g: '#b45309',
+      G: '#fbbf24',
+      l: '#fef9c3',
+      b: '#78350f',
+    },
+  },
+
+  // บัฟ JP
+  'buff-jp': {
+    rows: [
+      '..oooooooooo......',
+      '.oOOllOOOOOOo.....',
+      '.oOOObbbbOOOo.....',
+      '.oOOOObbOOOOo.....',
+      '.oOOOObbOOOOo.....',
+      '.oOObbOObbOOo.....',
+      '.oOOObbbbOOOo.....',
+      '..oooooooooo......',
+    ],
+    palette: {
+      o: '#c2410c',
+      O: '#fb923c',
+      l: '#ffedd5',
+      b: '#431407',
+    },
+  },
+
+  // บัฟอาหาร
+  'buff-food': {
+    rows: [
+      '......ww..........',
+      '...nnnnnnnn.......',
+      '..nNNllNNNNn..ss..',
+      '.nNNNNNNNNNNnsSSs.',
+      '..nnnnnnnnnn..ss..',
+      '.ssssssssssss.....',
+      '..dddddddddd......',
+    ],
+    palette: {
+      w: '#ffffff',
+      n: '#9a3412',
+      N: '#ea580c',
+      l: '#fed7aa',
+      s: '#cbd5e1',
+      S: '#ffffff',
+      d: '#64748b',
+    },
+  },
+
+  // บัฟ VIP
+  'buff-vip': {
+    rows: [
+      '..G....GG....G....',
+      '..Gg..gGGg..gG....',
+      '..gGggGGGGggGg....',
+      '..gGGcGGGGcGGg....',
+      '..gGGGGGGGGGGg....',
+      '..rrrrrrrrrrrr....',
+      '..gggggggggggg....',
+    ],
+    palette: {
+      G: '#fde047',
+      g: '#ca8a04',
+      c: '#38bdf8',
+      r: '#dc2626',
+    },
+  },
+
+  // แม่เหล็กดูดของ
+  'buff-magnet': {
+    rows: [
+      '..sss......sss....',
+      '.sSSSs....sSSSs...',
+      '.rRRRr....rRRRr...',
+      '.rRRRr....rRRRr...',
+      '.rRRRRrrrrRRRRr...',
+      '..rRRRRRRRRRRr....',
+      '...rrrrrrrrrr.....',
+    ],
+    palette: {
+      s: '#64748b',
+      S: '#e2e8f0',
+      r: '#b91c1c',
+      R: '#ef4444',
+    },
+  },
+
+  // ออโต้ฟาร์ม
+  'auto-farm': {
+    rows: [
+      '......cc..........',
+      '...gggggggg.......',
+      '..gGGGGGGGGg......',
+      '..gGcCggCcGg......',
+      '..gGGGGGGGGg......',
+      '...gGllllGg.......',
+      '..gggggggggg......',
+      '...ss....ss.......',
+    ],
+    palette: {
+      c: '#22d3ee',
+      C: '#a5f3fc',
+      g: '#047857',
+      G: '#34d399',
+      l: '#a7f3d0',
+      s: '#475569',
+    },
+  },
+
+  // ออโต้สกิล
+  'auto-skill': {
+    rows: [
+      '.......pppp.......',
+      '......pPPllp......',
+      '.....pPPPp........',
+      '....pPPPPPPPp.....',
+      '.......pPPPp......',
+      '......pPPPp.......',
+      '.....pPPp.........',
+      '....ppp...........',
+    ],
+    palette: {
+      p: '#7e22ce',
+      P: '#c084fc',
+      l: '#faf5ff',
+    },
+  },
+
+  // PK ดาบไขว้
+  'pk-swords': {
+    rows: [
+      '.ll..........ll...',
+      '..lSl......lSl....',
+      '...lSl....lSl.....',
+      '....rRrrrrRr......',
+      '.....rRRRRr.......',
+      '....lSl..lSl......',
+      '...nn......nn.....',
+    ],
+    palette: {
+      l: '#f8fafc',
+      S: '#94a3b8',
+      r: '#b91c1c',
+      R: '#ef4444',
+      n: '#78350f',
+    },
+  },
+
+  // สัตว์ขี่สายลม
+  'mount-wind': {
+    rows: [
+      '..ccc......ggg....',
+      '.cCCCc....gGGGg...',
+      '..ccCCCccgGGGGg...',
+      '....ccCCCCCCCCg...',
+      '..cccCCCllCCCc....',
+      '...ccCCCCCCcc.....',
+      '.....cccccc.......',
+    ],
+    palette: {
+      c: '#0284c7',
+      C: '#38bdf8',
+      l: '#e0f2fe',
+      g: '#b45309',
+      G: '#fbbf24',
+    },
+  },
+
+  // GP ถ้วยรางวัล
+  'gp-trophy': {
+    rows: [
+      '..gggggggggggg....',
+      '.gGgGGGGGGGGgGg...',
+      '.gg.gGGllGGg.gg...',
+      '....gGGGGGGg......',
+      '.....gGGGGg.......',
+      '......gGGg........',
+      '....gggggggg......',
+    ],
+    palette: {
+      g: '#b45309',
+      G: '#fbbf24',
+      l: '#fef9c3',
+    },
+  },
+
+  // BP ปีกตราสัญลักษณ์
+  'bp-wings': {
+    rows: [
+      '.ww....cc....ww...',
+      'wWWw..cCCc..wWWw..',
+      '.wwgGGcCCcGGgww...',
+      '...gGGcCCcGGg.....',
+      '....gGGGGGGg......',
+      '.....gGGGGg.......',
+      '......gggg........',
+    ],
+    palette: {
+      w: '#94a3b8',
+      W: '#ffffff',
+      c: '#0284c7',
+      C: '#38bdf8',
+      g: '#b45309',
+      G: '#fbbf24',
+    },
+  },
+
+  // Event Flash
+  'event-flash': {
+    rows: [
+      '......yyyy........',
+      '.....yYYlly.......',
+      '....yYYYy.........',
+      '...yYYYYYYYYy.....',
+      '......yYYYy.......',
+      '.....yYYy.........',
+      '....yyy...........',
+    ],
+    palette: {
+      y: '#d97706',
+      Y: '#fde047',
+      l: '#ffffff',
+    },
+  },
+
+  // ตราเผ่ามนุษย์
+  'race-human': {
+    rows: [
+      '....cccccccc......',
+      '..ccCCCCCCCCcc....',
+      '.cCCcWWWWWWcCCc...',
+      '.cCCcWWbbWWcCCc...',
+      '.cCCcWWbbWWcCCc...',
+      '..ccCWWWWWWCcc....',
+      '....ccCCCCcc......',
+      '......cccc........',
+    ],
+    palette: {
+      c: '#1d4ed8',
+      C: '#38bdf8',
+      W: '#e0f2fe',
+      b: '#1e3a8a',
+    },
+  },
+
+  // ตราอาชีพ 8 แฉก
+  'class-star': {
+    rows: [
+      '......gg..........',
+      '...g..GG..g.......',
+      '..gGggGGggGg......',
+      '...gGGllGGg.......',
+      '.ggggGllGgggg.....',
+      '...gGGGGGGg.......',
+      '..gGggGGggGg......',
+      '...g..GG..g.......',
+      '......gg..........',
+    ],
+    palette: {
+      g: '#b45309',
+      G: '#fbbf24',
+      l: '#fffbeb',
+    },
+  },
+
+  // NPC Overhead Tool Bubbles
+  'npc-anvil': {
+    rows: [
+      '.......ggggg......',
+      '......gGGGGGg.....',
+      '.......nGGGn......',
+      '......n...........',
+      '..ssssssssssssss..',
+      '.sSSSSSSSSSSSSSSs.',
+      '...ssssssssssss...',
+      '.....sSSSSSSs.....',
+    ],
+    palette: {
+      g: '#b45309',
+      G: '#fbbf24',
+      n: '#78350f',
+      s: '#475569',
+      S: '#cbd5e1',
+    },
+  },
+  'npc-chest': {
+    rows: [
+      '...nnnnnnnnnn.....',
+      '..nNNNNNNNNNNn....',
+      '.nNNgGGGGGGgNNn...',
+      '.nNNgGyyyyGgNNn...',
+      '.gggggggggggggg...',
+      '.nNNnGGGGGGnNNn...',
+      '.nNNnNNNNNNnNNn...',
+      '..dddddddddddd....',
+    ],
+    palette: {
+      n: '#78350f',
+      N: '#b45309',
+      d: '#451a03',
+      g: '#ca8a04',
+      G: '#fbbf24',
+      y: '#fef08a',
+    },
+  },
+  'npc-pouch': {
+    rows: [
+      '.....gggggg.......',
+      '......nNNn........',
+      '.....rrrrrr.......',
+      '....nNNNNNNn......',
+      '...nNNgGGgNNn.....',
+      '...nNNgYYgNNn.....',
+      '...nNNNNNNNNn.....',
+      '....dddddddd......',
+    ],
+    palette: {
+      g: '#ca8a04',
+      n: '#92400e',
+      N: '#d97706',
+      r: '#dc2626',
+      G: '#fbbf24',
+      Y: '#fef08a',
+      d: '#78350f',
+    },
+  },
+  'npc-job': {
+    rows: [
+      '..ll..........ll..',
+      '...lSl......lSl...',
+      '....lSgGGGGSl.....',
+      '.....gGGGGGGg.....',
+      '....gGlSlGlSlg....',
+      '...nn...gg...nn...',
+    ],
+    palette: {
+      l: '#f8fafc',
+      S: '#94a3b8',
+      g: '#b45309',
+      G: '#fbbf24',
+      n: '#78350f',
+    },
+  },
+  'npc-gacha': {
+    rows: [
+      '...yy......yy.....',
+      '..yYYy....yYYy....',
+      '.rrrrrrgggrrrrr...',
+      '.rRRRRgGGgRRRRr...',
+      '..rRRRgGGgRRRr....',
+      '..rrrrgggggrrr....',
+    ],
+    palette: {
+      y: '#ca8a04',
+      Y: '#fef08a',
+      r: '#b91c1c',
+      R: '#ef4444',
+      g: '#d97706',
+      G: '#fbbf24',
+    },
+  },
+  'npc-rebirth': {
+    rows: [
+      '.gg....ll....gg...',
+      'gGGg..cCCc..gGGg..',
+      '.gGGgcCllCcgGGg...',
+      '..gGGcCCCCcGGg....',
+      '...ggGGGGGGgg.....',
+    ],
+    palette: {
+      g: '#b45309',
+      G: '#fbbf24',
+      l: '#ffffff',
+      c: '#0284c7',
+      C: '#67e8f9',
+    },
+  },
 }
 
-function renderTemplatePng(tmpl: IconTemplate): string {
+function renderTemplateCanvas(tmpl: IconTemplate): HTMLCanvasElement {
   const rows = tmpl.rows
   const w = Math.max(...rows.map((r) => r.length))
   const h = rows.length
@@ -782,8 +1434,7 @@ function renderTemplatePng(tmpl: IconTemplate): string {
   const canvas = document.createElement('canvas')
   canvas.width = cw
   canvas.height = ch
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return ''
+  const ctx = canvas.getContext('2d')!
   ctx.imageSmoothingEnabled = false
 
   const filled: boolean[][] = Array.from({ length: ch }, () => Array<boolean>(cw).fill(false))
@@ -818,16 +1469,27 @@ function renderTemplatePng(tmpl: IconTemplate): string {
     }
   }
 
-  return canvas.toDataURL('image/png')
+  return canvas
+}
+
+export function getMenuIconCanvas(id: MenuIconId): HTMLCanvasElement | null {
+  if (typeof document === 'undefined') return null
+  const cached = iconCanvasCache.get(id)
+  if (cached) return cached
+  const tmpl = TEMPLATES[id]
+  if (!tmpl) return null
+  const canvas = renderTemplateCanvas(tmpl)
+  iconCanvasCache.set(id, canvas)
+  return canvas
 }
 
 export function getMenuIconUrl(id: MenuIconId): string {
   if (typeof document === 'undefined') return ''
   const cached = iconDataCache.get(id)
   if (cached) return cached
-  const tmpl = TEMPLATES[id]
-  if (!tmpl) return ''
-  const url = renderTemplatePng(tmpl)
+  const canvas = getMenuIconCanvas(id)
+  if (!canvas) return ''
+  const url = canvas.toDataURL('image/png')
   iconDataCache.set(id, url)
   return url
 }
