@@ -190,6 +190,7 @@ import {
   type EquipmentRarity,
   type ItemAffix,
 } from './mmo-systems'
+import { inferItemElement, type ItemElement } from './item-vfx'
 import type {
   AuditLogEntry,
   DiamondTxType,
@@ -487,6 +488,7 @@ export interface SaveData {
   mutedUntilMs?: number
   muteReason?: string
   claimedGiftDropIds?: string[]
+  lastDailyFreeChestAt?: number
 }
 
 const inFlightPremiumLocks = new Set<string>()
@@ -687,6 +689,9 @@ export interface GroundDrop {
   y: number
   ownerId: string
   expiresAt: number
+  rarity: EquipmentRarity
+  element?: ItemElement
+  plus?: number
 }
 
 export interface Effect {
@@ -754,6 +759,7 @@ export type PanelId =
   | 'talents'
   | 'wardrobe'
   | 'guide'
+  | 'treasure-chest'
 export type ChatType = 'system' | 'player' | 'gm' | 'loot' | 'error' | 'npc'
 export interface ChatMsg {
   id: number
@@ -804,6 +810,14 @@ export const game = {
   },
   partySupportCd: 0,
   keys: new Set<string>(),
+  virtualMove: { x: 0, y: 0 },
+  moveTarget: null as null | {
+    x: number
+    y: number
+    kind: 'walk' | 'npc' | 'drop' | 'monster'
+    npcId?: string
+    targetUid?: string
+  },
   attackHeld: false,
   facing: 'down' as Dir,
   moving: false,
@@ -2555,9 +2569,83 @@ function damageMonster(m: Monster, mult: number, skillId?: string) {
   if (m.hp <= 0) killMonster(m)
 }
 
-function dropItem(itemId: string, qty: number, x: number, y: number) {
+function dropItem(itemId: string, qty: number, x: number, y: number, forcedRarity?: EquipmentRarity) {
   const p = player()
-  game.groundDrops.push({ uid: uid(), itemId, qty, x: x + rand(-5, 5), y: y + rand(-3, 3), ownerId: String(p.uid ?? p.name), expiresAt: game.time + 60 })
+  const def = ITEMS[itemId]
+  const rarity: EquipmentRarity =
+    forcedRarity ??
+    (def && (def.kind === 'weapon' || def.kind === 'armor')
+      ? rollEquipmentRarity(def.tier ?? 1)
+      : resolveEffectiveRarity(undefined, def))
+  const element = inferItemElement(def)
+  game.groundDrops.push({
+    uid: uid(),
+    itemId,
+    qty,
+    x: x + rand(-16, 16),
+    y: y + rand(-10, 12),
+    ownerId: String(p.uid ?? p.name),
+    expiresAt: game.time + 60,
+    rarity,
+    element,
+    plus: 0,
+  })
+}
+
+function finalizeGroundDropPickup(dropIndex: number): boolean {
+  const drop = game.groundDrops[dropIndex]
+  if (!drop) return false
+  const def = ITEMS[drop.itemId]
+  const isEq = def && (def.kind === 'weapon' || def.kind === 'armor')
+  if (!addItem(drop.itemId, drop.qty, drop.plus ?? 0, undefined, undefined, isEq ? { rarity: drop.rarity } : undefined)) {
+    warn('กระเป๋าเต็ม! เก็บไอเทมไม่ได้')
+    return false
+  }
+  game.groundDrops.splice(dropIndex, 1)
+  game.lootToast = { itemId: drop.itemId, until: game.time + 3 }
+  pushKillToast({
+    kind: 'pickup',
+    monsterName: 'เก็บไอเทมสำเร็จ',
+    isBoss: false,
+    gold: 0,
+    exp: 0,
+    items: [{ itemId: drop.itemId, qty: drop.qty }],
+    duration: 2.8,
+  })
+  say('loot', `เก็บ ${def?.name ?? drop.itemId} x${drop.qty}`)
+  recordDailyMissionProgress({ itemsLooted: drop.qty })
+  return true
+}
+
+export function pickupGroundDrop(dropUid?: string): boolean {
+  const p = player()
+  const ownerId = String(p.uid ?? p.name)
+  if (dropUid) {
+    const idx = game.groundDrops.findIndex((d) => d.uid === dropUid && d.ownerId === ownerId)
+    if (idx >= 0 && Math.hypot(game.groundDrops[idx].x - p.x, game.groundDrops[idx].y - p.y) <= 44) {
+      const ok = finalizeGroundDropPickup(idx)
+      if (ok) notify()
+      return ok
+    }
+    return false
+  }
+  let bestIdx = -1
+  let bestDist = 44
+  for (let i = 0; i < game.groundDrops.length; i++) {
+    const d = game.groundDrops[i]
+    if (d.ownerId !== ownerId) continue
+    const dist = Math.hypot(d.x - p.x, d.y - p.y)
+    if (dist <= bestDist) {
+      bestDist = dist
+      bestIdx = i
+    }
+  }
+  if (bestIdx >= 0) {
+    const ok = finalizeGroundDropPickup(bestIdx)
+    if (ok) notify()
+    return ok
+  }
+  return false
 }
 
 function collectGroundDrops() {
@@ -2575,23 +2663,7 @@ function collectGroundDrops() {
     const petRange = Math.max(gemPetRange, evolvePetRange)
     const magnetRange = p.lootMagnetUntil > Date.now() ? 120 : 22
     if (drop.ownerId !== ownerId || Math.hypot(drop.x - p.x, drop.y - p.y) > Math.max(petRange, magnetRange)) continue
-    if (!addItem(drop.itemId, drop.qty)) {
-      warn('กระเป๋าเต็ม! เก็บไอเทมไม่ได้')
-      continue
-    }
-    game.groundDrops.splice(i, 1)
-    game.lootToast = { itemId: drop.itemId, until: game.time + 3 }
-    pushKillToast({
-      kind: 'pickup',
-      monsterName: 'เก็บไอเทมสำเร็จ',
-      isBoss: false,
-      gold: 0,
-      exp: 0,
-      items: [{ itemId: drop.itemId, qty: drop.qty }],
-      duration: 2.8,
-    })
-    say('loot', `เก็บ ${ITEMS[drop.itemId]?.name ?? drop.itemId} x${drop.qty}`)
-    recordDailyMissionProgress({ itemsLooted: drop.qty })
+    finalizeGroundDropPickup(i)
   }
 }
 
@@ -3211,8 +3283,9 @@ export function interact() {
 
 export function rebirth() {
   const p = player()
-  if (p.level < MAX_LEVEL) {
-    say('error', `ต้องมีเลเวล ${MAX_LEVEL} จึงจะจุติได้`)
+  const REBIRTH_REQ_LEVEL = 70
+  if (p.level < REBIRTH_REQ_LEVEL) {
+    say('error', `ต้องมีเลเวล ${REBIRTH_REQ_LEVEL} จึงจะจุติได้`)
     notify()
     return false
   }
@@ -3960,7 +4033,12 @@ export function equipGemShopItem(itemId: string) {
 export function sellPrice(it: InvItem) {
   const def = ITEMS[it.itemId]
   if (!def) return 0
-  return Math.floor(def.price * 0.4 * (1 + it.plus * 0.3))
+  if (typeof def.sellPrice === 'number') {
+    return def.sellPrice === 0 ? 0 : Math.floor(def.sellPrice * (1 + it.plus * 0.25))
+  }
+  const rarity = resolveEffectiveRarity(it, def)
+  const rarityMul = EQUIPMENT_RARITY_META[rarity]?.sellMultiplier ?? 1
+  return Math.max(1, Math.floor(def.price * 0.4 * (1 + it.plus * 0.3) * rarityMul))
 }
 
 export function sellItem(id: string, qty: number) {
@@ -3974,6 +4052,19 @@ export function sellItem(id: string, qty: number) {
   p.gold += total
   say('loot', `ขาย ${itemLabel(removed)} x${removed.qty} (+${total.toLocaleString()}G)`)
   notify()
+}
+
+export function discardItem(id: string, qty = 1): boolean {
+  const p = player()
+  const it = p.inventory.find((i) => i.uid === id)
+  if (!it) return false
+  const label = itemLabel(it)
+  const removed = removeUid(p.inventory, id, qty)
+  if (!removed) return false
+  say('system', `ทิ้งไอเทม ${label} x${removed.qty} แล้ว`)
+  saveGame()
+  notify()
+  return true
 }
 
 export function findEquipment(id: string): InvItem | null {
@@ -7839,6 +7930,8 @@ function resetRuntime() {
   game.activeDuelId = null
   game.duelTarget = null
   game.keys.clear()
+  game.virtualMove = { x: 0, y: 0 }
+  game.moveTarget = null
   game.attackHeld = false
   game.moveHoldT = 0
   game.mountTransition = 'none'
@@ -8147,7 +8240,7 @@ export function update(dt: number) {
   const inputBlocked = game.blockingUi || game.panel === 'trade'
   let mx = 0
   let my = 0
-  if (!inputBlocked)
+  if (!inputBlocked) {
     for (const k of game.keys) {
       const v = KEYMAP[k]
       if (v) {
@@ -8155,14 +8248,85 @@ export function update(dt: number) {
         my += v[1]
       }
     }
+    if (mx === 0 && my === 0 && (Math.abs(game.virtualMove.x) > 0.05 || Math.abs(game.virtualMove.y) > 0.05)) {
+      mx = game.virtualMove.x
+      my = game.virtualMove.y
+    }
+  }
+  if (mx !== 0 || my !== 0) {
+    game.moveTarget = null
+  }
   game.moving = mx !== 0 || my !== 0
   if (game.moving) {
     const len = Math.hypot(mx, my)
-    const sp = getStats().speed * dt
+    const mag = Math.min(1, len)
+    const sp = getStats().speed * mag * dt
     moveEntity(map, p, (mx / len) * sp, (my / len) * sp)
     game.walkT += dt
     game.moveHoldT += dt
     game.facing = Math.abs(mx) > Math.abs(my) ? (mx < 0 ? 'left' : 'right') : my < 0 ? 'up' : 'down'
+  } else if (!inputBlocked && game.moveTarget) {
+    const mt = game.moveTarget
+    if (mt.kind === 'monster' && mt.targetUid) {
+      const mon = game.monsters.find((m) => m.uid === mt.targetUid && !m.dead)
+      if (!mon) {
+        game.moveTarget = null
+      } else {
+        mt.x = mon.x
+        mt.y = mon.y
+      }
+    } else if (mt.kind === 'drop' && mt.targetUid) {
+      const drop = game.groundDrops.find((d) => d.uid === mt.targetUid)
+      if (!drop) {
+        game.moveTarget = null
+      } else {
+        mt.x = drop.x
+        mt.y = drop.y
+      }
+    }
+    if (game.moveTarget) {
+      const dx = game.moveTarget.x - p.x
+      const dy = game.moveTarget.y - p.y
+      const dist = Math.hypot(dx, dy)
+      const job = currentJob()
+      const arriveDist =
+        game.moveTarget.kind === 'npc'
+          ? 30
+          : game.moveTarget.kind === 'drop'
+            ? 20
+            : game.moveTarget.kind === 'monster'
+              ? Math.max(18, job.range * 0.85)
+              : 6
+      if (dist <= arriveDist) {
+        const arrived = game.moveTarget
+        game.moveTarget = null
+        game.moveHoldT = 0
+        if (arrived.kind === 'npc' && arrived.npcId) {
+          const npc = map.npcs.find((n) => n.id === arrived.npcId)
+          if (npc) interactWithNpc(npc, 64)
+        } else if (arrived.kind === 'drop' && arrived.targetUid) {
+          pickupGroundDrop(arrived.targetUid)
+        } else if (arrived.kind === 'monster' && arrived.targetUid) {
+          game.targetMonsterUid = arrived.targetUid
+          game.targetMonsterExpiresAt = game.time + 12
+          basicAttack()
+        }
+      } else {
+        const sp = Math.min(dist, getStats().speed * dt)
+        const prevX = p.x
+        const prevY = p.y
+        moveEntity(map, p, (dx / dist) * sp, (dy / dist) * sp)
+        if (Math.hypot(p.x - prevX, p.y - prevY) < 0.08 && dt > 0) {
+          game.moveTarget = null
+          game.moveHoldT = 0
+        } else {
+          game.moving = true
+          game.walkT += dt
+          game.moveHoldT += dt
+          game.facing = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 'left' : 'right') : dy < 0 ? 'up' : 'down'
+        }
+      }
+    }
   } else {
     game.moveHoldT = 0
   }

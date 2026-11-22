@@ -5,6 +5,7 @@ import {
   ArrowLeftRight,
   Backpack,
   Check,
+  Coins,
   Crown,
   Feather,
   GripHorizontal,
@@ -41,6 +42,7 @@ import {
   consumeItemWithFeedback,
   countItem,
   currentJob,
+  discardItem,
   ensurePremiumState,
   equip,
   equipCombatPet,
@@ -63,6 +65,7 @@ import {
   resolvePlayerFashionLoadout,
   saveLoadoutAction,
   sellItem,
+  sellPrice,
   setQuickSlot,
   socketRuneAction,
   toggleMountRiding,
@@ -101,12 +104,19 @@ import { RUNE_DEFS, computeCombatPower, computeEquipmentSetBonuses, sanitizeRpgE
 import { isSfxMuted, playEnhanceSfx, playQuestClaimSfx } from '@/lib/game/sfx'
 import type { Dir } from '@/lib/game/sprites'
 import { getCombatPetDef, sanitizePetState } from '@/lib/game/systems'
+import {
+  ITEM_CATEGORY_THAI_LABEL,
+  ITEM_ELEMENT_THAI_LABEL,
+  inferItemCategory,
+  inferItemElement,
+} from '@/lib/game/item-vfx'
 import { useGame } from '@/lib/game/use-game'
 import { getSkillIconPath, getSkillVfxSpec, resolveRebirthAuraSpec } from '@/lib/game/vfx-specs'
 import { cn } from '@/lib/utils'
 import { formatNum, formatPlayTime } from '../format'
 import { GameArtIcon } from '../game-badge-icon'
 import { ItemIcon, ItemSlot } from '../item-icon'
+import { ItemVfxBox } from '../item-vfx'
 import { SkillVfxPreview } from '../skill-vfx-preview'
 import { SpriteModelCanvas } from '../sprite-model-canvas'
 import { useWindowContext } from '../window-context'
@@ -795,19 +805,43 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                     <>
                       <div className="space-y-1">
                         <div className="flex items-start gap-2">
-                          <div className="grid size-10 shrink-0 place-items-center rounded border border-[#2d4e80] bg-[#172336]">
-                            <ItemIcon itemId={inspectedItem.itemId} size={28} />
-                          </div>
+                          <ItemVfxBox
+                            itemId={inspectedItem.itemId}
+                            rarity={inspectedRarity}
+                            element={inspectedDef.element}
+                            size="md"
+                            className="size-11 shrink-0 p-1"
+                          >
+                            <ItemIcon itemId={inspectedItem.itemId} size={32} />
+                          </ItemVfxBox>
                           <div className="min-w-0 flex-1">
                             <p className={cn('truncate font-bold', inspectedRarityMeta.textColorClass)}>
                               {itemLabel(inspectedItem)}
                             </p>
                             <p className="text-[10px] text-slate-400">
-                              Lv.{inspectedDef.reqLevel ?? 1} · {inspectedRarityMeta.thaiLabel}
+                              Lv.{inspectedDef.reqLevel ?? 1} · {ITEM_CATEGORY_THAI_LABEL[inferItemCategory(inspectedDef)]} · {inspectedRarityMeta.thaiLabel}
                               {inspectedDef.kind === 'weapon' || inspectedDef.kind === 'armor'
                                 ? ` · พลัง ${itemPower(inspectedItem)}`
                                 : ''}
                             </p>
+                            <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[9.5px]">
+                              {(() => {
+                                const el = inferItemElement(inspectedDef)
+                                if (el === 'physical') return null
+                                const elMeta = ITEM_ELEMENT_THAI_LABEL[el]
+                                return (
+                                  <span
+                                    className="rounded border border-white/15 bg-black/40 px-1 py-0.5 font-semibold"
+                                    style={{ color: elMeta.color }}
+                                  >
+                                    {elMeta.label}
+                                  </span>
+                                )
+                              })()}
+                              <span className="font-mono font-semibold text-amber-300 tabular-nums">
+                                ราคาขาย {formatNum(sellPrice(inspectedItem))} G
+                              </span>
+                            </div>
                           </div>
                         </div>
                         <p className="line-clamp-2 text-[11px] leading-snug text-slate-300">
@@ -873,17 +907,36 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                             </button>
                           </>
                         )}
-                        {selectedBagItem && quickSellMode && (
+                        {selectedBagItem && sellPrice(selectedBagItem) > 0 && (
                           <button
                             type="button"
                             onClick={() => {
-                              sellItem(selectedBagItem.uid, 1)
-                              setSelectedBagUid(null)
-                              setNotice({ ok: true, text: `ขาย ${inspectedDef.name} x1 แล้ว` })
+                              const uid = selectedBagItem.uid
+                              const earned = sellPrice(selectedBagItem)
+                              sellItem(uid, 1)
+                              if (!p.inventory.some((i) => i.uid === uid)) setSelectedBagUid(null)
+                              setNotice({ ok: true, text: `ขาย ${inspectedDef.name} x1 (+${formatNum(earned)} G) แล้ว` })
                             }}
-                            className="rounded border border-rose-400/50 bg-rose-700/80 px-2.5 py-1 text-[11px] font-bold text-white"
+                            className="inline-flex items-center gap-1 rounded border border-amber-400/45 bg-[#1b283c] px-2.5 py-1 text-[11px] font-bold text-amber-200 hover:brightness-110"
                           >
-                            ขาย 1 ชิ้น
+                            <Coins className="size-3" aria-hidden />
+                            ขาย ({formatNum(sellPrice(selectedBagItem))} G)
+                          </button>
+                        )}
+                        {selectedBagItem && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const uid = selectedBagItem.uid
+                              if (discardItem(uid, 1)) {
+                                if (!p.inventory.some((i) => i.uid === uid)) setSelectedBagUid(null)
+                                setNotice({ ok: true, text: `ทิ้ง ${inspectedDef.name} x1 แล้ว` })
+                              }
+                            }}
+                            className="inline-flex items-center gap-1 rounded border border-rose-400/45 bg-rose-900/70 px-2 py-1 text-[11px] font-bold text-rose-100 hover:bg-rose-800/80"
+                          >
+                            <Trash2 className="size-3" aria-hidden />
+                            ทิ้ง
                           </button>
                         )}
                         {selectedEqSlot && selectedEqItem && !selectedBagItem && (
@@ -949,7 +1002,6 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                         const def = ITEMS[it.itemId]
                         const selected = selectedBagUid === it.uid
                         const rarity = def ? resolveEffectiveRarity(it, def) : 'common'
-                        const rMeta = EQUIPMENT_RARITY_META[rarity]
                         return (
                           <button
                             key={it.uid}
@@ -959,26 +1011,28 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                               setSelectedBagUid(it.uid)
                             }}
                             title={itemLabel(it)}
-                            className={cn(
-                              'relative flex aspect-square items-center justify-center rounded border bg-[#142033] p-1 transition-all hover:brightness-110',
-                              selected
-                                ? 'border-amber-400 ring-1 ring-amber-400/70'
-                                : rarity !== 'common'
-                                  ? rMeta.borderColorClass
-                                  : 'border-[#27436b]',
-                            )}
+                            className="relative flex aspect-square items-center justify-center rounded transition-transform hover:brightness-110 active:scale-95"
                           >
-                            <ItemIcon itemId={it.itemId} size={30} />
-                            {it.qty > 1 && (
-                              <span className="absolute bottom-0.5 right-1 rounded bg-black/70 px-1 text-[9.5px] font-bold text-white tabular-nums">
-                                {it.qty}
-                              </span>
-                            )}
-                            {it.plus > 0 && (
-                              <span className="absolute left-0.5 top-0.5 rounded bg-amber-500 px-1 text-[8.5px] font-bold text-slate-950 tabular-nums">
-                                +{it.plus}
-                              </span>
-                            )}
+                            <ItemVfxBox
+                              itemId={it.itemId}
+                              rarity={rarity}
+                              element={def?.element}
+                              size="sm"
+                              selected={selected}
+                              className="size-full p-1"
+                            >
+                              <ItemIcon itemId={it.itemId} size={30} />
+                              {it.qty > 1 && (
+                                <span className="absolute bottom-0.5 right-1 z-30 rounded bg-black/75 px-1 text-[9.5px] font-bold text-white tabular-nums">
+                                  {it.qty}
+                                </span>
+                              )}
+                              {it.plus > 0 && (
+                                <span className="absolute left-0.5 top-0.5 z-30 rounded bg-amber-500 px-1 text-[8.5px] font-bold text-slate-950 tabular-nums">
+                                  +{it.plus}
+                                </span>
+                              )}
+                            </ItemVfxBox>
                           </button>
                         )
                       })}

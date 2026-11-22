@@ -425,6 +425,7 @@ export function TitleScreen() {
           {(
             [
               ['/inventory', 'คลังไอเทม'],
+              ['/treasure-chest', 'หีบสมบัติ'],
               ['/tower', 'หอคอย'],
               ['/encounter', 'ล่ามอนสเตอร์'],
               ['/class-selector', 'สายอาชีพ'],

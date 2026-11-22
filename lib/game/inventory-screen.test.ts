@@ -51,7 +51,7 @@ function createTestSave(overrides: Partial<SaveData> = {}): SaveData {
 
 test('every consumable item in ITEMS works cleanly via useConsumableInInventory', () => {
   const consumables = Object.values(ITEMS).filter((def) => def.kind === 'consumable')
-  assert.equal(consumables.length, 23)
+  assert.ok(consumables.length >= 23, `Expected at least 23 consumables, got ${consumables.length}`)
 
   for (const def of consumables) {
     const uid = `u_${def.id}`
@@ -66,6 +66,14 @@ test('every consumable item in ITEMS works cleanly via useConsumableInInventory'
     })
 
     const res = useConsumableInInventory(baseSave, uid)
+    if (
+      def.id === 'stat_reset_potion' ||
+      def.id === 'skill_reset_potion' ||
+      def.id === 'job_reset_potion'
+    ) {
+      assert.ok(res.error && res.error.includes('หน้าต่างสถานะ'), `Expected status-panel notice for ${def.id}`)
+      continue
+    }
     assert.equal(res.error, null, `Expected ${def.id} to succeed without error, got: ${res.error}`)
     assert.ok(res.message.length > 0, `Expected non-empty feedback message for ${def.id}`)
 

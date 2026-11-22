@@ -3,14 +3,17 @@
 import { useEffect, useRef } from 'react'
 import {
   action,
+  basicAttack,
   castSkill,
   closePanel,
+  currentJob,
   currentMap,
   drinkPotion,
   game,
   interactWithNpc,
   notify,
   openPanel,
+  pickupGroundDrop,
   saveGame,
   toggleMountRiding,
   toggleZenHud,
@@ -22,14 +25,16 @@ import {
 } from '@/lib/game/engine'
 import { TILE } from '@/lib/game/maps'
 import { render, screenToWorld } from '@/lib/game/renderer'
+import { resolveCanvasTapAction } from '@/lib/game/touch-movement'
 import { getUiPreferences, subscribeUiLayout } from '@/lib/game/ui-layout'
 
 const MOVE_KEYS = new Set(['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd'])
 
 export function GameCanvas() {
   const ref = useRef<HTMLCanvasElement>(null)
+  const pointerDownPosRef = useRef<{ x: number; y: number } | null>(null)
 
-  const hitTestWorldTargets = (clientX: number, clientY: number) => {
+  const resolveCanvasHit = (clientX: number, clientY: number) => {
     const canvas = ref.current
     const p = game.p
     if (!canvas || !p) return null
@@ -37,42 +42,15 @@ export function GameCanvas() {
     if (rect.width <= 0 || rect.height <= 0) return null
     const world = screenToWorld(clientX - rect.left, clientY - rect.top, rect.width, rect.height)
     const map = currentMap()
-
-    let bestNpc: (typeof map.npcs)[number] | null = null
-    let bestNpcScore = Number.POSITIVE_INFINITY
-    for (const n of map.npcs) {
-      const fx = n.x * TILE
-      const fy = n.y * TILE + 8
-      const withinBodyOrLabel =
-        world.x >= fx - 20 &&
-        world.x <= fx + 20 &&
-        world.y >= fy - 56 &&
-        world.y <= fy + 12
-      if (!withinBodyOrLabel) continue
-      const score = Math.hypot(world.x - fx, world.y - (fy - 16))
-      if (score < bestNpcScore) {
-        bestNpcScore = score
-        bestNpc = n
-      }
-    }
-    if (bestNpc) {
-      return { kind: 'npc' as const, npc: bestNpc }
-    }
-
-    const clickedRemote = game.remotePlayers
-      .filter((other) => !other.invisible && other.mapId === p.mapId)
-      .filter((other) => {
-        const rx = other.x
-        const ry = other.y
-        return world.x >= rx - 20 && world.x <= rx + 20 && world.y >= ry - 52 && world.y <= ry + 12
-      })
-      .sort((a, b) => Math.hypot(a.x - world.x, a.y - world.y) - Math.hypot(b.x - world.x, b.y - world.y))[0]
-
-    if (clickedRemote && Math.hypot(clickedRemote.x - p.x, clickedRemote.y - p.y) < 110) {
-      return { kind: 'remote' as const, remote: clickedRemote }
-    }
-
-    return null
+    return resolveCanvasTapAction(world.x, world.y, {
+      tileSize: TILE,
+      playerMapId: p.mapId,
+      playerOwnerId: String(p.uid ?? p.name),
+      npcs: map.npcs,
+      groundDrops: game.groundDrops,
+      monsters: game.monsters,
+      remotePlayers: game.remotePlayers,
+    })
   }
 
   useEffect(() => {
@@ -281,36 +259,83 @@ export function GameCanvas() {
     <canvas
       ref={ref}
       data-testid="game-canvas"
+      onPointerDown={(e) => {
+        pointerDownPosRef.current = { x: e.clientX, y: e.clientY }
+      }}
       onPointerMove={(e) => {
         const canvas = ref.current
         if (!canvas) return
-        const hit = hitTestWorldTargets(e.clientX, e.clientY)
-        canvas.style.cursor = hit ? 'pointer' : 'default'
+        const hit = resolveCanvasHit(e.clientX, e.clientY)
+        canvas.style.cursor = hit && hit.kind !== 'walk' ? 'pointer' : 'default'
       }}
       onPointerLeave={() => {
         if (ref.current) ref.current.style.cursor = 'default'
       }}
       onClick={(e) => {
-        const hit = hitTestWorldTargets(e.clientX, e.clientY)
-        if (hit?.kind === 'npc') {
-          interactWithNpc(hit.npc, 120)
+        const down = pointerDownPosRef.current
+        pointerDownPosRef.current = null
+        if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) >= 10) {
           return
         }
-        if (hit?.kind === 'remote') {
-          game.socialTargetId = hit.remote.userId
+        const p = game.p
+        if (!p || game.panel) return
+        const hit = resolveCanvasHit(e.clientX, e.clientY)
+        if (!hit) return
+
+        if (hit.kind === 'npc') {
+          const dist = Math.hypot(hit.worldX - p.x, hit.worldY - p.y)
+          if (dist <= 72) {
+            interactWithNpc(hit.npc, 72)
+          } else {
+            game.moveTarget = { kind: 'npc', x: hit.worldX, y: hit.worldY, npcId: hit.npc.id }
+          }
+          return
+        }
+
+        if (hit.kind === 'drop') {
+          const dist = Math.hypot(hit.worldX - p.x, hit.worldY - p.y)
+          if (dist <= 36) {
+            pickupGroundDrop(hit.drop.uid)
+          } else {
+            game.moveTarget = { kind: 'drop', x: hit.worldX, y: hit.worldY, targetUid: hit.drop.uid }
+          }
+          return
+        }
+
+        if (hit.kind === 'monster') {
+          game.targetMonsterUid = hit.monster.uid
+          game.targetMonsterExpiresAt = game.time + 12
+          const dist = Math.hypot(hit.worldX - p.x, hit.worldY - p.y)
+          const attackReach = Math.max(24, currentJob().range * 0.9)
+          if (dist <= attackReach) {
+            basicAttack()
+          } else {
+            game.moveTarget = {
+              kind: 'monster',
+              x: hit.worldX,
+              y: hit.worldY,
+              targetUid: hit.monster.uid,
+            }
+          }
           notify()
           return
         }
-        const target = game.remotePlayers
-          .filter((other) => !other.invisible && other.mapId === game.p?.mapId)
-          .sort((a, b) => Math.hypot(a.x - (game.p?.x ?? 0), a.y - (game.p?.y ?? 0)) - Math.hypot(b.x - (game.p?.x ?? 0), b.y - (game.p?.y ?? 0)))[0]
-        if (target && game.p && Math.hypot(target.x - game.p.x, target.y - game.p.y) < 64) {
-          game.socialTargetId = target.userId
-          notify()
+
+        if (hit.kind === 'remote') {
+          const dist = Math.hypot(hit.worldX - p.x, hit.worldY - p.y)
+          if (dist < 110) {
+            game.socialTargetId = hit.remote.userId
+            notify()
+          } else {
+            game.moveTarget = { kind: 'walk', x: hit.worldX, y: hit.worldY }
+          }
+          return
         }
+
+        game.moveTarget = { kind: 'walk', x: hit.worldX, y: hit.worldY }
       }}
       className="absolute inset-0 h-full w-full touch-none"
-      aria-label="หน้าจอเกม ใช้ WASD หรือปุ่มลูกศรเพื่อเดิน คลิก NPC หรือตัวละครใกล้เคียงเพื่อใช้งาน"
+      aria-label="หน้าจอเกม แตะหรือคลิกเพื่อเดิน เก็บไอเทม โจมตี หรือคุยกับ NPC"
     />
   )
 }

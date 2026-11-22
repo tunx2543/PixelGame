@@ -17,6 +17,7 @@ import type { MenuIconId } from '@/lib/game/menu-icons'
 import { TOPUP_MILESTONES } from '@/lib/game/premium/topup'
 import { todayIsoDate } from '@/lib/game/rpg-systems'
 import { countClaimableQuests } from '@/lib/game/systems'
+import { canClaimDailyFreeChest } from '@/lib/game/treasure-chest'
 import { useGame } from '@/lib/game/use-game'
 import { cn } from '@/lib/utils'
 import { GameArtIcon, GameBadgeMedallion } from './game-badge-icon'
@@ -438,6 +439,14 @@ export function AsuraMenuModal({
       iconId: 'bp-wings',
       tone: 'border-amber-300/80 bg-[radial-gradient(circle_at_35%_28%,#874539_0%,#47221c_65%,#24100d_100%)]',
       onClick: () => openAndClose('pass'),
+    },
+    {
+      id: 'treasure-chest',
+      label: 'หีบสมบัติ',
+      iconId: 'npc-chest',
+      badgeCount: canClaimDailyFreeChest(p.lastDailyFreeChestAt) ? 1 : 0,
+      tone: 'border-yellow-300/85 bg-[radial-gradient(circle_at_35%_28%,#8f5b14_0%,#4a2e08_65%,#241604_100%)]',
+      onClick: () => openAndClose('treasure-chest'),
     },
   ]
 

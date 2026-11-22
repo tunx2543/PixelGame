@@ -8,6 +8,7 @@ import {
   ArrowUpRight,
   Backpack,
   Check,
+  Coins,
   Eye,
   Lock,
   RotateCcw,
@@ -17,6 +18,7 @@ import {
   Skull,
   Sparkles,
   Swords,
+  Trash2,
   X,
 } from 'lucide-react'
 import { auth } from '@/lib/firebase/client'
@@ -24,6 +26,7 @@ import { listUserCharacters } from '@/lib/firebase/characters'
 import { AccountPanel } from './account-panel'
 import { formatNum } from './format'
 import { ItemIcon } from './item-icon'
+import { ItemVfxBox } from './item-vfx'
 import { SpriteModelCanvas } from './sprite-model-canvas'
 import { ITEMS, JOBS, normalizeJobId, type EquipmentSlot } from '@/lib/game/data'
 import {
@@ -45,9 +48,11 @@ import {
   summarizeEquipmentBonuses,
 } from '@/lib/game/equipment-ui'
 import {
+  discardInventoryItem,
   equipInventoryItem,
   filterAndSortInventory,
   formatAllowedJobsLabel,
+  getInventoryItemSellPrice,
   getInventorySummary,
   getItemKindThaiLabel,
   getItemRarityMeta,
@@ -56,6 +61,7 @@ import {
   previewUnequipStatDelta,
   renameWithTicketInSave,
   resolveItemRarity,
+  sellInventoryItem,
   unequipInventorySlot,
   useConsumableInInventory,
   type InventoryFilterTab,
@@ -63,6 +69,7 @@ import {
   type InventorySortMode,
   type ItemRarity,
 } from '@/lib/game/inventory-screen'
+import { ITEM_ELEMENT_THAI_LABEL, inferItemElement } from '@/lib/game/item-vfx'
 import {
   EQUIPMENT_RARITY_META,
   formatAffixLabel,
@@ -113,6 +120,13 @@ const RARITY_STYLES: Record<
     text: 'text-slate-300',
     inspectorBox: 'border-slate-500/55 bg-slate-900/45',
   },
+  uncommon: {
+    card: 'border-emerald-400/55 bg-emerald-950/30 hover:border-emerald-300 hover:bg-emerald-950/45',
+    slot: 'border-emerald-400/55 bg-emerald-950/30',
+    iconBox: 'border-emerald-400/65 bg-emerald-950/75',
+    text: 'text-emerald-300',
+    inspectorBox: 'border-emerald-400/55 bg-emerald-950/25',
+  },
   rare: {
     card: 'border-sky-400/65 bg-sky-950/35 hover:border-sky-300 hover:bg-sky-950/50',
     slot: 'border-sky-400/60 bg-sky-950/35',
@@ -133,6 +147,13 @@ const RARITY_STYLES: Record<
     iconBox: 'border-amber-400/90 bg-amber-950/75',
     text: 'text-amber-300',
     inspectorBox: 'border-amber-400/75 bg-amber-950/30',
+  },
+  mythic: {
+    card: 'border-rose-400/90 bg-rose-950/35 shadow-[inset_0_0_22px_rgba(251,113,133,0.18)] hover:border-rose-300 hover:bg-rose-950/50',
+    slot: 'border-rose-400/85 bg-rose-950/35 shadow-[inset_0_0_18px_rgba(251,113,133,0.15)]',
+    iconBox: 'border-rose-400/90 bg-rose-950/75',
+    text: 'text-rose-300',
+    inspectorBox: 'border-rose-400/85 bg-rose-950/35',
   },
 }
 
@@ -352,6 +373,46 @@ export function InventoryScreen() {
         setPendingRenameUid(itemUid)
         setRenameDraft('')
         setRenameErr(null)
+        return
+      }
+      saveRef.current = res.nextSave
+      setSave(res.nextSave)
+      if (!res.nextSave.inventory.some((i) => i.uid === itemUid)) {
+        setSelectedUid((prev) => (prev === itemUid ? null : prev))
+      }
+      setActionFeedback({ tone: 'ok', text: res.message })
+      void syncSave(res.nextSave, user, slotId)
+    },
+    [slotId, syncSave, user],
+  )
+
+  const handleSellEntry = useCallback(
+    (itemUid: string, qty = 1) => {
+      const currentSave = saveRef.current
+      if (!currentSave) return
+      const res = sellInventoryItem(currentSave, itemUid, qty)
+      if (res.error) {
+        setActionFeedback({ tone: 'err', text: res.error })
+        return
+      }
+      saveRef.current = res.nextSave
+      setSave(res.nextSave)
+      if (!res.nextSave.inventory.some((i) => i.uid === itemUid)) {
+        setSelectedUid((prev) => (prev === itemUid ? null : prev))
+      }
+      setActionFeedback({ tone: 'ok', text: res.message })
+      void syncSave(res.nextSave, user, slotId)
+    },
+    [slotId, syncSave, user],
+  )
+
+  const handleDiscardEntry = useCallback(
+    (itemUid: string, qty = 1) => {
+      const currentSave = saveRef.current
+      if (!currentSave) return
+      const res = discardInventoryItem(currentSave, itemUid, qty)
+      if (res.error) {
+        setActionFeedback({ tone: 'err', text: res.error })
         return
       }
       saveRef.current = res.nextSave
@@ -788,18 +849,21 @@ export function InventoryScreen() {
                       }}
                       className="flex min-w-0 flex-1 items-center gap-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                      <div
-                        className={cn(
-                          'grid size-10 shrink-0 place-items-center border',
-                          rarityStyle ? rarityStyle.iconBox : 'border-border bg-muted/80',
-                        )}
-                      >
-                        {card.equipped ? (
+                      {card.equipped ? (
+                        <ItemVfxBox
+                          itemId={card.equipped.itemId}
+                          rarity={equippedRarity ?? 'common'}
+                          element={equippedDef?.element}
+                          size="sm"
+                          className="size-10 shrink-0 p-1"
+                        >
                           <ItemIcon itemId={card.equipped.itemId} size={32} />
-                        ) : (
+                        </ItemVfxBox>
+                      ) : (
+                        <div className="grid size-10 shrink-0 place-items-center border border-border bg-muted/80">
                           <span className="text-[10px] text-muted-foreground">ว่าง</span>
-                        )}
-                      </div>
+                        </div>
+                      )}
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-[11px] text-muted-foreground">
                           {card.meta.thaiLabel} · {card.meta.statTag}
@@ -867,18 +931,25 @@ export function InventoryScreen() {
           <div className="pixel-panel p-4" aria-label="รายละเอียดไอเทมที่เลือก">
             {selectedBagEntry ? (
               (() => {
+                const inspectorEffectiveRarity = resolveEffectiveRarity(selectedBagEntry.item, selectedBagEntry.def)
                 const inspectorRarity = RARITY_STYLES[selectedBagEntry.rarity]
                 const inspectorRarityMeta = getItemRarityMeta(selectedBagEntry.rarity)
+                const unitSell = getInventoryItemSellPrice(selectedBagEntry.item, selectedBagEntry.def)
+                const el = inferItemElement(selectedBagEntry.def)
+                const elMeta = el !== 'physical' ? ITEM_ELEMENT_THAI_LABEL[el] : null
                 return (
               <div className="flex flex-col gap-3">
                 <div className={cn('flex flex-wrap items-start justify-between gap-3 border p-3', inspectorRarity.inspectorBox)}>
                   <div className="flex items-start gap-3">
-                    <div
-                      className={cn('grid size-14 shrink-0 place-items-center border-2', inspectorRarity.iconBox)}
-                      style={{ backgroundColor: `${selectedBagEntry.def.color}22` }}
+                    <ItemVfxBox
+                      itemId={selectedBagEntry.item.itemId}
+                      rarity={inspectorEffectiveRarity}
+                      element={selectedBagEntry.def.element}
+                      size="lg"
+                      className="size-14 shrink-0 p-1.5"
                     >
                       <ItemIcon itemId={selectedBagEntry.item.itemId} size={42} />
-                    </div>
+                    </ItemVfxBox>
                     <div>
                       <h2 className="flex flex-wrap items-center gap-1.5 text-base font-bold text-foreground">
                         <span>
@@ -886,14 +957,21 @@ export function InventoryScreen() {
                           {selectedBagEntry.item.plus > 0 ? ` +${selectedBagEntry.item.plus}` : ''}
                         </span>
                         {(() => {
-                          const eff = resolveEffectiveRarity(selectedBagEntry.item, selectedBagEntry.def)
-                          const mmoMeta = EQUIPMENT_RARITY_META[eff]
-                          return (selectedBagEntry.def.kind === 'weapon' || selectedBagEntry.def.kind === 'armor') ? (
+                          const mmoMeta = EQUIPMENT_RARITY_META[inspectorEffectiveRarity]
+                          return (
                             <span className={cn('px-1.5 py-0.5 text-[10px] font-bold', mmoMeta.badgeBgClass, mmoMeta.textColorClass)}>
                               {mmoMeta.thaiLabel}
                             </span>
-                          ) : null
+                          )
                         })()}
+                        {elMeta && (
+                          <span
+                            className="border border-white/15 bg-black/40 px-1.5 py-0.5 text-[10px] font-semibold"
+                            style={{ color: elMeta.color }}
+                          >
+                            {elMeta.label}
+                          </span>
+                        )}
                         {selectedBagEntry.item.bound && (
                           <span className="inline-flex items-center gap-0.5 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
                             <Lock className="size-2.5" aria-hidden /> ผูกมัด
@@ -905,7 +983,9 @@ export function InventoryScreen() {
                           {inspectorRarityMeta.label} ({inspectorRarityMeta.thaiLabel})
                         </span>
                         {' · '}
-                        {getItemKindThaiLabel(selectedBagEntry.def.kind, selectedBagEntry.targetSlot)} · ต้องการ Lv.{selectedBagEntry.def.reqLevel ?? 1} · อาชีพ: {formatAllowedJobsLabel(selectedBagEntry.def)}
+                        {getItemKindThaiLabel(selectedBagEntry.def.kind, selectedBagEntry.targetSlot, selectedBagEntry.def)} · ต้องการ Lv.{selectedBagEntry.def.reqLevel ?? 1} · อาชีพ: {formatAllowedJobsLabel(selectedBagEntry.def)}
+                        {' · '}
+                        <span className="font-semibold text-amber-300">ราคาขาย {formatNum(unitSell)} G</span>
                       </p>
                       <p className="mt-1 text-xs text-foreground/90">{selectedBagEntry.def.description}</p>
                       {selectedBagEntry.item.affixes && selectedBagEntry.item.affixes.length > 0 && (
@@ -923,24 +1003,44 @@ export function InventoryScreen() {
                     </div>
                   </div>
 
-                  {selectedBagEntry.targetSlot ? (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {selectedBagEntry.targetSlot ? (
+                      <button
+                        type="button"
+                        onClick={() => handleEquipEntry(selectedBagEntry.item.uid)}
+                        disabled={!selectedBagEntry.canEquip}
+                        className="pixel-btn min-h-10 shrink-0 bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45"
+                      >
+                        {selectedBagEntry.canEquip ? 'สวมใส่ไอเทมนี้' : (selectedBagEntry.equipError ?? 'ใส่ไม่ได้')}
+                      </button>
+                    ) : selectedBagEntry.def.kind === 'consumable' ? (
+                      <button
+                        type="button"
+                        onClick={() => handleUseConsumable(selectedBagEntry.item.uid)}
+                        className="pixel-btn min-h-10 shrink-0 bg-accent px-4 py-2 text-xs font-bold text-accent-foreground hover:brightness-110"
+                      >
+                        ใช้ 1 ชิ้น
+                      </button>
+                    ) : null}
+                    {unitSell > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => handleSellEntry(selectedBagEntry.item.uid, 1)}
+                        className="pixel-btn inline-flex min-h-10 shrink-0 items-center gap-1 bg-secondary px-3 py-2 text-xs font-semibold text-amber-200 hover:brightness-110"
+                      >
+                        <Coins className="size-3.5" aria-hidden />
+                        ขาย 1 ({formatNum(unitSell)} G)
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={() => handleEquipEntry(selectedBagEntry.item.uid)}
-                      disabled={!selectedBagEntry.canEquip}
-                      className="pixel-btn min-h-10 shrink-0 bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45"
+                      onClick={() => handleDiscardEntry(selectedBagEntry.item.uid, 1)}
+                      className="pixel-btn inline-flex min-h-10 shrink-0 items-center gap-1 border-rose-500/40 bg-rose-950/70 px-3 py-2 text-xs font-semibold text-rose-200 hover:bg-rose-900/70"
                     >
-                      {selectedBagEntry.canEquip ? 'สวมใส่ไอเทมนี้' : (selectedBagEntry.equipError ?? 'ใส่ไม่ได้')}
+                      <Trash2 className="size-3.5" aria-hidden />
+                      ทิ้ง
                     </button>
-                  ) : selectedBagEntry.def.kind === 'consumable' ? (
-                    <button
-                      type="button"
-                      onClick={() => handleUseConsumable(selectedBagEntry.item.uid)}
-                      className="pixel-btn min-h-10 shrink-0 bg-accent px-4 py-2 text-xs font-bold text-accent-foreground hover:brightness-110"
-                    >
-                      ใช้ 1 ชิ้น
-                    </button>
-                  ) : null}
+                  </div>
                 </div>
 
                 <div className={cn('grid gap-3', statDeltaPreview && selectedBagEntry.targetSlot ? 'md:grid-cols-2' : 'grid-cols-1')}>
@@ -1022,12 +1122,15 @@ export function InventoryScreen() {
               <div className="flex flex-col gap-3">
                 <div className={cn('flex flex-wrap items-start justify-between gap-3 border p-3', eqRarityStyle.inspectorBox)}>
                   <div className="flex items-start gap-3">
-                    <div
-                      className={cn('grid size-14 shrink-0 place-items-center border-2', eqRarityStyle.iconBox)}
-                      style={{ backgroundColor: `${inspectedEquippedDef.color}22` }}
+                    <ItemVfxBox
+                      itemId={inspectedEquippedItem.itemId}
+                      rarity={resolveEffectiveRarity(inspectedEquippedItem, inspectedEquippedDef)}
+                      element={inspectedEquippedDef.element}
+                      size="lg"
+                      className="size-14 shrink-0 p-1.5"
                     >
                       <ItemIcon itemId={inspectedEquippedItem.itemId} size={42} />
-                    </div>
+                    </ItemVfxBox>
                     <div>
                       <h2 className="flex flex-wrap items-center gap-1.5 text-base font-bold text-foreground">
                         <span>{formatEquippedItemName(inspectedEquippedItem)}</span>
@@ -1107,13 +1210,22 @@ export function InventoryScreen() {
                   ความจุ {formatNum(summary.usedSlots)}/{formatNum(summary.maxSlots)} ช่อง · อุปกรณ์ {formatNum(summary.equipableCount)} ชิ้น · ดรอปจากมอนสเตอร์ {formatNum(summary.monsterDropStackCount)} รายการ
                 </p>
               </div>
-              <Link
-                href="/encounter"
-                className="inline-flex items-center gap-1 text-xs font-semibold text-accent hover:underline"
-              >
-                <Swords className="size-3.5" aria-hidden />
-                ไปหามอนสเตอร์เพิ่มดรอป
-              </Link>
+              <div className="flex flex-wrap items-center gap-3">
+                <Link
+                  href="/treasure-chest"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-amber-300 hover:underline"
+                >
+                  <Sparkles className="size-3.5" aria-hidden />
+                  เปิดหีบสมบัติ
+                </Link>
+                <Link
+                  href="/encounter"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-accent hover:underline"
+                >
+                  <Swords className="size-3.5" aria-hidden />
+                  ไปหามอนสเตอร์เพิ่มดรอป
+                </Link>
+              </div>
             </div>
 
             {actionFeedback && (
@@ -1422,12 +1534,16 @@ export function InventoryScreen() {
                         }}
                         className="flex w-full items-start gap-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
-                        <div
-                          className={cn('grid size-11 shrink-0 place-items-center border', rarityStyle.iconBox)}
-                          style={{ backgroundColor: `${entry.def.color}22` }}
+                        <ItemVfxBox
+                          itemId={entry.item.itemId}
+                          rarity={resolveEffectiveRarity(entry.item, entry.def)}
+                          element={entry.def.element}
+                          size="sm"
+                          selected={isSelected}
+                          className="size-11 shrink-0 p-1"
                         >
                           <ItemIcon itemId={entry.item.itemId} size={32} />
-                        </div>
+                        </ItemVfxBox>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-xs font-bold text-foreground">
                             {nameWithPlus}

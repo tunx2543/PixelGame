@@ -47,44 +47,58 @@ export function ItemSlot({
   const def = item ? ITEMS[item.itemId] : null
   const effectiveRarity = item && def ? (rarity ?? resolveEffectiveRarity(item, def)) : 'common'
 
+  const inner = item ? (
+    <ItemVfxBox
+      itemId={item.itemId}
+      rarity={effectiveRarity}
+      element={def?.element}
+      size="sm"
+      selected={selected}
+      showVfx={showVfx}
+      className="size-full p-1"
+    >
+      <ItemIcon itemId={item.itemId} size={30} />
+      {item.plus > 0 && (
+        <span className="absolute left-0.5 top-0 z-30 text-[10px] font-bold leading-none text-amber-300 drop-shadow-[1px_1px_0_#000] tabular-nums">
+          +{item.plus}
+        </span>
+      )}
+      {item.qty > 1 && (
+        <span className="absolute bottom-0 right-0.5 z-30 text-[10px] font-bold leading-none text-white drop-shadow-[1px_1px_0_#000] tabular-nums">
+          {item.qty}
+        </span>
+      )}
+    </ItemVfxBox>
+  ) : (
+    label && <span className="text-[10px] text-muted-foreground">{label}</span>
+  )
+
+  const sharedClassName = cn(
+    'relative flex aspect-square w-full items-center justify-center rounded transition-transform',
+    onClick && 'active:scale-95',
+    !item && 'border-2 border-border bg-muted/80 hover:border-primary/60',
+    selected && !item && 'border-primary bg-secondary',
+  )
+  const sharedTitle = def ? `${def.name}${item!.plus ? ` +${item!.plus}` : ''} - ${def.description}` : label
+  const sharedAriaLabel = def ? `${def.name}${item!.plus ? ` +${item!.plus}` : ''} จำนวน ${item!.qty}` : (label ?? 'ช่องว่าง')
+
+  if (!onClick) {
+    return (
+      <div title={sharedTitle} aria-label={sharedAriaLabel} className={sharedClassName}>
+        {inner}
+      </div>
+    )
+  }
+
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={!item && !onClick}
-      title={def ? `${def.name}${item!.plus ? ` +${item!.plus}` : ''} - ${def.description}` : label}
-      aria-label={def ? `${def.name}${item!.plus ? ` +${item!.plus}` : ''} จำนวน ${item!.qty}` : (label ?? 'ช่องว่าง')}
-      className={cn(
-        'relative flex aspect-square w-full items-center justify-center rounded transition-transform active:scale-95',
-        !item && 'border-2 border-border bg-muted/80 hover:border-primary/60',
-        selected && !item && 'border-primary bg-secondary',
-      )}
+      title={sharedTitle}
+      aria-label={sharedAriaLabel}
+      className={sharedClassName}
     >
-      {item ? (
-        <ItemVfxBox
-          itemId={item.itemId}
-          rarity={effectiveRarity}
-          element={def?.element}
-          size="sm"
-          selected={selected}
-          showVfx={showVfx}
-          className="size-full p-1"
-        >
-          <ItemIcon itemId={item.itemId} size={30} />
-          {item.plus > 0 && (
-            <span className="absolute left-0.5 top-0 z-30 text-[10px] font-bold leading-none text-amber-300 drop-shadow-[1px_1px_0_#000] tabular-nums">
-              +{item.plus}
-            </span>
-          )}
-          {item.qty > 1 && (
-            <span className="absolute bottom-0 right-0.5 z-30 text-[10px] font-bold leading-none text-white drop-shadow-[1px_1px_0_#000] tabular-nums">
-              {item.qty}
-            </span>
-          )}
-        </ItemVfxBox>
-      ) : (
-        label && <span className="text-[10px] text-muted-foreground">{label}</span>
-      )}
+      {inner}
     </button>
   )
 }

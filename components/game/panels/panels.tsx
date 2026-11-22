@@ -33,6 +33,7 @@ import { PassPanel } from './pass-panel'
 import { LifeSkillsPanel } from './lifeskills-panel'
 import { WardrobePanel } from './wardrobe-panel'
 import { GuidePanel } from './guide-panel'
+import { TreasureChestPanel } from './treasure-chest-panel'
 import { ModelGalleryView } from '../model-gallery-view'
 import { AsuraCharacterHub } from './asura-character-hub'
 
@@ -102,6 +103,8 @@ export function renderPanelById(id: PanelId, g: ReturnType<typeof useGame>): Rea
       return <WardrobePanel />
     case 'guide':
       return <GuidePanel />
+    case 'treasure-chest':
+      return <TreasureChestPanel />
     case 'models':
       return (
         <PanelFrame title="คลังโมเดล 2D & แอนิเมชั่น" subtitle="พรีวิวโมเดลครบทุกอาชีพ, 17 มอนสเตอร์, 5 สัตว์ขี่ และ 10 สัตว์เลี้ยง/ผอบ">

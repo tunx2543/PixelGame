@@ -57,6 +57,23 @@ import { getFashionItemDef } from './premium/fashion-pet'
 import { getEffectiveVipBonuses, getVipTierDef } from './premium/vip'
 import { sanitizePremiumState } from './premium/wallet'
 import { getUiPreferences } from './ui-layout'
+import { EQUIPMENT_RARITY_META, resolveEffectiveRarity } from './mmo-systems'
+import { resolveItemVfxSpec } from './item-vfx'
+import { resolveItemImagePath } from './items'
+
+const itemAssetImageCache = new Map<string, HTMLImageElement>()
+
+function getItemAssetImage(assetPath: string): HTMLImageElement | null {
+  if (typeof Image === 'undefined' || !assetPath) return null
+  let img = itemAssetImageCache.get(assetPath)
+  if (!img) {
+    img = new Image()
+    img.referrerPolicy = 'no-referrer'
+    img.src = assetPath
+    itemAssetImageCache.set(assetPath, img)
+  }
+  return img.complete && img.naturalWidth > 0 ? img : null
+}
 
 const cameraState = createCameraState('town')
 let prevRenderTime = 0
@@ -418,21 +435,139 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     }
   }
 
+  // Subtle pulsing tap-to-walk destination marker
+  if (game.moveTarget && game.moveTarget.kind === 'walk') {
+    const pulse = 0.55 + Math.sin(t * 8) * 0.35
+    ctx.save()
+    ctx.strokeStyle = `rgba(96, 165, 250, ${0.8 * pulse})`
+    ctx.lineWidth = 1.4
+    ctx.beginPath()
+    ctx.ellipse(game.moveTarget.x, game.moveTarget.y + 2, 7 + pulse * 3, 4 + pulse * 1.5, 0, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.fillStyle = `rgba(191, 219, 254, ${0.85 * pulse})`
+    ctx.fillRect(Math.round(game.moveTarget.x - 1), Math.round(game.moveTarget.y + 1), 2, 2)
+    ctx.restore()
+  }
+
   for (const drop of game.groundDrops) {
     const item = ITEMS[drop.itemId]
     if (!item) continue
-    const bob = Math.sin(t * 5 + drop.x) * 1.5
-    ctx.fillStyle = 'rgba(0,0,0,0.35)'
-    ctx.fillRect(Math.round(drop.x - 4), Math.round(drop.y + 3), 9, 3)
-    ctx.fillStyle = item.color
-    ctx.fillRect(Math.round(drop.x - 3), Math.round(drop.y - 5 + bob), 7, 7)
-    ctx.strokeStyle = '#fff3b0'
-    ctx.strokeRect(Math.round(drop.x - 4), Math.round(drop.y - 6 + bob), 9, 9)
-    ctx.fillStyle = item.color
-    ctx.font = `6px ${font}`
-    ctx.textAlign = 'center'
-    ctx.fillText(`${item.name} x${drop.qty}`, drop.x, drop.y - 10 + bob)
-    ctx.textAlign = 'start'
+    const rarity = drop.rarity ?? resolveEffectiveRarity(undefined, item)
+    const rMeta = EQUIPMENT_RARITY_META[rarity] ?? EQUIPMENT_RARITY_META.common
+    const vfx = resolveItemVfxSpec(rarity, {
+      id: item.id,
+      name: item.name,
+      element: drop.element ?? item.element,
+      color: item.color,
+    })
+    const bob = Math.sin(t * 4.6 + drop.x * 0.2) * 1.8
+    const imgPath = resolveItemImagePath(item)
+    const spriteImg = getItemAssetImage(imgPath)
+    const distToPlayer = Math.hypot(drop.x - p.x, drop.y - p.y)
+    const showProximityLabel = distToPlayer <= 78
+
+    // Shadow ellipse
+    ctx.fillStyle = 'rgba(0,0,0,0.42)'
+    ctx.beginPath()
+    ctx.ellipse(drop.x, drop.y + 4, 8, 3.5, 0, 0, Math.PI * 2)
+    ctx.fill()
+
+    // Rarity Ground Beam & Aura (Epic / Legendary / Mythic)
+    if (!disableGlow && vfx.intensity >= 1) {
+      ctx.save()
+      const pulse = 0.78 + Math.sin(t * 5.2 + drop.x) * 0.22
+      ctx.fillStyle = vfx.primaryColor
+      ctx.globalAlpha = (0.14 + vfx.intensity * 0.04) * pulse
+      ctx.beginPath()
+      ctx.ellipse(drop.x, drop.y + 2, 9 + vfx.intensity * 2.5, 4.5 + vfx.intensity * 1.1, 0, 0, Math.PI * 2)
+      ctx.fill()
+
+      if (vfx.showGroundBeam) {
+        const beamH = vfx.groundBeamHeight
+        const beamW = rarity === 'mythic' ? 8 : rarity === 'legendary' ? 6 : 4
+        const grad = ctx.createLinearGradient(drop.x, drop.y + 2, drop.x, drop.y - beamH)
+        grad.addColorStop(0, `${vfx.primaryColor}88`)
+        grad.addColorStop(0.6, `${vfx.secondaryColor}33`)
+        grad.addColorStop(1, 'rgba(0,0,0,0)')
+        ctx.globalAlpha = 0.75 * pulse
+        ctx.fillStyle = grad
+        ctx.fillRect(Math.round(drop.x - beamW / 2), Math.round(drop.y - beamH), beamW, beamH + 2)
+      }
+
+      if (vfx.effects.includes('rotating_rune')) {
+        ctx.globalAlpha = rarity === 'mythic' ? 0.72 : 0.45
+        ctx.strokeStyle = rarity === 'mythic' ? vfx.secondaryColor : vfx.primaryColor
+        ctx.lineWidth = 1.1
+        ctx.save()
+        ctx.translate(drop.x, drop.y + 2)
+        ctx.scale(1, 0.5)
+        ctx.rotate(t * (rarity === 'mythic' ? 2.4 : 1.4))
+        ctx.beginPath()
+        ctx.arc(0, 0, rarity === 'mythic' ? 14 : 11, 0, Math.PI * 2)
+        ctx.stroke()
+        ctx.restore()
+      }
+
+      if (vfx.effects.includes('periodic_burst')) {
+        const period = Math.max(1.4, vfx.burstIntervalMs / 1000)
+        const phase = ((t + drop.x * 0.1) % period) / period
+        if (phase < 0.35) {
+          const bp = phase / 0.35
+          ctx.globalAlpha = (1 - bp) * 0.75
+          ctx.strokeStyle = vfx.secondaryColor
+          ctx.lineWidth = 1.5
+          ctx.beginPath()
+          ctx.ellipse(drop.x, drop.y + 1, 6 + bp * 16, 3 + bp * 8, 0, 0, Math.PI * 2)
+          ctx.stroke()
+        }
+      }
+
+      // Floating pixel sparkles
+      if (vfx.particleCount > 0) {
+        const pCount = Math.min(6, vfx.particleCount)
+        for (let k = 0; k < pCount; k++) {
+          const ptPhase = (t * 1.6 + k * 0.37 + drop.x * 0.05) % 1
+          const px = drop.x + Math.sin(t * 3 + k * 2.1) * (5 + vfx.intensity * 1.4)
+          const py = drop.y + 1 - ptPhase * (14 + vfx.intensity * 3)
+          ctx.globalAlpha = Math.sin(ptPhase * Math.PI) * 0.9
+          ctx.fillStyle = k % 2 === 0 ? vfx.primaryColor : vfx.secondaryColor
+          ctx.fillRect(Math.round(px), Math.round(py), 1.6, 1.6)
+        }
+      }
+      ctx.restore()
+    }
+
+    // Crisp Pixel-Art Item PNG Sprite (centered 22x22)
+    if (spriteImg) {
+      const prevSmooth = ctx.imageSmoothingEnabled
+      ctx.imageSmoothingEnabled = false
+      ctx.drawImage(spriteImg, Math.round(drop.x - 11), Math.round(drop.y - 19 + bob), 22, 22)
+      ctx.imageSmoothingEnabled = prevSmooth
+    } else {
+      ctx.fillStyle = rMeta.hexColor
+      ctx.fillRect(Math.round(drop.x - 4), Math.round(drop.y - 8 + bob), 8, 8)
+      ctx.strokeStyle = '#140f1d'
+      ctx.strokeRect(Math.round(drop.x - 4), Math.round(drop.y - 8 + bob), 8, 8)
+    }
+
+    // Proximity-only item name label colored by rarity
+    if (showProximityLabel) {
+      const label = drop.qty > 1 ? `${item.name} x${drop.qty}` : item.name
+      ctx.save()
+      ctx.font = `bold 6.5px ${font}`
+      ctx.textAlign = 'center'
+      const textW = ctx.measureText(label).width
+      const lx = Math.round(drop.x)
+      const ly = Math.round(drop.y - 23 + bob)
+      ctx.fillStyle = 'rgba(10, 14, 24, 0.82)'
+      ctx.fillRect(Math.round(lx - textW / 2 - 3), ly - 6.5, Math.round(textW + 6), 8.5)
+      ctx.strokeStyle = rMeta.hexColor
+      ctx.lineWidth = 0.65
+      ctx.strokeRect(Math.round(lx - textW / 2 - 3), ly - 6.5, Math.round(textW + 6), 8.5)
+      ctx.fillStyle = rMeta.hexColor
+      ctx.fillText(label, lx, ly)
+      ctx.restore()
+    }
   }
 
   for (const node of GATHERING_NODES) {

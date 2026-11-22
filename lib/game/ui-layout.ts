@@ -134,6 +134,7 @@ export const WINDOW_META: Record<PanelId, { title: string; defaultW: number; def
   talents: { title: 'ทักษะ & ฝึกฝน', defaultW: 840, defaultH: 540 },
   wardrobe: { title: 'แฟชั่น & ปีก', defaultW: 660, defaultH: 520 },
   guide: { title: 'คู่มือ & แจ้งข้อมูล', defaultW: 640, defaultH: 510 },
+  'treasure-chest': { title: 'หีบสมบัติ & สุ่มไอเทม', defaultW: 820, defaultH: 560 },
 }
 
 export function getSafeZoneBounds(vw: number, vh: number) {

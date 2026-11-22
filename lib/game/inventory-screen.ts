@@ -36,7 +36,12 @@ import {
 } from './premium/wallet'
 import { COMBAT_PETS, MAX_PET_LEVEL, grantActivePetExp, sanitizePetState } from './systems'
 
-import { EQUIPMENT_RARITY_META, type EquipmentRarity } from './mmo-systems'
+import {
+  EQUIPMENT_RARITY_META,
+  resolveEffectiveRarity,
+  type EquipmentRarity,
+} from './mmo-systems'
+import { ITEM_CATEGORY_THAI_LABEL, inferItemCategory } from './item-vfx'
 
 export type InventoryFilterTab =
   | 'all'
@@ -215,11 +220,83 @@ export function getSlotThaiLabel(slot: EquipmentSlot): string {
   }
 }
 
-export function getItemKindThaiLabel(kind: ItemKind, slot?: EquipmentSlot | null): string {
+export function getItemCategoryThaiLabel(def?: ItemDef | null): string {
+  if (!def) return 'ไอเทม'
+  return ITEM_CATEGORY_THAI_LABEL[inferItemCategory(def)] ?? 'ไอเทม'
+}
+
+export function getItemKindThaiLabel(
+  kind: ItemKind,
+  slot?: EquipmentSlot | null,
+  def?: ItemDef | null,
+): string {
+  if (def?.itemCategory) return ITEM_CATEGORY_THAI_LABEL[def.itemCategory]
   if (kind === 'weapon') return 'อาวุธ'
-  if (kind === 'armor') return slot ? getSlotThaiLabel(slot) : 'ชุดเกราะ'
-  if (kind === 'consumable') return 'ไอเทมใช้งาน'
+  if (kind === 'armor') return def ? getItemCategoryThaiLabel(def) : slot ? getSlotThaiLabel(slot) : 'ชุดเกราะ'
+  if (kind === 'consumable') return 'ของใช้'
+  if (def && inferItemCategory(def) === 'special') return 'ไอเทมพิเศษ'
   return 'วัตถุดิบจากมอนสเตอร์'
+}
+
+export function getInventoryItemSellPrice(item: InvItem, def?: ItemDef | null): number {
+  const resolved = def ?? ITEMS[item.itemId]
+  if (!resolved) return 0
+  if (typeof resolved.sellPrice === 'number') {
+    return resolved.sellPrice === 0 ? 0 : Math.floor(resolved.sellPrice * (1 + item.plus * 0.25))
+  }
+  const rarity = resolveEffectiveRarity(item, resolved)
+  const rarityMul = EQUIPMENT_RARITY_META[rarity]?.sellMultiplier ?? 1
+  return Math.max(1, Math.floor(resolved.price * 0.4 * (1 + item.plus * 0.3) * rarityMul))
+}
+
+export function sellInventoryItem(
+  save: SaveData,
+  itemUid: string,
+  qty = 1,
+): { nextSave: SaveData; gainedGold: number; message: string; error: string | null } {
+  const idx = save.inventory.findIndex((entry) => entry.uid === itemUid)
+  if (idx < 0) return { nextSave: save, gainedGold: 0, message: '', error: 'ไม่พบไอเทมนี้ในกระเป๋า' }
+  const target = save.inventory[idx]
+  const def = ITEMS[target.itemId]
+  const sellQty = Math.max(1, Math.min(target.qty, qty))
+  const unitPrice = getInventoryItemSellPrice(target, def)
+  const gainedGold = unitPrice * sellQty
+  const nextSave: SaveData = structuredClone(save)
+  const entry = nextSave.inventory[idx]
+  entry.qty -= sellQty
+  if (entry.qty <= 0) nextSave.inventory.splice(idx, 1)
+  nextSave.gold = (nextSave.gold ?? 0) + gainedGold
+  nextSave.extV2 = pruneDepletedQuickSlotsInExtV2(sanitizeExtV2(nextSave.extV2), nextSave.inventory).nextExtV2
+  nextSave.savedAt = Date.now()
+  return {
+    nextSave,
+    gainedGold,
+    message: `ขาย ${def?.name ?? target.itemId} x${sellQty} ได้รับ +${gainedGold.toLocaleString()} G`,
+    error: null,
+  }
+}
+
+export function discardInventoryItem(
+  save: SaveData,
+  itemUid: string,
+  qty = 1,
+): { nextSave: SaveData; message: string; error: string | null } {
+  const idx = save.inventory.findIndex((entry) => entry.uid === itemUid)
+  if (idx < 0) return { nextSave: save, message: '', error: 'ไม่พบไอเทมนี้ในกระเป๋า' }
+  const target = save.inventory[idx]
+  const def = ITEMS[target.itemId]
+  const dropQty = Math.max(1, Math.min(target.qty, qty))
+  const nextSave: SaveData = structuredClone(save)
+  const entry = nextSave.inventory[idx]
+  entry.qty -= dropQty
+  if (entry.qty <= 0) nextSave.inventory.splice(idx, 1)
+  nextSave.extV2 = pruneDepletedQuickSlotsInExtV2(sanitizeExtV2(nextSave.extV2), nextSave.inventory).nextExtV2
+  nextSave.savedAt = Date.now()
+  return {
+    nextSave,
+    message: `ทิ้ง ${def?.name ?? target.itemId} x${dropQty} ออกจากกระเป๋าแล้ว`,
+    error: null,
+  }
 }
 
 export function equipInventoryItem(

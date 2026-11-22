@@ -135,17 +135,22 @@ export function Game() {
     if (typeof window === 'undefined') return
     const checkViewport = () => {
       const coarse = window.matchMedia('(pointer: coarse)').matches
-      setIsTouchDevice(coarse)
+      setIsTouchDevice((prev) => prev || coarse)
       setNarrowPortrait(window.innerWidth < 640 && window.innerHeight > window.innerWidth)
+    }
+    const handleFirstTouch = () => {
+      setIsTouchDevice(true)
     }
     const handleToggleTouch = () => {
       setTouchOverride((prev) => !(prev ?? isTouchDevice))
     }
     checkViewport()
     window.addEventListener('resize', checkViewport)
+    window.addEventListener('touchstart', handleFirstTouch, { passive: true, once: true })
     window.addEventListener('pixelquest:toggle-touch', handleToggleTouch)
     return () => {
       window.removeEventListener('resize', checkViewport)
+      window.removeEventListener('touchstart', handleFirstTouch)
       window.removeEventListener('pixelquest:toggle-touch', handleToggleTouch)
     }
   }, [isTouchDevice])

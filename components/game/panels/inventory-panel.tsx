@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react'
 import {
   ArrowUpDown,
   Backpack,
+  Coins,
   Crown,
   Eye,
   Feather,
@@ -16,6 +17,7 @@ import {
   ShieldCheck,
   Sparkles,
   Swords,
+  Trash2,
   Wind,
 } from 'lucide-react'
 import { ITEMS, JOBS, normalizeJobId, type EquipmentSlot, type ItemDef } from '@/lib/game/data'
@@ -23,6 +25,7 @@ import {
   canEquip,
   closePanel,
   consumeItemWithFeedback,
+  discardItem,
   ensurePremiumState,
   equip,
   equipCombatPet,
@@ -36,6 +39,8 @@ import {
   openPanel,
   resolvePlayerFashionLoadout,
   saveGame,
+  sellItem,
+  sellPrice,
   setQuickSlot,
   storeMount,
   summonMount,
@@ -61,6 +66,12 @@ import type { Dir } from '@/lib/game/sprites'
 import { getMountDef, sanitizeMountState } from '@/lib/game/mounts'
 import { compareEquipmentItem } from '@/lib/game/item-compare'
 import {
+  ITEM_CATEGORY_THAI_LABEL,
+  ITEM_ELEMENT_THAI_LABEL,
+  inferItemCategory,
+  inferItemElement,
+} from '@/lib/game/item-vfx'
+import {
   EQUIPMENT_RARITY_META,
   formatAffixLabel,
   resolveEffectiveRarity,
@@ -73,6 +84,7 @@ import {
 import { useGame } from '@/lib/game/use-game'
 import { cn } from '@/lib/utils'
 import { ItemIcon } from '../item-icon'
+import { ItemVfxBox } from '../item-vfx'
 import { SpriteModelCanvas } from '../sprite-model-canvas'
 import { PanelFrame, PxButton } from './panels'
 
@@ -87,7 +99,22 @@ type InventoryTabId =
   | 'pets'
 
 type RarityFilter = 'all' | EquipmentRarity
-type TypeFilter = 'all' | 'weapon' | 'armor' | 'shoes' | 'cloak' | 'potion' | 'food' | 'scroll'
+type TypeFilter =
+  | 'all'
+  | 'weapon'
+  | 'helmet'
+  | 'armor'
+  | 'gloves'
+  | 'shoes'
+  | 'shield'
+  | 'cloak'
+  | 'ring'
+  | 'necklace'
+  | 'charm'
+  | 'special'
+  | 'potion'
+  | 'food'
+  | 'scroll'
 type SortOption = 'default' | 'level-desc' | 'level-asc' | 'rarity-desc' | 'rarity-asc' | 'power-desc'
 
 const TABS: Array<{ id: InventoryTabId; label: string }> = [
@@ -107,6 +134,7 @@ const RARITY_ORDER: Record<EquipmentRarity, number> = {
   rare: 3,
   epic: 4,
   legendary: 5,
+  mythic: 6,
 }
 
 const QUEST_ITEM_IDS = new Set([
@@ -132,6 +160,9 @@ function getEffectiveRarityForAny(item: { itemId: string; rarity?: EquipmentRari
   if (def.kind === 'weapon' || def.kind === 'armor') {
     return resolveEffectiveRarity(item, def)
   }
+  if (item.rarity && EQUIPMENT_RARITY_META[item.rarity]) return item.rarity
+  if (def.defaultRarity && EQUIPMENT_RARITY_META[def.defaultRarity]) return def.defaultRarity
+  if (def.id === 'mythic_awakening_core' || (def.tier ?? 0) >= 6) return 'mythic'
   if (def.id === 'astral_bag_expansion' || def.id === 'starlight_loot_magnet' || def.id === 'abyss_crystal') {
     return 'legendary'
   }
@@ -190,10 +221,18 @@ export function InventoryPanel() {
 
       // Type sub-filter
       if (typeFilter !== 'all') {
-        if (typeFilter === 'weapon' && def.kind !== 'weapon') return false
-        if (typeFilter === 'armor' && !(def.kind === 'armor' && (def.slot ?? 'armor') === 'armor')) return false
-        if (typeFilter === 'shoes' && def.slot !== 'shoes') return false
+        const cat = inferItemCategory(def)
+        if (typeFilter === 'weapon' && cat !== 'weapon') return false
+        if (typeFilter === 'helmet' && cat !== 'helmet') return false
+        if (typeFilter === 'armor' && cat !== 'armor') return false
+        if (typeFilter === 'gloves' && cat !== 'gloves') return false
+        if (typeFilter === 'shoes' && def.slot !== 'shoes' && cat !== 'boots') return false
+        if (typeFilter === 'shield' && cat !== 'shield') return false
         if (typeFilter === 'cloak' && def.slot !== 'cloak') return false
+        if (typeFilter === 'ring' && cat !== 'ring') return false
+        if (typeFilter === 'necklace' && cat !== 'necklace') return false
+        if (typeFilter === 'charm' && cat !== 'charm') return false
+        if (typeFilter === 'special' && cat !== 'special') return false
         if (typeFilter === 'potion' && !(def.kind === 'consumable' && (def.heal || def.mana) && !def.id.startsWith('food_'))) return false
         if (typeFilter === 'food' && !def.id.startsWith('food_')) return false
         if (typeFilter === 'scroll' && !(def.kind === 'consumable' && !(def.heal || def.mana) && !def.id.startsWith('food_'))) return false
@@ -275,14 +314,15 @@ export function InventoryPanel() {
           ? def.allowedJobs.map((id) => JOBS[normalizeJobId(id)]?.name ?? id).join(', ')
           : 'ทุกอาชีพ',
     level: def.reqLevel ?? 1,
-    slot:
+    slot: ITEM_CATEGORY_THAI_LABEL[inferItemCategory(def)] ?? (
       def.kind === 'weapon'
         ? 'อาวุธ'
         : def.kind === 'armor'
           ? SLOT_LABELS[def.slot ?? 'armor']
           : def.kind === 'consumable'
             ? 'ไอเทมใช้งาน'
-            : 'วัตถุดิบ',
+            : 'วัตถุดิบ'
+    ),
   })
 
   const assignConsumableToNextSlot = (itemId: string, preferredSlot?: number) => {
@@ -415,9 +455,16 @@ export function InventoryPanel() {
             >
               <option value="all">ทุกประเภท</option>
               <option value="weapon">อาวุธ</option>
-              <option value="armor">ชุดเกราะ</option>
+              <option value="helmet">หมวก</option>
+              <option value="armor">เสื้อเกราะ</option>
+              <option value="gloves">ถุงมือ</option>
               <option value="shoes">รองเท้า</option>
+              <option value="shield">โล่</option>
               <option value="cloak">ผ้าคลุม</option>
+              <option value="ring">แหวน</option>
+              <option value="necklace">สร้อย</option>
+              <option value="charm">เครื่องราง</option>
+              <option value="special">ไอเทมพิเศษ</option>
               <option value="potion">ยาฟื้นฟู</option>
               <option value="food">อาหารบัฟ</option>
               <option value="scroll">คัมภีร์ / ตั๋ว</option>
@@ -430,11 +477,12 @@ export function InventoryPanel() {
               className="rounded border border-border bg-secondary px-2 py-1 text-[11px] text-foreground outline-none focus:border-primary"
             >
               <option value="all">ทุกระดับหายาก</option>
-              <option value="common">ธรรมดา</option>
-              <option value="uncommon">ไม่ธรรมดา</option>
-              <option value="rare">หายาก</option>
-              <option value="epic">อีปิก</option>
-              <option value="legendary">ตำนาน</option>
+              <option value="common">ธรรมดา (Common)</option>
+              <option value="uncommon">ไม่ธรรมดา (Uncommon)</option>
+              <option value="rare">หายาก (Rare)</option>
+              <option value="epic">มหากาพย์ (Epic)</option>
+              <option value="legendary">ตำนาน (Legendary)</option>
+              <option value="mythic">เทพ (Mythic)</option>
             </select>
 
             <div className="flex items-center gap-1">
@@ -910,17 +958,21 @@ export function InventoryPanel() {
                       onClick={() => setSelectedUid(item.uid)}
                       className="mb-1.5 flex w-full items-start gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
-                      <span
-                        className="relative grid size-9 shrink-0 place-items-center rounded border border-white/20"
-                        style={{ backgroundColor: `${def.color}2b` }}
+                      <ItemVfxBox
+                        itemId={item.itemId}
+                        rarity={rarity}
+                        element={def.element}
+                        size="sm"
+                        selected={isSelected}
+                        className="size-10 shrink-0 p-1"
                       >
-                        <ItemIcon itemId={item.itemId} size={28} />
+                        <ItemIcon itemId={item.itemId} size={30} />
                         {item.qty > 1 && (
-                          <span className="absolute -bottom-1 -right-1 rounded bg-black/85 px-1 font-mono text-[9px] font-bold text-amber-200 tabular-nums">
+                          <span className="absolute bottom-0 right-0.5 z-30 rounded bg-black/85 px-1 font-mono text-[9px] font-bold text-amber-200 tabular-nums">
                             x{item.qty}
                           </span>
                         )}
-                      </span>
+                      </ItemVfxBox>
                       <div className="min-w-0 flex-1">
                         <p className={cn('truncate text-[11px] font-bold', rMeta.textColorClass)}>
                           {itemLabel(item)}
@@ -1010,12 +1062,15 @@ export function InventoryPanel() {
               <div className={cn('rounded border-2 bg-muted/85 p-3', inspectRarityMeta.borderColorClass)}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-2.5">
-                    <span
-                      className="grid size-10 shrink-0 place-items-center rounded border border-white/20"
-                      style={{ backgroundColor: `${inspectDef.color}33` }}
+                    <ItemVfxBox
+                      itemId={inspectInvItem.itemId}
+                      rarity={inspectRarity}
+                      element={inspectDef.element}
+                      size="md"
+                      className="size-12 shrink-0 p-1.5"
                     >
-                      <ItemIcon itemId={inspectInvItem.itemId} size={32} />
-                    </span>
+                      <ItemIcon itemId={inspectInvItem.itemId} size={36} />
+                    </ItemVfxBox>
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <p className={cn('text-sm font-bold', inspectRarityMeta.textColorClass)}>
@@ -1024,6 +1079,19 @@ export function InventoryPanel() {
                         <span className={cn('px-1.5 py-0.5 text-[10px] font-bold', inspectRarityMeta.badgeBgClass, inspectRarityMeta.textColorClass)}>
                           {inspectRarityMeta.thaiLabel}
                         </span>
+                        {(() => {
+                          const el = inferItemElement(inspectDef)
+                          if (el === 'physical') return null
+                          const elMeta = ITEM_ELEMENT_THAI_LABEL[el]
+                          return (
+                            <span
+                              className="rounded border border-white/15 bg-black/40 px-1.5 py-0.5 text-[10px] font-semibold"
+                              style={{ color: elMeta.color }}
+                            >
+                              {elMeta.label}
+                            </span>
+                          )
+                        })()}
                         {inspectInvItem.bound && (
                           <span className="inline-flex items-center gap-0.5 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
                             <Lock className="size-2.5" aria-hidden /> ผูกมัด
@@ -1078,7 +1146,7 @@ export function InventoryPanel() {
 
                   return (
                     <div className="mt-2.5 space-y-2 border-t border-border/60 pt-2 text-[11px]">
-                      <div className="grid grid-cols-2 gap-x-3 gap-y-1 sm:grid-cols-3">
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1 sm:grid-cols-4">
                         <div>
                           <span className="text-muted-foreground">ประเภท: </span>
                           <span className="text-foreground">{meta.slot}</span>
@@ -1090,6 +1158,12 @@ export function InventoryPanel() {
                         <div>
                           <span className="text-muted-foreground">เลเวลขั้นต่ำ: </span>
                           <span className="text-foreground">Lv.{meta.level}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">ราคาขาย: </span>
+                          <span className="font-mono font-bold text-amber-300 tabular-nums">
+                            {sellPrice(inspectInvItem).toLocaleString()} G
+                          </span>
                         </div>
                       </div>
 
@@ -1156,6 +1230,92 @@ export function InventoryPanel() {
                           </div>
                         </div>
                       )}
+
+                      {/* Direct Inspector Actions: Equip / Use / Sell / Discard */}
+                      <div className="flex flex-wrap items-center gap-1.5 border-t border-border/50 pt-2">
+                        {isEq && (
+                          <PxButton
+                            disabled={Boolean(equipErr)}
+                            onClick={() => equip(inspectInvItem.uid)}
+                            className="px-3 py-1 text-[11px]"
+                          >
+                            สวมใส่
+                          </PxButton>
+                        )}
+                        {inspectDef.kind === 'consumable' && (
+                          <PxButton
+                            variant="accent"
+                            onClick={() => {
+                              const uid = inspectInvItem.uid
+                              const res = consumeItemWithFeedback(uid)
+                              setAssignFeedback({ ok: res.ok, text: res.message })
+                              if (!p.inventory.some((i) => i.uid === uid)) {
+                                if (selectedUid === uid) setSelectedUid(null)
+                                if (hoveredUid === uid) setHoveredUid(null)
+                              }
+                            }}
+                            className="px-3 py-1 text-[11px]"
+                          >
+                            ใช้ 1 ชิ้น
+                          </PxButton>
+                        )}
+                        {sellPrice(inspectInvItem) > 0 && (
+                          <PxButton
+                            variant="secondary"
+                            onClick={() => {
+                              const uid = inspectInvItem.uid
+                              const earned = sellPrice(inspectInvItem)
+                              const label = itemLabel(inspectInvItem)
+                              sellItem(uid, 1)
+                              setAssignFeedback({ ok: true, text: `ขาย ${label} x1 (+${earned.toLocaleString()} G)` })
+                              if (!p.inventory.some((i) => i.uid === uid)) {
+                                if (selectedUid === uid) setSelectedUid(null)
+                                if (hoveredUid === uid) setHoveredUid(null)
+                              }
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] text-amber-200"
+                          >
+                            <Coins className="size-3" aria-hidden />
+                            ขาย 1 ({sellPrice(inspectInvItem).toLocaleString()} G)
+                          </PxButton>
+                        )}
+                        {inspectInvItem.qty > 1 && sellPrice(inspectInvItem) > 0 && (
+                          <PxButton
+                            variant="secondary"
+                            onClick={() => {
+                              const uid = inspectInvItem.uid
+                              const qty = inspectInvItem.qty
+                              const earned = sellPrice(inspectInvItem) * qty
+                              const label = itemLabel(inspectInvItem)
+                              sellItem(uid, qty)
+                              setAssignFeedback({ ok: true, text: `ขาย ${label} x${qty} (+${earned.toLocaleString()} G)` })
+                              setSelectedUid(null)
+                              setHoveredUid(null)
+                            }}
+                            className="px-2.5 py-1 text-[11px] text-amber-300"
+                          >
+                            ขายทั้งหมด ({(sellPrice(inspectInvItem) * inspectInvItem.qty).toLocaleString()} G)
+                          </PxButton>
+                        )}
+                        <PxButton
+                          variant="secondary"
+                          onClick={() => {
+                            const uid = inspectInvItem.uid
+                            const label = itemLabel(inspectInvItem)
+                            if (discardItem(uid, 1)) {
+                              setAssignFeedback({ ok: true, text: `ทิ้ง ${label} x1 แล้ว` })
+                              if (!p.inventory.some((i) => i.uid === uid)) {
+                                if (selectedUid === uid) setSelectedUid(null)
+                                if (hoveredUid === uid) setHoveredUid(null)
+                              }
+                            }
+                          }}
+                          className="ml-auto inline-flex items-center gap-1 border-rose-500/40 bg-rose-950/60 px-2.5 py-1 text-[11px] text-rose-200 hover:bg-rose-900/70"
+                        >
+                          <Trash2 className="size-3" aria-hidden />
+                          ทิ้ง
+                        </PxButton>
+                      </div>
                     </div>
                   )
                 })()}

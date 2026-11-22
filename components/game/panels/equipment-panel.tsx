@@ -34,6 +34,7 @@ import { useGame } from '@/lib/game/use-game'
 import { cn } from '@/lib/utils'
 import { formatNum } from '../format'
 import { ItemIcon } from '../item-icon'
+import { ItemVfxBox } from '../item-vfx'
 import { SpriteModelCanvas } from '../sprite-model-canvas'
 import { PanelFrame, PxButton } from './panels'
 
@@ -275,12 +276,15 @@ export function EquipmentPanel() {
 
                     {it && def ? (
                       <div className="flex items-start gap-2.5">
-                        <div
-                          className="grid size-11 shrink-0 place-items-center rounded border border-white/20"
-                          style={{ backgroundColor: `${def.color}33` }}
+                        <ItemVfxBox
+                          itemId={it.itemId}
+                          rarity={resolveEffectiveRarity(it, def)}
+                          element={def.element}
+                          size="sm"
+                          className="size-11 shrink-0 p-1"
                         >
                           <ItemIcon itemId={it.itemId} size={34} />
-                        </div>
+                        </ItemVfxBox>
                         <div className="min-w-0 flex-1">
                           <p className={cn('truncate text-xs font-bold', rarityMeta ? rarityMeta.textColorClass : 'text-foreground')}>
                             {itemLabel(it)}
@@ -362,7 +366,15 @@ export function EquipmentPanel() {
                         className={cn('flex items-center justify-between gap-2 rounded border bg-card/85 p-1.5', rarityMeta.borderColorClass)}
                       >
                         <div className="flex min-w-0 items-center gap-2">
-                          <ItemIcon itemId={it.itemId} size={26} />
+                          <ItemVfxBox
+                            itemId={it.itemId}
+                            rarity={resolveEffectiveRarity(it, def)}
+                            element={def.element}
+                            size="xs"
+                            className="size-8 shrink-0 p-0.5"
+                          >
+                            <ItemIcon itemId={it.itemId} size={24} />
+                          </ItemVfxBox>
                           <div className="min-w-0">
                             <p className={cn('truncate text-[11px] font-semibold', rarityMeta.textColorClass)}>
                               {itemLabel(it)}
