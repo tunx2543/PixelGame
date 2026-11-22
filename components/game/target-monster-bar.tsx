@@ -30,8 +30,8 @@ export function TargetMonsterBar({ offsetTouch = false }: { offsetTouch?: boolea
       data-testid="target-monster-bar"
       role="status"
       aria-label={`เป้าหมาย: ${displayName}`}
-      className={`pointer-events-none fixed left-1/2 z-20 w-[min(21rem,76vw)] -translate-x-1/2 select-none ${
-        offsetTouch ? 'bottom-[7.85rem] sm:bottom-11' : 'bottom-10'
+      className={`pointer-events-none fixed left-1/2 z-20 w-[min(19rem,58vw)] -translate-x-1/2 select-none sm:w-[min(19rem,42vw)] ${
+        offsetTouch ? 'bottom-[10.75rem] sm:bottom-11' : 'bottom-10'
       }`}
     >
       <div className="rounded-lg border border-[#d69f4c]/85 bg-[#0c1422]/94 px-2.5 py-1.5 shadow-[0_6px_18px_rgba(0,0,0,0.68)]">

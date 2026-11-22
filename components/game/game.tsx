@@ -23,7 +23,7 @@ import { ChatBox } from './chat-box'
 import { CheckinModal } from './checkin-modal'
 import { GameCanvas } from './game-canvas'
 import { GmToolsWidget } from './gm-tools-widget'
-import { AsuraBuffAndToggleStrip, AsuraExpStrip, Hud } from './hud'
+import { AsuraBuffAndToggleStrip, Hud } from './hud'
 import { ItemIcon } from './item-icon'
 import { KillRewardToast } from './kill-reward-toast'
 import { MenuDock } from './menu-dock'
@@ -231,17 +231,9 @@ export function Game() {
           )}
         </div>
 
-        {/* ZONE 3: ล่างซ้าย (XP% / JP%), ล่างกลาง (Chat ▲), ขวาล่าง (2-Column Vertical Skill/Item Hotbar) */}
+        {/* ZONE 3: ล่างกลาง (Chat ▲), ขวาล่าง (2-Column Vertical Skill/Item Hotbar) */}
         {!g.zenHud && (
           <>
-            <div
-              className={`pointer-events-none fixed left-1.5 z-20 sm:left-2 ${
-                showTouch ? 'bottom-[9.5rem] sm:bottom-[10.5rem]' : 'bottom-1.5'
-              }`}
-            >
-              <AsuraExpStrip />
-            </div>
-
             <TargetMonsterBar offsetTouch={showTouch} />
 
             <ChatBox offsetTouch={showTouch} />

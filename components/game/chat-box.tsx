@@ -176,8 +176,8 @@ export function ChatBox({ offsetTouch = false }: { offsetTouch?: boolean }) {
         'pointer-events-auto fixed left-1/2 flex -translate-x-1/2 flex-col overflow-hidden rounded border border-[#2c4e7c]/85 bg-[#080d15]/92 shadow-xl transition-all',
         isOpen
           ? 'z-40 w-[min(24rem,calc(100vw-1rem))]'
-          : 'z-20 w-[min(17.5rem,44vw)] sm:w-[21rem]',
-        offsetTouch ? 'bottom-[5.25rem] sm:bottom-2' : 'bottom-1.5',
+          : 'z-20 w-[min(16.5rem,44vw)] sm:w-[min(19rem,38vw)]',
+        offsetTouch ? 'bottom-[8.5rem] sm:bottom-1.5' : 'bottom-1.5',
       )}
     >
       {isOpen && (

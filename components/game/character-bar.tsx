@@ -14,6 +14,7 @@ import {
   type PanelId,
 } from '@/lib/game/engine'
 import { PERMANENT_GM_GAME_UID } from '@/lib/game/permissions'
+import { computeProfileProgressBars } from '@/lib/game/hud-vitals'
 import { formatVipRemaining, getEffectiveVipBonuses } from '@/lib/game/premium/vip'
 import { useGame } from '@/lib/game/use-game'
 import { formatNum } from './format'
@@ -55,7 +56,13 @@ export function CharacterBar({ compact = false }: { compact?: boolean; layout?: 
   const vipBonus = getEffectiveVipBonuses(p.premium?.vip)
   const hpPct = Math.max(0, Math.min(100, (p.hp / Math.max(1, s.maxHp)) * 100))
   const mpPct = Math.max(0, Math.min(100, (p.mp / Math.max(1, s.maxMp)) * 100))
-  const jobLevel = Math.max(1, p.jobLevel ?? 1)
+  const expBars = computeProfileProgressBars({
+    level: p.level,
+    exp: p.exp,
+    jobLevel: p.jobLevel,
+    jobExp: p.jobExp,
+  })
+  const jobLevel = expBars.jobLevel
   const spiritStage = s.spiritStage ?? 0
 
   const openRemote = (panel: PanelId) => {
@@ -91,7 +98,7 @@ export function CharacterBar({ compact = false }: { compact?: boolean; layout?: 
             label={`ภาพโปรไฟล์ ${p.name}`}
           />
         </button>
-        <div className="-mt-1.5 flex items-center gap-1 rounded bg-[#0a101b]/90 px-1 py-px font-mono text-[9.5px] font-extrabold leading-none shadow tabular-nums">
+        <div className="relative z-10 -mt-1.5 flex items-center gap-1 rounded border border-[#2c4a75]/90 bg-[#0a101b]/95 px-1.5 py-0.5 font-mono text-[9.5px] font-extrabold leading-none shadow tabular-nums">
           <span className="text-amber-300" title="เลเวลตัวละคร">
             {p.level}
           </span>
@@ -197,6 +204,43 @@ export function CharacterBar({ compact = false }: { compact?: boolean; layout?: 
           <span className="pointer-events-none absolute inset-0 flex items-center justify-center font-mono text-[9.5px] font-extrabold text-white [text-shadow:0_1px_2px_#000] tabular-nums">
             {formatNum(p.mp)} / {formatNum(s.maxMp)}
           </span>
+        </div>
+
+        {/* Compact Inline XP & JP Mini Bars inside Profile */}
+        <div data-testid="profile-exp-bars" className="grid grid-cols-2 gap-1 pt-0.5">
+          <button
+            type="button"
+            data-testid="profile-xp-bar"
+            onClick={() => openPanel('character')}
+            title={`ค่าประสบการณ์ตัวละคร: ${formatNum(expBars.exp)} / ${formatNum(expBars.maxExp)} (${expBars.xpPct.toFixed(2)}%)`}
+            aria-label={`XP ${expBars.xpPct.toFixed(2)}%`}
+            className="relative h-3 w-full overflow-hidden rounded-full border border-[#1d3f73]/90 bg-[#08101c]/95 shadow-inner hover:brightness-110"
+          >
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-[#1d4ed8] via-[#2563eb] to-[#38bdf8] transition-[width] duration-200"
+              style={{ width: `${expBars.xpPct}%` }}
+            />
+            <span className="pointer-events-none absolute inset-0 flex items-center justify-center font-mono text-[7.5px] font-extrabold leading-none text-white [text-shadow:0_1px_1.5px_#000] tabular-nums sm:text-[8px]">
+              XP {expBars.xpPct.toFixed(1)}%
+            </span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="profile-jp-bar"
+            onClick={() => openPanel('job')}
+            title={`ค่าประสบการณ์อาชีพ: ${formatNum(expBars.jobExp)} / ${formatNum(expBars.maxJp)} (${expBars.jpPct.toFixed(2)}%)`}
+            aria-label={`JP ${expBars.jpPct.toFixed(2)}%`}
+            className="relative h-3 w-full overflow-hidden rounded-full border border-[#61380e]/90 bg-[#140d06]/95 shadow-inner hover:brightness-110"
+          >
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-[#b45309] via-[#d97706] to-[#fbbf24] transition-[width] duration-200"
+              style={{ width: `${expBars.jpPct}%` }}
+            />
+            <span className="pointer-events-none absolute inset-0 flex items-center justify-center font-mono text-[7.5px] font-extrabold leading-none text-white [text-shadow:0_1px_1.5px_#000] tabular-nums sm:text-[8px]">
+              JP {expBars.jpPct.toFixed(1)}%
+            </span>
+          </button>
         </div>
       </div>
 

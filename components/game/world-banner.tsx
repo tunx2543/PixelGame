@@ -51,7 +51,7 @@ export function TopAnnouncementTicker() {
       type="button"
       onClick={() => openPanel('guild')}
       aria-label="ประกาศกิจกรรมเซิร์ฟเวอร์"
-      className="pointer-events-auto fixed left-1/2 top-0.5 z-20 flex max-w-[min(92vw,34rem)] -translate-x-1/2 items-center gap-2 rounded-b-md border border-t-0 border-[#3b6bb3]/75 bg-[#09101c]/94 px-3 py-1 text-left shadow-lg transition-colors hover:border-amber-300/75"
+      className="pointer-events-auto fixed left-[42%] top-0.5 z-20 flex max-w-[min(34vw,19rem)] -translate-x-1/2 items-center gap-2 rounded-b-md border border-t-0 border-[#3b6bb3]/75 bg-[#09101c]/94 px-2.5 py-1 text-left shadow-lg transition-colors hover:border-amber-300/75 lg:left-1/2 lg:max-w-[min(44vw,28rem)] lg:px-3"
     >
       <span className="grid size-4 shrink-0 place-items-center rounded bg-sky-500/25 text-amber-300">
         {iconKind === 'megaphone' ? (

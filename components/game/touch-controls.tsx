@@ -57,7 +57,7 @@ function HoldButton({
         onUp?.()
       }}
       onContextMenu={(e) => e.preventDefault()}
-      className={cn('pixel-btn flex min-h-11 min-w-11 touch-none items-center justify-center text-foreground', className)}
+      className={cn('pixel-btn flex min-h-9 min-w-9 touch-none items-center justify-center text-foreground', className)}
     >
       {children}
     </button>
@@ -129,7 +129,7 @@ function VirtualJoystick() {
       }}
       onLostPointerCapture={() => releaseStick()}
       onContextMenu={(e) => e.preventDefault()}
-      className="relative flex size-[116px] touch-none select-none items-center justify-center rounded-full border-2 border-[#c9963b]/70 bg-[#141923]/80 shadow-2xl"
+      className="relative flex size-[100px] touch-none select-none items-center justify-center rounded-full border-2 border-[#c9963b]/70 bg-[#141923]/80 shadow-2xl sm:size-[110px]"
     >
       <span
         aria-hidden
@@ -177,15 +177,15 @@ export function TouchControls() {
       <div className="pointer-events-auto absolute inset-x-0 bottom-1.5 flex items-end justify-between gap-2 px-2 pb-[env(safe-area-inset-bottom)] lg:bottom-2.5 lg:px-3">
         <VirtualJoystick />
 
-        <div className="flex flex-col items-end gap-1.5">
-          <div className="flex flex-wrap items-center justify-end gap-1.5">
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex flex-wrap items-center justify-end gap-1">
             {nearbyDrop && (
               <HoldButton
                 label="เก็บไอเทม"
                 onDown={() => pickupGroundDrop()}
-                className="h-11 gap-1.5 rounded-full border-2 border-amber-300/90 bg-amber-900/95 px-3.5 text-xs font-bold text-amber-100 shadow-lg"
+                className="h-9 gap-1 rounded-full border-2 border-amber-300/90 bg-amber-900/95 px-3 text-[11px] font-bold text-amber-100 shadow-lg"
               >
-                <Hand className="size-4" aria-hidden />
+                <Hand className="size-3.5" aria-hidden />
                 <span>เก็บของ</span>
               </HoldButton>
             )}
@@ -193,19 +193,22 @@ export function TouchControls() {
               <HoldButton
                 label={`คุยกับ ${nearNpc.name}`}
                 onDown={() => interact()}
-                className="h-11 gap-1.5 rounded-full border-2 border-emerald-300/80 bg-emerald-900/95 px-3.5 text-xs font-bold text-emerald-100 shadow-lg"
+                className="h-9 gap-1 rounded-full border-2 border-emerald-300/80 bg-emerald-900/95 px-3 text-[11px] font-bold text-emerald-100 shadow-lg"
               >
-                <MessageCircle className="size-4" aria-hidden />
+                <MessageCircle className="size-3.5" aria-hidden />
                 <span>คุยกับ {nearNpc.name}</span>
               </HoldButton>
             )}
           </div>
 
-          <div className="flex max-w-[15rem] flex-wrap items-center justify-end gap-1.5 sm:max-w-none">
+          <div
+            data-testid="touch-skill-cluster"
+            className="grid grid-cols-4 gap-1 rounded-xl border border-[#2c4a75]/75 bg-[#09101c]/75 p-1 shadow-xl"
+          >
             <HoldButton
               label="เปิดกระเป๋า"
               onDown={() => openPanel('inventory')}
-              className="size-11 rounded-xl border-2 border-amber-300/60 bg-[#1e2636]/95 text-amber-200 shadow-md"
+              className="size-9 rounded-lg border border-amber-300/60 bg-[#1e2636]/95 text-amber-200 shadow sm:size-10"
             >
               <Backpack className="size-4" aria-hidden />
             </HoldButton>
@@ -213,7 +216,7 @@ export function TouchControls() {
               label="แดชหลบ (X)"
               onDown={() => triggerDodgeDash()}
               className={cn(
-                'size-11 rounded-xl border-2 border-cyan-300/60 bg-[#18293b]/95 text-cyan-200 shadow-md',
+                'size-9 rounded-lg border border-cyan-300/60 bg-[#18293b]/95 text-cyan-200 shadow sm:size-10',
                 game.dashCd > 0 && 'opacity-50',
               )}
             >
@@ -223,11 +226,18 @@ export function TouchControls() {
               label="ป้องกัน (การ์ด)"
               onDown={() => triggerOpenWorldGuard()}
               className={cn(
-                'size-11 rounded-xl border-2 border-sky-300/60 bg-[#1c2b42]/95 text-sky-200 shadow-md',
+                'size-9 rounded-lg border border-sky-300/60 bg-[#1c2b42]/95 text-sky-200 shadow sm:size-10',
                 game.guardCd > 0 && 'opacity-50',
               )}
             >
               <Shield className="size-4" aria-hidden />
+            </HoldButton>
+            <HoldButton
+              label="สกิลไม้ตาย (U)"
+              onDown={() => triggerUltimateSkill()}
+              className="size-9 rounded-lg border border-rose-400/80 bg-rose-950/95 text-rose-200 shadow sm:size-10"
+            >
+              <Flame className="size-4" aria-hidden />
             </HoldButton>
             {job.skills.map((sk, i) => (
               <HoldButton
@@ -235,12 +245,12 @@ export function TouchControls() {
                 label={sk.name}
                 onDown={() => castSkill(i)}
                 className={cn(
-                  'relative size-11 overflow-hidden rounded-xl border-2 border-[#d4a348] bg-[#241a18]/95 p-1 text-[9px] leading-tight shadow-lg',
+                  'relative size-9 overflow-hidden rounded-lg border-2 border-[#d4a348] bg-[#241a18]/95 p-0.5 text-[9px] leading-tight shadow sm:size-10',
                   g.p && g.p.mp < sk.mp && 'opacity-50',
                 )}
               >
                 {getSkillIconPath(sk.id) ? (
-                  <img src={getSkillIconPath(sk.id)} alt="" className="size-full rounded-md object-cover" />
+                  <img src={getSkillIconPath(sk.id)} alt="" className="size-full rounded object-cover" />
                 ) : (
                   <Sparkles className="size-4" style={{ color: sk.color }} aria-hidden />
                 )}
@@ -254,13 +264,6 @@ export function TouchControls() {
                 )}
               </HoldButton>
             ))}
-            <HoldButton
-              label="สกิลไม้ตาย (U)"
-              onDown={() => triggerUltimateSkill()}
-              className="size-11 rounded-xl border-2 border-rose-400/80 bg-rose-950/95 text-rose-200 shadow-md"
-            >
-              <Flame className="size-4" aria-hidden />
-            </HoldButton>
           </div>
 
           <HoldButton
@@ -277,7 +280,7 @@ export function TouchControls() {
               game.attackHeld = false
             }}
             className={cn(
-              'h-11 min-w-[6.75rem] gap-1.5 rounded-2xl border-2 px-3.5 text-xs font-extrabold shadow-lg',
+              'h-10 min-w-[6.75rem] gap-1.5 rounded-xl border-2 px-3.5 text-xs font-extrabold shadow-lg',
               nearNpc && inSafeZone
                 ? 'border-emerald-200/85 bg-gradient-to-b from-emerald-400 to-emerald-600 text-[#052e16]'
                 : 'border-amber-200/80 bg-gradient-to-b from-amber-400 to-amber-600 text-[#241409]',
