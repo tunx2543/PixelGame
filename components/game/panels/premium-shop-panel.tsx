@@ -855,7 +855,7 @@ export function PremiumShopPanel() {
 
   return (
     <PanelFrame
-      title="ร้านค้าโซล (Asura Soul Shop)"
+      title="ร้านค้าโซล (Pixel Quest Soul Shop)"
       subtitle="เลือกซื้อไอเทมสนับสนุน ตีบวก แฟชั่น คู่หู เปิดเคล็ด และเติมโซลจริง (PromptPay / Stripe / ตรวจสลิป)"
     >
       {/* Top Banner: Verified Payment & Soul Wallet Strip */}
@@ -864,7 +864,7 @@ export function PremiumShopPanel() {
           <div className="flex items-center gap-2 text-[11px] text-sky-100">
             <ShieldCheck className="size-4 shrink-0 text-emerald-300" aria-hidden />
             <span>
-              <strong className="text-emerald-300">ร้านค้าโซลอสุรา (Server-Verified):</strong>{' '}
+              <strong className="text-emerald-300">ร้านค้าโซล Pixel Quest (Server-Verified):</strong>{' '}
               รองรับเติมโซล PromptPay QR, บัตรเครดิต Stripe และสลิปธนาคารอัตโนมัติ
             </span>
           </div>

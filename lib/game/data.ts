@@ -1613,10 +1613,10 @@ const SET_A_AND_HIGH_TIER_ITEMS: Record<string, ItemDef> = {
   }),
 
   // ---- Lv.100 Mythic / God-Tier Weapons (Mythic) ----
-  lv100_mythic_asura_sovereign: weapon('lv100_mythic_asura_sovereign', 'ดาบเทพราชันย์อสุรา', 'sword', 1180, 680000, 6, 100, '#fb7185', {
+  lv100_mythic_asura_sovereign: weapon('lv100_mythic_asura_sovereign', 'ดาบเทพราชันย์ Pixel Quest', 'sword', 1180, 680000, 6, 100, '#fb7185', {
     defaultRarity: 'mythic',
     element: 'fire',
-    description: 'สุดยอดมหาศาสตราระดับเทพ ดาบราชันย์อสุราเปล่งรัศมีเพลิงสวรรค์ Lv.100 (ATK +1,180)',
+    description: 'สุดยอดมหาศาสตราระดับเทพ ดาบราชันย์ Pixel Quest เปล่งรัศมีเพลิงสวรรค์ Lv.100 (ATK +1,180)',
   }),
   lv100_mythic_celestial_orb: weapon('lv100_mythic_celestial_orb', 'คทาเทพดาราจักรนิรันดร์', 'staff', 1150, 680000, 6, 100, '#c084fc', {
     defaultRarity: 'mythic',
@@ -1657,11 +1657,11 @@ const SET_A_AND_HIGH_TIER_ITEMS: Record<string, ItemDef> = {
     element: 'fire',
     description: 'หมวกศึกเขามังกรโบราณทนเปลวเพลิงและแรงปะทะ (DEF +148)',
   }),
-  mythic_asura_crown: armor('mythic_asura_crown', 'มงกุฎเทพอสุรานิรันดร์', 260, 240000, 6, 95, '#fb7185', {
+  mythic_asura_crown: armor('mythic_asura_crown', 'มงกุฎเทพ Pixel Quest นิรันดร์', 260, 240000, 6, 95, '#fb7185', {
     itemCategory: 'helmet',
     defaultRarity: 'mythic',
     element: 'holy',
-    description: 'มงกุฎทองคำเปลวเทพระดับสูงสุดแห่งราชันย์อสุรา (DEF +260)',
+    description: 'มงกุฎทองคำเปลวเทพระดับสูงสุดแห่งราชันย์ Pixel Quest (DEF +260)',
   }),
 
   // ---- Set A Armors (เสื้อเกราะ) ----
@@ -1676,7 +1676,7 @@ const SET_A_AND_HIGH_TIER_ITEMS: Record<string, ItemDef> = {
     element: 'lightning',
     description: 'เสื้อเกราะเกล็ดทองคำผนึกพลังสายฟ้า (DEF +185)',
   }),
-  celestial_godplate: armor('celestial_godplate', 'เกราะเทพสุริยันอสุรา', 320, 310000, 6, 95, '#fb7185', {
+  celestial_godplate: armor('celestial_godplate', 'เกราะเทพสุริยัน Pixel Quest', 320, 310000, 6, 95, '#fb7185', {
     itemCategory: 'armor',
     defaultRarity: 'mythic',
     element: 'holy',
@@ -1725,7 +1725,7 @@ const SET_A_AND_HIGH_TIER_ITEMS: Record<string, ItemDef> = {
     element: 'holy',
     description: 'รองเท้าเกราะทองปีกคู่เดินเหินเหนือเมฆา (DEF +135)',
   }),
-  mythic_asura_sabatons: armor('mythic_asura_sabatons', 'รองเท้าเทพอสุรากัมปนาท', 235, 230000, 6, 95, '#fb7185', {
+  mythic_asura_sabatons: armor('mythic_asura_sabatons', 'รองเท้าเทพ Pixel Quest กัมปนาท', 235, 230000, 6, 95, '#fb7185', {
     slot: 'shoes',
     itemCategory: 'boots',
     defaultRarity: 'mythic',
@@ -1790,7 +1790,7 @@ const SET_A_AND_HIGH_TIER_ITEMS: Record<string, ItemDef> = {
     element: 'arcane',
     description: 'แหวนไพลินล้อมเพชรเรืองแสงอาคม (DEF +124)',
   }),
-  mythic_sovereign_ring: armor('mythic_sovereign_ring', 'แหวนเทพจักรพรรดิอสุรา', 210, 240000, 6, 95, '#fb7185', {
+  mythic_sovereign_ring: armor('mythic_sovereign_ring', 'แหวนเทพจักรพรรดิ Pixel Quest', 210, 240000, 6, 95, '#fb7185', {
     slot: 'accessory',
     itemCategory: 'ring',
     defaultRarity: 'mythic',
@@ -1831,12 +1831,12 @@ const SET_A_AND_HIGH_TIER_ITEMS: Record<string, ItemDef> = {
     element: 'arcane',
     description: 'เครื่องรางศิลารูนสี่ทิศเรืองแสงอาคม (DEF +112)',
   }),
-  mythic_asura_seal: armor('mythic_asura_seal', 'เครื่องรางตราประทับเทพอสุรา', 220, 250000, 6, 95, '#fde047', {
+  mythic_asura_seal: armor('mythic_asura_seal', 'เครื่องรางตราประทับเทพ Pixel Quest', 220, 250000, 6, 95, '#fde047', {
     slot: 'cloak',
     itemCategory: 'charm',
     defaultRarity: 'mythic',
     element: 'holy',
-    description: 'ตราประทับศักดิ์สิทธิ์แห่งเทพอสุรา คุ้มครองวิญญาณระดับสูงสุด (DEF +220)',
+    description: 'ตราประทับศักดิ์สิทธิ์แห่งเทพ Pixel Quest คุ้มครองวิญญาณระดับสูงสุด (DEF +220)',
   }),
 
   // ---- Set A Special Items (ไอเทมพิเศษ) ----
@@ -1883,7 +1883,7 @@ const SET_A_AND_HIGH_TIER_ITEMS: Record<string, ItemDef> = {
   },
   soul_awakening_relic: {
     id: 'soul_awakening_relic',
-    name: 'ศิลาปลุกจิตอสุรา',
+    name: 'ศิลาปลุกจิต Pixel Quest',
     kind: 'material',
     itemCategory: 'special',
     price: 12000,
@@ -1897,7 +1897,7 @@ const SET_A_AND_HIGH_TIER_ITEMS: Record<string, ItemDef> = {
   },
   mythic_awakening_core: {
     id: 'mythic_awakening_core',
-    name: 'แก่นปลุกพลังเทพอสุรา',
+    name: 'แก่นปลุกพลังเทพ Pixel Quest',
     kind: 'material',
     itemCategory: 'special',
     price: 35000,
@@ -1980,7 +1980,7 @@ const BASE_ITEMS: Record<string, ItemDef> = {
   skill_reset_potion: { id: 'skill_reset_potion', name: 'น้ำยาลืมทักษะ', kind: 'consumable', itemCategory: 'special', price: 600, defaultRarity: 'rare', icon: 'potion', color: '#c084fc', description: 'ใช้ล้างแต้มทักษะ (SP) ทั้งหมดคืนฟรี 1 ครั้ง', effect: true },
   job_reset_potion: { id: 'job_reset_potion', name: 'น้ำยาเปลี่ยนอาชีพ', kind: 'consumable', itemCategory: 'special', price: 1500, defaultRarity: 'epic', icon: 'potion', color: '#f59e0b', description: 'รีเซ็ตสายอาชีพกลับสู่ผู้ฝึกหัด (คงเลเวลและอุปกรณ์) เพื่อเลือกสายใหม่', effect: true },
   title_clear_scroll: { id: 'title_clear_scroll', name: 'ใบแจ้งลบฉายา', kind: 'consumable', itemCategory: 'special', price: 250, icon: 'scroll', color: '#94a3b8', description: 'ล้างนามแฝงและฉายาที่แสดงบนตัวละครออกทั้งหมดทันที' },
-  companion_gacha_box: { id: 'companion_gacha_box', name: 'กล่องสุ่มคู่หูอสุรา', kind: 'consumable', itemCategory: 'special', price: 2400, sellPrice: 800, defaultRarity: 'epic', icon: 'bag', color: '#f472b6', description: 'เปิดเพื่อสุ่มรับคู่หู (ผอบ) หรือผลึกวิวัฒนาการคู่หู x5 + EXP สัตว์เลี้ยง', effect: true },
+  companion_gacha_box: { id: 'companion_gacha_box', name: 'กล่องสุ่มคู่หู Pixel Quest', kind: 'consumable', itemCategory: 'special', price: 2400, sellPrice: 800, defaultRarity: 'epic', icon: 'bag', color: '#f472b6', description: 'เปิดเพื่อสุ่มรับคู่หู (ผอบ) หรือผลึกวิวัฒนาการคู่หู x5 + EXP สัตว์เลี้ยง', effect: true },
 
   wooden_stick: weapon('wooden_stick', 'ไม้พลอง', 'stick', 6, 50, 1, 1, '#a47148', { defaultRarity: 'common' }),
   oak_club: weapon('oak_club', 'กระบองโอ๊ค', 'stick', 14, 400, 2, 5, '#7f5539', { defaultRarity: 'uncommon' }),

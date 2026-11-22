@@ -10,6 +10,7 @@ import {
   ScrollText,
   Users,
 } from 'lucide-react'
+import { motion } from 'motion/react'
 import { expToNext } from '@/lib/game/data'
 import {
   game,
@@ -371,35 +372,47 @@ export function AsuraExpStrip() {
       data-testid="asura-exp-strip"
       className="pointer-events-auto flex items-center gap-1.5 select-none"
     >
-      <button
+      <motion.button
         type="button"
         onClick={() => openPanel('character')}
         title={`ค่าประสบการณ์ตัวละคร: ${p.exp} / ${maxExp}`}
-        className="relative h-5 w-28 overflow-hidden rounded border border-[#3b6bb3]/85 bg-[#0c1626]/92 shadow-md sm:w-36"
+        initial={{ opacity: 0, y: 6, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        whileHover={{ scale: 1.03, y: -1, boxShadow: '0 0 10px rgba(56, 189, 248, 0.4)' }}
+        whileTap={{ scale: 0.98 }}
+        transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+        className="group relative h-5 w-28 overflow-hidden rounded border border-[#3b6bb3]/85 bg-[#0c1626]/92 shadow-md sm:w-36"
       >
-        <div
-          className="h-full bg-gradient-to-r from-[#1d4ed8] via-[#2563eb] to-[#38bdf8] transition-[width] duration-200"
-          style={{ width: `${xpPct}%` }}
+        <motion.div
+          className="h-full bg-gradient-to-r from-[#1d4ed8] via-[#2563eb] to-[#38bdf8]"
+          animate={{ width: `${xpPct}%` }}
+          transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
         />
         <span className="pointer-events-none absolute inset-0 flex items-center justify-center font-mono text-[10px] font-extrabold text-white [text-shadow:0_1px_2px_#000] tabular-nums">
           XP {xpPct.toFixed(2)} %
         </span>
-      </button>
+      </motion.button>
 
-      <button
+      <motion.button
         type="button"
         onClick={() => openPanel('job')}
         title={`ค่าประสบการณ์อาชีพ: ${p.jobExp ?? 0} / ${maxJp}`}
-        className="relative h-5 w-28 overflow-hidden rounded border border-[#3b6bb3]/85 bg-[#0c1626]/92 shadow-md sm:w-36"
+        initial={{ opacity: 0, y: 6, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        whileHover={{ scale: 1.03, y: -1, boxShadow: '0 0 10px rgba(251, 191, 36, 0.4)' }}
+        whileTap={{ scale: 0.98 }}
+        transition={{ duration: 0.22, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
+        className="group relative h-5 w-28 overflow-hidden rounded border border-[#3b6bb3]/85 bg-[#0c1626]/92 shadow-md sm:w-36"
       >
-        <div
-          className="h-full bg-gradient-to-r from-[#b45309] via-[#d97706] to-[#fbbf24] transition-[width] duration-200"
-          style={{ width: `${jpPct}%` }}
+        <motion.div
+          className="h-full bg-gradient-to-r from-[#b45309] via-[#d97706] to-[#fbbf24]"
+          animate={{ width: `${jpPct}%` }}
+          transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
         />
         <span className="pointer-events-none absolute inset-0 flex items-center justify-center font-mono text-[10px] font-extrabold text-white [text-shadow:0_1px_2px_#000] tabular-nums">
           JP {jpPct.toFixed(2)} %
         </span>
-      </button>
+      </motion.button>
     </div>
   )
 }

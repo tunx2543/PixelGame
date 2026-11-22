@@ -120,7 +120,7 @@ export function AsuraDailyHelperModal({
           <div className="flex items-center gap-2">
             <GameArtIcon iconId="helper" size={24} />
             <div>
-              <h3 className="text-sm font-bold text-white">ตัวช่วยอสุราประจำวัน</h3>
+              <h3 className="text-sm font-bold text-white">ตัวช่วย Pixel Quest ประจำวัน</h3>
               <p className="text-[10.5px] text-sky-300">เช็กรายการรับรางวัลฟรีและโบนัสรายวัน ({today})</p>
             </div>
           </div>
@@ -269,7 +269,7 @@ export function AsuraMenuModal({
       const url = canvas.toDataURL('image/png')
       const a = document.createElement('a')
       a.href = url
-      a.download = `asura-screenshot-${Date.now()}.png`
+      a.download = `pixel-quest-screenshot-${Date.now()}.png`
       document.body.appendChild(a)
       a.click()
       a.remove()
@@ -538,7 +538,7 @@ export function AsuraMenuModal({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="เมนูอสุรา"
+      aria-label="เมนู Pixel Quest"
       className="pointer-events-auto fixed inset-0 z-[70] flex items-center justify-center bg-black/72 p-3"
       onPointerDown={(e) => {
         if (e.target === e.currentTarget) onClose()
@@ -548,7 +548,7 @@ export function AsuraMenuModal({
         <header className="flex items-center justify-between border-b border-[#295596] bg-[#162336]/95 px-4 py-2.5">
           <div className="flex items-center gap-2">
             <GameArtIcon iconId="menu-castle" size={26} />
-            <h2 className="text-sm font-bold text-white sm:text-base">เมนูระบบหลัก (LUMIVARA)</h2>
+            <h2 className="text-sm font-bold text-white sm:text-base">เมนูระบบหลัก (Pixel Quest)</h2>
           </div>
           <button
             type="button"

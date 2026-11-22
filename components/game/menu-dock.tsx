@@ -68,7 +68,7 @@ export function MenuDock({
   return (
     <>
       <nav
-        aria-label="แถบเมนูหลักอสุรา"
+        aria-label="แถบเมนูหลัก Pixel Quest"
         data-testid="menu-dock"
         className="pointer-events-auto relative flex items-start gap-1.5 sm:gap-2"
       >

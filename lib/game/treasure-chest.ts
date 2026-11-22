@@ -92,7 +92,7 @@ export const CHEST_TIERS: Record<ChestTierId, ChestTierDef> = {
   },
   mythic: {
     id: 'mythic',
-    name: 'หีบสมบัติเทพอสุรา',
+    name: 'หีบสมบัติเทพ Pixel Quest',
     subtitle: 'การันตีระดับมหากาพย์ (Epic) ขึ้นไป · โอกาสระดับเทพสูงสุด',
     costGold: 7500,
     keyItemId: 'imperial_gold_key',

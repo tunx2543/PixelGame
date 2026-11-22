@@ -52,7 +52,7 @@ export function SkillBar({ compactTouchMode = false }: { compactTouchMode?: bool
   return (
     <div
       data-testid="skill-bar"
-      aria-label="แถบสกิลแนวตั้งอสุรา"
+      aria-label="แถบสกิลแนวตั้ง Pixel Quest"
       className={cn(
         'pointer-events-auto flex flex-col items-end gap-1.5 select-none',
         compactTouchMode && 'scale-95 origin-bottom-right',

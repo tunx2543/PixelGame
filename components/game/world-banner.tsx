@@ -1,5 +1,7 @@
 'use client'
 
+import { useEffect, useState } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
 import {
   Flame,
   Megaphone,
@@ -24,48 +26,86 @@ import { SocialBar } from './social-bar'
 
 export function TopAnnouncementTicker() {
   const { p } = useGame()
-  if (!p) return null
+  const [hiddenEventKey, setHiddenEventKey] = useState<string | null>(null)
 
-  const map = game.p ? p.mapId : 'town'
-  const announcement = game.announcement && game.announcement.until > Date.now() ? game.announcement : null
+  const map = p ? (game.p ? p.mapId : 'town') : 'town'
+  const nowMs = Date.now()
+  const announcement = game.announcement && game.announcement.until > nowMs ? game.announcement : null
   const worldBoss = getActiveWorldBoss()
-  const wbRemainSec = Math.max(0, Math.floor((worldBoss.endsAtMs - Date.now()) / 1000))
+  const wbRemainSec = Math.max(0, Math.floor((worldBoss.endsAtMs - nowMs) / 1000))
   const wbMin = Math.floor(wbRemainSec / 60)
-  const fieldBoss = getFieldBossForMap(map)
+  const fieldBoss = p ? getFieldBossForMap(map) : null
 
-  let headline = `ยินดีต้อนรับสู่โลกอสุรา · บอสโลก ${worldBoss.name} เหลือเวลาอีก ${wbMin} นาที`
+  let headline = `ยินดีต้อนรับสู่โลก Pixel Quest · บอสโลก ${worldBoss.name} เหลือเวลาอีก ${wbMin} นาที`
+  let eventKey = p ? `welcome:${worldBoss.name}` : ''
   let iconKind: 'megaphone' | 'shield' | 'flame' = 'flame'
+
   if (announcement) {
     headline = `${announcement.authorName ? `[${announcement.authorName}] ` : ''}${announcement.body}`
+    eventKey = `ann:${announcement.until}:${announcement.body}`
     iconKind = 'megaphone'
   } else if (game.invasion?.active) {
     headline = `กิจกรรม ปกป้องหมู่บ้าน Wave ${game.invasion.wave}/${game.invasion.maxWaves} กำลังเปิดฉาก!`
+    eventKey = `inv:${game.invasion.wave}`
     iconKind = 'shield'
   } else if (fieldBoss) {
     headline = `ฟิลด์บอสประจำแมพ: ${fieldBoss.name} (Lv.${fieldBoss.level}) ปรากฏตัวแล้ว!`
+    eventKey = `fb:${map}:${fieldBoss.name}`
     iconKind = 'shield'
   }
 
+  const isVisible = Boolean(p && eventKey && hiddenEventKey !== eventKey)
+  const scrollDurationSec = Math.max(6.5, Math.min(13, 4.5 + headline.length * 0.085))
+
+  useEffect(() => {
+    if (!isVisible || !eventKey) return
+    const timer = window.setTimeout(() => {
+      setHiddenEventKey(eventKey)
+    }, Math.round((scrollDurationSec + 0.6) * 1000))
+    return () => window.clearTimeout(timer)
+  }, [isVisible, eventKey, scrollDurationSec])
+
+  if (!p) return null
+
   return (
-    <button
-      type="button"
-      onClick={() => openPanel('guild')}
-      aria-label="ประกาศกิจกรรมเซิร์ฟเวอร์"
-      className="pointer-events-auto fixed left-[42%] top-0.5 z-20 flex max-w-[min(34vw,19rem)] -translate-x-1/2 items-center gap-2 rounded-b-md border border-t-0 border-[#3b6bb3]/75 bg-[#09101c]/94 px-2.5 py-1 text-left shadow-lg transition-colors hover:border-amber-300/75 lg:left-1/2 lg:max-w-[min(44vw,28rem)] lg:px-3"
-    >
-      <span className="grid size-4 shrink-0 place-items-center rounded bg-sky-500/25 text-amber-300">
-        {iconKind === 'megaphone' ? (
-          <Megaphone className="size-3" aria-hidden />
-        ) : iconKind === 'shield' ? (
-          <Shield className="size-3" aria-hidden />
-        ) : (
-          <Flame className="size-3 text-rose-400" aria-hidden />
-        )}
-      </span>
-      <span className="truncate text-[11px] font-bold text-amber-300 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]">
-        {headline}
-      </span>
-    </button>
+    <AnimatePresence>
+      {isVisible && (
+        <motion.button
+          key={eventKey}
+          type="button"
+          data-testid="top-announcement-ticker"
+          onClick={() => openPanel('guild')}
+          aria-label="ประกาศกิจกรรมเซิร์ฟเวอร์"
+          initial={{ opacity: 0, y: -8, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -8, scale: 0.96 }}
+          transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+          className="pointer-events-auto fixed left-1/2 top-[14.25rem] z-30 flex w-[min(22rem,calc(100vw-1.5rem))] -translate-x-1/2 items-center gap-2 rounded-full border border-[#3b6bb3]/85 bg-[#09101c]/92 px-2.5 py-1 text-left shadow-[0_6px_20px_rgba(0,0,0,0.6)] backdrop-blur-sm transition-colors hover:border-amber-300/80 sm:top-[4.75rem] sm:w-[min(24rem,calc(100vw-26rem))] xl:top-4 xl:w-[min(30vw,26rem)] xl:px-3"
+        >
+          <span className="grid size-4 shrink-0 place-items-center rounded-full bg-sky-500/25 text-amber-300">
+            {iconKind === 'megaphone' ? (
+              <Megaphone className="size-3" aria-hidden />
+            ) : iconKind === 'shield' ? (
+              <Shield className="size-3" aria-hidden />
+            ) : (
+              <Flame className="size-3 text-rose-400" aria-hidden />
+            )}
+          </span>
+          <div className="relative min-w-0 flex-1 overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_6%,black_94%,transparent)]">
+            <motion.div
+              key={eventKey}
+              initial={{ x: 0 }}
+              animate={{ x: '-100%' }}
+              transition={{ duration: scrollDurationSec, ease: 'linear' }}
+              onAnimationComplete={() => setHiddenEventKey(eventKey)}
+              className="w-max whitespace-nowrap pl-[100%] text-[11px] font-bold text-amber-300 [text-shadow:0_1px_2px_rgba(0,0,0,0.95)]"
+            >
+              {headline}
+            </motion.div>
+          </div>
+        </motion.button>
+      )}
+    </AnimatePresence>
   )
 }
 

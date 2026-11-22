@@ -402,7 +402,7 @@ export function TitleScreen() {
       <div className="relative z-10 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="rounded-lg border border-[#3a68a8]/80 bg-[#152030]/90 px-3 py-1 font-[family-name:var(--font-display)] text-sm font-extrabold tracking-wide text-amber-300 shadow">
-            LUMIVARA
+            Pixel Quest
           </span>
           <button
             type="button"

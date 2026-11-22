@@ -896,7 +896,7 @@ export const PREMIUM_CATALOG: PremiumProduct[] = [
   {
     productId: 'prod_asura_companion_gacha',
     itemId: 'companion_gacha_box',
-    name: 'กล่องสุ่มคู่หูอสุรา',
+    name: 'กล่องสุ่มคู่หู Pixel Quest',
     description: 'เปิดเพื่อสุ่มรับคู่หู (ผอบ) หรือผลึกวิวัฒนาการคู่หู x5 พร้อม EXP สัตว์เลี้ยง',
     icon: 'companion_gacha_box',
     diamondPrice: 220,

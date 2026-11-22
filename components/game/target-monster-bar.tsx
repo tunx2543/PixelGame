@@ -1,5 +1,6 @@
 'use client'
 
+import { motion } from 'motion/react'
 import { MONSTERS } from '@/lib/game/data'
 import { getTargetMonster } from '@/lib/game/engine'
 import { ELEMENT_META, getMonsterElement } from '@/lib/game/rpg-systems'
@@ -26,10 +27,14 @@ export function TargetMonsterBar({ offsetTouch = false }: { offsetTouch?: boolea
   const isBoss = Boolean(def.boss || target.worldBossName)
 
   return (
-    <div
+    <motion.div
+      key={target.uid}
       data-testid="target-monster-bar"
       role="status"
       aria-label={`เป้าหมาย: ${displayName}`}
+      initial={{ opacity: 0, y: 8, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
       className={`pointer-events-none fixed left-1/2 z-20 w-[min(19rem,58vw)] -translate-x-1/2 select-none sm:w-[min(19rem,42vw)] ${
         offsetTouch ? 'bottom-[10.75rem] sm:bottom-11' : 'bottom-10'
       }`}
@@ -64,9 +69,15 @@ export function TargetMonsterBar({ offsetTouch = false }: { offsetTouch?: boolea
         </div>
 
         <div className="relative h-3.5 w-full overflow-hidden rounded-full border border-[#2a1216] bg-[#160b0e] shadow-inner">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-[#b91c1c] via-[#ef4444] to-[#f59e0b] transition-[width] duration-150"
-            style={{ width: `${hpPct}%` }}
+          <motion.div
+            className="absolute inset-y-0 left-0 rounded-full bg-amber-200/55"
+            animate={{ width: `${hpPct}%` }}
+            transition={{ duration: 0.42, ease: 'easeOut' }}
+          />
+          <motion.div
+            className="relative h-full rounded-full bg-gradient-to-r from-[#b91c1c] via-[#ef4444] to-[#f59e0b]"
+            animate={{ width: `${hpPct}%` }}
+            transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
           />
           <span className="pointer-events-none absolute inset-x-1.5 top-0.5 h-[2px] rounded-full bg-white/25" />
           <span className="pointer-events-none absolute inset-0 flex items-center justify-center font-mono text-[9.5px] font-extrabold text-white [text-shadow:0_1px_2px_#000] tabular-nums">
@@ -74,6 +85,6 @@ export function TargetMonsterBar({ offsetTouch = false }: { offsetTouch?: boolea
           </span>
         </div>
       </div>
-    </div>
+    </motion.div>
   )
 }
