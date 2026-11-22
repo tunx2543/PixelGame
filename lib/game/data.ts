@@ -1,5 +1,7 @@
 import { WEAPON_CATALOG } from './weapon-catalog'
 import { GENERATED_BIOME_MONSTERS } from './biome-monsters'
+import type { EquipmentRarity } from './mmo-systems'
+import type { ItemCategory, ItemElement } from './item-vfx'
 
 export type WeaponType = 'stick' | 'sword' | 'staff' | 'bow' | 'dagger'
 
@@ -1346,6 +1348,7 @@ export interface ItemDef {
   name: string
   kind: ItemKind
   price: number
+  sellPrice?: number
   icon: string
   color: string
   description: string
@@ -1361,6 +1364,9 @@ export interface ItemDef {
   gmOnly?: boolean
   slot?: EquipmentSlot
   allowedJobs?: string[]
+  itemCategory?: ItemCategory
+  element?: ItemElement
+  defaultRarity?: EquipmentRarity
 }
 
 const weapon = (
@@ -1372,6 +1378,7 @@ const weapon = (
   tier: number,
   reqLevel: number,
   color: string,
+  extra?: Partial<ItemDef>,
 ): ItemDef => ({
   id,
   name,
@@ -1383,10 +1390,21 @@ const weapon = (
   reqLevel,
   icon: weaponType,
   color,
+  itemCategory: 'weapon',
   description: `อาวุธ (${weaponType}) พลังโจมตี +${atk}`,
+  ...extra,
 })
 
-const armor = (id: string, name: string, def: number, price: number, tier: number, reqLevel: number, color: string): ItemDef => ({
+const armor = (
+  id: string,
+  name: string,
+  def: number,
+  price: number,
+  tier: number,
+  reqLevel: number,
+  color: string,
+  extra?: Partial<ItemDef>,
+): ItemDef => ({
   id,
   name,
   kind: 'armor',
@@ -1397,7 +1415,9 @@ const armor = (id: string, name: string, def: number, price: number, tier: numbe
   reqLevel,
   icon: 'armor',
   color,
+  itemCategory: 'armor',
   description: `ชุดเกราะ พลังป้องกัน +${def}`,
+  ...extra,
 })
 
 const CATALOG_NAMES = ['รัตติกาล', 'เพลิงฟ้า', 'เขี้ยวจันทรา', 'ผ่าอเวจี', 'เงาพราย', 'ดาวตก', 'โลหิตแดง', 'วายุเงิน', 'พิทักษ์เถ้า', 'ราชันย์ผลึก']
@@ -1440,11 +1460,14 @@ const catalogItems = Object.fromEntries(CATALOG_ASSETS.map((asset, index) => {
   const atk = 18 + tier * 16 + (index % 5) * 3
   const id = `catalog_${asset.replace('.png', '').replaceAll('-', '_')}`
   const name = `${baseName} ${isEffect ? 'อุปกรณ์อาคม' : weaponLabel} ${String(index + 1).padStart(2, '0')}`
+  const eqSlot: EquipmentSlot = isEffect ? (['armor', 'shoes', 'cloak', 'accessory'][index % 4] as EquipmentSlot) : 'weapon'
+  const assetFolder = !isEffect ? 'weapons' : eqSlot === 'accessory' ? 'accessories' : 'armor'
   const item: ItemDef = {
     id,
     name,
     kind: isEffect ? 'armor' : 'weapon',
-    slot: isEffect ? (['armor', 'shoes', 'cloak', 'accessory'][index % 4] as EquipmentSlot) : 'weapon',
+    slot: eqSlot,
+    itemCategory: isEffect ? (eqSlot === 'accessory' ? 'accessory' : eqSlot === 'shoes' ? 'boots' : 'armor') : 'weapon',
     weaponType: isEffect ? undefined : weaponType,
     atk: isEffect ? undefined : atk,
     def: isEffect ? 20 + tier * 10 : undefined,
@@ -1453,146 +1476,611 @@ const catalogItems = Object.fromEntries(CATALOG_ASSETS.map((asset, index) => {
     reqLevel: tier * 10,
     icon: isEffect ? 'armor' : weaponType,
     effect: isEffect,
+    defaultRarity: tier >= 4 ? 'legendary' : tier === 3 ? 'epic' : tier === 2 ? 'rare' : 'uncommon',
     color: isEffect ? '#c084fc' : weaponType === 'dagger' ? '#d00000' : weaponType === 'staff' ? '#8b5cf6' : weaponType === 'bow' ? '#16a34a' : '#f59e0b',
-    asset: `/images/items/${id}.png`,
-    description: `${isEffect ? 'อุปกรณ์อาคมจากบอส' : `อาวุธสำหรับ ${weaponLabel}`} | ไฟล์: ${asset} | ${isEffect ? `ป้องกัน +${20 + tier * 10}` : `โจมตี +${atk}`}`,
+    asset: `/assets/items/${assetFolder}/${id}.png`,
+    description: `${isEffect ? 'อุปกรณ์อาคมจากบอส' : `อาวุธสำหรับ ${weaponLabel}`} | ${isEffect ? `ป้องกัน +${20 + tier * 10}` : `โจมตี +${atk}`}`,
   }
   return [id, item]
 })) as Record<string, ItemDef>
 
+function resolveSemanticBaseItemAssetPath(id: string, def: ItemDef): string {
+  if (def.asset && def.asset.startsWith('/assets/items/')) return def.asset
+  if (def.kind === 'weapon') return `/assets/items/weapons/${id}.png`
+  if (def.itemCategory === 'shield') return `/assets/items/shields/${id}.png`
+  if (
+    def.itemCategory === 'accessory' ||
+    def.itemCategory === 'ring' ||
+    def.itemCategory === 'necklace' ||
+    def.itemCategory === 'charm' ||
+    def.slot === 'accessory'
+  ) {
+    return `/assets/items/accessories/${id}.png`
+  }
+  if (def.kind === 'armor') return `/assets/items/armor/${id}.png`
+  return `/assets/items/special/${id}.png`
+}
+
+const SET_A_AND_HIGH_TIER_ITEMS: Record<string, ItemDef> = {
+  // ---- Lv.50 High-Tier Warrior Weapons (Rare/Epic) ----
+  lv50_vanguard_greatsword: weapon('lv50_vanguard_greatsword', 'ดาบใหญ่นักรบชั้นสูง', 'sword', 210, 48000, 3, 50, '#38bdf8', {
+    defaultRarity: 'epic',
+    element: 'physical',
+    description: 'ดาบใหญ่เหล็กกล้าชุบพลังปราณ สำหรับนักรบชั้นสูง Lv.50 (ATK +210)',
+  }),
+  lv50_arcanist_spire: weapon('lv50_arcanist_spire', 'คทามหาปราชญ์ชั้นสูง', 'staff', 198, 48000, 3, 50, '#a855f7', {
+    defaultRarity: 'epic',
+    element: 'arcane',
+    description: 'คทายอดผลึกสองชั้นสำหรับจอมเวทชั้นสูง Lv.50 (ATK +198)',
+  }),
+  lv50_windstalker_recurve: weapon('lv50_windstalker_recurve', 'ธนูจ้าววายุชั้นสูง', 'bow', 202, 48000, 3, 50, '#34d399', {
+    defaultRarity: 'epic',
+    element: 'physical',
+    description: 'ธนูโค้งสะท้อนแรงลมความเร็วสูง สำหรับพราน Lv.50 (ATK +202)',
+  }),
+  lv50_nightveil_kris: weapon('lv50_nightveil_kris', 'กริชเงาจันทราชั้นสูง', 'dagger', 192, 48000, 3, 50, '#c084fc', {
+    defaultRarity: 'epic',
+    element: 'shadow',
+    description: 'กริชคมหยักเคลือบอักษรเงา สำหรับนักฆ่า Lv.50 (ATK +192)',
+  }),
+
+  // ---- Lv.60 Knight Tier Weapons (Epic) ----
+  lv60_templar_claymore: weapon('lv60_templar_claymore', 'ดาบศักดิ์สิทธิ์อัศวิน', 'sword', 310, 78000, 4, 60, '#60a5fa', {
+    defaultRarity: 'epic',
+    element: 'holy',
+    description: 'ดาบอัศวินเทมพลาร์สลักปีกศักดิ์สิทธิ์ Lv.60 (ATK +310)',
+  }),
+  lv60_aegis_scepter: weapon('lv60_aegis_scepter', 'คทาอัศวินแสงพิสุทธิ์', 'staff', 295, 78000, 4, 60, '#fde047', {
+    defaultRarity: 'epic',
+    element: 'holy',
+    description: 'คทาประดับปีกทูตสวรรค์สำหรับนักบวชและจอมเวท Lv.60 (ATK +295)',
+  }),
+  lv60_silverwing_longbow: weapon('lv60_silverwing_longbow', 'ธนูปีกเงินอัศวิน', 'bow', 300, 78000, 4, 60, '#93c5fd', {
+    defaultRarity: 'epic',
+    element: 'holy',
+    description: 'ธนูยาวตีจากแร่เงินบริสุทธิ์ Lv.60 (ATK +300)',
+  }),
+  lv60_phantom_twinblade: weapon('lv60_phantom_twinblade', 'มีดคู่เงาอัศวิน', 'dagger', 288, 78000, 4, 60, '#818cf8', {
+    defaultRarity: 'epic',
+    element: 'shadow',
+    description: 'ศาสตราคู่ปลายแหลมสองคมของอัศวินเงา Lv.60 (ATK +288)',
+  }),
+
+  // ---- Lv.70 Elemental Weapons (Legendary) ----
+  lv70_elemental_ignis_blade: weapon('lv70_elemental_ignis_blade', 'ดาบธาตุเพลิงสุริยะ', 'sword', 440, 125000, 5, 70, '#fb923c', {
+    defaultRarity: 'legendary',
+    element: 'fire',
+    description: 'ดาบธาตุไฟหลอมจากแกนเพลิงภูเขาไฟ Lv.70 (ATK +440 · ธาตุไฟ)',
+  }),
+  lv70_tempest_storm_staff: weapon('lv70_tempest_storm_staff', 'คทาธาตุสายฟ้ากัมปนาท', 'staff', 425, 125000, 5, 70, '#facc15', {
+    defaultRarity: 'legendary',
+    element: 'lightning',
+    description: 'คทาวชิระเก็บประจุสายฟ้า Lv.70 (ATK +425 · ธาตุสายฟ้า)',
+  }),
+  lv70_glacial_frost_bow: weapon('lv70_glacial_frost_bow', 'ธนูธาตุเหมันต์เยือกแข็ง', 'bow', 432, 125000, 5, 70, '#67e8f9', {
+    defaultRarity: 'legendary',
+    element: 'ice',
+    description: 'ธนูผลึกน้ำแข็งนิรันดร์ Lv.70 (ATK +432 · ธาตุน้ำแข็ง)',
+  }),
+  lv70_venom_eclipse_claw: weapon('lv70_venom_eclipse_claw', 'กรงเล็บธาตุมืดอสรพิษ', 'dagger', 418, 125000, 5, 70, '#4ade80', {
+    defaultRarity: 'legendary',
+    element: 'venom',
+    description: 'กรงเล็บคู่ผสานพิษอสรพิษและพลังมืด Lv.70 (ATK +418 · ธาตุพิษ)',
+  }),
+
+  // ---- Lv.80 Arcane / Rune Weapons (Legendary) ----
+  lv80_arcane_runeblade: weapon('lv80_arcane_runeblade', 'ดาบอาคมรูนนิรันดร์', 'sword', 590, 195000, 5, 80, '#818cf8', {
+    defaultRarity: 'legendary',
+    element: 'arcane',
+    description: 'ดาบสลักอักขระเวทมนตร์โบราณส่องสว่างตลอดคมดาบ Lv.80 (ATK +590)',
+  }),
+  lv80_astral_grimoire_staff: weapon('lv80_astral_grimoire_staff', 'คทามนตราจักรวาล', 'staff', 575, 195000, 5, 80, '#e879f9', {
+    defaultRarity: 'legendary',
+    element: 'arcane',
+    description: 'คทาวงแหวนอาคมหมุนวนรอบผลึกดาราจักร Lv.80 (ATK +575)',
+  }),
+  lv80_starfall_sigil_bow: weapon('lv80_starfall_sigil_bow', 'ธนูผนึกดาวตกอาคม', 'bow', 582, 195000, 5, 80, '#f472b6', {
+    defaultRarity: 'legendary',
+    element: 'arcane',
+    description: 'ธนูเวทมนตร์ยิงศรแสงดาว Lv.80 (ATK +582)',
+  }),
+  lv80_void_hex_dagger: weapon('lv80_void_hex_dagger', 'มีดอาคมห้วงมิติ', 'dagger', 565, 195000, 5, 80, '#a855f7', {
+    defaultRarity: 'legendary',
+    element: 'shadow',
+    description: 'มีดสั้นอาคมตัดผ่านช่องว่างมิติ Lv.80 (ATK +565)',
+  }),
+
+  // ---- Lv.90 Ancient Relic Weapons (Legendary / Mythic) ----
+  lv90_ancient_relic_excalibur: weapon('lv90_ancient_relic_excalibur', 'ดาบโบราณมรดกสวรรค์', 'sword', 790, 320000, 5, 90, '#fde047', {
+    defaultRarity: 'legendary',
+    element: 'holy',
+    description: 'ดาบโบราณแห่งราชาผู้สาบสูญ ปลุกพลังแสงทอง Lv.90 (ATK +790)',
+  }),
+  lv90_elder_dragon_caduceus: weapon('lv90_elder_dragon_caduceus', 'คทาโบราณมังกรบรรพกาล', 'staff', 770, 320000, 5, 90, '#fb7185', {
+    defaultRarity: 'legendary',
+    element: 'fire',
+    description: 'คทาเศียรมังกรคู่จากยุคบรรพกาล Lv.90 (ATK +770)',
+  }),
+  lv90_ancient_windgod_bow: weapon('lv90_ancient_windgod_bow', 'ธนูโบราณเทพวายุ', 'bow', 780, 320000, 5, 90, '#38bdf8', {
+    defaultRarity: 'legendary',
+    element: 'lightning',
+    description: 'ธนูโบราณสลักปีกสายฟ้าจากวิหารเมฆา Lv.90 (ATK +780)',
+  }),
+  lv90_reaper_abyss_scythe: weapon('lv90_reaper_abyss_scythe', 'มีดเคียวโบราณยมทูต', 'dagger', 760, 320000, 5, 90, '#f43f5e', {
+    defaultRarity: 'legendary',
+    element: 'shadow',
+    description: 'เคียวสั้นอเวจีของยมทูตโบราณ Lv.90 (ATK +760)',
+  }),
+
+  // ---- Lv.100 Mythic / God-Tier Weapons (Mythic) ----
+  lv100_mythic_asura_sovereign: weapon('lv100_mythic_asura_sovereign', 'ดาบเทพราชันย์อสุรา', 'sword', 1180, 680000, 6, 100, '#fb7185', {
+    defaultRarity: 'mythic',
+    element: 'fire',
+    description: 'สุดยอดมหาศาสตราระดับเทพ ดาบราชันย์อสุราเปล่งรัศมีเพลิงสวรรค์ Lv.100 (ATK +1,180)',
+  }),
+  lv100_mythic_celestial_orb: weapon('lv100_mythic_celestial_orb', 'คทาเทพดาราจักรนิรันดร์', 'staff', 1150, 680000, 6, 100, '#c084fc', {
+    defaultRarity: 'mythic',
+    element: 'arcane',
+    description: 'คทาเทพประดับวงแหวนสุริยัน-จันทราและแกนดาราจักร Lv.100 (ATK +1,150)',
+  }),
+  lv100_mythic_seraph_bow: weapon('lv100_mythic_seraph_bow', 'ธนูเทพสุริยคราส', 'bow', 1165, 680000, 6, 100, '#fde047', {
+    defaultRarity: 'mythic',
+    element: 'holy',
+    description: 'ธนูเทพหกปีกทองคำยิงศรแสงอาทิตย์ Lv.100 (ATK +1,165)',
+  }),
+  lv100_mythic_nightmare_fang: weapon('lv100_mythic_nightmare_fang', 'เขี้ยวเทพเงาอนันตกาล', 'dagger', 1140, 680000, 6, 100, '#a855f7', {
+    defaultRarity: 'mythic',
+    element: 'shadow',
+    description: 'มีดเทพคู่แกนโลหิตอเวจีสำหรับยอดนักฆ่า Lv.100 (ATK +1,140)',
+  }),
+  lv100_mythic_vajra_hammer: weapon('lv100_mythic_vajra_hammer', 'ค้อนวชิระเทพสงคราม', 'stick', 1190, 680000, 6, 100, '#facc15', {
+    defaultRarity: 'mythic',
+    element: 'lightning',
+    description: 'มหาค้อนวชิระสายฟ้าแห่งเทพสงคราม Lv.100 (ATK +1,190)',
+  }),
+
+  // ---- Set A Helmets (หมวก) ----
+  iron_visor_helm: armor('iron_visor_helm', 'หมวกเกราะเหล็กอัศวิน', 42, 4200, 2, 20, '#94a3b8', {
+    itemCategory: 'helmet',
+    defaultRarity: 'uncommon',
+    description: 'หมวกเหล็กกล้าปิดหน้าพร้อมพู่แดงสำหรับนักรบ (DEF +42)',
+  }),
+  arcanist_diadem: armor('arcanist_diadem', 'รัดเกล้ามหาปราชญ์', 76, 16000, 3, 45, '#38bdf8', {
+    itemCategory: 'helmet',
+    defaultRarity: 'rare',
+    element: 'arcane',
+    description: 'มงกุฎรัดเกล้าประดับอัญมณีไพลินเสริมสมาธิเวท (DEF +76)',
+  }),
+  dragonbone_warhelm: armor('dragonbone_warhelm', 'หมวกเขามังกรบรรพกาล', 148, 56000, 5, 70, '#fb923c', {
+    itemCategory: 'helmet',
+    defaultRarity: 'legendary',
+    element: 'fire',
+    description: 'หมวกศึกเขามังกรโบราณทนเปลวเพลิงและแรงปะทะ (DEF +148)',
+  }),
+  mythic_asura_crown: armor('mythic_asura_crown', 'มงกุฎเทพอสุรานิรันดร์', 260, 240000, 6, 95, '#fb7185', {
+    itemCategory: 'helmet',
+    defaultRarity: 'mythic',
+    element: 'holy',
+    description: 'มงกุฎทองคำเปลวเทพระดับสูงสุดแห่งราชันย์อสุรา (DEF +260)',
+  }),
+
+  // ---- Set A Armors (เสื้อเกราะ) ----
+  vanguard_breastplate: armor('vanguard_breastplate', 'เกราะอกผู้พิทักษ์แนวหน้า', 95, 22000, 3, 45, '#60a5fa', {
+    itemCategory: 'armor',
+    defaultRarity: 'epic',
+    description: 'เกราะแผ่นเหล็กชั้นหนาตกแต่งลายทอง (DEF +95)',
+  }),
+  tempest_battlemail: armor('tempest_battlemail', 'เสื้อเกราะพายุสายฟ้า', 185, 88000, 5, 75, '#facc15', {
+    itemCategory: 'armor',
+    defaultRarity: 'legendary',
+    element: 'lightning',
+    description: 'เสื้อเกราะเกล็ดทองคำผนึกพลังสายฟ้า (DEF +185)',
+  }),
+  celestial_godplate: armor('celestial_godplate', 'เกราะเทพสุริยันอสุรา', 320, 310000, 6, 95, '#fb7185', {
+    itemCategory: 'armor',
+    defaultRarity: 'mythic',
+    element: 'holy',
+    description: 'ชุดเกราะเทพเจ้าประดับปีกและแกนดวงดาว (DEF +320)',
+  }),
+
+  // ---- Set A Gloves (ถุงมือ) ----
+  leather_archer_bracer: armor('leather_archer_bracer', 'ถุงมือหนังพรานป่า', 22, 1800, 2, 15, '#b45309', {
+    slot: 'accessory',
+    itemCategory: 'gloves',
+    defaultRarity: 'uncommon',
+    description: 'ถุงมือหนังเย็บเสริมแผ่นกันสายธนู (DEF +22)',
+  }),
+  steel_gauntlets: armor('steel_gauntlets', 'ถุงมือเกราะเหล็กกล้า', 56, 12000, 3, 40, '#94a3b8', {
+    slot: 'accessory',
+    itemCategory: 'gloves',
+    defaultRarity: 'rare',
+    description: 'ถุงมือหุ้มข้อเหล็กเพิ่มความแม่นยำและแรงปะทะ (DEF +56)',
+  }),
+  dragon_claw_gauntlets: armor('dragon_claw_gauntlets', 'ถุงมือกรงเล็บมังกรเพลิง', 120, 62000, 5, 70, '#fb923c', {
+    slot: 'accessory',
+    itemCategory: 'gloves',
+    defaultRarity: 'legendary',
+    element: 'fire',
+    description: 'ถุงมือกรงเล็บเกล็ดมังกรแดงลุกโชน (DEF +120)',
+  }),
+  mythic_seraph_grips: armor('mythic_seraph_grips', 'ถุงมือเทพเซราฟิม', 225, 220000, 6, 95, '#fde047', {
+    slot: 'accessory',
+    itemCategory: 'gloves',
+    defaultRarity: 'mythic',
+    element: 'holy',
+    description: 'ถุงมือเทพทองคำขาวเปล่งประกายแสงศักดิ์สิทธิ์ (DEF +225)',
+  }),
+
+  // ---- Set A Boots (รองเท้า) ----
+  windrunner_greaves: armor('windrunner_greaves', 'รองเท้าเกราะนักวิ่งวายุ', 64, 15000, 3, 45, '#34d399', {
+    slot: 'shoes',
+    itemCategory: 'boots',
+    defaultRarity: 'epic',
+    description: 'รองเท้าเกราะน้ำหนักเบาติดปีกเล็กเสริมความคล่องตัว (DEF +64)',
+  }),
+  celestial_winged_boots: armor('celestial_winged_boots', 'รองเท้าปีกสวรรค์แสงดาว', 135, 74000, 5, 75, '#38bdf8', {
+    slot: 'shoes',
+    itemCategory: 'boots',
+    defaultRarity: 'legendary',
+    element: 'holy',
+    description: 'รองเท้าเกราะทองปีกคู่เดินเหินเหนือเมฆา (DEF +135)',
+  }),
+  mythic_asura_sabatons: armor('mythic_asura_sabatons', 'รองเท้าเทพอสุรากัมปนาท', 235, 230000, 6, 95, '#fb7185', {
+    slot: 'shoes',
+    itemCategory: 'boots',
+    defaultRarity: 'mythic',
+    element: 'fire',
+    description: 'รองเท้าเกราะเทพระดับสูงสุดพร้อมออร่าเปลวไฟศักดิ์สิทธิ์ (DEF +235)',
+  }),
+
+  // ---- Set A Shields (โล่) ----
+  knight_heater_shield: armor('knight_heater_shield', 'โล่อัศวินตราสิงโต', 52, 8500, 2, 25, '#60a5fa', {
+    slot: 'cloak',
+    itemCategory: 'shield',
+    defaultRarity: 'rare',
+    description: 'โล่เหล็กทรงหัวใจสลักตราราชสีห์ของอัศวิน (DEF +52)',
+  }),
+  aegis_prism_shield: armor('aegis_prism_shield', 'โล่ผลึกเอจิสเวทมนตร์', 115, 42000, 4, 60, '#a855f7', {
+    slot: 'cloak',
+    itemCategory: 'shield',
+    defaultRarity: 'epic',
+    element: 'arcane',
+    description: 'โล่ผลึกแก้วสะท้อนเวทมนตร์และคำสาป (DEF +115)',
+  }),
+  inferno_bulwark_shield: armor('inferno_bulwark_shield', 'โล่ปราการอสูรเพลิงนรก', 175, 95000, 5, 80, '#f97316', {
+    slot: 'cloak',
+    itemCategory: 'shield',
+    defaultRarity: 'legendary',
+    element: 'fire',
+    description: 'โล่ยักษ์หัวอสูรเหล็กหลอมระอุจากนรกภูเขาไฟ (DEF +175)',
+  }),
+  mythic_immortal_aegis: armor('mythic_immortal_aegis', 'โล่เทพอมตะดาราสวรรค์', 310, 290000, 6, 100, '#fde047', {
+    slot: 'cloak',
+    itemCategory: 'shield',
+    defaultRarity: 'mythic',
+    element: 'holy',
+    description: 'โล่เทพระดับสูงสุดไร้เทียมทานแห่งวิหารเทพ (DEF +310)',
+  }),
+
+  // ---- Set A Accessories / Rings / Necklaces / Charms ----
+  golden_crescent_earring: armor('golden_crescent_earring', 'ต่างหูจันทร์เสี้ยวทองคำ', 38, 6500, 2, 25, '#fbbf24', {
+    slot: 'accessory',
+    itemCategory: 'accessory',
+    defaultRarity: 'rare',
+    description: 'เครื่องประดับหูรูปจันทร์เสี้ยวประดับมรกต (DEF +38)',
+  }),
+  eclipse_royal_brooch: armor('eclipse_royal_brooch', 'เข็มกลัดสุริยคราสหลวง', 96, 36000, 4, 60, '#c084fc', {
+    slot: 'accessory',
+    itemCategory: 'accessory',
+    defaultRarity: 'epic',
+    element: 'shadow',
+    description: 'เข็มกลัดราชวงศ์สลักสุริยุปราคาเสริมพลังเวท (DEF +96)',
+  }),
+  ruby_warrior_ring: armor('ruby_warrior_ring', 'แหวนทับทิมราชันย์นักรบ', 68, 18000, 3, 45, '#f43f5e', {
+    slot: 'accessory',
+    itemCategory: 'ring',
+    defaultRarity: 'epic',
+    element: 'fire',
+    description: 'แหวนทองสลักลายทับทิมสีเลือดเพิ่มพลังโจมตีแฝง (DEF +68)',
+  }),
+  sapphire_archmage_ring: armor('sapphire_archmage_ring', 'แหวนไพลินจอมเวท', 124, 58000, 5, 75, '#38bdf8', {
+    slot: 'accessory',
+    itemCategory: 'ring',
+    defaultRarity: 'legendary',
+    element: 'arcane',
+    description: 'แหวนไพลินล้อมเพชรเรืองแสงอาคม (DEF +124)',
+  }),
+  mythic_sovereign_ring: armor('mythic_sovereign_ring', 'แหวนเทพจักรพรรดิอสุรา', 210, 240000, 6, 95, '#fb7185', {
+    slot: 'accessory',
+    itemCategory: 'ring',
+    defaultRarity: 'mythic',
+    element: 'holy',
+    description: 'แหวนเทพระดับสูงสุดผนึกพลังดาราจักรนิรันดร์ (DEF +210)',
+  }),
+  crimson_phoenix_pendant: armor('crimson_phoenix_pendant', 'สร้อยจี้ฟีนิกซ์เพลิง', 82, 28000, 4, 55, '#fb923c', {
+    slot: 'accessory',
+    itemCategory: 'necklace',
+    defaultRarity: 'epic',
+    element: 'fire',
+    description: 'สร้อยคอจี้ปีกฟีนิกซ์สีเพลิงช่วยฟื้นพลังใจ (DEF +82)',
+  }),
+  astral_starlight_necklace: armor('astral_starlight_necklace', 'สร้อยแสงดาวจักรวาล', 142, 72000, 5, 80, '#818cf8', {
+    slot: 'accessory',
+    itemCategory: 'necklace',
+    defaultRarity: 'legendary',
+    element: 'arcane',
+    description: 'สร้อยอัญมณีแสงดาวที่เปล่งแสงประสานพลังเวท (DEF +142)',
+  }),
+  mythic_dragonheart_collar: armor('mythic_dragonheart_collar', 'สร้อยหัวใจมังกรเทพ', 235, 260000, 6, 100, '#fb7185', {
+    slot: 'accessory',
+    itemCategory: 'necklace',
+    defaultRarity: 'mythic',
+    element: 'fire',
+    description: 'สร้อยคอหัวใจมังกรเทพเจ้าระดับสูงสุด (DEF +235)',
+  }),
+  jade_guardian_talisman: armor('jade_guardian_talisman', 'เครื่องรางหยกผู้พิทักษ์', 48, 9500, 2, 30, '#34d399', {
+    slot: 'cloak',
+    itemCategory: 'charm',
+    defaultRarity: 'rare',
+    description: 'เครื่องรางหยกแกะสลักโบราณคุ้มครองภัย (DEF +48)',
+  }),
+  ancient_rune_charm: armor('ancient_rune_charm', 'เครื่องรางแผ่นศิลารูนโบราณ', 112, 46000, 5, 70, '#c084fc', {
+    slot: 'cloak',
+    itemCategory: 'charm',
+    defaultRarity: 'legendary',
+    element: 'arcane',
+    description: 'เครื่องรางศิลารูนสี่ทิศเรืองแสงอาคม (DEF +112)',
+  }),
+  mythic_asura_seal: armor('mythic_asura_seal', 'เครื่องรางตราประทับเทพอสุรา', 220, 250000, 6, 95, '#fde047', {
+    slot: 'cloak',
+    itemCategory: 'charm',
+    defaultRarity: 'mythic',
+    element: 'holy',
+    description: 'ตราประทับศักดิ์สิทธิ์แห่งเทพอสุรา คุ้มครองวิญญาณระดับสูงสุด (DEF +220)',
+  }),
+
+  // ---- Set A Special Items (ไอเทมพิเศษ) ----
+  imperial_gold_key: {
+    id: 'imperial_gold_key',
+    name: 'กุญแจทองคำราชันย์',
+    kind: 'material',
+    itemCategory: 'special',
+    price: 2400,
+    sellPrice: 1200,
+    tier: 2,
+    defaultRarity: 'rare',
+    icon: 'core',
+    color: '#fbbf24',
+    description: 'กุญแจทองคำสลักลายมงกุฎ ใช้เปิดหีบสมบัติโบราณหรือขายได้ราคาดี',
+  },
+  elemental_prismatic_orb: {
+    id: 'elemental_prismatic_orb',
+    name: 'ลูกแก้วเบญจธาตุ',
+    kind: 'material',
+    itemCategory: 'special',
+    price: 4500,
+    sellPrice: 2250,
+    tier: 3,
+    defaultRarity: 'epic',
+    element: 'arcane',
+    icon: 'core',
+    color: '#a855f7',
+    description: 'ลูกแก้วผลึกรวมธาตุทั้งห้า สำหรับหลอมศาสตราธาตุระดับ Lv.70',
+  },
+  ancient_forge_emblem: {
+    id: 'ancient_forge_emblem',
+    name: 'ตราช่างหลอมโบราณ',
+    kind: 'material',
+    itemCategory: 'special',
+    price: 9500,
+    sellPrice: 4800,
+    tier: 5,
+    defaultRarity: 'legendary',
+    element: 'fire',
+    icon: 'core',
+    color: '#fb923c',
+    description: 'ตราประทับของช่างตีเหล็กในตำนาน ใช้แลกหรือหลอมอุปกรณ์ระดับ Lv.80-90',
+  },
+  soul_awakening_relic: {
+    id: 'soul_awakening_relic',
+    name: 'ศิลาปลุกจิตอสุรา',
+    kind: 'material',
+    itemCategory: 'special',
+    price: 12000,
+    sellPrice: 6000,
+    tier: 5,
+    defaultRarity: 'legendary',
+    element: 'holy',
+    icon: 'core',
+    color: '#fde047',
+    description: 'ศิลาโบราณที่เก็บพลังจิตวิญญาณอันบริสุทธิ์',
+  },
+  mythic_awakening_core: {
+    id: 'mythic_awakening_core',
+    name: 'แก่นปลุกพลังเทพอสุรา',
+    kind: 'material',
+    itemCategory: 'special',
+    price: 35000,
+    sellPrice: 18000,
+    tier: 6,
+    defaultRarity: 'mythic',
+    element: 'holy',
+    icon: 'core',
+    color: '#fb7185',
+    description: 'แก่นคริสตัลระดับเทพที่เปี่ยมด้วยแสงจักรวาล ใช้หลอมศาสตราเทพ Lv.100',
+  },
+}
+
 const BASE_ITEMS: Record<string, ItemDef> = {
   ...catalogItems,
-  red_potion: { id: 'red_potion', name: 'ยาแดง', kind: 'consumable', price: 30, heal: 60, icon: 'potion', color: '#e63946', description: 'ฟื้นฟู HP 60' },
-  orange_potion: { id: 'orange_potion', name: 'ยาส้ม', kind: 'consumable', price: 120, heal: 220, icon: 'potion', color: '#f4a261', description: 'ฟื้นฟู HP 220' },
-  white_potion: { id: 'white_potion', name: 'ยาขาว', kind: 'consumable', price: 400, heal: 700, icon: 'potion', color: '#f1faee', description: 'ฟื้นฟู HP 700' },
-  blue_potion: { id: 'blue_potion', name: 'ยาฟ้า', kind: 'consumable', price: 60, mana: 50, icon: 'potion', color: '#4895ef', description: 'ฟื้นฟู MP 50' },
-  purple_potion: { id: 'purple_potion', name: 'ยาม่วง', kind: 'consumable', price: 280, mana: 200, icon: 'potion', color: '#9d4edd', description: 'ฟื้นฟู MP 200' },
-  return_scroll: { id: 'return_scroll', name: 'ม้วนคัมภีร์กลับเมือง', kind: 'consumable', price: 50, icon: 'scroll', color: '#f4d35e', description: 'วาร์ปกลับเมืองทันที' },
-  town_warp_tome: { id: 'town_warp_tome', name: 'คัมภีร์วาร์ปกลับเมือง', kind: 'consumable', price: 0, icon: 'scroll', color: '#c4b5fd', description: 'ใช้เพื่อวาร์ปกลับเมืองทันที' },
-  starlight_loot_magnet: { id: 'starlight_loot_magnet', name: 'แม่เหล็กดูดของแสงดาว', kind: 'consumable', price: 0, icon: 'core', color: '#38bdf8', description: 'ดูดดรอปของคุณในระยะ 120 px นาน 5 นาที' },
-  astral_bag_expansion: { id: 'astral_bag_expansion', name: 'กระเป๋าดวงดาว +20 ช่อง', kind: 'consumable', price: 0, icon: 'bag', color: '#f59e0b', description: 'เพิ่มช่องกระเป๋าถาวร 20 ช่อง สูงสุด +60 ช่อง' },
-  vip_card_7d: { id: 'vip_card_7d', name: 'บัตรสมาชิก VIP (7 วัน)', kind: 'consumable', price: 0, icon: 'ticket', color: '#fbbf24', description: 'กดใช้เพื่อเปิดใช้งานหรือต่ออายุสมาชิก VIP 7 วัน (+150 VIP EXP)', effect: true },
-  vip_card_30d: { id: 'vip_card_30d', name: 'บัตรสมาชิก VIP (30 วัน)', kind: 'consumable', price: 0, icon: 'ticket', color: '#c084fc', description: 'กดใช้เพื่อเปิดใช้งานหรือต่ออายุสมาชิก VIP 30 วัน (+450 VIP EXP)', effect: true },
-  vip_exp_crystal: { id: 'vip_exp_crystal', name: 'ผลึกเลื่อนขั้น VIP (+600 EXP)', kind: 'consumable', price: 0, icon: 'crystal', color: '#38bdf8', description: 'กดใช้เพื่อเพิ่ม VIP EXP +600 ทันที', effect: true },
-  bag_scroll_10: { id: 'bag_scroll_10', name: 'คัมภีร์ขยายกระเป๋า +10 ช่อง', kind: 'consumable', price: 0, icon: 'bag', color: '#34d399', description: 'กดใช้เพื่อเพิ่มความจุกระเป๋าถาวร +10 ช่อง', effect: true },
-  storage_scroll_15: { id: 'storage_scroll_15', name: 'คัมภีร์ขยายคลังพี่มณี +15 ช่อง', kind: 'consumable', price: 0, icon: 'scroll', color: '#60a5fa', description: 'กดใช้เพื่อขยายคลังเก็บของถาวร +15 ช่อง', effect: true },
-  storage_scroll_30: { id: 'storage_scroll_30', name: 'หีบนิรภัยจักรวาล +30 ช่องคลัง', kind: 'consumable', price: 0, icon: 'bag', color: '#a855f7', description: 'กดใช้เพื่อขยายคลังเก็บของถาวร +30 ช่อง', effect: true },
-  pet_exp_elixir: { id: 'pet_exp_elixir', name: 'น้ำทิพย์ฝึกสัตว์เลี้ยง', kind: 'consumable', price: 0, icon: 'potion', color: '#f472b6', description: 'กดใช้เพื่อเพิ่ม EXP สัตว์เลี้ยงที่สวมใส่อยู่ +250 EXP', effect: true },
-  supreme_hp_elixir: { id: 'supreme_hp_elixir', name: 'น้ำยาอมฤตสวรรค์', kind: 'consumable', price: 0, heal: 1200, mana: 400, icon: 'potion', color: '#fb7185', description: 'ฟื้นฟู HP 1,200 และ MP 400 ทันที', effect: true },
-  double_exp_scroll: { id: 'double_exp_scroll', name: 'คัมภีร์คูณค่าประสบการณ์ (10 นาที)', kind: 'consumable', price: 0, icon: 'scroll', color: '#facc15', description: 'กดใช้เพื่อรับบัฟ EXP +35%, ATK +15%, DEF +15% นาน 10 นาที', effect: true },
-  enhance_stone: { id: 'enhance_stone', name: 'หินตีบวก', kind: 'material', price: 500, icon: 'stone', color: '#4cc9f0', description: 'ใช้ตีบวกอุปกรณ์ที่ช่างตีบวก' },
-  slime_gel: { id: 'slime_gel', name: 'เจลสไลม์', kind: 'material', price: 8, icon: 'gel', color: '#80ed99', description: 'ของดรอปจากสไลม์ ขายได้' },
-  mushroom_cap: { id: 'mushroom_cap', name: 'หมวกเห็ด', kind: 'material', price: 15, icon: 'gel', color: '#e76f51', description: 'ของดรอปจากเห็ด ขายได้' },
-  wolf_fang: { id: 'wolf_fang', name: 'เขี้ยวหมาป่า', kind: 'material', price: 45, icon: 'fang', color: '#f1faee', description: 'ของดรอปจากหมาป่า ขายได้' },
-  goblin_ear: { id: 'goblin_ear', name: 'หูก๊อบลิน', kind: 'material', price: 60, icon: 'fang', color: '#90be6d', description: 'ของดรอปจากก๊อบลิน ขายได้' },
-  bone: { id: 'bone', name: 'กระดูก', kind: 'material', price: 90, icon: 'bone', color: '#e9e3d5', description: 'ของดรอปจากโครงกระดูก ขายได้' },
-  ectoplasm: { id: 'ectoplasm', name: 'วิญญาณหลอน', kind: 'material', price: 130, icon: 'gel', color: '#caf0f8', description: 'ของดรอปจากผี ขายได้' },
-  ember_core: { id: 'ember_core', name: 'แกนเพลิง', kind: 'material', price: 220, icon: 'core', color: '#ff6b35', description: 'ของดรอปจากภูเขาไฟ ขายได้' },
-  earth_core: { id: 'earth_core', name: 'แก่นปฐพี', kind: 'material', price: 1200, icon: 'core', color: '#b08954', description: 'แก่นพลังที่ได้จากผู้พิทักษ์ปฐพี' },
-  demon_horn: { id: 'demon_horn', name: 'เขาปีศาจ', kind: 'material', price: 350, icon: 'fang', color: '#9d0208', description: 'ของดรอปจากปีศาจ ขายได้' },
-  torn_cloth: { id: 'torn_cloth', name: 'ผ้าขาดจากมอน', kind: 'material', price: 3, icon: 'junk', color: '#a78b72', description: 'เศษผ้าสกปรกจากมอนสเตอร์ ขายให้พ่อค้าได้' },
-  cracked_claw: { id: 'cracked_claw', name: 'กรงเล็บแตกร้าว', kind: 'material', price: 6, icon: 'junk', color: '#c08457', description: 'กรงเล็บเก่าที่แตกแล้วจากมอนสเตอร์' },
-  monster_scrap: { id: 'monster_scrap', name: 'เศษซากมอนสเตอร์', kind: 'material', price: 12, icon: 'junk', color: '#64748b', description: 'เศษซากไร้ค่า แต่ขายรวมกันแล้วได้เงิน' },
-  name_change_ticket: { id: 'name_change_ticket', name: 'บัตรเปลี่ยนชื่อ', kind: 'consumable', price: 2500, icon: 'ticket', color: '#f8c537', description: 'ใช้เปลี่ยนชื่อตัวละครของคุณได้ 1 ครั้ง', effect: true },
-  fish_silver: { id: 'fish_silver', name: 'ปลาเงินลำธาร', kind: 'material', price: 28, icon: 'gel', color: '#93c5fd', description: 'ปลาสดจากลำธาร ใช้ทำอาหารหรือขายได้' },
-  fish_golden: { id: 'fish_golden', name: 'ปลาคาร์ปทองคำ', kind: 'material', price: 140, icon: 'core', color: '#fbbf24', description: 'ปลาหายากจากบ่อน้ำเมือง ใช้นึ่งซุปเพิ่มสเตตัส' },
-  ore_iron: { id: 'ore_iron', name: 'แร่เหล็กดิบ', kind: 'material', price: 36, icon: 'stone', color: '#94a3b8', description: 'แร่เหล็กจากเหมืองถ้ำ ใช้คราฟต์และหลอมรูน' },
-  ore_mythril: { id: 'ore_mythril', name: 'แร่มิธริลเรืองแสง', kind: 'material', price: 185, icon: 'stone', color: '#38bdf8', description: 'แร่ล้ำค่าจากถ้ำลึกและฟากฟ้า' },
-  herb_green: { id: 'herb_green', name: 'สมุนไพรพฤกษา', kind: 'material', price: 25, icon: 'gel', color: '#4ade80', description: 'สมุนไพรสดจากทุ่งหญ้า ใช้ปรุงอาหารฟื้นพลัง' },
-  herb_moon: { id: 'herb_moon', name: 'ดอกจันทร์เหมันต์', kind: 'material', price: 160, icon: 'core', color: '#c084fc', description: 'สมุนไพรหายากใต้แสงจันทร์ ใช้ปรุงน้ำยาชั้นสูง' },
-  pet_essence: { id: 'pet_essence', name: 'ผลึกวิญญาณคู่หู', kind: 'material', price: 320, icon: 'core', color: '#f472b6', description: 'ใช้หลอมวิวัฒนาการเพิ่มดาวสัตว์เลี้ยง (1★ -> 5★)' },
-  food_grilled_fish: { id: 'food_grilled_fish', name: 'ปลาย่างสมุนไพร', kind: 'consumable', price: 120, heal: 180, icon: 'gel', color: '#fb923c', description: 'ฟื้น HP 180 และเพิ่ม ATK +12% นาน 5 นาที' },
-  food_miner_tonic: { id: 'food_miner_tonic', name: 'ยาชูกำลังนักขุด', kind: 'consumable', price: 160, mana: 140, icon: 'core', color: '#38bdf8', description: 'ฟื้น MP 140 และเพิ่ม DEF +15% นาน 5 นาที' },
-  food_hero_feast: { id: 'food_hero_feast', name: 'ชุดอาหารผู้กล้า', kind: 'consumable', price: 420, heal: 420, icon: 'core', color: '#facc15', description: 'เพิ่ม ATK +18%, คริติคอล +8% และ EXP +25% นาน 8 นาที' },
-  food_dragon_soup: { id: 'food_dragon_soup', name: 'ซุปมังกรศิลา', kind: 'consumable', price: 650, heal: 700, icon: 'core', color: '#f43f5e', description: 'เพิ่ม ATK +25%, DEF +20% และ EXP +35% นาน 10 นาที' },
+  ...SET_A_AND_HIGH_TIER_ITEMS,
+  red_potion: { id: 'red_potion', name: 'ยาแดง', kind: 'consumable', itemCategory: 'consumable', price: 30, heal: 60, icon: 'potion', color: '#e63946', description: 'ฟื้นฟู HP 60' },
+  orange_potion: { id: 'orange_potion', name: 'ยาส้ม', kind: 'consumable', itemCategory: 'consumable', price: 120, heal: 220, icon: 'potion', color: '#f4a261', description: 'ฟื้นฟู HP 220' },
+  white_potion: { id: 'white_potion', name: 'ยาขาว', kind: 'consumable', itemCategory: 'consumable', price: 400, heal: 700, icon: 'potion', color: '#f1faee', description: 'ฟื้นฟู HP 700' },
+  blue_potion: { id: 'blue_potion', name: 'ยาฟ้า', kind: 'consumable', itemCategory: 'consumable', price: 60, mana: 50, icon: 'potion', color: '#4895ef', description: 'ฟื้นฟู MP 50' },
+  purple_potion: { id: 'purple_potion', name: 'ยาม่วง', kind: 'consumable', itemCategory: 'consumable', price: 280, mana: 200, icon: 'potion', color: '#9d4edd', description: 'ฟื้นฟู MP 200' },
+  return_scroll: { id: 'return_scroll', name: 'ม้วนคัมภีร์กลับเมือง', kind: 'consumable', itemCategory: 'consumable', price: 50, icon: 'scroll', color: '#f4d35e', description: 'วาร์ปกลับเมืองทันที' },
+  town_warp_tome: { id: 'town_warp_tome', name: 'คัมภีร์วาร์ปกลับเมือง', kind: 'consumable', itemCategory: 'special', price: 1200, sellPrice: 400, defaultRarity: 'rare', icon: 'scroll', color: '#c4b5fd', description: 'ใช้เพื่อวาร์ปกลับเมืองทันที' },
+  starlight_loot_magnet: { id: 'starlight_loot_magnet', name: 'แม่เหล็กดูดของแสงดาว', kind: 'consumable', itemCategory: 'special', price: 4500, sellPrice: 1800, defaultRarity: 'legendary', icon: 'core', color: '#38bdf8', description: 'ดูดดรอปของคุณในระยะ 120 px นาน 5 นาที' },
+  astral_bag_expansion: { id: 'astral_bag_expansion', name: 'กระเป๋าดวงดาว +20 ช่อง', kind: 'consumable', itemCategory: 'special', price: 6000, sellPrice: 2400, defaultRarity: 'legendary', icon: 'bag', color: '#f59e0b', description: 'เพิ่มช่องกระเป๋าถาวร 20 ช่อง สูงสุด +60 ช่อง' },
+  vip_card_7d: { id: 'vip_card_7d', name: 'บัตรสมาชิก VIP (7 วัน)', kind: 'consumable', itemCategory: 'special', price: 2500, sellPrice: 800, defaultRarity: 'rare', icon: 'ticket', color: '#fbbf24', description: 'กดใช้เพื่อเปิดใช้งานหรือต่ออายุสมาชิก VIP 7 วัน (+150 VIP EXP)', effect: true },
+  vip_card_30d: { id: 'vip_card_30d', name: 'บัตรสมาชิก VIP (30 วัน)', kind: 'consumable', itemCategory: 'special', price: 8500, sellPrice: 2800, defaultRarity: 'epic', icon: 'ticket', color: '#c084fc', description: 'กดใช้เพื่อเปิดใช้งานหรือต่ออายุสมาชิก VIP 30 วัน (+450 VIP EXP)', effect: true },
+  vip_exp_crystal: { id: 'vip_exp_crystal', name: 'ผลึกเลื่อนขั้น VIP (+600 EXP)', kind: 'consumable', itemCategory: 'special', price: 5000, sellPrice: 1800, defaultRarity: 'epic', icon: 'crystal', color: '#38bdf8', description: 'กดใช้เพื่อเพิ่ม VIP EXP +600 ทันที', effect: true },
+  bag_scroll_10: { id: 'bag_scroll_10', name: 'คัมภีร์ขยายกระเป๋า +10 ช่อง', kind: 'consumable', itemCategory: 'special', price: 3000, sellPrice: 1000, defaultRarity: 'rare', icon: 'bag', color: '#34d399', description: 'กดใช้เพื่อเพิ่มความจุกระเป๋าถาวร +10 ช่อง', effect: true },
+  storage_scroll_15: { id: 'storage_scroll_15', name: 'คัมภีร์ขยายคลังพี่มณี +15 ช่อง', kind: 'consumable', itemCategory: 'special', price: 3200, sellPrice: 1100, defaultRarity: 'rare', icon: 'scroll', color: '#60a5fa', description: 'กดใช้เพื่อขยายคลังเก็บของถาวร +15 ช่อง', effect: true },
+  storage_scroll_30: { id: 'storage_scroll_30', name: 'หีบนิรภัยจักรวาล +30 ช่องคลัง', kind: 'consumable', itemCategory: 'special', price: 6500, sellPrice: 2200, defaultRarity: 'epic', icon: 'bag', color: '#a855f7', description: 'กดใช้เพื่อขยายคลังเก็บของถาวร +30 ช่อง', effect: true },
+  pet_exp_elixir: { id: 'pet_exp_elixir', name: 'น้ำทิพย์ฝึกสัตว์เลี้ยง', kind: 'consumable', itemCategory: 'consumable', price: 900, sellPrice: 360, defaultRarity: 'rare', icon: 'potion', color: '#f472b6', description: 'กดใช้เพื่อเพิ่ม EXP สัตว์เลี้ยงที่สวมใส่อยู่ +250 EXP', effect: true },
+  supreme_hp_elixir: { id: 'supreme_hp_elixir', name: 'น้ำยาอมฤตสวรรค์', kind: 'consumable', itemCategory: 'consumable', price: 1400, sellPrice: 560, defaultRarity: 'epic', heal: 1200, mana: 400, icon: 'potion', color: '#fb7185', description: 'ฟื้นฟู HP 1,200 และ MP 400 ทันที', effect: true },
+  double_exp_scroll: { id: 'double_exp_scroll', name: 'คัมภีร์คูณค่าประสบการณ์ (10 นาที)', kind: 'consumable', itemCategory: 'special', price: 1800, sellPrice: 700, defaultRarity: 'epic', icon: 'scroll', color: '#facc15', description: 'กดใช้เพื่อรับบัฟ EXP +35%, ATK +15%, DEF +15% นาน 10 นาที', effect: true },
+  enhance_stone: { id: 'enhance_stone', name: 'หินตีบวก', kind: 'material', itemCategory: 'special', price: 500, defaultRarity: 'rare', icon: 'stone', color: '#4cc9f0', description: 'ใช้ตีบวกอุปกรณ์ที่ช่างตีบวก' },
+  slime_gel: { id: 'slime_gel', name: 'เจลสไลม์', kind: 'material', itemCategory: 'material', price: 8, icon: 'gel', color: '#80ed99', description: 'ของดรอปจากสไลม์ ขายได้' },
+  mushroom_cap: { id: 'mushroom_cap', name: 'หมวกเห็ด', kind: 'material', itemCategory: 'material', price: 15, icon: 'gel', color: '#e76f51', description: 'ของดรอปจากเห็ด ขายได้' },
+  wolf_fang: { id: 'wolf_fang', name: 'เขี้ยวหมาป่า', kind: 'material', itemCategory: 'material', price: 45, icon: 'fang', color: '#f1faee', description: 'ของดรอปจากหมาป่า ขายได้' },
+  goblin_ear: { id: 'goblin_ear', name: 'หูก๊อบลิน', kind: 'material', itemCategory: 'material', price: 60, icon: 'fang', color: '#90be6d', description: 'ของดรอปจากก๊อบลิน ขายได้' },
+  bone: { id: 'bone', name: 'กระดูก', kind: 'material', itemCategory: 'material', price: 90, icon: 'bone', color: '#e9e3d5', description: 'ของดรอปจากโครงกระดูก ขายได้' },
+  ectoplasm: { id: 'ectoplasm', name: 'วิญญาณหลอน', kind: 'material', itemCategory: 'material', price: 130, icon: 'gel', color: '#caf0f8', description: 'ของดรอปจากผี ขายได้' },
+  ember_core: { id: 'ember_core', name: 'แกนเพลิง', kind: 'material', itemCategory: 'special', price: 220, defaultRarity: 'epic', element: 'fire', icon: 'core', color: '#ff6b35', description: 'ของดรอปจากภูเขาไฟ ขายได้' },
+  earth_core: { id: 'earth_core', name: 'แก่นปฐพี', kind: 'material', itemCategory: 'special', price: 1200, defaultRarity: 'legendary', icon: 'core', color: '#b08954', description: 'แก่นพลังที่ได้จากผู้พิทักษ์ปฐพี' },
+  demon_horn: { id: 'demon_horn', name: 'เขาปีศาจ', kind: 'material', itemCategory: 'material', price: 350, defaultRarity: 'epic', element: 'shadow', icon: 'fang', color: '#9d0208', description: 'ของดรอปจากปีศาจ ขายได้' },
+  torn_cloth: { id: 'torn_cloth', name: 'ผ้าขาดจากมอน', kind: 'material', itemCategory: 'material', price: 3, icon: 'junk', color: '#a78b72', description: 'เศษผ้าสกปรกจากมอนสเตอร์ ขายให้พ่อค้าได้' },
+  cracked_claw: { id: 'cracked_claw', name: 'กรงเล็บแตกร้าว', kind: 'material', itemCategory: 'material', price: 6, icon: 'junk', color: '#c08457', description: 'กรงเล็บเก่าที่แตกแล้วจากมอนสเตอร์' },
+  monster_scrap: { id: 'monster_scrap', name: 'เศษซากมอนสเตอร์', kind: 'material', itemCategory: 'material', price: 12, icon: 'junk', color: '#64748b', description: 'เศษซากไร้ค่า แต่ขายรวมกันแล้วได้เงิน' },
+  name_change_ticket: { id: 'name_change_ticket', name: 'บัตรเปลี่ยนชื่อ', kind: 'consumable', itemCategory: 'special', price: 2500, defaultRarity: 'epic', icon: 'ticket', color: '#f8c537', description: 'ใช้เปลี่ยนชื่อตัวละครของคุณได้ 1 ครั้ง', effect: true },
+  fish_silver: { id: 'fish_silver', name: 'ปลาเงินลำธาร', kind: 'material', itemCategory: 'material', price: 28, icon: 'gel', color: '#93c5fd', description: 'ปลาสดจากลำธาร ใช้ทำอาหารหรือขายได้' },
+  fish_golden: { id: 'fish_golden', name: 'ปลาคาร์ปทองคำ', kind: 'material', itemCategory: 'material', price: 140, defaultRarity: 'uncommon', icon: 'core', color: '#fbbf24', description: 'ปลาหายากจากบ่อน้ำเมือง ใช้นึ่งซุปเพิ่มสเตตัส' },
+  ore_iron: { id: 'ore_iron', name: 'แร่เหล็กดิบ', kind: 'material', itemCategory: 'material', price: 36, icon: 'stone', color: '#94a3b8', description: 'แร่เหล็กจากเหมืองถ้ำ ใช้คราฟต์และหลอมรูน' },
+  ore_mythril: { id: 'ore_mythril', name: 'แร่มิธริลเรืองแสง', kind: 'material', itemCategory: 'material', price: 185, defaultRarity: 'rare', icon: 'stone', color: '#38bdf8', description: 'แร่ล้ำค่าจากถ้ำลึกและฟากฟ้า' },
+  herb_green: { id: 'herb_green', name: 'สมุนไพรพฤกษา', kind: 'material', itemCategory: 'material', price: 25, icon: 'gel', color: '#4ade80', description: 'สมุนไพรสดจากทุ่งหญ้า ใช้ปรุงอาหารฟื้นพลัง' },
+  herb_moon: { id: 'herb_moon', name: 'ดอกจันทร์เหมันต์', kind: 'material', itemCategory: 'material', price: 160, defaultRarity: 'rare', icon: 'core', color: '#c084fc', description: 'สมุนไพรหายากใต้แสงจันทร์ ใช้ปรุงน้ำยาชั้นสูง' },
+  pet_essence: { id: 'pet_essence', name: 'ผลึกวิญญาณคู่หู', kind: 'material', itemCategory: 'special', price: 320, defaultRarity: 'epic', icon: 'core', color: '#f472b6', description: 'ใช้หลอมวิวัฒนาการเพิ่มดาวสัตว์เลี้ยง (1★ -> 5★)' },
+  food_grilled_fish: { id: 'food_grilled_fish', name: 'ปลาย่างสมุนไพร', kind: 'consumable', itemCategory: 'consumable', price: 120, heal: 180, icon: 'gel', color: '#fb923c', description: 'ฟื้น HP 180 และเพิ่ม ATK +12% นาน 5 นาที' },
+  food_miner_tonic: { id: 'food_miner_tonic', name: 'ยาชูกำลังนักขุด', kind: 'consumable', itemCategory: 'consumable', price: 160, mana: 140, icon: 'core', color: '#38bdf8', description: 'ฟื้น MP 140 และเพิ่ม DEF +15% นาน 5 นาที' },
+  food_hero_feast: { id: 'food_hero_feast', name: 'ชุดอาหารผู้กล้า', kind: 'consumable', itemCategory: 'consumable', price: 420, heal: 420, defaultRarity: 'rare', icon: 'core', color: '#facc15', description: 'เพิ่ม ATK +18%, คริติคอล +8% และ EXP +25% นาน 8 นาที' },
+  food_dragon_soup: { id: 'food_dragon_soup', name: 'ซุปมังกรศิลา', kind: 'consumable', itemCategory: 'consumable', price: 650, heal: 700, defaultRarity: 'epic', icon: 'core', color: '#f43f5e', description: 'เพิ่ม ATK +25%, DEF +20% และ EXP +35% นาน 10 นาที' },
 
   // ---- Asura Online Boosters, Upgrade Scrolls & Utility Potions ----
-  asura_exp_50: { id: 'asura_exp_50', name: 'EXP Boost Up 50% (20น.)', kind: 'consumable', price: 0, icon: 'potion', color: '#f59e0b', asset: '', description: 'เพิ่มค่าประสบการณ์ (EXP) ที่ได้รับจากมอนสเตอร์ +50% นาน 20 นาที', effect: true },
-  asura_exp_100: { id: 'asura_exp_100', name: 'EXP Boost Up 100% (20น.)', kind: 'consumable', price: 0, icon: 'potion', color: '#facc15', asset: '', description: 'เพิ่มค่าประสบการณ์ (EXP) จากมอนสเตอร์ +100% (x2) นาน 20 นาที', effect: true },
-  asura_jp_50: { id: 'asura_jp_50', name: 'การงาน Boost Up 50% (20น.)', kind: 'consumable', price: 0, icon: 'potion', color: '#fb923c', asset: '', description: 'เพิ่มค่าประสบการณ์อาชีพ (JP) +50% นาน 20 นาที', effect: true },
-  asura_jp_100: { id: 'asura_jp_100', name: 'การงาน Boost Up 100% (20น.)', kind: 'consumable', price: 0, icon: 'potion', color: '#f97316', asset: '', description: 'เพิ่มค่าประสบการณ์อาชีพ (JP) +100% (x2) นาน 20 นาที', effect: true },
-  asura_lifeskill_50: { id: 'asura_lifeskill_50', name: 'ทักษะฝึกฝน Boost Up 50%', kind: 'consumable', price: 0, icon: 'potion', color: '#4ade80', asset: '', description: 'เพิ่ม EXP ทักษะฝึกฝน (ตกปลา/ขุดแร่/เก็บสมุนไพร) +50% และเพิ่มโอกาสดรอปแรร์ 20 นาที', effect: true },
-  asura_leg_muscle: { id: 'asura_leg_muscle', name: 'ยาเพิ่มกล้ามเนื้อขา (20น.)', kind: 'consumable', price: 0, icon: 'potion', color: '#38bdf8', asset: '', description: 'เพิ่มความเร็วในการเคลื่อนที่ +25% ต่อเนื่อง 20 นาที', effect: true },
-  asura_weight_potion: { id: 'asura_weight_potion', name: 'ยาเพิ่มพลังแบกของ (30น.)', kind: 'consumable', price: 0, icon: 'potion', color: '#a78bfa', asset: '', description: 'เพิ่มขีดจำกัดน้ำหนักสัมภาระ +650 หน่วย นาน 30 นาที', effect: true },
-  asura_stat_potion_s: { id: 'asura_stat_potion_s', name: 'ยาเพิ่มสเตตัสขนาดเล็ก', kind: 'consumable', price: 0, icon: 'potion', color: '#34d399', asset: '', description: 'เพิ่ม ATK / DEF / MaxHP +5% นาน 20 นาที', effect: true },
-  asura_stat_potion_m: { id: 'asura_stat_potion_m', name: 'ยาเพิ่มสเตตัสขนาดกลาง', kind: 'consumable', price: 0, icon: 'potion', color: '#22d3ee', asset: '', description: 'เพิ่ม ATK / DEF / MaxHP +10% และ CRIT +5% นาน 20 นาที', effect: true },
+  asura_exp_50: { id: 'asura_exp_50', name: 'EXP Boost Up 50% (20น.)', kind: 'consumable', itemCategory: 'special', price: 600, sellPrice: 240, defaultRarity: 'uncommon', icon: 'potion', color: '#f59e0b', description: 'เพิ่มค่าประสบการณ์ (EXP) ที่ได้รับจากมอนสเตอร์ +50% นาน 20 นาที', effect: true },
+  asura_exp_100: { id: 'asura_exp_100', name: 'EXP Boost Up 100% (20น.)', kind: 'consumable', itemCategory: 'special', price: 1500, sellPrice: 600, defaultRarity: 'rare', icon: 'potion', color: '#facc15', description: 'เพิ่มค่าประสบการณ์ (EXP) จากมอนสเตอร์ +100% (x2) นาน 20 นาที', effect: true },
+  asura_jp_50: { id: 'asura_jp_50', name: 'การงาน Boost Up 50% (20น.)', kind: 'consumable', itemCategory: 'special', price: 600, sellPrice: 240, defaultRarity: 'uncommon', icon: 'potion', color: '#fb923c', description: 'เพิ่มค่าประสบการณ์อาชีพ (JP) +50% นาน 20 นาที', effect: true },
+  asura_jp_100: { id: 'asura_jp_100', name: 'การงาน Boost Up 100% (20น.)', kind: 'consumable', itemCategory: 'special', price: 1500, sellPrice: 600, defaultRarity: 'rare', icon: 'potion', color: '#f97316', description: 'เพิ่มค่าประสบการณ์อาชีพ (JP) +100% (x2) นาน 20 นาที', effect: true },
+  asura_lifeskill_50: { id: 'asura_lifeskill_50', name: 'ทักษะฝึกฝน Boost Up 50%', kind: 'consumable', itemCategory: 'special', price: 800, sellPrice: 320, defaultRarity: 'uncommon', icon: 'potion', color: '#4ade80', description: 'เพิ่ม EXP ทักษะฝึกฝน (ตกปลา/ขุดแร่/เก็บสมุนไพร) +50% และเพิ่มโอกาสดรอปแรร์ 20 นาที', effect: true },
+  asura_leg_muscle: { id: 'asura_leg_muscle', name: 'ยาเพิ่มกล้ามเนื้อขา (20น.)', kind: 'consumable', itemCategory: 'consumable', price: 500, sellPrice: 200, defaultRarity: 'uncommon', icon: 'potion', color: '#38bdf8', description: 'เพิ่มความเร็วในการเคลื่อนที่ +25% ต่อเนื่อง 20 นาที', effect: true },
+  asura_weight_potion: { id: 'asura_weight_potion', name: 'ยาเพิ่มพลังแบกของ (30น.)', kind: 'consumable', itemCategory: 'consumable', price: 700, sellPrice: 280, defaultRarity: 'uncommon', icon: 'potion', color: '#a78bfa', description: 'เพิ่มขีดจำกัดน้ำหนักสัมภาระ +650 หน่วย นาน 30 นาที', effect: true },
+  asura_stat_potion_s: { id: 'asura_stat_potion_s', name: 'ยาเพิ่มสเตตัสขนาดเล็ก', kind: 'consumable', itemCategory: 'consumable', price: 750, sellPrice: 300, defaultRarity: 'uncommon', icon: 'potion', color: '#34d399', description: 'เพิ่ม ATK / DEF / MaxHP +5% นาน 20 นาที', effect: true },
+  asura_stat_potion_m: { id: 'asura_stat_potion_m', name: 'ยาเพิ่มสเตตัสขนาดกลาง', kind: 'consumable', itemCategory: 'consumable', price: 1450, sellPrice: 580, defaultRarity: 'rare', icon: 'potion', color: '#22d3ee', description: 'เพิ่ม ATK / DEF / MaxHP +10% และ CRIT +5% นาน 20 นาที', effect: true },
 
-  enhance_chance_scroll_1: { id: 'enhance_chance_scroll_1', name: 'ใบเพิ่มโอกาส (+10%)', kind: 'material', price: 450, icon: 'scroll', color: '#38bdf8', asset: '', description: 'ใช้ในหน้าต่างตีบวกเพื่อเพิ่มโอกาสสำเร็จ +10%', effect: true },
-  enhance_chance_scroll_2: { id: 'enhance_chance_scroll_2', name: 'ใบเพิ่มโอกาสชั้นดี (+20%)', kind: 'material', price: 900, icon: 'scroll', color: '#818cf8', asset: '', description: 'ใช้ในหน้าต่างตีบวกเพื่อเพิ่มโอกาสสำเร็จ +20%', effect: true },
-  enhance_chance_scroll_3: { id: 'enhance_chance_scroll_3', name: 'ใบเพิ่มโอกาสชั้นเยี่ยม (+35%)', kind: 'material', price: 1800, icon: 'scroll', color: '#c084fc', asset: '', description: 'ใช้ในหน้าต่างตีบวกเพื่อเพิ่มโอกาสสำเร็จ +35%', effect: true },
-  enhance_chance_scroll_4: { id: 'enhance_chance_scroll_4', name: 'ใบเพิ่มโอกาสของคหบดี (+50%)', kind: 'material', price: 3200, icon: 'scroll', color: '#fbbf24', asset: '', description: 'ใบอัพเกรดระดับตำนาน เพิ่มโอกาสตีบวกสำเร็จ +50%', effect: true },
-  enhance_protect_scroll_1: { id: 'enhance_protect_scroll_1', name: 'ใบประกันความเสียหาย', kind: 'material', price: 800, icon: 'scroll', color: '#4ade80', asset: '', description: 'ใช้ในหน้าต่างตีบวก ป้องกันระดับไอเทมลดลงเมื่อตีบวกล้มเหลว (+6 ขึ้นไป)', effect: true },
-  enhance_protect_scroll_2: { id: 'enhance_protect_scroll_2', name: 'ใบประกันความเสียหายชั้นดี', kind: 'material', price: 1600, icon: 'scroll', color: '#f43f5e', asset: '', description: 'ป้องกันระดับไอเทมลดลงเมื่อตีบวกล้มเหลว พร้อมคืนหินตีบวกครึ่งหนึ่ง', effect: true },
+  enhance_chance_scroll_1: { id: 'enhance_chance_scroll_1', name: 'ใบเพิ่มโอกาส (+10%)', kind: 'material', itemCategory: 'special', price: 450, defaultRarity: 'uncommon', icon: 'scroll', color: '#38bdf8', description: 'ใช้ในหน้าต่างตีบวกเพื่อเพิ่มโอกาสสำเร็จ +10%', effect: true },
+  enhance_chance_scroll_2: { id: 'enhance_chance_scroll_2', name: 'ใบเพิ่มโอกาสชั้นดี (+20%)', kind: 'material', itemCategory: 'special', price: 900, defaultRarity: 'rare', icon: 'scroll', color: '#818cf8', description: 'ใช้ในหน้าต่างตีบวกเพื่อเพิ่มโอกาสสำเร็จ +20%', effect: true },
+  enhance_chance_scroll_3: { id: 'enhance_chance_scroll_3', name: 'ใบเพิ่มโอกาสชั้นเยี่ยม (+35%)', kind: 'material', itemCategory: 'special', price: 1800, defaultRarity: 'epic', icon: 'scroll', color: '#c084fc', description: 'ใช้ในหน้าต่างตีบวกเพื่อเพิ่มโอกาสสำเร็จ +35%', effect: true },
+  enhance_chance_scroll_4: { id: 'enhance_chance_scroll_4', name: 'ใบเพิ่มโอกาสของคหบดี (+50%)', kind: 'material', itemCategory: 'special', price: 3200, defaultRarity: 'legendary', icon: 'scroll', color: '#fbbf24', description: 'ใบอัพเกรดระดับตำนาน เพิ่มโอกาสตีบวกสำเร็จ +50%', effect: true },
+  enhance_protect_scroll_1: { id: 'enhance_protect_scroll_1', name: 'ใบประกันความเสียหาย', kind: 'material', itemCategory: 'special', price: 800, defaultRarity: 'rare', icon: 'scroll', color: '#4ade80', description: 'ใช้ในหน้าต่างตีบวก ป้องกันระดับไอเทมลดลงเมื่อตีบวกล้มเหลว (+6 ขึ้นไป)', effect: true },
+  enhance_protect_scroll_2: { id: 'enhance_protect_scroll_2', name: 'ใบประกันความเสียหายชั้นดี', kind: 'material', itemCategory: 'special', price: 1600, defaultRarity: 'epic', icon: 'scroll', color: '#f43f5e', description: 'ป้องกันระดับไอเทมลดลงเมื่อตีบวกล้มเหลว พร้อมคืนหินตีบวกครึ่งหนึ่ง', effect: true },
 
-  stat_reset_potion: { id: 'stat_reset_potion', name: 'น้ำยาหวนกลับ', kind: 'consumable', price: 600, icon: 'potion', color: '#fb7185', asset: '', description: 'ใช้ล้างแต้มสเตตัส (STR/VIT/DEX/AGI/INT/LUK) ทั้งหมดคืนฟรี 1 ครั้ง', effect: true },
-  skill_reset_potion: { id: 'skill_reset_potion', name: 'น้ำยาลืมทักษะ', kind: 'consumable', price: 600, icon: 'potion', color: '#c084fc', asset: '', description: 'ใช้ล้างแต้มทักษะ (SP) ทั้งหมดคืนฟรี 1 ครั้ง', effect: true },
-  job_reset_potion: { id: 'job_reset_potion', name: 'น้ำยาเปลี่ยนอาชีพ', kind: 'consumable', price: 1500, icon: 'potion', color: '#f59e0b', asset: '', description: 'รีเซ็ตสายอาชีพกลับสู่ผู้ฝึกหัด (คงเลเวลและอุปกรณ์) เพื่อเลือกสายใหม่', effect: true },
-  title_clear_scroll: { id: 'title_clear_scroll', name: 'ใบแจ้งลบฉายา', kind: 'consumable', price: 250, icon: 'scroll', color: '#94a3b8', asset: '', description: 'ล้างนามแฝงและฉายาที่แสดงบนตัวละครออกทั้งหมดทันที' },
-  companion_gacha_box: { id: 'companion_gacha_box', name: 'กล่องสุ่มคู่หูอสุรา', kind: 'consumable', price: 0, icon: 'bag', color: '#f472b6', asset: '', description: 'เปิดเพื่อสุ่มรับคู่หู (ผอบ) หรือผลึกวิวัฒนาการคู่หู x5 + EXP สัตว์เลี้ยง', effect: true },
+  stat_reset_potion: { id: 'stat_reset_potion', name: 'น้ำยาหวนกลับ', kind: 'consumable', itemCategory: 'special', price: 600, defaultRarity: 'rare', icon: 'potion', color: '#fb7185', description: 'ใช้ล้างแต้มสเตตัส (STR/VIT/DEX/AGI/INT/LUK) ทั้งหมดคืนฟรี 1 ครั้ง', effect: true },
+  skill_reset_potion: { id: 'skill_reset_potion', name: 'น้ำยาลืมทักษะ', kind: 'consumable', itemCategory: 'special', price: 600, defaultRarity: 'rare', icon: 'potion', color: '#c084fc', description: 'ใช้ล้างแต้มทักษะ (SP) ทั้งหมดคืนฟรี 1 ครั้ง', effect: true },
+  job_reset_potion: { id: 'job_reset_potion', name: 'น้ำยาเปลี่ยนอาชีพ', kind: 'consumable', itemCategory: 'special', price: 1500, defaultRarity: 'epic', icon: 'potion', color: '#f59e0b', description: 'รีเซ็ตสายอาชีพกลับสู่ผู้ฝึกหัด (คงเลเวลและอุปกรณ์) เพื่อเลือกสายใหม่', effect: true },
+  title_clear_scroll: { id: 'title_clear_scroll', name: 'ใบแจ้งลบฉายา', kind: 'consumable', itemCategory: 'special', price: 250, icon: 'scroll', color: '#94a3b8', description: 'ล้างนามแฝงและฉายาที่แสดงบนตัวละครออกทั้งหมดทันที' },
+  companion_gacha_box: { id: 'companion_gacha_box', name: 'กล่องสุ่มคู่หูอสุรา', kind: 'consumable', itemCategory: 'special', price: 2400, sellPrice: 800, defaultRarity: 'epic', icon: 'bag', color: '#f472b6', description: 'เปิดเพื่อสุ่มรับคู่หู (ผอบ) หรือผลึกวิวัฒนาการคู่หู x5 + EXP สัตว์เลี้ยง', effect: true },
 
+  wooden_stick: weapon('wooden_stick', 'ไม้พลอง', 'stick', 6, 50, 1, 1, '#a47148', { defaultRarity: 'common' }),
+  oak_club: weapon('oak_club', 'กระบองโอ๊ค', 'stick', 14, 400, 2, 5, '#7f5539', { defaultRarity: 'uncommon' }),
 
-  wooden_stick: weapon('wooden_stick', 'ไม้พลอง', 'stick', 6, 50, 1, 1, '#a47148'),
-  oak_club: weapon('oak_club', 'กระบองโอ๊ค', 'stick', 14, 400, 2, 5, '#7f5539'),
+  short_sword: weapon('short_sword', 'ดาบสั้น', 'sword', 16, 400, 1, 10, '#adb5bd', { defaultRarity: 'common' }),
+  steel_sword: weapon('steel_sword', 'ดาบเหล็กกล้า', 'sword', 36, 2500, 2, 15, '#dee2e6', { defaultRarity: 'uncommon' }),
+  knight_blade: weapon('knight_blade', 'ดาบอัศวิน', 'sword', 72, 9000, 3, 25, '#90e0ef', { defaultRarity: 'rare' }),
+  flame_sword: weapon('flame_sword', 'ดาบเพลิงนรก', 'sword', 125, 25000, 4, 38, '#ff6b35', { defaultRarity: 'epic', element: 'fire' }),
 
-  short_sword: weapon('short_sword', 'ดาบสั้น', 'sword', 16, 400, 1, 10, '#adb5bd'),
-  steel_sword: weapon('steel_sword', 'ดาบเหล็กกล้า', 'sword', 36, 2500, 2, 15, '#dee2e6'),
-  knight_blade: weapon('knight_blade', 'ดาบอัศวิน', 'sword', 72, 9000, 3, 25, '#90e0ef'),
-  flame_sword: weapon('flame_sword', 'ดาบเพลิงนรก', 'sword', 125, 25000, 4, 38, '#ff6b35'),
+  wood_staff: weapon('wood_staff', 'คทาไม้', 'staff', 15, 400, 1, 10, '#b08968', { defaultRarity: 'common' }),
+  oak_staff: weapon('oak_staff', 'คทาโอ๊ค', 'staff', 34, 2500, 2, 15, '#9c6644', { defaultRarity: 'uncommon' }),
+  crystal_staff: weapon('crystal_staff', 'คทาคริสตัล', 'staff', 68, 9000, 3, 25, '#a2d2ff', { defaultRarity: 'rare', element: 'arcane' }),
+  inferno_staff: weapon('inferno_staff', 'คทาอัคคี', 'staff', 120, 25000, 4, 38, '#e85d04', { defaultRarity: 'epic', element: 'fire' }),
+  gm_golden_staff: { id: 'gm_golden_staff', name: 'คฑาทองคำ GM', kind: 'weapon', itemCategory: 'weapon', weaponType: 'staff', atk: 9999999, price: 0, sellPrice: 0, tier: 99, reqLevel: 1, gmOnly: true, defaultRarity: 'mythic', element: 'holy', icon: 'staff', color: '#ffd700', description: 'อาวุธเฉพาะ GM — ความเสียหาย 9,999,999' },
 
-  wood_staff: weapon('wood_staff', 'คทาไม้', 'staff', 15, 400, 1, 10, '#b08968'),
-  oak_staff: weapon('oak_staff', 'คทาโอ๊ค', 'staff', 34, 2500, 2, 15, '#9c6644'),
-  crystal_staff: weapon('crystal_staff', 'คทาคริสตัล', 'staff', 68, 9000, 3, 25, '#a2d2ff'),
-  inferno_staff: weapon('inferno_staff', 'คทาอัคคี', 'staff', 120, 25000, 4, 38, '#e85d04'),
-  gm_golden_staff: { id: 'gm_golden_staff', name: 'คฑาทองคำ GM', kind: 'weapon', weaponType: 'staff', atk: 9999999, price: 0, tier: 99, reqLevel: 1, icon: 'staff', color: '#ffd700', description: 'อาวุธเฉพาะ GM — ความเสียหาย 9,999,999' },
+  short_bow: weapon('short_bow', 'ธนูสั้น', 'bow', 15, 400, 1, 10, '#bc6c25', { defaultRarity: 'common' }),
+  long_bow: weapon('long_bow', 'ธนูยาว', 'bow', 35, 2500, 2, 15, '#99582a', { defaultRarity: 'uncommon' }),
+  hunter_bow: weapon('hunter_bow', 'ธนูพราน', 'bow', 69, 9000, 3, 25, '#606c38', { defaultRarity: 'rare' }),
+  phoenix_bow: weapon('phoenix_bow', 'ธนูฟีนิกซ์', 'bow', 122, 25000, 4, 38, '#f48c06', { defaultRarity: 'epic', element: 'fire' }),
 
-  short_bow: weapon('short_bow', 'ธนูสั้น', 'bow', 15, 400, 1, 10, '#bc6c25'),
-  long_bow: weapon('long_bow', 'ธนูยาว', 'bow', 35, 2500, 2, 15, '#99582a'),
-  hunter_bow: weapon('hunter_bow', 'ธนูพราน', 'bow', 69, 9000, 3, 25, '#606c38'),
-  phoenix_bow: weapon('phoenix_bow', 'ธนูฟีนิกซ์', 'bow', 122, 25000, 4, 38, '#f48c06'),
+  knife: weapon('knife', 'มีดสั้น', 'dagger', 14, 400, 1, 10, '#ced4da', { defaultRarity: 'common' }),
+  kris: weapon('kris', 'กริช', 'dagger', 32, 2500, 2, 15, '#e9c46a', { defaultRarity: 'uncommon' }),
+  shadow_dagger: weapon('shadow_dagger', 'มีดเงา', 'dagger', 64, 9000, 3, 25, '#7b2cbf', { defaultRarity: 'rare', element: 'shadow' }),
+  demon_fang: weapon('demon_fang', 'เขี้ยวปีศาจ', 'dagger', 115, 25000, 4, 38, '#d00000', { defaultRarity: 'epic', element: 'shadow' }),
+  abyss_crystal: { id: 'abyss_crystal', name: 'ผลึกอเวจี', kind: 'material', itemCategory: 'special', price: 1800, sellPrice: 900, defaultRarity: 'legendary', element: 'shadow', icon: 'core', color: '#8b5cf6', description: 'ผลึกหายากจากดันเจี้ยนห้วงอเวจี', tier: 5 },
 
-  knife: weapon('knife', 'มีดสั้น', 'dagger', 14, 400, 1, 10, '#ced4da'),
-  kris: weapon('kris', 'กริช', 'dagger', 32, 2500, 2, 15, '#e9c46a'),
-  shadow_dagger: weapon('shadow_dagger', 'มีดเงา', 'dagger', 64, 9000, 3, 25, '#7b2cbf'),
-  demon_fang: weapon('demon_fang', 'เขี้ยวปีศาจ', 'dagger', 115, 25000, 4, 38, '#d00000'),
-  abyss_crystal: { id: 'abyss_crystal', name: 'ผลึกอเวจี', kind: 'material', price: 1800, icon: 'core', color: '#8b5cf6', description: 'ผลึกหายากจากดันเจี้ยนห้วงอเวจี', tier: 5 },
+  cloth_armor: armor('cloth_armor', 'ชุดผ้า', 5, 100, 1, 1, '#d4a373', { defaultRarity: 'common' }),
+  leather_armor: armor('leather_armor', 'เกราะหนัง', 15, 1200, 2, 10, '#8b5e34', { defaultRarity: 'uncommon' }),
+  chain_mail: armor('chain_mail', 'เกราะโซ่', 34, 8000, 3, 22, '#adb5bd', { defaultRarity: 'rare' }),
+  dragon_armor: armor('dragon_armor', 'เกราะมังกร', 70, 24000, 4, 36, '#c1121f', { defaultRarity: 'epic', element: 'fire' }),
+}
 
-  cloth_armor: armor('cloth_armor', 'ชุดผ้า', 5, 100, 1, 1, '#d4a373'),
-  leather_armor: armor('leather_armor', 'เกราะหนัง', 15, 1200, 2, 10, '#8b5e34'),
-  chain_mail: armor('chain_mail', 'เกราะโซ่', 34, 8000, 3, 22, '#adb5bd'),
-  dragon_armor: armor('dragon_armor', 'เกราะมังกร', 70, 24000, 4, 36, '#c1121f'),
+function resolveCatalogItemCategory(entry: (typeof WEAPON_CATALOG)[number]): ItemCategory {
+  if (entry.slot === 'weapon') return 'weapon'
+  if (entry.slot === 'shoes') return 'boots'
+  if (entry.slot === 'accessory') return entry.name.includes('สร้อย') ? 'necklace' : 'accessory'
+  if (entry.name.includes('โล่')) return 'shield'
+  if (entry.name.includes('หมวก')) return 'helmet'
+  if (entry.name.includes('ปลอกแขน')) return 'gloves'
+  return 'armor'
 }
 
 const FILE_ITEMS: Record<string, ItemDef> = Object.fromEntries(
-  WEAPON_CATALOG.map((entry, index) => [
-    entry.id,
-    {
-      id: entry.id,
-      name: entry.name,
-      kind: entry.slot === 'weapon' ? 'weapon' : 'armor',
-      weaponType: entry.slot === 'weapon' ? (entry.job === 'mage' ? 'staff' : entry.job === 'archer' ? 'bow' : entry.job === 'thief' ? 'dagger' : 'sword') : undefined,
-      slot: entry.slot,
-      atk: entry.slot === 'weapon' ? 18 + index * 7 : undefined,
-      def: entry.slot === 'weapon' ? undefined : 8 + index * 3,
-      price: 500 + index * 750,
-      tier: Math.min(6, 1 + Math.floor(index / 10)),
-      reqLevel: 1 + Math.floor(index / 5) * 5,
-      icon: entry.slot === 'weapon' ? 'sword' : entry.slot,
-      color: entry.job === 'mage' ? '#67e8f9' : entry.job === 'archer' ? '#86efac' : entry.job === 'thief' ? '#c084fc' : '#fbbf24',
-      description: `${entry.name} จากไฟล์อาวุธตามอาชีพ`,
-      asset: entry.asset,
-      allowedJobs:
-        entry.job === 'all' || entry.job === 'gm'
-          ? undefined
-          : entry.job === 'swordsman'
-            ? ['swordsman', 'kensei', 'templar', 'the_king', 'iron_fist']
-            : entry.job === 'mage'
-              ? ['mage', 'cleric', 'wicked_necromancer']
-              : entry.job === 'thief'
-                ? ['thief', 'sinister', 'nekobaku', 'mamushi']
-                : [entry.job],
-      gmOnly: entry.job === 'gm',
-    },
-  ]),
+  WEAPON_CATALOG.map((entry, index) => {
+    const tier = Math.min(6, 1 + Math.floor(index / 10))
+    const isWeapon = entry.slot === 'weapon'
+    const weaponType = isWeapon
+      ? entry.id === 'weapon_004'
+        ? 'stick'
+        : entry.job === 'mage'
+          ? 'staff'
+          : entry.job === 'archer'
+            ? 'bow'
+            : entry.job === 'thief'
+              ? 'dagger'
+              : 'sword'
+      : undefined
+    const itemCategory = resolveCatalogItemCategory(entry)
+    return [
+      entry.id,
+      {
+        id: entry.id,
+        name: entry.name,
+        kind: isWeapon ? 'weapon' : 'armor',
+        weaponType,
+        slot: entry.slot as EquipmentSlot,
+        itemCategory,
+        atk: isWeapon ? 18 + index * 7 : undefined,
+        def: isWeapon ? undefined : 8 + index * 3,
+        price: 500 + index * 750,
+        tier,
+        reqLevel: 1 + Math.floor(index / 5) * 5,
+        icon: isWeapon ? (weaponType ?? 'sword') : entry.slot,
+        color: entry.job === 'mage' ? '#67e8f9' : entry.job === 'archer' ? '#86efac' : entry.job === 'thief' ? '#c084fc' : '#fbbf24',
+        description: `${entry.name} — อุปกรณ์เซ็ตผจญภัยตามสายอาชีพ`,
+        asset: entry.asset,
+        defaultRarity:
+          entry.job === 'gm'
+            ? 'mythic'
+            : tier >= 5
+              ? 'legendary'
+              : tier >= 3
+                ? 'epic'
+                : tier === 2
+                  ? 'rare'
+                  : 'uncommon',
+        allowedJobs:
+          entry.job === 'all' || entry.job === 'gm'
+            ? undefined
+            : entry.job === 'swordsman'
+              ? ['swordsman', 'kensei', 'templar', 'the_king', 'iron_fist']
+              : entry.job === 'mage'
+                ? ['mage', 'cleric', 'wicked_necromancer']
+                : entry.job === 'thief'
+                  ? ['thief', 'sinister', 'nekobaku', 'mamushi']
+                  : [entry.job],
+        gmOnly: entry.job === 'gm',
+      },
+    ]
+  }),
 )
 
 const FILE_ITEM_IDS = Object.keys(FILE_ITEMS)
@@ -1600,32 +2088,43 @@ const FILE_ITEM_IDS = Object.keys(FILE_ITEMS)
 export const GM_ITEMS: Record<string, ItemDef> = Object.fromEntries(
   FILE_ITEM_IDS.map((id) => {
     const gmId = `gm888_${id.replace('weapon_', '')}`
-    return [gmId, { ...FILE_ITEMS[id], id: gmId, gmOnly: true }]
+    return [gmId, { ...FILE_ITEMS[id], id: gmId, gmOnly: true, defaultRarity: 'mythic' as EquipmentRarity }]
   }),
 )
 
 const BASE_ITEMS_WITH_ASSETS: Record<string, ItemDef> = Object.fromEntries(
-  Object.entries(BASE_ITEMS).map(([id, def]) => [id, { ...def, asset: def.asset ?? `/images/items/${id}.png` }]),
+  Object.entries(BASE_ITEMS).map(([id, def]) => [
+    id,
+    {
+      ...def,
+      asset: resolveSemanticBaseItemAssetPath(id, def),
+    },
+  ]),
 )
 
 export const ITEMS: Record<string, ItemDef> = { ...BASE_ITEMS_WITH_ASSETS, ...FILE_ITEMS, ...GM_ITEMS }
 
-export const SHOP_STOCK: string[] = FILE_ITEM_IDS.filter((id) => !ITEMS[id].gmOnly).slice(0, 24)
-/* Legacy consumables are intentionally no longer stocked; all visible item art comes from the weapons archive. */
-/*
+export const SHOP_STOCK: string[] = [
+  'red_potion',
+  'orange_potion',
+  'white_potion',
+  'blue_potion',
+  'purple_potion',
+  'return_scroll',
+  'enhance_stone',
   'wooden_stick',
-  'oak_club',
   'short_sword',
-  'steel_sword',
   'wood_staff',
-  'oak_staff',
   'short_bow',
-  'long_bow',
   'knife',
-  'kris',
-  'cloth_armor',
-  'leather_armor',
-] */
+  'iron_visor_helm',
+  'leather_archer_bracer',
+  'knight_heater_shield',
+  'golden_crescent_earring',
+  'jade_guardian_talisman',
+  'imperial_gold_key',
+  ...FILE_ITEM_IDS.filter((id) => !ITEMS[id].gmOnly).slice(0, 12),
+]
 
 export type MonsterSprite =
   | 'slime'
@@ -1665,7 +2164,7 @@ export const MONSTERS: Record<string, MonsterDef> = {
   ...GENERATED_BIOME_MONSTERS,
 }
 
-export const MAX_LEVEL = 70
+export const MAX_LEVEL = 100
 export const MAX_PLUS = 15
 
 export function expToNext(level: number) {

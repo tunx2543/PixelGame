@@ -179,7 +179,8 @@
     box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.45);
   }
   .pixelated {
-    image-rendering: auto;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
   }
 
   .gem-art-wrap {
@@ -300,6 +301,74 @@
   .asset-no-bg {
     mix-blend-mode: normal;
     isolation: isolate;
+  }
+
+  /* Composable Dynamic Item VFX (GPU transform/opacity composited) */
+  @keyframes item-vfx-breathe {
+    0%, 100% { opacity: 0.45; transform: scale(0.92); }
+    50% { opacity: 0.92; transform: scale(1.06); }
+  }
+
+  @keyframes item-vfx-rune-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes item-vfx-rune-spin-rev {
+    from { transform: rotate(360deg); }
+    to { transform: rotate(0deg); }
+  }
+
+  @keyframes item-vfx-shine {
+    0%, 62% { opacity: 0; transform: translateX(-140%) skewX(-24deg); }
+    72% { opacity: 0.65; }
+    88% { opacity: 0.25; transform: translateX(160%) skewX(-24deg); }
+    100% { opacity: 0; transform: translateX(160%) skewX(-24deg); }
+  }
+
+  @keyframes item-vfx-particle-up {
+    0% { opacity: 0; transform: translateY(8px) scale(0.6); }
+    25% { opacity: 0.95; }
+    85% { opacity: 0.65; }
+    100% { opacity: 0; transform: translateY(-16px) scale(1.1); }
+  }
+
+  @keyframes item-vfx-spark {
+    0%, 100% { opacity: 0.15; transform: scale(0.65) rotate(0deg); }
+    50% { opacity: 1; transform: scale(1.2) rotate(45deg); }
+  }
+
+  @keyframes item-vfx-burst {
+    0%, 72% { opacity: 0; transform: scale(0.45); }
+    82% { opacity: 0.85; transform: scale(1.05); }
+    100% { opacity: 0; transform: scale(1.45); }
+  }
+
+  @keyframes item-vfx-border-glow {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 1; }
+  }
+
+  .item-vfx-breathe { animation: item-vfx-breathe 2.4s ease-in-out infinite; }
+  .item-vfx-rune-spin { animation: item-vfx-rune-spin 7.5s linear infinite; }
+  .item-vfx-rune-spin-rev { animation: item-vfx-rune-spin-rev 10s linear infinite; }
+  .item-vfx-shine { animation: item-vfx-shine 3.8s ease-in-out infinite; }
+  .item-vfx-particle-up { animation: item-vfx-particle-up 2.1s ease-out infinite; }
+  .item-vfx-spark { animation: item-vfx-spark 1.9s ease-in-out infinite; }
+  .item-vfx-burst { animation: item-vfx-burst 2.8s ease-out infinite; }
+  .item-vfx-border-glow { animation: item-vfx-border-glow 1.8s ease-in-out infinite; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .item-vfx-breathe,
+    .item-vfx-rune-spin,
+    .item-vfx-rune-spin-rev,
+    .item-vfx-shine,
+    .item-vfx-particle-up,
+    .item-vfx-spark,
+    .item-vfx-burst,
+    .item-vfx-border-glow {
+      animation: none !important;
+    }
   }
 }
 

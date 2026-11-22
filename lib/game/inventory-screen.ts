@@ -36,6 +36,8 @@ import {
 } from './premium/wallet'
 import { COMBAT_PETS, MAX_PET_LEVEL, grantActivePetExp, sanitizePetState } from './systems'
 
+import { EQUIPMENT_RARITY_META, type EquipmentRarity } from './mmo-systems'
+
 export type InventoryFilterTab =
   | 'all'
   | 'equipable'
@@ -46,27 +48,39 @@ export type InventoryFilterTab =
 
 export type InventorySortMode = 'power' | 'rarity' | 'monster_drops' | 'name'
 
-export type ItemRarity = 'common' | 'rare' | 'epic' | 'legendary'
+export type ItemRarity = EquipmentRarity
 
 export interface ItemRarityMeta {
   id: ItemRarity
-  label: 'Common' | 'Rare' | 'Epic' | 'Legendary'
+  label: 'Common' | 'Uncommon' | 'Rare' | 'Epic' | 'Legendary' | 'Mythic'
   thaiLabel: string
   rank: number
 }
 
 export const ITEM_RARITY_META: Record<ItemRarity, ItemRarityMeta> = {
-  common: { id: 'common', label: 'Common', thaiLabel: 'ทั่วไป', rank: 1 },
-  rare: { id: 'rare', label: 'Rare', thaiLabel: 'หายาก', rank: 2 },
-  epic: { id: 'epic', label: 'Epic', thaiLabel: 'อีปิก', rank: 3 },
-  legendary: { id: 'legendary', label: 'Legendary', thaiLabel: 'ตำนาน', rank: 4 },
+  common: { id: 'common', label: 'Common', thaiLabel: EQUIPMENT_RARITY_META.common.thaiLabel, rank: 1 },
+  uncommon: { id: 'uncommon', label: 'Uncommon', thaiLabel: EQUIPMENT_RARITY_META.uncommon.thaiLabel, rank: 2 },
+  rare: { id: 'rare', label: 'Rare', thaiLabel: EQUIPMENT_RARITY_META.rare.thaiLabel, rank: 3 },
+  epic: { id: 'epic', label: 'Epic', thaiLabel: EQUIPMENT_RARITY_META.epic.thaiLabel, rank: 4 },
+  legendary: { id: 'legendary', label: 'Legendary', thaiLabel: EQUIPMENT_RARITY_META.legendary.thaiLabel, rank: 5 },
+  mythic: { id: 'mythic', label: 'Mythic', thaiLabel: EQUIPMENT_RARITY_META.mythic.thaiLabel, rank: 6 },
 }
 
 export function resolveItemRarity(def: ItemDef): ItemRarity {
+  if (def.defaultRarity && ITEM_RARITY_META[def.defaultRarity]) {
+    return def.defaultRarity
+  }
   if (
     def.gmOnly ||
+    (def.tier ?? 0) >= 6 ||
+    def.id === 'mythic_awakening_core'
+  ) {
+    return 'mythic'
+  }
+  if (
     (def.tier ?? 0) >= 4 ||
     def.id === 'earth_core' ||
+    def.id === 'abyss_crystal' ||
     def.id === 'astral_bag_expansion' ||
     def.id === 'starlight_loot_magnet'
   ) {
@@ -85,11 +99,18 @@ export function resolveItemRarity(def: ItemDef): ItemRarity {
     (def.tier ?? 0) === 2 ||
     def.id === 'enhance_stone' ||
     def.id === 'purple_potion' ||
-    def.id === 'orange_potion' ||
     (def.kind === 'material' && def.price >= 90) ||
-    (def.kind === 'consumable' && def.price >= 120)
+    (def.kind === 'consumable' && def.price >= 200)
   ) {
     return 'rare'
+  }
+  if (
+    def.id === 'orange_potion' ||
+    def.id === 'return_scroll' ||
+    (def.kind === 'material' && def.price >= 30) ||
+    (def.kind === 'consumable' && def.price >= 60)
+  ) {
+    return 'uncommon'
   }
   return 'common'
 }

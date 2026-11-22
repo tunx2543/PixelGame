@@ -7,7 +7,7 @@ import { getActiveWorldBoss, type ElementType, type WorldBossScheduleSpec } from
 /* 1. EQUIPMENT RARITY, RANDOM SUB-STATS (AFFIXES) & REFORGE                  */
 /* ========================================================================== */
 
-export type EquipmentRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'
+export type EquipmentRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'mythic'
 
 export type AffixStat =
   | 'atk_flat'
@@ -26,59 +26,98 @@ export interface ItemAffix {
 
 export interface RarityStyleMeta {
   id: EquipmentRarity
+  label: string
   thaiLabel: string
   affixCount: number
   statMultiplier: number
+  sellMultiplier: number
+  hexColor: string
   textColorClass: string
   borderColorClass: string
   badgeBgClass: string
 }
 
+export const EQUIPMENT_RARITY_ORDER: readonly EquipmentRarity[] = [
+  'common',
+  'uncommon',
+  'rare',
+  'epic',
+  'legendary',
+  'mythic',
+] as const
+
 export const EQUIPMENT_RARITY_META: Record<EquipmentRarity, RarityStyleMeta> = {
   common: {
     id: 'common',
+    label: 'Common',
     thaiLabel: 'ธรรมดา',
     affixCount: 0,
     statMultiplier: 1,
+    sellMultiplier: 1,
+    hexColor: '#cbd5e1',
     textColorClass: 'text-slate-200',
-    borderColorClass: 'border-border',
-    badgeBgClass: 'bg-slate-600/30',
+    borderColorClass: 'border-slate-500/60',
+    badgeBgClass: 'bg-slate-600/35',
   },
   uncommon: {
     id: 'uncommon',
-    thaiLabel: 'ชั้นดี',
+    label: 'Uncommon',
+    thaiLabel: 'ไม่ธรรมดา',
     affixCount: 1,
-    statMultiplier: 1.05,
+    statMultiplier: 1.06,
+    sellMultiplier: 1.25,
+    hexColor: '#34d399',
     textColorClass: 'text-emerald-300',
-    borderColorClass: 'border-emerald-400/70',
+    borderColorClass: 'border-emerald-400/75',
     badgeBgClass: 'bg-emerald-500/20',
   },
   rare: {
     id: 'rare',
+    label: 'Rare',
     thaiLabel: 'หายาก',
     affixCount: 2,
-    statMultiplier: 1.12,
+    statMultiplier: 1.14,
+    sellMultiplier: 1.6,
+    hexColor: '#38bdf8',
     textColorClass: 'text-sky-300',
-    borderColorClass: 'border-sky-400/80',
+    borderColorClass: 'border-sky-400/85',
     badgeBgClass: 'bg-sky-500/20',
   },
   epic: {
     id: 'epic',
+    label: 'Epic',
     thaiLabel: 'มหากาพย์',
     affixCount: 3,
-    statMultiplier: 1.22,
+    statMultiplier: 1.24,
+    sellMultiplier: 2.1,
+    hexColor: '#c084fc',
     textColorClass: 'text-purple-300',
-    borderColorClass: 'border-purple-400/85',
-    badgeBgClass: 'bg-purple-500/20',
+    borderColorClass: 'border-purple-400/90',
+    badgeBgClass: 'bg-purple-500/25',
   },
   legendary: {
     id: 'legendary',
+    label: 'Legendary',
     thaiLabel: 'ตำนาน',
     affixCount: 4,
-    statMultiplier: 1.35,
+    statMultiplier: 1.38,
+    sellMultiplier: 3.0,
+    hexColor: '#fbbf24',
     textColorClass: 'text-amber-300',
     borderColorClass: 'border-amber-400',
-    badgeBgClass: 'bg-amber-500/20',
+    badgeBgClass: 'bg-amber-500/25',
+  },
+  mythic: {
+    id: 'mythic',
+    label: 'Mythic',
+    thaiLabel: 'เทพ',
+    affixCount: 5,
+    statMultiplier: 1.55,
+    sellMultiplier: 4.5,
+    hexColor: '#fb7185',
+    textColorClass: 'text-rose-200',
+    borderColorClass: 'border-rose-400',
+    badgeBgClass: 'bg-gradient-to-r from-rose-500/35 via-amber-500/30 to-fuchsia-500/35',
   },
 }
 
@@ -101,7 +140,8 @@ const AFFIX_POOL: Array<{
 ]
 
 export function getItemTierRarityFallback(tier: number | undefined, gmOnly?: boolean): EquipmentRarity {
-  if (gmOnly || (tier ?? 1) >= 4) return 'legendary'
+  if (gmOnly || (tier ?? 1) >= 6) return 'mythic'
+  if ((tier ?? 1) >= 4) return 'legendary'
   if ((tier ?? 1) === 3) return 'epic'
   if ((tier ?? 1) === 2) return 'rare'
   return 'common'
@@ -109,9 +149,10 @@ export function getItemTierRarityFallback(tier: number | undefined, gmOnly?: boo
 
 export function resolveEffectiveRarity(
   item: { rarity?: EquipmentRarity } | null | undefined,
-  def: Pick<ItemDef, 'tier' | 'gmOnly'> | undefined,
+  def: (Pick<ItemDef, 'tier' | 'gmOnly'> & { defaultRarity?: EquipmentRarity }) | undefined,
 ): EquipmentRarity {
   if (item?.rarity && EQUIPMENT_RARITY_META[item.rarity]) return item.rarity
+  if (def?.defaultRarity && EQUIPMENT_RARITY_META[def.defaultRarity]) return def.defaultRarity
   return getItemTierRarityFallback(def?.tier, def?.gmOnly)
 }
 
@@ -120,16 +161,17 @@ export function rollEquipmentRarity(
   rng: () => number = Math.random,
   forceMinRarity?: EquipmentRarity,
 ): EquipmentRarity {
-  const order: EquipmentRarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary']
+  const order = EQUIPMENT_RARITY_ORDER
   const roll = Math.max(0, Math.min(0.999999, rng()))
-  const tierShift = Math.max(0, Math.min(3, tier - 1)) * 0.14
+  const tierShift = Math.max(0, Math.min(5, tier - 1)) * 0.11
   const score = roll + tierShift
 
   let rolled: EquipmentRarity = 'common'
-  if (score >= 0.96) rolled = 'legendary'
-  else if (score >= 0.82) rolled = 'epic'
-  else if (score >= 0.58) rolled = 'rare'
-  else if (score >= 0.30) rolled = 'uncommon'
+  if (score >= 1.24) rolled = 'mythic'
+  else if (score >= 0.96) rolled = 'legendary'
+  else if (score >= 0.78) rolled = 'epic'
+  else if (score >= 0.56) rolled = 'rare'
+  else if (score >= 0.28) rolled = 'uncommon'
 
   if (forceMinRarity) {
     return order.indexOf(rolled) < order.indexOf(forceMinRarity) ? forceMinRarity : rolled
@@ -177,7 +219,7 @@ export function sanitizeAffixes(raw: unknown): ItemAffix[] {
     if (typeof stat === 'string' && validStats.has(stat as AffixStat) && Number.isFinite(value) && value > 0) {
       out.push({ stat: stat as AffixStat, value: Math.min(9999, Math.round(value)) })
     }
-    if (out.length >= 4) break
+    if (out.length >= 5) break
   }
   return out
 }
@@ -236,11 +278,12 @@ export function reforgeCost(tier = 1, currentRarity: EquipmentRarity): { gold: n
     rare: 2,
     epic: 3,
     legendary: 4,
+    mythic: 6,
   }
   const r = rankMap[currentRarity]
   return {
     gold: Math.max(120, Math.round(150 * Math.max(1, tier) * r)),
-    stones: Math.max(1, Math.min(4, Math.ceil(r / 2))),
+    stones: Math.max(1, Math.min(6, Math.ceil(r / 2))),
   }
 }
 
