@@ -10,8 +10,8 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: '/',
     display: 'standalone',
     display_override: ['fullscreen', 'standalone'],
-    background_color: '#0e0f1a',
-    theme_color: '#0e0f1a',
+    background_color: '#111d2e',
+    theme_color: '#111d2e',
     orientation: 'landscape',
     categories: ['games', 'role playing'],
     icons: [

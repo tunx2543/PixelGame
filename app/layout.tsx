@@ -21,15 +21,18 @@ export const metadata: Metadata = {
       { url: '/icon-dark-32x32.png', sizes: '32x32', media: '(prefers-color-scheme: dark)' },
       { url: '/pwa-192x192.png', sizes: '192x192', type: 'image/png' },
       { url: '/pwa-512x512.png', sizes: '512x512', type: 'image/png' },
-      { url: '/icon.svg', type: 'image/svg+xml' },
     ],
-    apple: [{ url: '/apple-icon.png', sizes: '180x180', type: 'image/png' }],
+    shortcut: ['/favicon.ico'],
+    apple: [
+      { url: '/apple-icon.png', sizes: '180x180', type: 'image/png' },
+      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+    ],
   },
 }
 
 export const viewport: Viewport = {
   colorScheme: 'dark',
-  themeColor: '#14111d',
+  themeColor: '#111d2e',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
