@@ -123,9 +123,22 @@ export function Panels() {
   return <WindowManager />
 }
 
-export function PanelFrame({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
+export function PanelFrame({
+  title,
+  subtitle,
+  children,
+  onClose,
+  hideGold = false,
+}: {
+  title: string
+  subtitle?: string
+  children: ReactNode
+  onClose?: () => void
+  hideGold?: boolean
+}) {
   const g = useGame()
   const winCtx = useWindowContext()
+  const handleClose = onClose ?? closePanel
 
   if (winCtx?.insideWindowManager) {
     return (
@@ -151,9 +164,11 @@ export function PanelFrame({ title, subtitle, children }: { title: string; subti
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            <span className="mr-1 hidden text-xs font-semibold text-gold tabular-nums sm:inline">
-              {formatNum(g.p?.gold ?? 0)} G
-            </span>
+            {!hideGold && (
+              <span className="mr-1 hidden text-xs font-semibold text-gold tabular-nums sm:inline">
+                {formatNum(g.p?.gold ?? 0)} G
+              </span>
+            )}
             <button
               type="button"
               onClick={winCtx.minimize}
@@ -194,7 +209,7 @@ export function PanelFrame({ title, subtitle, children }: { title: string; subti
     <div
       className="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/55 p-1.5 sm:p-3 md:p-5"
       onPointerDown={(e) => {
-        if (e.target === e.currentTarget) closePanel()
+        if (e.target === e.currentTarget) handleClose()
       }}
     >
       <section
@@ -209,10 +224,10 @@ export function PanelFrame({ title, subtitle, children }: { title: string; subti
             {subtitle && <p className="truncate text-xs text-muted-foreground">{subtitle}</p>}
           </div>
           <div className="flex shrink-0 items-center gap-3">
-            <span className="text-sm text-gold">{formatNum(g.p?.gold ?? 0)} G</span>
+            {!hideGold && <span className="text-sm text-gold">{formatNum(g.p?.gold ?? 0)} G</span>}
             <button
               type="button"
-              onClick={() => closePanel()}
+              onClick={() => handleClose()}
               className="pixel-btn bg-destructive/80 p-1 text-white hover:bg-destructive"
               aria-label="ปิดหน้าต่าง (Esc)"
             >

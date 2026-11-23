@@ -39,7 +39,7 @@ const HOTKEY_GUIDE: Array<{ key: string; action: string }> = [
   { key: 'H / Esc', action: 'ซ่อน HUD รอบจอ / ปิดหน้าต่างบนสุด' },
 ]
 
-export function SettingsPanel() {
+export function SettingsPanel({ onClose }: { onClose?: () => void } = {}) {
   const { p, zenHud } = useGame()
   const layout = useUiLayout()
   const versionInfo = useVersionUpdate()
@@ -48,10 +48,8 @@ export function SettingsPanel() {
   const [sfxMuted, setSfxMutedState] = useState(() => isSfxMuted())
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
 
-  if (!p) return null
-
   const handleToggleBgm = () => {
-    const next = toggleBgmMute(p.mapId)
+    const next = toggleBgmMute(p?.mapId ?? 'town')
     setBgmMutedState(next)
   }
 
@@ -75,6 +73,8 @@ export function SettingsPanel() {
     <PanelFrame
       title="ตั้งค่าระบบ & การควบคุม"
       subtitle="เสียงเพลง เอฟเฟกต์ การจัดหน้าต่าง HUD และปุ่มลัดคีย์บอร์ด"
+      onClose={onClose}
+      hideGold={!p}
     >
       <div className="space-y-4 text-xs">
         {statusMsg && (
