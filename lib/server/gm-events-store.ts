@@ -1,5 +1,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import {
+  DEFAULT_SERVER_RATES,
+  getEffectiveServerRates,
+  sanitizeServerRates,
+  type ServerRatesConfig,
+} from '@/lib/game/server-rates'
 
 export type WorldAnnouncementVariant = 'gm' | 'news'
 export type WorldNewsCategory = 'gm' | 'enhance' | 'boss_kill' | 'gacha' | 'rare_drop'
@@ -56,6 +62,7 @@ interface GmEventsStoreData {
   announcements: ServerAnnouncementEvent[]
   directives: ServerGmDirectiveEvent[]
   giftDrops: ServerGiftDropEvent[]
+  serverRates: ServerRatesConfig
 }
 
 const PRIMARY_DIR = path.join(process.cwd(), '.data')
@@ -89,6 +96,7 @@ function pruneStore(data: GmEventsStoreData, nowMs = Date.now()): GmEventsStoreD
     giftDrops: (data.giftDrops ?? [])
       .filter((g) => g.expiresAtMs > nowMs && g.createdAtMs >= dropCutoff)
       .slice(-50),
+    serverRates: getEffectiveServerRates(data.serverRates, nowMs),
   }
 }
 
@@ -107,6 +115,7 @@ function readStore(): GmEventsStoreData {
           announcements: Array.isArray(parsed.announcements) ? parsed.announcements : [],
           directives: Array.isArray(parsed.directives) ? parsed.directives : [],
           giftDrops: Array.isArray(parsed.giftDrops) ? parsed.giftDrops : [],
+          serverRates: sanitizeServerRates(parsed.serverRates),
         })
         return memoryStore
       }
@@ -114,7 +123,12 @@ function readStore(): GmEventsStoreData {
       // Ignore unreadable store and fallback
     }
   }
-  memoryStore = { announcements: [], directives: [], giftDrops: [] }
+  memoryStore = {
+    announcements: [],
+    directives: [],
+    giftDrops: [],
+    serverRates: { ...DEFAULT_SERVER_RATES },
+  }
   return memoryStore
 }
 
@@ -133,6 +147,10 @@ function writeStore(next: GmEventsStoreData): void {
   }
 }
 
+export function resetGmEventsMemoryCacheForTests(): void {
+  memoryStore = null
+}
+
 export function canPublishWorldNews(uid: string, cooldownMs = 4_000): boolean {
   const now = Date.now()
   if (worldNewsRateLimits.size > 2000) {
@@ -144,6 +162,21 @@ export function canPublishWorldNews(uid: string, cooldownMs = 4_000): boolean {
   if (now - prev < cooldownMs) return false
   worldNewsRateLimits.set(uid, now)
   return true
+}
+
+export function setServerRates(nextRates: ServerRatesConfig): ServerRatesConfig {
+  const store = readStore()
+  const sanitized = getEffectiveServerRates(sanitizeServerRates(nextRates))
+  writeStore({
+    ...store,
+    serverRates: sanitized,
+  })
+  return sanitized
+}
+
+export function getEffectiveStoredServerRates(nowMs = Date.now()): ServerRatesConfig {
+  const store = readStore()
+  return getEffectiveServerRates(store.serverRates, nowMs)
 }
 
 export function addServerAnnouncement(event: ServerAnnouncementEvent): ServerAnnouncementEvent {
@@ -199,10 +232,28 @@ export function ackServerGmDirective(directiveId: string, targetUid: string): bo
   return updated
 }
 
+export function getPublicWorldEvents(sinceMs = 0): {
+  announcements: ServerAnnouncementEvent[]
+  serverRates: ServerRatesConfig
+  serverTimeMs: number
+} {
+  const nowMs = Date.now()
+  const store = readStore()
+  const announcements = store.announcements.filter(
+    (a) => a.expiresAtMs > nowMs - 1000 && a.createdAtMs >= sinceMs,
+  )
+  return {
+    announcements,
+    serverRates: getEffectiveServerRates(store.serverRates, nowMs),
+    serverTimeMs: nowMs,
+  }
+}
+
 export function getEventsForUser(userId: string, sinceMs = 0): {
   announcements: ServerAnnouncementEvent[]
   directives: ServerGmDirectiveEvent[]
   giftDrops: ServerGiftDropEvent[]
+  serverRates: ServerRatesConfig
 } {
   const nowMs = Date.now()
   const store = readStore()
@@ -219,5 +270,10 @@ export function getEventsForUser(userId: string, sinceMs = 0): {
     .filter((g) => g.expiresAtMs > nowMs)
     .sort((a, b) => b.createdAtMs - a.createdAtMs)
     .slice(0, 20)
-  return { announcements, directives, giftDrops }
+  return {
+    announcements,
+    directives,
+    giftDrops,
+    serverRates: getEffectiveServerRates(store.serverRates, nowMs),
+  }
 }

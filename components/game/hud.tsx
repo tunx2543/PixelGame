@@ -15,6 +15,7 @@ import { expToNext } from '@/lib/game/data'
 import {
   game,
   gatherNearbyNodeAction,
+  getActiveServerRates,
   interact,
   jobExpToNext,
   notify,
@@ -132,10 +133,12 @@ export function AsuraBuffAndToggleStrip() {
   const extV2 = p ? sanitizeExtV2(p.extV2) : null
   const boostSummary = extV2 ? getActiveAsuraBoostSummary(extV2, nowMs) : null
   const activeBoostCount = boostSummary?.activeList.length ?? 0
+  const serverRates = getActiveServerRates(nowMs)
   const hasAnyTimedBuff = Boolean(
     activeBoostCount > 0 ||
       (extV2?.activeFoodBuff && extV2.activeFoodBuff.expiresAtMs > nowMs) ||
-      (p && (p.lootMagnetUntil ?? 0) > nowMs),
+      (p && (p.lootMagnetUntil ?? 0) > nowMs) ||
+      (serverRates.expiresAtMs !== null && serverRates.expiresAtMs > nowMs),
   )
 
   useEffect(() => {
@@ -162,6 +165,36 @@ export function AsuraBuffAndToggleStrip() {
     tone: string
     iconId: MenuIconId
   }> = []
+
+  if (serverRates.expMultiplier > 1) {
+    const rateRemain =
+      serverRates.expiresAtMs !== null
+        ? formatBuffRemain(serverRates.expiresAtMs - nowMs)
+        : `x${serverRates.expMultiplier}`
+    buffBadges.push({
+      key: 'server_exp_rate',
+      tag: `เซิร์ฟ XP x${serverRates.expMultiplier}`,
+      title: `กิจกรรมเซิร์ฟเวอร์: คูณ EXP x${serverRates.expMultiplier}${serverRates.label ? ` (${serverRates.label})` : ''}${serverRates.expiresAtMs !== null ? ` • เหลือ ${formatBuffRemain(serverRates.expiresAtMs - nowMs)}` : ' • เปิดต่อเนื่อง'}`,
+      remain: rateRemain,
+      tone: 'border-amber-300 bg-gradient-to-b from-amber-700/95 to-amber-950/95 text-amber-200 shadow-[0_0_8px_rgba(251,191,36,0.45)]',
+      iconId: 'buff-xp',
+    })
+  }
+
+  if (serverRates.dropMultiplier > 1) {
+    const rateRemain =
+      serverRates.expiresAtMs !== null
+        ? formatBuffRemain(serverRates.expiresAtMs - nowMs)
+        : `x${serverRates.dropMultiplier}`
+    buffBadges.push({
+      key: 'server_drop_rate',
+      tag: `เซิร์ฟ DROP x${serverRates.dropMultiplier}`,
+      title: `กิจกรรมเซิร์ฟเวอร์: คูณโอกาสดรอป x${serverRates.dropMultiplier}${serverRates.label ? ` (${serverRates.label})` : ''}${serverRates.expiresAtMs !== null ? ` • เหลือ ${formatBuffRemain(serverRates.expiresAtMs - nowMs)}` : ' • เปิดต่อเนื่อง'}`,
+      remain: rateRemain,
+      tone: 'border-emerald-300 bg-gradient-to-b from-emerald-700/95 to-emerald-950/95 text-emerald-200 shadow-[0_0_8px_rgba(52,211,153,0.45)]',
+      iconId: 'event-flash',
+    })
+  }
 
   for (const b of boostSummary.activeList) {
     const tagMap: Record<string, string> = {

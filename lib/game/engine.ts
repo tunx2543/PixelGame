@@ -36,6 +36,7 @@ import {
 import type { PartyInviteRecord, PartyRecord } from '@/lib/firebase/party-helpers'
 import {
   publishServerGiftDrop,
+  publishServerRatesConfig,
   publishWorldAnnouncement,
   publishWorldNewsBroadcast,
   resolveModerationTarget,
@@ -47,6 +48,16 @@ import {
   type WorldAnnouncementVariant,
   type WorldNewsCategory,
 } from '@/lib/firebase/gm-events'
+import {
+  DEFAULT_SERVER_RATES,
+  applyServerDropChance,
+  clampServerMultiplier,
+  formatServerRateSummary,
+  getEffectiveServerRates,
+  isServerRateBoostActive,
+  sanitizeServerRates,
+  type ServerRatesConfig,
+} from './server-rates'
 import { gmSendMailGiftToTarget } from '@/lib/firebase/rpg-online'
 import { cancelTradeRequest, createBan, createTrade, publishAnnouncement, sendFriendRequest, sendWhisper } from './social'
 import { isGmAccountUser, PERMANENT_GM_GAME_UID, PERMANENT_GM_UID } from './permissions'
@@ -240,7 +251,7 @@ import {
   savePromptPayShopSettings,
   submitManualTopupSlipRequest,
 } from '@/lib/firebase/topup-requests'
-import { claimRedeemCodeInFirestore } from '@/lib/firebase/redeem-codes'
+import { claimRedeemCodeEverywhere } from '@/lib/firebase/redeem-codes'
 import {
   isGatewayRefRecorded,
   recordDiamondTransaction,
@@ -760,6 +771,7 @@ export type PanelId =
   | 'wardrobe'
   | 'guide'
   | 'treasure-chest'
+  | 'redeem'
 export type ChatType = 'system' | 'player' | 'gm' | 'loot' | 'error' | 'npc'
 export interface ChatMsg {
   id: number
@@ -889,7 +901,54 @@ export const game = {
   lastItemFeedback: null as null | { ok: boolean; message: string; at: number },
   zenHud: false,
   cameraZoomScale: 1,
+  serverRates: { ...DEFAULT_SERVER_RATES } as ServerRatesConfig,
   version: 0,
+}
+
+export function getActiveServerRates(nowMs = Date.now()): ServerRatesConfig {
+  return getEffectiveServerRates(game.serverRates, nowMs)
+}
+
+export function applyServerRatesUpdate(nextRates: ServerRatesConfig, options?: { silent?: boolean }) {
+  const clean = getEffectiveServerRates(sanitizeServerRates(nextRates))
+  const prev = getActiveServerRates()
+  const changed =
+    prev.expMultiplier !== clean.expMultiplier ||
+    prev.dropMultiplier !== clean.dropMultiplier ||
+    prev.expiresAtMs !== clean.expiresAtMs ||
+    prev.label !== clean.label
+  game.serverRates = clean
+  if (changed && !options?.silent && game.p) {
+    if (isServerRateBoostActive(clean)) {
+      say('system', `⚡ กิจกรรมเซิร์ฟเวอร์เปิดใช้งาน: ${formatServerRateSummary(clean)}`, undefined, { channel: 'world' })
+    } else if (isServerRateBoostActive(prev)) {
+      say('system', '⚡ กิจกรรมคูณเซิร์ฟเวอร์สิ้นสุดแล้ว (กลับสู่อัตราปกติ x1)', undefined, { channel: 'world' })
+    }
+  }
+  if (changed) notify()
+}
+
+export async function gmSetServerRatesAction(input: {
+  expMultiplier: number
+  dropMultiplier: number
+  durationMinutes?: number
+  label?: string
+  reset?: boolean
+}): Promise<{ ok: boolean; serverRates?: ServerRatesConfig; message: string }> {
+  const p = game.p
+  if (!p || !p.gm || !isCurrentAccountGm()) {
+    return { ok: false, message: 'คำสั่งปรับคูณเซิร์ฟเวอร์สงวนเฉพาะ GM สูงสุดเท่านั้น' }
+  }
+  const res = await publishServerRatesConfig({
+    ...input,
+    authorName: p.name,
+  })
+  if (res.ok && res.serverRates) {
+    applyServerRatesUpdate(res.serverRates, { silent: true })
+    say('gm', `[DEV] ${res.message}`, undefined, { channel: 'world' })
+    notify()
+  }
+  return res
 }
 
 export function adjustCameraZoomAction(delta: number) {
@@ -2711,6 +2770,7 @@ function killMonster(m: Monster) {
   )
   const vipBonus = getEffectiveVipBonuses(ensurePremiumState(p).vip)
   const asuraKillBoosts = getActiveAsuraBoostSummary(extV2)
+  const activeServerRates = getActiveServerRates()
   const expGain = Math.round(
     def.exp *
       (petBonus?.expMul ?? 1) *
@@ -2720,6 +2780,7 @@ function killMonster(m: Monster) {
       foodBuff.expMul *
       vipBonus.expMul *
       timeExpMul *
+      activeServerRates.expMultiplier *
       (1 + ((getStats(p).affixExpPct ?? 0) + asuraKillBoosts.expBonusPct) / 100),
   )
   p.gold += gold
@@ -2762,7 +2823,8 @@ function killMonster(m: Monster) {
   for (const d of [...junkDrops, ...dynamicDrops]) {
     if (seen.has(d.itemId)) continue
     seen.add(d.itemId)
-    if (Math.random() < d.chance) {
+    const effectiveDropChance = applyServerDropChance(d.chance, activeServerRates.dropMultiplier)
+    if (Math.random() < effectiveDropChance) {
       dropItem(d.itemId, 1, m.x, m.y)
       droppedItems.push({ itemId: d.itemId, qty: 1 })
       const droppedDef = ITEMS[d.itemId]
@@ -6924,9 +6986,9 @@ export async function claimDailyTopupBonusAction(): Promise<{ ok: boolean; messa
 export async function redeemGiftCodeAction(rawCode: string): Promise<{ ok: boolean; message: string }> {
   const p = player()
   const prem = ensurePremiumState(p)
-  const cleanCode = rawCode.trim().toUpperCase()
+  const cleanCode = rawCode.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 32)
   if (cleanCode.length < 4) {
-    return { ok: false, message: 'กรุณากรอกโค้ดรางวัลอย่างน้อย 4 ตัวอักษร' }
+    return { ok: false, message: 'กรุณากรอกโค้ดรางวัลอย่างน้อย 4 ตัวอักษร (A-Z, 0-9, -, _)' }
   }
   const lockKey = `redeem:${cleanCode}`
   if (inFlightPremiumLocks.has(lockKey)) {
@@ -6934,7 +6996,7 @@ export async function redeemGiftCodeAction(rawCode: string): Promise<{ ok: boole
   }
   inFlightPremiumLocks.add(lockKey)
   try {
-    const claimed = await claimRedeemCodeInFirestore(cleanCode, {
+    const claimed = await claimRedeemCodeEverywhere(cleanCode, {
       characterId: prem.wallet.characterId || getActiveCharacterSlot(),
       playerName: p.name,
       gameUid: p.gameUid || '1000',
@@ -6948,8 +7010,12 @@ export async function redeemGiftCodeAction(rawCode: string): Promise<{ ok: boole
       commitDiamondDelta(p, claimed.diamonds, {
         source: 'redeem_code',
         note: `แลกโค้ดรางวัล ${claimed.code} (${claimed.label})`,
-        requestId: `REDEEM:${claimed.code}`,
-        serverVerified: true,
+        requestId: claimed.claimTx?.requestId ?? `REDEEM:${claimed.code}`,
+        txId: claimed.claimTx?.txId,
+        actorUid: claimed.claimTx?.actorUid,
+        timestampMs: claimed.claimTx?.timestampMs,
+        serverSignature: claimed.claimTx?.serverSignature,
+        serverVerified: Boolean(claimed.claimTx?.serverSignature),
       })
       rewardParts.push(`${claimed.diamonds.toLocaleString()} D`)
     }
@@ -6965,14 +7031,25 @@ export async function redeemGiftCodeAction(rawCode: string): Promise<{ ok: boole
       rewardParts.push(`${claimed.vipExp} VIP EXP`)
     }
     if (claimed.itemId && claimed.qty > 0 && ITEMS[claimed.itemId]) {
-      addItem(claimed.itemId, claimed.qty, claimed.plus)
       const itemName = ITEMS[claimed.itemId]?.name ?? claimed.itemId
-      rewardParts.push(`${itemName}${claimed.plus > 0 ? `+${claimed.plus}` : ''} x${claimed.qty}`)
+      const plusSuffix = claimed.plus > 0 ? `+${claimed.plus}` : ''
+      const addedBag = addItem(claimed.itemId, claimed.qty, claimed.plus)
+      if (addedBag) {
+        rewardParts.push(`${itemName}${plusSuffix} x${claimed.qty}`)
+      } else {
+        const addedStorage = addItem(claimed.itemId, claimed.qty, claimed.plus, p.storage, getStorageCapacity(p))
+        if (addedStorage) {
+          rewardParts.push(`${itemName}${plusSuffix} x${claimed.qty} (ส่งเข้าคลังเก็บของ)`)
+        } else {
+          rewardParts.push(`${itemName}${plusSuffix} x${claimed.qty} (กระเป๋า/คลังเต็ม)`)
+        }
+      }
     }
 
     const summaryText = rewardParts.join(' + ') || 'รางวัลพิเศษ'
     logPremiumAudit(p, {
       action: 'REDEEM_CODE',
+      txId: claimed.claimTx?.txId ?? null,
       details: `แลกโค้ด ${claimed.code}: ${summaryText}`,
       verifiedByServer: true,
     })
@@ -7633,6 +7710,44 @@ function runCommand(text: string) {
         itemId: null,
         qty: 0,
         plus: 0,
+      })
+    },
+    '/rate': () => {
+      const expMul = clampServerMultiplier(args[0] ?? 1)
+      const dropMul = clampServerMultiplier(args[1] ?? expMul)
+      const durationMin = Math.max(0, Math.floor(num(2, 60)))
+      const label = args.slice(3).join(' ').trim()
+      void gmSetServerRatesAction({
+        expMultiplier: expMul,
+        dropMultiplier: dropMul,
+        durationMinutes: durationMin,
+        label: label || undefined,
+      }).then((r) => {
+        if (!r.ok) say('error', r.message)
+      })
+    },
+    '/exprate': () => {
+      const expMul = clampServerMultiplier(args[0] ?? 2)
+      const durationMin = Math.max(0, Math.floor(num(1, 60)))
+      const cur = getActiveServerRates()
+      void gmSetServerRatesAction({
+        expMultiplier: expMul,
+        dropMultiplier: cur.dropMultiplier,
+        durationMinutes: durationMin,
+      }).then((r) => {
+        if (!r.ok) say('error', r.message)
+      })
+    },
+    '/droprate': () => {
+      const dropMul = clampServerMultiplier(args[0] ?? 2)
+      const durationMin = Math.max(0, Math.floor(num(1, 60)))
+      const cur = getActiveServerRates()
+      void gmSetServerRatesAction({
+        expMultiplier: cur.expMultiplier,
+        dropMultiplier: dropMul,
+        durationMinutes: durationMin,
+      }).then((r) => {
+        if (!r.ok) say('error', r.message)
       })
     },
     '/closegm': () => {

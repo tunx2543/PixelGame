@@ -19,6 +19,7 @@ import { todayIsoDate } from '@/lib/game/rpg-systems'
 import { countClaimableQuests } from '@/lib/game/systems'
 import { canClaimDailyFreeChest } from '@/lib/game/treasure-chest'
 import { useGame } from '@/lib/game/use-game'
+import { openChangelogModal } from '@/lib/game/use-version-update'
 import { cn } from '@/lib/utils'
 import { GameArtIcon, GameBadgeMedallion } from './game-badge-icon'
 
@@ -448,6 +449,13 @@ export function AsuraMenuModal({
       tone: 'border-yellow-300/85 bg-[radial-gradient(circle_at_35%_28%,#8f5b14_0%,#4a2e08_65%,#241604_100%)]',
       onClick: () => openAndClose('treasure-chest'),
     },
+    {
+      id: 'redeem',
+      label: 'ไอเทมโค้ด',
+      iconId: 'gacha',
+      tone: 'border-fuchsia-300/85 bg-[radial-gradient(circle_at_35%_28%,#8f3278_0%,#4a163d_65%,#24091e_100%)]',
+      onClick: () => openAndClose('redeem'),
+    },
   ]
 
   const helperEntries: MenuGridEntry[] = [
@@ -511,6 +519,16 @@ export function AsuraMenuModal({
       iconId: 'guide',
       tone: 'border-teal-300/80 bg-[radial-gradient(circle_at_35%_28%,#1d706b_0%,#0e3836_65%,#061a19_100%)]',
       onClick: () => openAndClose('guide'),
+    },
+    {
+      id: 'patch-notes',
+      label: 'แพตช์โน้ต',
+      iconId: 'quests',
+      tone: 'border-amber-300/85 bg-[radial-gradient(circle_at_35%_28%,#8c5b1b_0%,#472d0b_65%,#211404_100%)]',
+      onClick: () => {
+        onClose()
+        openChangelogModal()
+      },
     },
     {
       id: 'switch-char',

@@ -26,12 +26,15 @@ import {
 } from 'lucide-react'
 import { auth } from '@/lib/firebase/client'
 import { listUserCharacters } from '@/lib/firebase/characters'
+import { pollPublicWorldEvents } from '@/lib/firebase/gm-events'
 import { AccountPanel } from './account-panel'
 import { JOBS, MAX_LEVEL, expToNext, normalizeJobId, type SkillDef } from '@/lib/game/data'
 import { getSkillIconPath, getSkillVfxSpec } from '@/lib/game/vfx-specs'
 import {
   SAVE_KEY,
+  applyServerRatesUpdate,
   getActiveCharacterSlot,
+  getActiveServerRates,
   getInventoryCapacity,
   getStats,
   setActiveCharacterSlot,
@@ -302,6 +305,18 @@ export function TowerArena() {
 
   useEffect(() => {
     let active = true
+    void pollPublicWorldEvents(0).then((res) => {
+      if (active && res) {
+        applyServerRatesUpdate(res.serverRates, { silent: true })
+      }
+    })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let active = true
     const unsubscribe = onAuthStateChanged(auth, async (nextUser) => {
       if (!active) return
       const cloudUid = nextUser && nextUser.emailVerified ? nextUser.uid : null
@@ -394,8 +409,9 @@ export function TowerArena() {
       const isFirstClear = spec.floor > prevTower.highestFloor
       const petBonus = getActivePetBonuses(nextSave.petState, nextSave.equippedGemCompanion, nextSave.ownedGemItems)
 
+      const activeServerRates = typeof window !== 'undefined' ? getActiveServerRates() : null
       const goldEarned = Math.round(spec.clearGold * (petBonus?.goldMul ?? 1))
-      const expEarned = Math.round(spec.clearExp * (petBonus?.expMul ?? 1))
+      const expEarned = Math.round(spec.clearExp * (petBonus?.expMul ?? 1) * (activeServerRates?.expMultiplier ?? 1))
       const diamondsEarned = isFirstClear ? spec.firstClearDiamonds : spec.isBossFloor ? 5 : 1
 
       nextSave.kills = (nextSave.kills ?? 0) + 1

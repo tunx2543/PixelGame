@@ -1422,7 +1422,7 @@ export function PremiumShopPanel() {
                   แลกโค้ดรางวัล / กิฟต์โค้ด (Redeem Code)
                 </h3>
                 <p className="text-[11px] text-muted-foreground">
-                  นำโค้ดกิจกรรมจาก GM มากรอกเพื่อรับเพชร ทอง VIP EXP หรือไอเทมแรร์ (จำกัด 1 ครั้งต่อ 1 บัญชี Google)
+                  นำโค้ดกิจกรรมจาก GM มากรอกเพื่อรับเพชร ทอง VIP EXP หรือไอเทมแรร์ (จำกัด 1 ครั้งต่อ 1 บัญชี/อุปกรณ์)
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -1432,13 +1432,13 @@ export function PremiumShopPanel() {
                   onChange={(e) => setRedeemCodeInput(e.target.value.toUpperCase())}
                   placeholder="กรอกโค้ด เช่น PIXEL2026..."
                   maxLength={32}
-                  disabled={!fbUser?.emailVerified || redeemBusy}
+                  disabled={redeemBusy}
                   className="min-w-0 flex-1 border border-border bg-background px-3 py-1.5 font-mono text-xs uppercase text-foreground outline-none focus:border-fuchsia-400 disabled:opacity-50"
                 />
                 <PxButton
                   type="submit"
                   variant="accent"
-                  disabled={!fbUser?.emailVerified || redeemBusy || redeemCodeInput.trim().length < 4}
+                  disabled={redeemBusy || redeemCodeInput.trim().length < 4}
                   className="px-4 py-1.5 text-xs"
                 >
                   {redeemBusy ? 'กำลังตรวจสอบ...' : 'แลกโค้ดเลย'}

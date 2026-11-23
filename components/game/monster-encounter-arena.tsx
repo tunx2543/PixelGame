@@ -20,13 +20,16 @@ import {
 } from 'lucide-react'
 import { auth } from '@/lib/firebase/client'
 import { listUserCharacters } from '@/lib/firebase/characters'
+import { pollPublicWorldEvents } from '@/lib/firebase/gm-events'
 import { AccountPanel } from './account-panel'
 import { ItemIcon } from './item-icon'
 import { ITEMS, JOBS, MAX_LEVEL, MAX_PLUS, enhanceCost, enhanceRate, expToNext, normalizeJobId, type SkillDef } from '@/lib/game/data'
 import { getSkillIconPath, getSkillVfxSpec } from '@/lib/game/vfx-specs'
 import {
   SAVE_KEY,
+  applyServerRatesUpdate,
   getActiveCharacterSlot,
+  getActiveServerRates,
   getStats,
   setActiveCharacterSlot,
   setGameAccountIdentity,
@@ -258,6 +261,19 @@ export function MonsterEncounterArena() {
     }
   }, [])
 
+  // Sync active server EXP / Drop multiplier rates for standalone /encounter route
+  useEffect(() => {
+    let active = true
+    void pollPublicWorldEvents(0).then((res) => {
+      if (active && res) {
+        applyServerRatesUpdate(res.serverRates, { silent: true })
+      }
+    })
+    return () => {
+      active = false
+    }
+  }, [])
+
   // Load active character save (Firebase Firestore slot or Guest localStorage)
   useEffect(() => {
     let active = true
@@ -378,7 +394,7 @@ export function MonsterEncounterArena() {
     (currentSave: SaveData, defeatedEnemy: EncounterEnemy) => {
       if (phaseRef.current === 'VICTORY') return
       phaseRef.current = 'VICTORY'
-      const outcome = settleEncounterVictory(currentSave, defeatedEnemy)
+      const outcome = settleEncounterVictory(currentSave, defeatedEnemy, getActiveServerRates())
       saveRef.current = outcome.nextSave
       setSave(outcome.nextSave)
       setVictoryResult(outcome)

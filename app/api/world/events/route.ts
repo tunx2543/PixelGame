@@ -3,10 +3,31 @@ import { resolveActorFromRequest } from '@/lib/server/premium-security'
 import {
   addServerAnnouncement,
   canPublishWorldNews,
+  getPublicWorldEvents,
   type WorldNewsCategory,
 } from '@/lib/server/gm-events-store'
 
+export const dynamic = 'force-dynamic'
+
 const ALLOWED_CATEGORIES: WorldNewsCategory[] = ['enhance', 'boss_kill', 'gacha', 'rare_drop']
+
+export async function GET(req: Request) {
+  const url = new URL(req.url)
+  const sinceRaw = Number(url.searchParams.get('since') ?? '0')
+  const sinceMs = Number.isFinite(sinceRaw) && sinceRaw > 0 ? sinceRaw : 0
+  const payload = getPublicWorldEvents(sinceMs)
+  return NextResponse.json(
+    {
+      ok: true,
+      ...payload,
+    },
+    {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+      },
+    },
+  )
+}
 
 export async function POST(req: Request) {
   const auth = await resolveActorFromRequest(req)

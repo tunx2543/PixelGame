@@ -393,12 +393,18 @@ function addItemToSave(save: SaveData, itemId: string, qty = 1, plus = 0): boole
   return true
 }
 
-export function settleEncounterVictory(save: SaveData, enemy: EncounterEnemy): EncounterVictoryResult {
+export function settleEncounterVictory(
+  save: SaveData,
+  enemy: EncounterEnemy,
+  serverRates?: { expMultiplier?: number; dropMultiplier?: number },
+): EncounterVictoryResult {
   const nextSave: SaveData = structuredClone(save)
   const petBonus = getActivePetBonuses(nextSave.petState, nextSave.equippedGemCompanion, nextSave.ownedGemItems)
+  const expRate = Math.max(1, Number(serverRates?.expMultiplier ?? 1) || 1)
+  const dropRate = Math.max(1, Number(serverRates?.dropMultiplier ?? 1) || 1)
   const baseGold = randInt(enemy.goldRange[0], enemy.goldRange[1])
   const goldEarned = Math.round(baseGold * (petBonus?.goldMul ?? 1))
-  const expEarned = Math.round(enemy.expReward * (petBonus?.expMul ?? 1))
+  const expEarned = Math.round(enemy.expReward * (petBonus?.expMul ?? 1) * expRate)
   const leveledUpFrom = nextSave.level
 
   nextSave.gold += goldEarned
@@ -452,8 +458,9 @@ export function settleEncounterVictory(save: SaveData, enemy: EncounterEnemy): E
     rolled.add(drop.itemId)
     const def = ITEMS[drop.itemId]
     if (!def) continue
-    const bonusChance = enemy.rarity === 'elite' ? Math.min(1, drop.chance * 1.45) : drop.chance
-    if (Math.random() < bonusChance) {
+    const baseBonusChance = enemy.rarity === 'elite' ? Math.min(1, drop.chance * 1.45) : drop.chance
+    const effectiveChance = Math.min(1, baseBonusChance * dropRate)
+    if (Math.random() < effectiveChance) {
       const reward: EncounterDropReward = {
         itemId: def.id,
         name: def.name,

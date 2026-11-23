@@ -1,12 +1,19 @@
 import { NextResponse } from 'next/server'
 import { PERMANENT_GM_GAME_UID } from '@/lib/game/permissions'
+import {
+  DEFAULT_SERVER_RATES,
+  clampServerMultiplier,
+  formatServerRateSummary,
+} from '@/lib/game/server-rates'
 import { resolveActorFromRequest } from '@/lib/server/premium-security'
 import {
   ackServerGmDirective,
   addServerAnnouncement,
   addServerGiftDrop,
   addServerGmDirective,
+  getEffectiveStoredServerRates,
   getEventsForUser,
+  setServerRates,
   type GmDirectiveAction,
 } from '@/lib/server/gm-events-store'
 
@@ -22,26 +29,29 @@ export async function GET(req: Request) {
   if (!('actor' in auth)) {
     return NextResponse.json({ ok: false, message: auth.message }, { status: auth.status })
   }
+  const url = new URL(req.url)
+  const sinceRaw = Number(url.searchParams.get('since') ?? '0')
+  const sinceMs = Number.isFinite(sinceRaw) && sinceRaw > 0 ? sinceRaw : 0
+
   if (auth.actor.authMode !== 'firebase' || !auth.actor.emailVerified) {
     return NextResponse.json({
       ok: true,
       announcements: [],
       directives: [],
       giftDrops: [],
+      serverRates: getEffectiveStoredServerRates(),
       serverTimeMs: Date.now(),
     })
   }
 
-  const url = new URL(req.url)
-  const sinceRaw = Number(url.searchParams.get('since') ?? '0')
-  const sinceMs = Number.isFinite(sinceRaw) && sinceRaw > 0 ? sinceRaw : 0
-  const { announcements, directives, giftDrops } = getEventsForUser(auth.actor.uid, sinceMs)
+  const { announcements, directives, giftDrops, serverRates } = getEventsForUser(auth.actor.uid, sinceMs)
 
   return NextResponse.json({
     ok: true,
     announcements,
     directives,
     giftDrops,
+    serverRates,
     serverTimeMs: Date.now(),
   })
 }
@@ -74,6 +84,79 @@ export async function POST(req: Request) {
       { ok: false, message: 'คำสั่งนี้สงวนเฉพาะ GM สูงสุดเท่านั้น' },
       { status: 403 },
     )
+  }
+
+  if (body.action === 'set_rates' || body.action === 'reset_rates') {
+    const nowMs = Date.now()
+    const authorName =
+      typeof body.authorName === 'string' && body.authorName.trim()
+        ? body.authorName.trim().slice(0, 24)
+        : 'GM'
+
+    if (body.action === 'reset_rates') {
+      const reset = setServerRates({
+        ...DEFAULT_SERVER_RATES,
+        updatedAtMs: nowMs,
+        updatedByName: authorName,
+      })
+      addServerAnnouncement({
+        announcementId: sanitizeId(undefined, 'rate'),
+        authorUid: auth.actor.uid,
+        authorName,
+        authorGameUid: PERMANENT_GM_GAME_UID,
+        body: 'กิจกรรมคูณ EXP / ดรอปเซิร์ฟเวอร์สิ้นสุดแล้ว (กลับสู่อัตราปกติ x1)',
+        variant: 'gm',
+        category: 'gm',
+        createdAtMs: nowMs,
+        expiresAtMs: nowMs + 12_000,
+      })
+      return NextResponse.json({ ok: true, serverRates: reset })
+    }
+
+    const expMultiplier = clampServerMultiplier(body.expMultiplier ?? 1)
+    const dropMultiplier = clampServerMultiplier(body.dropMultiplier ?? 1)
+    const rawDurationMin = Number(body.durationMinutes ?? 0)
+    const durationMinutes =
+      Number.isFinite(rawDurationMin) && rawDurationMin > 0
+        ? Math.max(1, Math.min(10_080, Math.round(rawDurationMin)))
+        : 0
+    const label =
+      typeof body.label === 'string' && body.label.trim()
+        ? body.label.trim().slice(0, 80)
+        : expMultiplier > 1 || dropMultiplier > 1
+          ? 'กิจกรรมคูณพลังทั้งเซิร์ฟเวอร์'
+          : ''
+
+    const nextRates = setServerRates({
+      expMultiplier,
+      dropMultiplier,
+      label,
+      startedAtMs: expMultiplier > 1 || dropMultiplier > 1 ? nowMs : 0,
+      expiresAtMs:
+        (expMultiplier > 1 || dropMultiplier > 1) && durationMinutes > 0
+          ? nowMs + durationMinutes * 60_000
+          : null,
+      updatedAtMs: nowMs,
+      updatedByName: authorName,
+    })
+
+    const durationText = durationMinutes > 0 ? ` นาน ${durationMinutes} นาที` : ' (เปิดใช้งานต่อเนื่อง)'
+    addServerAnnouncement({
+      announcementId: sanitizeId(undefined, 'rate'),
+      authorUid: auth.actor.uid,
+      authorName,
+      authorGameUid: PERMANENT_GM_GAME_UID,
+      body:
+        expMultiplier > 1 || dropMultiplier > 1
+          ? `เปิดกิจกรรมเซิร์ฟเวอร์! ${formatServerRateSummary(nextRates)}${durationText}`.slice(0, 240)
+          : 'ปรับอัตรา EXP & ดรอปเซิร์ฟเวอร์กลับเป็น x1 ปกติแล้ว',
+      variant: 'gm',
+      category: 'gm',
+      createdAtMs: nowMs,
+      expiresAtMs: nowMs + 14_000,
+    })
+
+    return NextResponse.json({ ok: true, serverRates: nextRates })
   }
 
   if (body.action === 'announce') {

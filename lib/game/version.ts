@@ -8,12 +8,35 @@ export interface ReleaseNote {
   highlights: string[]
 }
 
-export const GAME_VERSION = '1.4.1'
-export const GAME_BUILD_DATE = '2026-11-20'
-export const GAME_RELEASE_TITLE = 'หลอด HP/MP ใต้ตัวละคร • แก้ไขไอเทมใช้งานครบทุกชิ้น & ตั้งค่ากราฟิกลดอาการหน่วง'
+export const GAME_VERSION = '1.4.2'
+export const GAME_BUILD_DATE = '2026-11-22'
+export const GAME_RELEASE_TITLE = 'คูณ EXP & ดรอปทั้งเซิร์ฟเวอร์ • ระบบไอเทมโค้ด & Patch Notes เรียลไทม์'
 export const LOCAL_SEEN_VERSION_KEY = 'pixelquest_last_seen_version'
 
 export const GAME_CHANGELOG: ReleaseNote[] = [
+  {
+    version: '1.4.2',
+    date: '2026-11-22',
+    title: 'คูณ EXP & ดรอปทั้งเซิร์ฟเวอร์ • ระบบไอเทมโค้ด & Patch Notes เรียลไทม์',
+    updates: [
+      'เพิ่มระบบกิจกรรมคูณ EXP และคูณโอกาสดรอปไอเทมทั้งเซิร์ฟเวอร์ (Server EXP & Drop Multiplier) ซิงค์ให้ผู้เล่นทุกคนทุกแมพรวมถึงดันเจี้ยนและสนามล่า พร้อมไอคอนแสดงเวลาคงเหลือบน HUD',
+      'เพิ่มเมนู "ไอเทมโค้ด" ในหน้าเมนูหลัก และเปิดใช้งาน API แลกไอเทมโค้ดฝั่งเซิร์ฟเวอร์อย่างสมบูรณ์ รองรับทั้งผู้เล่นบัญชี Google และ Guest พร้อมป้องกันการรับซ้ำและตรวจความจุกระเป๋า',
+      'เพิ่มระบบเผยแพร่และอัปเดต Patch Notes แบบเรียลไทม์ผ่านเซิร์ฟเวอร์ พร้อมปุ่มทางลัดเปิดดู Patch Notes ได้ทันทีจากหน้าเมนูหลักในเกม',
+    ],
+    improvements: [
+      'อัปเกรดเครื่องมือสร้างไอเทมโค้ดของ GM ให้ค้นหาไอเทมได้ครบทุกชิ้นในเกม (ไม่ถูกตัดรายการ) พร้อมกำหนดค่าตีบวก +0 ถึง +15 คัดลอกโค้ด และลบโค้ดได้',
+      'ปรับหน้าต่าง Patch Notes ให้แสดงผลเหนือเมนูและหน้าต่างย่อยทุกชั้น พร้อมดึงบันทึกเวอร์ชั่นล่าสุดอัตโนมัติทุกครั้งที่เปิดอ่าน',
+    ],
+    bugFixes: [
+      'แก้ไขบั๊กสิทธิ์ Firestore (REDEEM_CODE Audit Log) และปัญหาหน้าแลกโค้ดล็อคอินซ้ำที่ทำให้การกดแลกไอเทมโค้ดไม่ทำงาน',
+      'แก้ไขให้ประกาศข่าวเซิร์ฟเวอร์และตัวคูณ EXP/Drop ซิงค์ถึงผู้เล่นทั่วไป (Guest) ผ่าน /api/world/events ได้ทันที',
+    ],
+    highlights: [
+      'กิจกรรมคูณ EXP และคูณดรอปทั้งเซิร์ฟเวอร์ ซิงค์อัปเดตแบบเรียลไทม์พร้อมตัวนับบน HUD',
+      'ระบบไอเทมโค้ด (Redeem Code) ใช้งานได้จริงจากทั้งหน้าเมนูหลักและร้านค้าโซล',
+      'ระบบ Patch Notes เปิดอ่านได้จากเมนูหลักในเกม และอัปเดตประกาศแพตช์ใหม่ได้ทันที',
+    ],
+  },
   {
     version: '1.4.1',
     date: '2026-11-20',
@@ -110,6 +133,7 @@ export interface VersionPayload {
   title: string
   latestNotes: string[]
   changelog: ReleaseNote[]
+  customVersions?: string[]
   serverTimeMs: number
 }
 
@@ -161,18 +185,87 @@ export function isVersionUnseen(
   return compareSemver(currentVersion, seenVersion) > 0
 }
 
+function cleanBulletList(raw: unknown, maxItems = 12): string[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((entry) => (typeof entry === 'string' ? entry.trim().slice(0, 280) : ''))
+    .filter(Boolean)
+    .slice(0, maxItems)
+}
+
+export function sanitizeReleaseNote(raw: unknown): ReleaseNote | null {
+  if (!raw || typeof raw !== 'object') return null
+  const obj = raw as Record<string, unknown>
+  const versionRaw = typeof obj.version === 'string' ? obj.version.trim().replace(/^v/i, '') : ''
+  if (!/^\d+\.\d+\.\d+$/.test(versionRaw)) return null
+
+  const title = typeof obj.title === 'string' ? obj.title.trim().slice(0, 140) : ''
+  if (!title) return null
+
+  const dateRaw = typeof obj.date === 'string' ? obj.date.trim() : ''
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : new Date().toISOString().slice(0, 10)
+  const updates = cleanBulletList(obj.updates)
+  const improvements = cleanBulletList(obj.improvements)
+  const bugFixes = cleanBulletList(obj.bugFixes)
+  const rawHighlights = cleanBulletList(obj.highlights, 6)
+  const highlights =
+    rawHighlights.length > 0
+      ? rawHighlights
+      : [...updates, ...improvements, ...bugFixes].slice(0, 3)
+
+  if (updates.length === 0 && improvements.length === 0 && bugFixes.length === 0 && highlights.length === 0) {
+    return null
+  }
+
+  return {
+    version: versionRaw,
+    date,
+    title,
+    updates,
+    improvements,
+    bugFixes,
+    highlights,
+  }
+}
+
+export function mergeReleaseNotes(
+  customNotes: ReleaseNote[],
+  baseNotes: ReleaseNote[] = GAME_CHANGELOG,
+): ReleaseNote[] {
+  const byVersion = new Map<string, ReleaseNote>()
+  for (const entry of baseNotes) {
+    byVersion.set(entry.version, entry)
+  }
+  for (const custom of customNotes) {
+    const clean = sanitizeReleaseNote(custom)
+    if (clean) {
+      byVersion.set(clean.version, clean)
+    }
+  }
+  return [...byVersion.values()].sort((a, b) => compareSemver(b.version, a.version))
+}
+
+export function buildVersionPayload(
+  customNotes: ReleaseNote[] = [],
+  nowMs = Date.now(),
+): VersionPayload {
+  const merged = mergeReleaseNotes(customNotes, GAME_CHANGELOG)
+  const latest = merged[0] ?? GAME_CHANGELOG[0]
+  return {
+    version: latest?.version ?? GAME_VERSION,
+    buildDate: latest?.date ?? GAME_BUILD_DATE,
+    title: latest?.title ?? GAME_RELEASE_TITLE,
+    latestNotes: latest?.highlights ?? [],
+    changelog: merged,
+    customVersions: customNotes.map((entry) => entry.version),
+    serverTimeMs: nowMs,
+  }
+}
+
 export function getLatestReleaseNote(): ReleaseNote {
   return GAME_CHANGELOG[0]
 }
 
 export function getVersionPayload(): VersionPayload {
-  const latest = getLatestReleaseNote()
-  return {
-    version: GAME_VERSION,
-    buildDate: GAME_BUILD_DATE,
-    title: GAME_RELEASE_TITLE,
-    latestNotes: latest?.highlights ?? [],
-    changelog: GAME_CHANGELOG,
-    serverTimeMs: Date.now(),
-  }
+  return buildVersionPayload([], Date.now())
 }

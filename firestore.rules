@@ -364,6 +364,7 @@ service cloud.firestore {
           'SANDBOX_GRANT',
           'DIAMOND_EARN',
           'DIAMOND_SPEND',
+          'REDEEM_CODE',
           'PREMIUM_PURCHASE',
           'VIP_ACTIVATE',
           'VIP_CLAIM_TIER',

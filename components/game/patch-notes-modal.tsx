@@ -151,7 +151,7 @@ export function PatchNotesModal({ open, onClose, isNewUpdateBanner }: PatchNotes
       aria-modal="true"
       aria-label="บันทึกแพตช์และอัปเดตเกม Pixel Quest"
       data-testid="patch-notes-modal"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
+      className="fixed inset-0 z-[85] flex items-center justify-center bg-black/75 p-4"
       onPointerDown={(e) => {
         if (e.target === e.currentTarget) handleClose()
       }}

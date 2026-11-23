@@ -27,6 +27,7 @@ import {
 } from '@/lib/firebase/parties'
 import {
   ackGmDirective,
+  pollPublicWorldEvents,
   pollServerGmEvents,
   subscribeIncomingGmDirectives,
   subscribeWorldAnnouncements,
@@ -46,6 +47,7 @@ import {
   applyGmMuteDirective,
   applyGmSummonWarp,
   applyGmUnmuteDirective,
+  applyServerRatesUpdate,
   game,
   getStats,
   notify,
@@ -722,6 +724,7 @@ export function PresenceSync() {
         void pollServerGmEvents(lastGmRelaySinceMs)
           .then((res) => {
             if (!res || stopped || !game.p) return
+            applyServerRatesUpdate(res.serverRates)
             for (const ann of res.announcements) handleIncomingAnnouncement(ann)
             for (const dir of res.directives) handleIncomingDirective(dir)
             const claimedSet = new Set(game.p.claimedGiftDropIds ?? [])
@@ -759,6 +762,19 @@ export function PresenceSync() {
     }
     window.addEventListener('pagehide', onPageHide)
 
+    const syncPublicWorldEvents = () => {
+      if (stopped || !game.p) return
+      if (activeFbUser?.emailVerified) return
+      void pollPublicWorldEvents(lastGmRelaySinceMs).then((res) => {
+        if (!res || stopped || !game.p) return
+        applyServerRatesUpdate(res.serverRates)
+        for (const ann of res.announcements) handleIncomingAnnouncement(ann)
+        lastGmRelaySinceMs = Math.max(0, res.serverTimeMs - 14_000)
+      })
+    }
+    syncPublicWorldEvents()
+    const publicWorldTimer = window.setInterval(syncPublicWorldEvents, 4_000)
+
     let supabase: ReturnType<typeof createClient> | null = null
     try {
       supabase = createClient()
@@ -771,6 +787,7 @@ export function PresenceSync() {
         stopped = true
         window.removeEventListener('pagehide', onPageHide)
         window.clearInterval(fbTickTimer)
+        window.clearInterval(publicWorldTimer)
         unsubFbAuth()
         stopFbPresence(activeFbUser?.uid ?? null)
       }
@@ -1027,6 +1044,7 @@ export function PresenceSync() {
       stopped = true
       window.removeEventListener('pagehide', onPageHide)
       window.clearInterval(fbTickTimer)
+      window.clearInterval(publicWorldTimer)
       unsubFbAuth()
       stopFbPresence(activeFbUser?.uid ?? null)
       unsubscribe()

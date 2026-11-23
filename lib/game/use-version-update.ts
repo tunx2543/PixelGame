@@ -116,6 +116,7 @@ export function markVersionSeen() {
 export function openChangelogModal() {
   markVersionSeen()
   emit({ changelogOpen: true })
+  void checkForGameUpdates(true)
 }
 
 export function closeChangelogModal() {

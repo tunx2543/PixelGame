@@ -6,6 +6,7 @@ import {
   Ban,
   CheckCircle2,
   Compass,
+  Copy,
   Crown,
   Flag,
   Flame,
@@ -15,8 +16,10 @@ import {
   Mail,
   Megaphone,
   Navigation,
+  Newspaper,
   PackagePlus,
   RefreshCw,
+  RotateCcw,
   Save,
   Send,
   Shield,
@@ -25,6 +28,8 @@ import {
   Sparkles,
   Swords,
   Terminal,
+  Trash2,
+  TrendingUp,
   UserX,
   VolumeX,
   XCircle,
@@ -34,6 +39,7 @@ import { auth } from '@/lib/firebase/client'
 import { listPlayerReports, type PlayerReportRecord } from '@/lib/firebase/mmo-online'
 import {
   createOrUpdateRedeemCodeForGm,
+  deleteRedeemCodeForGm,
   listRedeemCodesForGm,
   toggleRedeemCodeActiveForGm,
   type RedeemCodeRecord,
@@ -58,11 +64,13 @@ import {
   devSpawnMonster,
   devTeleport,
   getActiveCharacterSlot,
+  getActiveServerRates,
   getStats,
   gmBroadcastGiftAll,
   gmKickPlayer,
   gmMutePlayer,
   gmSendSingleGiftMail,
+  gmSetServerRatesAction,
   gmSummonPlayer,
   gmUnmutePlayer,
   gmWarpToPlayer,
@@ -72,8 +80,11 @@ import {
 } from '@/lib/game/engine'
 import { MAPS, MAP_ORDER, TILE } from '@/lib/game/maps'
 import { GM_EMAIL, PERMANENT_GM_GAME_UID } from '@/lib/game/permissions'
+import { formatServerRateSummary, isServerRateBoostActive } from '@/lib/game/server-rates'
 import { createBan } from '@/lib/game/social'
 import { useGame } from '@/lib/game/use-game'
+import { checkForGameUpdates, openChangelogModal, useVersionUpdate } from '@/lib/game/use-version-update'
+import { GAME_VERSION, type VersionPayload } from '@/lib/game/version'
 import { formatNum } from '../format'
 import { PanelFrame, PxButton } from './panels'
 
@@ -136,6 +147,8 @@ export function DevToolsPanel() {
   const [sysStatus, setSysStatus] = useState<ServerSystemStatus | null>(null)
   const [sysLoading, setSysLoading] = useState(false)
 
+  const versionUpdate = useVersionUpdate()
+
   // GM Redeem Code Manager state
   const [redeemCodes, setRedeemCodes] = useState<RedeemCodeRecord[]>([])
   const [rcCode, setRcCode] = useState('')
@@ -144,10 +157,30 @@ export function DevToolsPanel() {
   const [rcDiamonds, setRcDiamonds] = useState('50')
   const [rcVipExp, setRcVipExp] = useState('0')
   const [rcItemId, setRcItemId] = useState('')
+  const [rcItemFilter, setRcItemFilter] = useState('')
   const [rcItemQty, setRcItemQty] = useState('1')
+  const [rcItemPlus, setRcItemPlus] = useState('0')
   const [rcMaxUses, setRcMaxUses] = useState('100')
   const [rcExpiresHours, setRcExpiresHours] = useState('168')
   const [rcBusy, setRcBusy] = useState(false)
+
+  // Server EXP / Drop Multiplier state
+  const [rateExpMul, setRateExpMul] = useState('2')
+  const [rateDropMul, setRateDropMul] = useState('2')
+  const [rateDurationMin, setRateDurationMin] = useState('60')
+  const [rateLabel, setRateLabel] = useState('กิจกรรมคูณเซิร์ฟเวอร์')
+  const [rateBusy, setRateBusy] = useState(false)
+
+  // Live Patch Notes Publisher state
+  const [pnVersion, setPnVersion] = useState('1.4.3')
+  const [pnDate, setPnDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [pnTitle, setPnTitle] = useState('')
+  const [pnUpdates, setPnUpdates] = useState('')
+  const [pnImprovements, setPnImprovements] = useState('')
+  const [pnBugFixes, setPnBugFixes] = useState('')
+  const [pnAnnounce, setPnAnnounce] = useState(true)
+  const [pnBusy, setPnBusy] = useState(false)
+  const [customPatchVersions, setCustomPatchVersions] = useState<string[]>([])
 
   const allItems = useMemo(() => {
     const q = itemQuery.trim().toLowerCase()
@@ -156,7 +189,15 @@ export function DevToolsPanel() {
     return list.filter((it) => it.id.toLowerCase().includes(q) || it.name.toLowerCase().includes(q)).slice(0, 48)
   }, [itemQuery])
 
-  const giftItemOptions = useMemo(() => Object.values(ITEMS).slice(0, 120), [])
+  const giftItemOptions = useMemo(() => Object.values(ITEMS), [])
+
+  const filteredRedeemItemOptions = useMemo(() => {
+    const q = rcItemFilter.trim().toLowerCase()
+    if (!q) return giftItemOptions
+    return giftItemOptions.filter(
+      (it) => it.id === rcItemId || it.name.toLowerCase().includes(q) || it.id.toLowerCase().includes(q),
+    )
+  }, [giftItemOptions, rcItemFilter, rcItemId])
 
   const loadReports = useCallback(async () => {
     setReportsLoading(true)
@@ -203,14 +244,27 @@ export function DevToolsPanel() {
     }
   }, [])
 
+  const loadVersionMeta = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/version?t=${Date.now()}`, { cache: 'no-store' })
+      const json = (await res.json().catch(() => null)) as VersionPayload | null
+      if (res.ok && json && Array.isArray(json.customVersions)) {
+        setCustomPatchVersions(json.customVersions)
+      }
+    } catch {
+      // Non-blocking patch version fetch
+    }
+  }, [])
+
   useEffect(() => {
     if (tab === 'mod') {
       void loadReports()
       void loadRedeemCodes()
     } else if (tab === 'system') {
       void loadSystemStatus()
+      void loadVersionMeta()
     }
-  }, [tab, loadReports, loadRedeemCodes, loadSystemStatus])
+  }, [tab, loadReports, loadRedeemCodes, loadSystemStatus, loadVersionMeta])
 
   if (!p || !p.gm || !isCurrentAccountGm()) {
     return (
@@ -794,6 +848,7 @@ export function DevToolsPanel() {
                     vipExp: Number(rcVipExp) || 0,
                     itemId: rcItemId || null,
                     qty: Number(rcItemQty) || 1,
+                    plus: rcItemId ? Math.max(0, Math.min(MAX_PLUS, Number(rcItemPlus) || 0)) : 0,
                     maxUses: Number(rcMaxUses) || 100,
                     expiresHours: Number(rcExpiresHours) || null,
                   })
@@ -812,10 +867,15 @@ export function DevToolsPanel() {
                   <Gift className="size-3.5 text-fuchsia-300" aria-hidden />
                   สร้างโค้ดรางวัล / กิฟต์โค้ด (Redeem Code Generator)
                 </p>
-                <PxButton type="button" variant="secondary" onClick={() => void loadRedeemCodes()}>
-                  <RefreshCw className="mr-1 inline size-3" aria-hidden />
-                  รีเฟรช
-                </PxButton>
+                <div className="flex items-center gap-1.5">
+                  <PxButton type="button" variant="secondary" onClick={() => openPanel('redeem')}>
+                    เปิดหน้าแลกโค้ด
+                  </PxButton>
+                  <PxButton type="button" variant="secondary" onClick={() => void loadRedeemCodes()}>
+                    <RefreshCw className="mr-1 inline size-3" aria-hidden />
+                    รีเฟรช
+                  </PxButton>
+                </div>
               </div>
 
               <div className="grid gap-2 sm:grid-cols-3">
@@ -838,24 +898,32 @@ export function DevToolsPanel() {
                     className="w-full border border-border bg-background px-2 py-1 text-xs text-foreground"
                   />
                 </label>
-                <label className="space-y-0.5 text-[10px] text-muted-foreground">
-                  <span>แนบไอเทม</span>
-                  <select
-                    value={rcItemId}
-                    onChange={(e) => setRcItemId(e.target.value)}
-                    className="w-full border border-border bg-background px-1.5 py-1 text-xs text-foreground"
-                  >
-                    <option value="">ไม่แนบไอเทม</option>
-                    {giftItemOptions.map((it) => (
-                      <option key={it.id} value={it.id}>
-                        {it.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <div className="space-y-0.5 text-[10px] text-muted-foreground">
+                  <span>ค้นหา & แนบไอเทม ({filteredRedeemItemOptions.length} ชิ้น)</span>
+                  <div className="flex gap-1">
+                    <input
+                      value={rcItemFilter}
+                      onChange={(e) => setRcItemFilter(e.target.value)}
+                      placeholder="ค้นหาชื่อ/ID..."
+                      className="w-24 border border-border bg-background px-1.5 py-1 text-[11px] text-foreground"
+                    />
+                    <select
+                      value={rcItemId}
+                      onChange={(e) => setRcItemId(e.target.value)}
+                      className="min-w-0 flex-1 border border-border bg-background px-1.5 py-1 text-xs text-foreground"
+                    >
+                      <option value="">ไม่แนบไอเทม</option>
+                      {filteredRedeemItemOptions.map((it) => (
+                        <option key={it.id} value={it.id}>
+                          {it.name} ({it.id})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-7">
                 <label className="space-y-0.5 text-[10px] text-muted-foreground">
                   <span>เพชร (D)</span>
                   <input
@@ -899,6 +967,18 @@ export function DevToolsPanel() {
                   />
                 </label>
                 <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                  <span>ตีบวก (+0-{MAX_PLUS})</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={MAX_PLUS}
+                    disabled={!rcItemId}
+                    value={rcItemPlus}
+                    onChange={(e) => setRcItemPlus(e.target.value)}
+                    className="w-full border border-border bg-background px-2 py-1 text-xs text-foreground disabled:opacity-45"
+                  />
+                </label>
+                <label className="space-y-0.5 text-[10px] text-muted-foreground">
                   <span>จำนวนสิทธิ์สูงสุด</span>
                   <input
                     type="number"
@@ -926,44 +1006,91 @@ export function DevToolsPanel() {
                   {rcBusy ? 'กำลังสร้าง...' : 'บันทึกโค้ดรางวัล'}
                 </PxButton>
                 <span className="text-[10px] text-muted-foreground">
-                  โค้ดทั้งหมด: {redeemCodes.length} รายการ
+                  โค้ดทั้งหมด: {redeemCodes.length} รายการ (กดที่เมนู → ไอเทมโค้ด เพื่อทดสอบรับได้ทันที)
                 </span>
               </div>
 
               {redeemCodes.length > 0 && (
-                <div className="max-h-40 space-y-1 overflow-y-auto border-t border-border/60 pt-2">
-                  {redeemCodes.map((rc) => (
-                    <div
-                      key={rc.code}
-                      className="flex flex-wrap items-center justify-between gap-2 border border-border bg-background/70 px-2 py-1 text-[11px]"
-                    >
-                      <div className="min-w-0">
-                        <span className="font-mono font-bold text-fuchsia-200">{rc.code}</span>
-                        <span className="ml-2 text-muted-foreground">{rc.label}</span>
-                        <p className="text-[10px] text-cyan-200">
-                          {rc.diamonds > 0 ? `+${formatNum(rc.diamonds)} D ` : ''}
-                          {rc.gold > 0 ? `+${formatNum(rc.gold)} G ` : ''}
-                          {rc.vipExp > 0 ? `+${rc.vipExp} VIP ` : ''}
-                          · ใช้แล้ว {rc.usedCount}/{rc.maxUses}
-                        </p>
-                      </div>
-                      <PxButton
-                        type="button"
-                        variant={rc.active ? 'secondary' : 'primary'}
-                        onClick={async () => {
-                          try {
-                            await toggleRedeemCodeActiveForGm(rc.code, !rc.active)
-                            setStatusMsg(`${rc.active ? 'ปิด' : 'เปิด'}ใช้งานโค้ด ${rc.code} แล้ว`)
-                            await loadRedeemCodes()
-                          } catch (err) {
-                            setStatusMsg(err instanceof Error ? err.message : 'เปลี่ยนสถานะโค้ดไม่สำเร็จ')
-                          }
-                        }}
+                <div className="max-h-48 space-y-1 overflow-y-auto border-t border-border/60 pt-2">
+                  {redeemCodes.map((rc) => {
+                    const itemDef = rc.itemId ? ITEMS[rc.itemId] : null
+                    return (
+                      <div
+                        key={rc.code}
+                        className="flex flex-wrap items-center justify-between gap-2 border border-border bg-background/70 px-2 py-1.5 text-[11px]"
                       >
-                        {rc.active ? 'ปิดโค้ด' : 'เปิดใช้'}
-                      </PxButton>
-                    </div>
-                  ))}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="font-mono font-bold text-fuchsia-200">{rc.code}</span>
+                            <span className="text-muted-foreground">{rc.label}</span>
+                            {!rc.active && (
+                              <span className="border border-rose-500/40 bg-rose-500/15 px-1 text-[9px] text-rose-200">
+                                ปิดใช้งาน
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-cyan-200">
+                            {rc.diamonds > 0 ? `+${formatNum(rc.diamonds)} D ` : ''}
+                            {rc.gold > 0 ? `+${formatNum(rc.gold)} G ` : ''}
+                            {rc.vipExp > 0 ? `+${rc.vipExp} VIP ` : ''}
+                            {rc.itemId
+                              ? `· ${itemDef?.name ?? rc.itemId}${rc.plus > 0 ? ` +${rc.plus}` : ''} x${Math.max(1, rc.qty)} `
+                              : ''}
+                            · ใช้แล้ว {rc.usedCount}/{rc.maxUses}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <PxButton
+                            type="button"
+                            variant="secondary"
+                            onClick={() => {
+                              if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                                void navigator.clipboard.writeText(rc.code).then(
+                                  () => setStatusMsg(`คัดลอกโค้ด ${rc.code} แล้ว`),
+                                  () => setStatusMsg(`รหัสโค้ด: ${rc.code}`),
+                                )
+                              } else {
+                                setStatusMsg(`รหัสโค้ด: ${rc.code}`)
+                              }
+                            }}
+                          >
+                            <Copy className="mr-1 inline size-3" aria-hidden />
+                            คัดลอก
+                          </PxButton>
+                          <PxButton
+                            type="button"
+                            variant={rc.active ? 'secondary' : 'primary'}
+                            onClick={async () => {
+                              try {
+                                await toggleRedeemCodeActiveForGm(rc.code, !rc.active)
+                                setStatusMsg(`${rc.active ? 'ปิด' : 'เปิด'}ใช้งานโค้ด ${rc.code} แล้ว`)
+                                await loadRedeemCodes()
+                              } catch (err) {
+                                setStatusMsg(err instanceof Error ? err.message : 'เปลี่ยนสถานะโค้ดไม่สำเร็จ')
+                              }
+                            }}
+                          >
+                            {rc.active ? 'ปิดโค้ด' : 'เปิดใช้'}
+                          </PxButton>
+                          <PxButton
+                            type="button"
+                            variant="danger"
+                            onClick={async () => {
+                              try {
+                                await deleteRedeemCodeForGm(rc.code)
+                                setStatusMsg(`ลบโค้ด ${rc.code} เรียบร้อยแล้ว`)
+                                await loadRedeemCodes()
+                              } catch (err) {
+                                setStatusMsg(err instanceof Error ? err.message : 'ลบโค้ดไม่สำเร็จ')
+                              }
+                            }}
+                          >
+                            <Trash2 className="size-3" aria-hidden />
+                          </PxButton>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </form>
@@ -1148,6 +1275,386 @@ export function DevToolsPanel() {
                   ประกาศทั้งเซิร์ฟ
                 </PxButton>
               </div>
+            </form>
+
+            {/* Server EXP & Drop Multiplier Controls */}
+            {(() => {
+              const activeRates = getActiveServerRates()
+              const boostOn = isServerRateBoostActive(activeRates)
+              const remainingMin =
+                activeRates.expiresAtMs && activeRates.expiresAtMs > Date.now()
+                  ? Math.max(1, Math.ceil((activeRates.expiresAtMs - Date.now()) / 60_000))
+                  : null
+              return (
+                <form
+                  className="space-y-2.5 border-2 border-amber-400/50 bg-amber-950/15 p-2.5"
+                  onSubmit={async (e) => {
+                    e.preventDefault()
+                    if (rateBusy) return
+                    setRateBusy(true)
+                    try {
+                      const res = await gmSetServerRatesAction({
+                        expMultiplier: Number(rateExpMul) || 1,
+                        dropMultiplier: Number(rateDropMul) || 1,
+                        durationMinutes: Math.max(0, Math.floor(Number(rateDurationMin) || 0)),
+                        label: rateLabel,
+                      })
+                      setStatusMsg(res.message)
+                    } finally {
+                      setRateBusy(false)
+                    }
+                  }}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="flex items-center gap-1.5 font-semibold text-amber-200">
+                      <TrendingUp className="size-3.5 text-amber-300" aria-hidden />
+                      คูณ EXP & คูณดรอปทั้งเซิร์ฟเวอร์ (Server Multiplier Event)
+                    </p>
+                    <span className="font-mono text-[10px] text-amber-300">/rate · /exprate · /droprate</span>
+                  </div>
+
+                  <div
+                    className={`flex flex-wrap items-center justify-between gap-2 border px-2.5 py-1.5 text-[11px] ${
+                      boostOn
+                        ? 'border-amber-400/60 bg-amber-500/15 text-amber-100'
+                        : 'border-border bg-background/70 text-muted-foreground'
+                    }`}
+                  >
+                    <span className="font-semibold">
+                      สถานะเซิร์ฟเวอร์ตอนนี้: {formatServerRateSummary(activeRates)}
+                    </span>
+                    <span className="font-mono text-[10px]">
+                      {boostOn
+                        ? remainingMin !== null
+                          ? `เหลืออีก ~${remainingMin} นาที`
+                          : 'เปิดต่อเนื่อง'
+                        : 'ปกติ x1'}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1">
+                    {[
+                      { label: 'EXP x1.5', exp: 1.5, drop: 1, min: 60 },
+                      { label: 'EXP x2', exp: 2, drop: 1, min: 60 },
+                      { label: 'EXP & DROP x2', exp: 2, drop: 2, min: 60 },
+                      { label: 'EXP & DROP x3', exp: 3, drop: 3, min: 120 },
+                      { label: 'กิจกรรมใหญ่ x5', exp: 5, drop: 5, min: 60 },
+                    ].map((preset) => (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        disabled={rateBusy}
+                        onClick={() => {
+                          setRateExpMul(String(preset.exp))
+                          setRateDropMul(String(preset.drop))
+                          setRateDurationMin(String(preset.min))
+                          setRateBusy(true)
+                          void gmSetServerRatesAction({
+                            expMultiplier: preset.exp,
+                            dropMultiplier: preset.drop,
+                            durationMinutes: preset.min,
+                            label: preset.label,
+                          })
+                            .then((r) => setStatusMsg(r.message))
+                            .finally(() => setRateBusy(false))
+                        }}
+                        className="border border-amber-400/40 bg-amber-400/10 px-2 py-1 text-[10px] font-semibold text-amber-200 hover:bg-amber-400/20 disabled:opacity-45"
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                      <span>คูณ EXP (1 - 10)</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={10}
+                        step={0.5}
+                        value={rateExpMul}
+                        onChange={(e) => setRateExpMul(e.target.value)}
+                        className="w-full border border-border bg-background px-2 py-1 text-xs text-foreground"
+                      />
+                    </label>
+                    <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                      <span>คูณดรอป (1 - 10)</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={10}
+                        step={0.5}
+                        value={rateDropMul}
+                        onChange={(e) => setRateDropMul(e.target.value)}
+                        className="w-full border border-border bg-background px-2 py-1 text-xs text-foreground"
+                      />
+                    </label>
+                    <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                      <span>เวลา (นาที, 0=ไม่จำกัด)</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={10080}
+                        value={rateDurationMin}
+                        onChange={(e) => setRateDurationMin(e.target.value)}
+                        className="w-full border border-border bg-background px-2 py-1 text-xs text-foreground"
+                      />
+                    </label>
+                    <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                      <span>ชื่อกิจกรรม</span>
+                      <input
+                        value={rateLabel}
+                        onChange={(e) => setRateLabel(e.target.value)}
+                        maxLength={80}
+                        className="w-full border border-border bg-background px-2 py-1 text-xs text-foreground"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5">
+                    <PxButton type="submit" variant="accent" disabled={rateBusy}>
+                      <TrendingUp className="mr-1 inline size-3.5" aria-hidden />
+                      {rateBusy ? 'กำลังตั้งค่า...' : 'เปิดคูณทั้งเซิร์ฟเวอร์'}
+                    </PxButton>
+                    <PxButton
+                      type="button"
+                      variant="secondary"
+                      disabled={rateBusy || !boostOn}
+                      onClick={() => {
+                        setRateBusy(true)
+                        void gmSetServerRatesAction({
+                          expMultiplier: 1,
+                          dropMultiplier: 1,
+                          reset: true,
+                        })
+                          .then((r) => setStatusMsg(r.message))
+                          .finally(() => setRateBusy(false))
+                      }}
+                    >
+                      <RotateCcw className="mr-1 inline size-3.5" aria-hidden />
+                      รีเซ็ตกลับ x1
+                    </PxButton>
+                  </div>
+                </form>
+              )
+            })()}
+
+            {/* Live Patch Notes Publisher */}
+            <form
+              className="space-y-2.5 border-2 border-cyan-400/45 bg-cyan-950/15 p-2.5"
+              onSubmit={async (e) => {
+                e.preventDefault()
+                if (pnBusy) return
+                const user = auth.currentUser
+                if (!user) {
+                  setStatusMsg('กรุณาล็อกอินบัญชี GM ก่อนเผยแพร่ Patch Notes')
+                  return
+                }
+                const parseLines = (text: string) =>
+                  text
+                    .split('\n')
+                    .map((line) => line.trim())
+                    .filter(Boolean)
+                setPnBusy(true)
+                try {
+                  const token = await user.getIdToken()
+                  const res = await fetch('/api/version', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                      announce: pnAnnounce,
+                      authorName: p.name,
+                      note: {
+                        version: pnVersion,
+                        date: pnDate,
+                        title: pnTitle,
+                        updates: parseLines(pnUpdates),
+                        improvements: parseLines(pnImprovements),
+                        bugFixes: parseLines(pnBugFixes),
+                      },
+                    }),
+                  })
+                  const json = (await res.json().catch(() => null)) as {
+                    ok?: boolean
+                    message?: string
+                    payload?: VersionPayload
+                  } | null
+                  if (!res.ok || !json?.ok) {
+                    setStatusMsg(json?.message || 'เผยแพร่ Patch Notes ไม่สำเร็จ')
+                    return
+                  }
+                  if (json.payload?.customVersions) {
+                    setCustomPatchVersions(json.payload.customVersions)
+                  }
+                  await checkForGameUpdates(true)
+                  setStatusMsg(json.message || `เผยแพร่ Patch Notes v${pnVersion} แล้ว`)
+                } catch {
+                  setStatusMsg('เชื่อมต่อเซิร์ฟเวอร์เพื่อเผยแพร่ Patch Notes ไม่สำเร็จ')
+                } finally {
+                  setPnBusy(false)
+                }
+              }}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="flex items-center gap-1.5 font-semibold text-cyan-200">
+                  <Newspaper className="size-3.5 text-cyan-300" aria-hidden />
+                  เผยแพร่ Patch Notes แบบเรียลไทม์ (Live Patch Notes)
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  <PxButton
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      const latest = versionUpdate.changelog[0]
+                      if (!latest) return
+                      setPnVersion(latest.version)
+                      setPnDate(latest.date)
+                      setPnTitle(latest.title)
+                      setPnUpdates(latest.updates.join('\n'))
+                      setPnImprovements(latest.improvements.join('\n'))
+                      setPnBugFixes(latest.bugFixes.join('\n'))
+                      setStatusMsg(`โหลดข้อมูล Patch Notes v${latest.version} เข้าแบบฟอร์มแล้ว`)
+                    }}
+                  >
+                    ดึงล่าสุดมาแก้
+                  </PxButton>
+                  <PxButton type="button" variant="secondary" onClick={() => openChangelogModal()}>
+                    เปิดดู Patch Notes
+                  </PxButton>
+                </div>
+              </div>
+
+              <p className="text-[10px] text-muted-foreground">
+                เวอร์ชั่นไคลเอนต์: v{GAME_VERSION} · เวอร์ชั่นล่าสุดบนเซิร์ฟ: v{versionUpdate.remoteVersion ?? GAME_VERSION}
+              </p>
+
+              <div className="grid gap-2 sm:grid-cols-3">
+                <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                  <span>เวอร์ชั่น (X.Y.Z)</span>
+                  <input
+                    value={pnVersion}
+                    onChange={(e) => setPnVersion(e.target.value)}
+                    placeholder="1.4.3"
+                    className="w-full border border-border bg-background px-2 py-1 font-mono text-xs text-foreground"
+                  />
+                </label>
+                <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                  <span>วันที่ (YYYY-MM-DD)</span>
+                  <input
+                    value={pnDate}
+                    onChange={(e) => setPnDate(e.target.value)}
+                    placeholder="2026-11-22"
+                    className="w-full border border-border bg-background px-2 py-1 font-mono text-xs text-foreground"
+                  />
+                </label>
+                <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                  <span>หัวข้อแพตช์</span>
+                  <input
+                    value={pnTitle}
+                    onChange={(e) => setPnTitle(e.target.value)}
+                    maxLength={140}
+                    placeholder="เช่น อัปเดตกิจกรรมวันหยุด x2..."
+                    className="w-full border border-border bg-background px-2 py-1 text-xs text-foreground"
+                  />
+                </label>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-3">
+                <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                  <span>อัปเดตใหม่ (ขึ้นบรรทัดใหม่ต่อข้อ)</span>
+                  <textarea
+                    rows={3}
+                    value={pnUpdates}
+                    onChange={(e) => setPnUpdates(e.target.value)}
+                    placeholder="เพิ่มบอสกิจกรรมใหม่..."
+                    className="w-full border border-border bg-background px-2 py-1 text-[11px] text-foreground"
+                  />
+                </label>
+                <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                  <span>ปรับปรุงสมดุล (ขึ้นบรรทัดใหม่ต่อข้อ)</span>
+                  <textarea
+                    rows={3}
+                    value={pnImprovements}
+                    onChange={(e) => setPnImprovements(e.target.value)}
+                    placeholder="ปรับความเร็วในการฟาร์ม..."
+                    className="w-full border border-border bg-background px-2 py-1 text-[11px] text-foreground"
+                  />
+                </label>
+                <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                  <span>แก้ไขบั๊ก (ขึ้นบรรทัดใหม่ต่อข้อ)</span>
+                  <textarea
+                    rows={3}
+                    value={pnBugFixes}
+                    onChange={(e) => setPnBugFixes(e.target.value)}
+                    placeholder="แก้ไขแสดงผลไอเทม..."
+                    className="w-full border border-border bg-background px-2 py-1 text-[11px] text-foreground"
+                  />
+                </label>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="flex items-center gap-1.5 text-[11px] text-foreground">
+                  <input
+                    type="checkbox"
+                    checked={pnAnnounce}
+                    onChange={(e) => setPnAnnounce(e.target.checked)}
+                    className="accent-cyan-400"
+                  />
+                  <span>ประกาศแจ้งผู้เล่นทั้งเซิร์ฟเวอร์เมื่อเผยแพร่</span>
+                </label>
+                <PxButton type="submit" variant="primary" disabled={pnBusy || !pnTitle.trim()}>
+                  <Newspaper className="mr-1 inline size-3.5" aria-hidden />
+                  {pnBusy ? 'กำลังบันทึก...' : 'เผยแพร่ Patch Notes'}
+                </PxButton>
+              </div>
+
+              {customPatchVersions.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 border-t border-border/60 pt-2 text-[10px]">
+                  <span className="text-muted-foreground">Patch Note แบบกำหนดเองบนเซิร์ฟ:</span>
+                  {customPatchVersions.map((ver) => (
+                    <span
+                      key={ver}
+                      className="inline-flex items-center gap-1 border border-cyan-400/40 bg-cyan-500/15 px-1.5 py-0.5 font-mono text-cyan-200"
+                    >
+                      v{ver}
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const user = auth.currentUser
+                          if (!user) return
+                          try {
+                            const token = await user.getIdToken()
+                            const res = await fetch(`/api/version?version=${encodeURIComponent(ver)}`, {
+                              method: 'DELETE',
+                              headers: { Authorization: `Bearer ${token}` },
+                            })
+                            const json = (await res.json().catch(() => null)) as {
+                              ok?: boolean
+                              message?: string
+                              payload?: VersionPayload
+                            } | null
+                            if (res.ok && json?.ok) {
+                              setCustomPatchVersions(json.payload?.customVersions ?? [])
+                              await checkForGameUpdates(true)
+                            }
+                            setStatusMsg(json?.message || `ลบ Patch Note v${ver} แล้ว`)
+                          } catch {
+                            setStatusMsg('ลบ Patch Note ไม่สำเร็จ')
+                          }
+                        }}
+                        className="text-rose-300 hover:text-rose-100"
+                        aria-label={`ลบ Patch Note v${ver}`}
+                      >
+                        <Trash2 className="size-3" aria-hidden />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </form>
 
             <div className="space-y-2 border-2 border-border bg-muted/50 p-2.5">

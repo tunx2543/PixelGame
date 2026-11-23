@@ -17,6 +17,11 @@ import {
 import { OperationType, auth, db, handleFirestoreError } from './client'
 import { sendWorldChatMessage } from './mmo-online'
 import { isGmAccountUser, normalizeGameUidInput, PERMANENT_GM_GAME_UID } from '@/lib/game/permissions'
+import {
+  DEFAULT_SERVER_RATES,
+  sanitizeServerRates,
+  type ServerRatesConfig,
+} from '@/lib/game/server-rates'
 
 export type WorldAnnouncementVariant = 'gm' | 'news'
 export type WorldNewsCategory = 'gm' | 'enhance' | 'boss_kill' | 'gacha' | 'rare_drop'
@@ -901,10 +906,92 @@ export async function ackGmDirective(directiveId: string): Promise<void> {
   ])
 }
 
+export async function publishServerRatesConfig(input: {
+  expMultiplier: number
+  dropMultiplier: number
+  durationMinutes?: number
+  label?: string
+  authorName?: string
+  reset?: boolean
+}): Promise<{ ok: boolean; serverRates?: ServerRatesConfig; message: string }> {
+  const user = auth.currentUser
+  if (!isSignedInVerified() || !user || !isGmAccountUser(user)) {
+    return { ok: false, message: 'คำสั่งปรับคูณเซิร์ฟเวอร์สงวนเฉพาะบัญชี GM ที่ยืนยันตัวตนแล้ว' }
+  }
+  try {
+    const headers = await getBearerHeaders()
+    const res = await fetch('/api/gm/events', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(
+        input.reset
+          ? {
+              action: 'reset_rates',
+              authorName: input.authorName ?? 'GM',
+            }
+          : {
+              action: 'set_rates',
+              expMultiplier: input.expMultiplier,
+              dropMultiplier: input.dropMultiplier,
+              durationMinutes: input.durationMinutes ?? 0,
+              label: input.label ?? '',
+              authorName: input.authorName ?? 'GM',
+            },
+      ),
+    })
+    const data = (await res.json().catch(() => null)) as {
+      ok?: boolean
+      serverRates?: ServerRatesConfig
+      message?: string
+    } | null
+    if (!res.ok || !data?.ok || !data.serverRates) {
+      return { ok: false, message: data?.message || 'อัปเดตตัวคูณเซิร์ฟเวอร์ไม่สำเร็จ' }
+    }
+    const clean = sanitizeServerRates(data.serverRates)
+    return {
+      ok: true,
+      serverRates: clean,
+      message: input.reset
+        ? 'รีเซ็ตตัวคูณเซิร์ฟเวอร์เป็น x1 ปกติแล้ว'
+        : `เปิดคูณเซิร์ฟเวอร์ EXP x${clean.expMultiplier} · DROP x${clean.dropMultiplier} เรียบร้อยแล้ว!`,
+    }
+  } catch {
+    return { ok: false, message: 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อตั้งค่าตัวคูณได้' }
+  }
+}
+
+export async function pollPublicWorldEvents(sinceMs: number): Promise<{
+  announcements: WorldAnnouncementRecord[]
+  serverRates: ServerRatesConfig
+  serverTimeMs: number
+} | null> {
+  try {
+    const res = await fetch(`/api/world/events?since=${Math.max(0, Math.floor(sinceMs))}`, {
+      cache: 'no-store',
+    })
+    if (!res.ok) return null
+    const data = (await res.json()) as {
+      ok?: boolean
+      announcements?: WorldAnnouncementRecord[]
+      serverRates?: ServerRatesConfig
+      serverTimeMs?: number
+    }
+    if (!data.ok) return null
+    return {
+      announcements: Array.isArray(data.announcements) ? data.announcements : [],
+      serverRates: data.serverRates ? sanitizeServerRates(data.serverRates) : { ...DEFAULT_SERVER_RATES },
+      serverTimeMs: typeof data.serverTimeMs === 'number' ? data.serverTimeMs : Date.now(),
+    }
+  } catch {
+    return null
+  }
+}
+
 export async function pollServerGmEvents(sinceMs: number): Promise<{
   announcements: WorldAnnouncementRecord[]
   directives: GmDirectiveRecord[]
   giftDrops: ServerGiftDropRecord[]
+  serverRates: ServerRatesConfig
   serverTimeMs: number
 } | null> {
   const user = auth.currentUser
@@ -921,6 +1008,7 @@ export async function pollServerGmEvents(sinceMs: number): Promise<{
       announcements?: WorldAnnouncementRecord[]
       directives?: GmDirectiveRecord[]
       giftDrops?: ServerGiftDropRecord[]
+      serverRates?: ServerRatesConfig
       serverTimeMs?: number
     }
     if (!data.ok) return null
@@ -928,6 +1016,7 @@ export async function pollServerGmEvents(sinceMs: number): Promise<{
       announcements: Array.isArray(data.announcements) ? data.announcements : [],
       directives: Array.isArray(data.directives) ? data.directives : [],
       giftDrops: Array.isArray(data.giftDrops) ? data.giftDrops : [],
+      serverRates: data.serverRates ? sanitizeServerRates(data.serverRates) : { ...DEFAULT_SERVER_RATES },
       serverTimeMs: typeof data.serverTimeMs === 'number' ? data.serverTimeMs : Date.now(),
     }
   } catch {
