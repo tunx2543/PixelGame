@@ -7049,7 +7049,7 @@ export async function redeemGiftCodeAction(rawCode: string): Promise<{ ok: boole
     const summaryText = rewardParts.join(' + ') || 'รางวัลพิเศษ'
     logPremiumAudit(p, {
       action: 'REDEEM_CODE',
-      txId: claimed.claimTx?.txId ?? null,
+      txId: claimed.claimTx?.txId ?? undefined,
       details: `แลกโค้ด ${claimed.code}: ${summaryText}`,
       verifiedByServer: true,
     })

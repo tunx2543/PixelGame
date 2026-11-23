@@ -67,13 +67,30 @@ const HERO_FRAME_W = 168
 const HERO_FRAME_H = 192
 const HERO_ANCHOR_Y = 178 / HERO_FRAME_H
 
-function makeHeroSheetSpec(id: HeroSheetId): SpriteSheetSpec {
+function makeHeroSheetSpec(id: HeroSheetId, withIdleRows = false): SpriteSheetSpec {
   const base = `/assets/hd/characters/${id}`
+  const prefixes = withIdleRows
+    ? ['walk_down', 'walk_left', 'walk_right', 'walk_up', 'attack', 'skill', 'idle_down', 'idle_left', 'idle_right', 'idle_up']
+    : ['walk_down', 'walk_left', 'walk_right', 'walk_up', 'attack', 'skill']
   const individualFrames: string[] = []
-  for (const prefix of ['walk_down', 'walk_left', 'walk_right', 'walk_up', 'attack', 'skill']) {
+  for (const prefix of prefixes) {
     for (let i = 0; i < 4; i++) {
       individualFrames.push(`${base}/${prefix}_${i}.png`)
     }
+  }
+  const actions: Record<string, SpriteSheetActionSpec> = {
+    walk_down: { row: 0, frames: 4, baseFacing: 'front' },
+    walk_left: { row: 1, frames: 4, baseFacing: 'left' },
+    walk_right: { row: 2, frames: 4, baseFacing: 'right' },
+    walk_up: { row: 3, frames: 4, baseFacing: 'back' },
+    attack: { row: 4, frames: 4, baseFacing: 'right' },
+    skill: { row: 5, frames: 4, baseFacing: 'right' },
+  }
+  if (withIdleRows) {
+    actions.idle_down = { row: 6, frames: 4, baseFacing: 'front' }
+    actions.idle_left = { row: 7, frames: 4, baseFacing: 'left' }
+    actions.idle_right = { row: 8, frames: 4, baseFacing: 'right' }
+    actions.idle_up = { row: 9, frames: 4, baseFacing: 'back' }
   }
   return {
     id,
@@ -82,18 +99,11 @@ function makeHeroSheetSpec(id: HeroSheetId): SpriteSheetSpec {
     frameWidth: HERO_FRAME_W,
     frameHeight: HERO_FRAME_H,
     cols: 4,
-    rows: 6,
+    rows: withIdleRows ? 10 : 6,
     anchorX: 0.5,
     anchorY: HERO_ANCHOR_Y,
     hdScale: 4,
-    actions: {
-      walk_down: { row: 0, frames: 4, baseFacing: 'front' },
-      walk_left: { row: 1, frames: 4, baseFacing: 'left' },
-      walk_right: { row: 2, frames: 4, baseFacing: 'right' },
-      walk_up: { row: 3, frames: 4, baseFacing: 'back' },
-      attack: { row: 4, frames: 4, baseFacing: 'right' },
-      skill: { row: 5, frames: 4, baseFacing: 'right' },
-    },
+    actions,
     individualFrames,
   }
 }
@@ -108,7 +118,7 @@ export const HERO_SPRITE_SHEETS: Record<HeroSheetId, SpriteSheetSpec> = {
   thief: makeHeroSheetSpec('thief'),
   kensei: makeHeroSheetSpec('kensei'),
   iron_fist: makeHeroSheetSpec('iron_fist'),
-  wicked_necromancer: makeHeroSheetSpec('wicked_necromancer'),
+  wicked_necromancer: makeHeroSheetSpec('wicked_necromancer', true),
   the_king: makeHeroSheetSpec('the_king'),
   sinister: makeHeroSheetSpec('sinister'),
   templar: makeHeroSheetSpec('templar'),
@@ -490,6 +500,17 @@ export function getHeroSheetFrameSpec(
   const spec = resolveHeroSheetSpec(jobId)
   if (!spec) return null
 
+  const isIdlePose = action === 'idle' || action === 'mount' || action === 'dismount'
+  const idleRowKey =
+    dir === 'left'
+      ? 'idle_left'
+      : dir === 'right'
+        ? 'idle_right'
+        : dir === 'up'
+          ? 'idle_up'
+          : 'idle_down'
+  const hasDedicatedIdle = Boolean(spec.actions[idleRowKey])
+
   let rowKey: string
   let flipX = false
 
@@ -499,6 +520,8 @@ export function getHeroSheetFrameSpec(
   } else if (action === 'attack') {
     rowKey = 'attack'
     flipX = dir === 'left'
+  } else if (isIdlePose && hasDedicatedIdle) {
+    rowKey = idleRowKey
   } else {
     rowKey =
       dir === 'left'
@@ -512,13 +535,15 @@ export function getHeroSheetFrameSpec(
 
   const rowSpec = spec.actions[rowKey] ?? spec.actions.walk_down
   const col =
-    action === 'idle' || action === 'mount' || action === 'dismount'
+    isIdlePose && !hasDedicatedIdle
       ? frame < 0
         ? 0
         : frame % 2 === 1
           ? 1
           : 0
-      : Math.abs(frame) % rowSpec.frames
+      : frame < 0
+        ? 0
+        : Math.abs(frame) % rowSpec.frames
 
   return buildFrameDrawSpec(spec, rowSpec.row, col, flipX)
 }
