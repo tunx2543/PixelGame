@@ -354,3 +354,217 @@ export function buildVictoryCoinParticles(seed: number, count = 36): VictoryCoin
   }
   return coins
 }
+
+export interface GlobalWorldBossHpInput {
+  liveMapBoss?: {
+    uid: string
+    name: string
+    level: number
+    element: string
+    hp: number
+    maxHp: number
+    isTestMode?: boolean
+  } | null
+  activeEventSpec: {
+    cycleKey: string
+    name: string
+    level: number
+    element: string
+    maxHp: number
+    isActive: boolean
+    isTestMode: boolean
+    endsAtMs: number
+  }
+  globalRaid?: {
+    cycleKey: string
+    name: string
+    hp: number
+    maxHp: number
+  } | null
+  currentMapId?: string
+  defeatedOnCurrentMap?: boolean
+}
+
+export interface GlobalWorldBossHpView {
+  visible: boolean
+  key: string
+  bossName: string
+  level: number
+  element: string
+  hp: number
+  maxHp: number
+  ratio: number
+  percentText: string
+  isTestMode: boolean
+  isLocalEncounter: boolean
+  endsAtMs: number
+}
+
+export function resolveGlobalWorldBossHpBar(input: GlobalWorldBossHpInput): GlobalWorldBossHpView | null {
+  if (input.liveMapBoss && input.liveMapBoss.hp > 0) {
+    const maxHp = Math.max(1, Math.round(input.liveMapBoss.maxHp))
+    const hp = Math.max(0, Math.min(maxHp, Math.round(input.liveMapBoss.hp)))
+    const ratio = clamp01(hp / maxHp)
+    return {
+      visible: true,
+      key: `local:${input.liveMapBoss.uid}`,
+      bossName: input.liveMapBoss.name,
+      level: input.liveMapBoss.level,
+      element: input.liveMapBoss.element,
+      hp,
+      maxHp,
+      ratio,
+      percentText: `${(ratio * 100).toFixed(ratio >= 0.995 || ratio <= 0.005 ? 0 : 1)}%`,
+      isTestMode: Boolean(input.liveMapBoss.isTestMode ?? input.activeEventSpec.isTestMode),
+      isLocalEncounter: true,
+      endsAtMs: input.activeEventSpec.endsAtMs,
+    }
+  }
+
+  if (input.currentMapId === 'world' && input.defeatedOnCurrentMap) {
+    return null
+  }
+
+  if (!input.activeEventSpec.isActive) {
+    return null
+  }
+
+  const raidMatches = input.globalRaid && input.globalRaid.cycleKey === input.activeEventSpec.cycleKey
+  const maxHp = Math.max(1, Math.round(raidMatches ? input.globalRaid!.maxHp : input.activeEventSpec.maxHp))
+  const hp = Math.max(0, Math.min(maxHp, Math.round(raidMatches ? input.globalRaid!.hp : input.activeEventSpec.maxHp)))
+  if (hp <= 0) {
+    return null
+  }
+  const ratio = clamp01(hp / maxHp)
+
+  return {
+    visible: true,
+    key: `global:${input.activeEventSpec.cycleKey}`,
+    bossName: raidMatches ? input.globalRaid!.name : input.activeEventSpec.name,
+    level: input.activeEventSpec.level,
+    element: input.activeEventSpec.element,
+    hp,
+    maxHp,
+    ratio,
+    percentText: `${(ratio * 100).toFixed(ratio >= 0.995 || ratio <= 0.005 ? 0 : 1)}%`,
+    isTestMode: input.activeEventSpec.isTestMode,
+    isLocalEncounter: false,
+    endsAtMs: input.activeEventSpec.endsAtMs,
+  }
+}
+
+export const WORLD_BOSS_ENTRANCE_DURATION_MS = 2750
+export const WORLD_BOSS_DEFAULT_SPRITE_URL = '/assets/world-boss/mech_golem/rotations/south.png'
+
+export interface WorldBossEntranceState {
+  id: number
+  bossName: string
+  level: number
+  element: string
+  spriteUrl: string
+  isTestMode: boolean
+  triggeredAtMs: number
+}
+
+export interface EntranceLightningBolt {
+  id: number
+  points: string
+  delaySec: number
+  durationSec: number
+  strokeWidth: number
+  isMain: boolean
+  opacity: number
+}
+
+export interface EntranceSparkParticle {
+  id: number
+  endX: number
+  endY: number
+  sizePx: number
+  delaySec: number
+  durationSec: number
+  color: string
+}
+
+export function buildEntranceLightningBolts(seed: number, count = 5): EntranceLightningBolt[] {
+  const safeCount = Math.max(1, Math.min(10, Math.floor(count)))
+  const bolts: EntranceLightningBolt[] = []
+
+  for (let b = 0; b < safeCount; b++) {
+    const isMain = b === 0
+    const startX = isMain ? 200 : 90 + hash01(seed * 71 + b * 23.1) * 220
+    const startY = isMain ? 0 : Math.round(hash01(seed * 83 + b * 17.7) * 90)
+    const endY = isMain ? 430 : 320 + Math.round(hash01(seed * 97 + b * 31.3) * 180)
+    const segments = isMain ? 10 : 7
+    const spread = isMain ? 28 : 42
+    const pts: string[] = [`${startX.toFixed(1)},${startY.toFixed(1)}`]
+
+    let curX = startX
+    for (let s = 1; s < segments; s++) {
+      const t = s / segments
+      const y = startY + (endY - startY) * t
+      const jitter = (hash01(seed * 149 + b * 41 + s * 13.7) - 0.5) * 2 * spread
+      curX = Math.max(16, Math.min(384, (isMain ? 200 : curX) + jitter))
+      pts.push(`${curX.toFixed(1)},${y.toFixed(1)}`)
+    }
+    const targetX = isMain ? 200 : Math.max(24, Math.min(376, curX + (hash01(seed * 193 + b * 7) - 0.5) * 44))
+    pts.push(`${targetX.toFixed(1)},${endY.toFixed(1)}`)
+
+    bolts.push({
+      id: b,
+      points: pts.join(' '),
+      delaySec: isMain ? 0.04 : Math.round((0.08 + hash01(seed * 211 + b * 19) * 0.28) * 100) / 100,
+      durationSec: isMain ? 0.42 : Math.round((0.28 + hash01(seed * 233 + b * 29) * 0.16) * 100) / 100,
+      strokeWidth: isMain ? 4.5 : Math.round((2 + hash01(seed * 257 + b * 11) * 1.6) * 10) / 10,
+      isMain,
+      opacity: isMain ? 1 : Math.round((0.68 + hash01(seed * 271 + b * 37) * 0.26) * 100) / 100,
+    })
+  }
+
+  return bolts
+}
+
+export function buildEntranceSparks(seed: number, count = 24): EntranceSparkParticle[] {
+  const safeCount = Math.max(0, Math.min(48, Math.floor(count)))
+  const sparks: EntranceSparkParticle[] = []
+  const palette = ['#e0f2fe', '#38bdf8', '#fde047', '#f59e0b']
+
+  for (let i = 0; i < safeCount; i++) {
+    const r0 = hash01(seed * 109 + i * 23.7 + 1)
+    const r1 = hash01(seed * 163 + i * 37.3 + 2)
+    const r2 = hash01(seed * 227 + i * 51.1 + 3)
+    const angle = (i / Math.max(1, safeCount)) * Math.PI * 2 + (r0 - 0.5) * 0.32
+    const dist = 75 + r1 * 185
+    sparks.push({
+      id: i,
+      endX: Math.round(Math.cos(angle) * dist * 10) / 10,
+      endY: Math.round((Math.sin(angle) * dist * 0.56 - 18) * 10) / 10,
+      sizePx: Math.round(4 + r2 * 6),
+      delaySec: Math.round((0.36 + r0 * 0.1) * 100) / 100,
+      durationSec: Math.round((0.5 + r1 * 0.35) * 100) / 100,
+      color: palette[i % palette.length] ?? '#38bdf8',
+    })
+  }
+
+  return sparks
+}
+
+export interface WorldBossCritHitState {
+  id: number
+  isSoulCrit: boolean
+  damage: number
+  triggeredAtMs: number
+}
+
+export const WORLD_BOSS_CRIT_SHAKE_MS = 460
+
+export function isWorldBossCritHitActive(
+  critHit: WorldBossCritHitState | null | undefined,
+  nowMs = Date.now(),
+): boolean {
+  if (!critHit || critHit.id <= 0) return false
+  const elapsed = nowMs - critHit.triggeredAtMs
+  return elapsed >= 0 && elapsed < WORLD_BOSS_CRIT_SHAKE_MS
+}
+
+

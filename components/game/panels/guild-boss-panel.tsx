@@ -17,6 +17,7 @@ import {
   saveGame,
   summonWorldBossInField,
   syncGuildStateAction,
+  triggerWorldBossCritHit,
   triggerWorldBossVictory,
 } from '@/lib/game/engine'
 import {
@@ -276,6 +277,9 @@ export function GuildBossPanel() {
       Math.round(raw * elem.multiplier * gap.damageMul * (crit ? 1.65 : 1) * (0.92 + Math.random() * 0.16)),
     )
 
+    if (crit) {
+      triggerWorldBossCritHit({ isSoulCrit: false, damage })
+    }
     recordWorldBossDamageAction(damage)
     const updatedWb = await attackWorldBossOnline({
       playerName: p.name,
@@ -332,6 +336,9 @@ export function GuildBossPanel() {
       Math.round(raw * elem.multiplier * gap.damageMul * (crit ? 1.7 : 1) * (0.95 + Math.random() * 0.15)),
     )
 
+    if (crit) {
+      triggerWorldBossCritHit({ isSoulCrit: false, damage })
+    }
     recordWorldBossDamageAction(damage)
     const updatedWb = await attackWorldBossOnline({
       playerName: p.name,

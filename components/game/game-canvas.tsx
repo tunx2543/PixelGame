@@ -306,7 +306,8 @@ export function GameCanvas() {
           game.targetMonsterUid = hit.monster.uid
           game.targetMonsterExpiresAt = game.time + 12
           const dist = Math.hypot(hit.worldX - p.x, hit.worldY - p.y)
-          const attackReach = Math.max(24, currentJob().range * 0.9)
+          const bodyBonus = hit.monster.isWorldBoss || hit.monster.defId === 'world_golem' ? 28 : 0
+          const attackReach = Math.max(24, currentJob().range * 0.9) + bodyBonus
           if (dist <= attackReach) {
             basicAttack()
           } else {

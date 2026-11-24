@@ -64,8 +64,11 @@ import { gmSendMailGiftToTarget } from '@/lib/firebase/rpg-online'
 import { cancelTradeRequest, createBan, createTrade, publishAnnouncement, sendFriendRequest, sendWhisper } from './social'
 import { isGmAccountUser, PERMANENT_GM_GAME_UID, PERMANENT_GM_UID } from './permissions'
 import {
+  WORLD_BOSS_DEFAULT_SPRITE_URL,
   WORLD_BOSS_WARNING_LEAD_SEC,
   createWorldBossMapFx,
+  type WorldBossCritHitState,
+  type WorldBossEntranceState,
   type WorldBossMapAttackVariant,
   type WorldBossMapFxState,
   type WorldBossVictoryState,
@@ -922,6 +925,10 @@ export const game = {
   worldBossMapFx: null as WorldBossMapFxState | null,
   worldBossMapFxSeq: 0,
   worldBossWarning: null as WorldBossWarningState | null,
+  worldBossEntrance: null as WorldBossEntranceState | null,
+  worldBossEntranceSeq: 0,
+  worldBossCritHit: null as WorldBossCritHitState | null,
+  worldBossCritSeq: 0,
   worldBossVictory: null as WorldBossVictoryState | null,
   worldBossVictorySeq: 0,
   version: 0,
@@ -940,6 +947,43 @@ export function triggerWorldBossMapFx(
     originX,
     originY,
   )
+  notify()
+}
+
+export function triggerWorldBossEntrance(input: {
+  bossName: string
+  level?: number
+  element?: string
+  spriteUrl?: string
+  isTestMode?: boolean
+}) {
+  game.worldBossEntranceSeq += 1
+  game.worldBossEntrance = {
+    id: game.worldBossEntranceSeq,
+    bossName: input.bossName,
+    level: Math.max(1, Math.round(input.level ?? 95)),
+    element: input.element ?? 'earth',
+    spriteUrl: input.spriteUrl ?? WORLD_BOSS_DEFAULT_SPRITE_URL,
+    isTestMode: Boolean(input.isTestMode),
+    triggeredAtMs: Date.now(),
+  }
+  notify()
+}
+
+export function dismissWorldBossEntrance() {
+  if (!game.worldBossEntrance) return
+  game.worldBossEntrance = null
+  notify()
+}
+
+export function triggerWorldBossCritHit(input?: { isSoulCrit?: boolean; damage?: number }) {
+  game.worldBossCritSeq += 1
+  game.worldBossCritHit = {
+    id: game.worldBossCritSeq,
+    isSoulCrit: Boolean(input?.isSoulCrit),
+    damage: Math.max(0, Math.round(input?.damage ?? 0)),
+    triggeredAtMs: Date.now(),
+  }
   notify()
 }
 
@@ -990,8 +1034,14 @@ export function applyWorldBossTestUpdate(
       wbMonster.provoked = true
       wbMonster.isWorldBoss = true
       wbMonster.worldBossName = `[GM Test] ${spec.name}`
-      wbMonster.worldSkillCd = 3.5
+      wbMonster.worldSkillCd = 4.5
       game.monsters.push(wbMonster)
+      triggerWorldBossEntrance({
+        bossName: spec.name,
+        level: spec.level,
+        element: spec.element,
+        isTestMode: true,
+      })
       syncBgmForMap('world', true)
     }
   } else if (!clean && prev) {
@@ -1001,6 +1051,8 @@ export function applyWorldBossTestUpdate(
       game.monsters = game.monsters.filter((m) => !m.isWorldBoss)
       game.worldBossMapFx = null
       game.worldBossWarning = null
+      game.worldBossEntrance = null
+      game.worldBossCritHit = null
       if (game.p?.mapId === 'world') {
         syncBgmForMap('world', false)
       }
@@ -2222,8 +2274,14 @@ function populateMap() {
       wbMonster.provoked = true
       wbMonster.isWorldBoss = true
       wbMonster.worldBossName = wbSpec.isTestMode ? `[GM Test] ${wbSpec.name}` : wbSpec.name
-      wbMonster.worldSkillCd = 3.5
+      wbMonster.worldSkillCd = 4.5
       game.monsters.push(wbMonster)
+      triggerWorldBossEntrance({
+        bossName: wbSpec.name,
+        level: wbSpec.level,
+        element: wbSpec.element,
+        isTestMode: wbSpec.isTestMode,
+      })
     }
     return
   }
@@ -2250,6 +2308,8 @@ export function changeMap(rawMapId: string, tx: number, ty: number) {
   game.floats = []
   game.worldBossMapFx = null
   game.worldBossWarning = null
+  game.worldBossEntrance = null
+  game.worldBossCritHit = null
   game.targetMonsterUid = null
   game.targetMonsterExpiresAt = 0
   game.panel = null
@@ -2730,8 +2790,10 @@ function nearestMonster(range: number, fromX = player().x, fromY = player().y - 
   for (const m of game.monsters) {
     if (m.dead) continue
     const d = Math.hypot(m.x - fromX, m.y - 6 - fromY)
-    if (d <= range && d < bd) {
-      bd = d
+    const bodyRadius = m.isWorldBoss || m.defId === 'world_golem' ? 28 : 0
+    const effectiveDist = Math.max(0, d - bodyRadius)
+    if (effectiveDist <= range && effectiveDist < bd) {
+      bd = effectiveDist
       best = m
     }
   }
@@ -2847,10 +2909,24 @@ function damageMonster(m: Monster, mult: number, skillId?: string) {
   if (soulCrit) {
     addEffect({ type: 'spark', x: m.x, y: m.y - 8, r: 16, color: '#67e8f9', max: 0.28 })
   }
+  const hitWorldBoss = Boolean(m.isWorldBoss || m.defId === 'world_golem')
+  if (hitWorldBoss && (crit || soulCrit)) {
+    game.worldBossCritSeq += 1
+    game.worldBossCritHit = {
+      id: game.worldBossCritSeq,
+      isSoulCrit: soulCrit,
+      damage: Math.max(0, Math.round(amount)),
+      triggeredAtMs: Date.now(),
+    }
+  }
   if (m.isWorldBoss) {
     recordWorldBossDamageAction(amount)
   }
-  if (m.hp <= 0) killMonster(m)
+  if (m.hp <= 0) {
+    killMonster(m)
+  } else if (hitWorldBoss) {
+    notify()
+  }
 }
 
 function dropItem(itemId: string, qty: number, x: number, y: number, forcedRarity?: EquipmentRarity) {
@@ -5184,7 +5260,8 @@ export function summonWorldBossInField(): { ok: boolean; message: string } {
       message: 'บอสกิจกรรมเวิลด์บอสเปิดทุกวัน จันทร์ · พุธ · ศุกร์ เวลา 20:00 – 21:00 น. (หรือรอ GM เรียกทดสอบ)',
     }
   }
-  if (p.mapId === 'town') {
+  const warpedFromTown = p.mapId === 'town'
+  if (warpedFromTown) {
     changeMap('world', 26, 22)
   }
   const map = currentMap()
@@ -5214,10 +5291,18 @@ export function summonWorldBossInField(): { ok: boolean; message: string } {
   wbMonster.provoked = true
   wbMonster.isWorldBoss = true
   wbMonster.worldBossName = spec.isTestMode ? `[GM Test] ${spec.name}` : spec.name
-  wbMonster.worldSkillCd = 3.5
+  wbMonster.worldSkillCd = 4.5
   game.monsters.push(wbMonster)
   game.panel = null
   addEffect({ type: 'burst', x: spawnX, y: spawnY - 8, r: 34, color: '#f43f5e', max: 0.65 })
+  if (!warpedFromTown) {
+    triggerWorldBossEntrance({
+      bossName: spec.name,
+      level: spec.level,
+      element: spec.element,
+      isTestMode: spec.isTestMode,
+    })
+  }
   syncBgmForMap(p.mapId, true)
   const msg = `★ อัญเชิญบอสกิจกรรมเวิลด์บอส "${spec.name}" ลงสู่แมพ ${map.name} แล้ว! ★`
   say('system', msg)
@@ -8299,6 +8384,8 @@ function resetRuntime() {
   game.projectiles = []
   game.worldBossMapFx = null
   game.worldBossWarning = null
+  game.worldBossEntrance = null
+  game.worldBossCritHit = null
   game.worldBossVictory = null
   game.chat = []
   game.panel = null
@@ -9165,7 +9252,11 @@ function updateProjectiles(dt: number) {
                   outlineColor: POPUP_PALETTE.pet.outlineColor,
                   duration: 0.9,
                 })
-                if (t.hp <= 0) killMonster(t)
+                if (t.hp <= 0) {
+                  killMonster(t)
+                } else if (t.isWorldBoss || t.defId === 'world_golem') {
+                  notify()
+                }
               }
             }
           }

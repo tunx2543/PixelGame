@@ -51,6 +51,8 @@ export interface TapWorldMonster {
   x: number
   y: number
   dead: boolean
+  defId?: string
+  isWorldBoss?: boolean
 }
 
 export interface TapWorldRemote {
@@ -141,9 +143,13 @@ export function resolveCanvasTapAction<
   let bestMonsterScore = Infinity
   for (const m of monsters) {
     if (m.dead) continue
-    const within = worldX >= m.x - 22 && worldX <= m.x + 22 && worldY >= m.y - 44 && worldY <= m.y + 14
+    const isLargeWorldBoss = Boolean(m.isWorldBoss || m.defId === 'world_golem')
+    const halfW = isLargeWorldBoss ? 54 : 22
+    const topH = isLargeWorldBoss ? 126 : 44
+    const botH = isLargeWorldBoss ? 18 : 14
+    const within = worldX >= m.x - halfW && worldX <= m.x + halfW && worldY >= m.y - topH && worldY <= m.y + botH
     if (!within) continue
-    const score = Math.hypot(worldX - m.x, worldY - (m.y - 12))
+    const score = Math.hypot(worldX - m.x, worldY - (m.y - (isLargeWorldBoss ? 48 : 12)))
     if (score < bestMonsterScore) {
       bestMonsterScore = score
       bestMonster = m

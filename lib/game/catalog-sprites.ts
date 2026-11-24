@@ -193,6 +193,13 @@ function makeWorldGolemRotationSpec(img: HTMLImageElement, hdScale: number): She
   }
 }
 
+export function resolveCatalogMonsterWorldHeight(defId: string, heightWorld: number): number {
+  if (defId === WORLD_GOLEM_ID) {
+    return 136
+  }
+  return Math.max(18, Math.min(72, 16 + heightWorld * 0.28))
+}
+
 function getWorldGolemFrameSpec(
   dir: Dir,
   action: SpriteAction,
@@ -200,7 +207,7 @@ function getWorldGolemFrameSpec(
   isBoss = true,
 ): SheetFrameDrawSpec | null {
   preloadWorldGolemAssets()
-  const desiredWorldH = Math.max(18, Math.min(72, 16 + WORLD_GOLEM_HEIGHT_WORLD * 0.28))
+  const desiredWorldH = resolveCatalogMonsterWorldHeight(WORLD_GOLEM_ID, WORLD_GOLEM_HEIGHT_WORLD)
   const hdScale = Number(((WORLD_GOLEM_BOX_H * (isBoss ? 1.65 : 1.05)) / desiredWorldH).toFixed(4))
 
   if (action === 'attack' || action === 'skill') {

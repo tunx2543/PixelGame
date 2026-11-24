@@ -13,6 +13,7 @@ import {
   getCatalogMonsterAtlas,
   getCatalogMonsterFrameCount,
   preloadMapCatalogSprites,
+  resolveCatalogMonsterWorldHeight,
 } from './catalog-sprites'
 import { getHdImage } from './hd-assets'
 import { getMonsterModelSpec, getPetModelSpec } from './models-2d'
@@ -795,7 +796,14 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         const attackReach = attacking && !isWorldGolem ? Math.sin(attackProgress * Math.PI) * (def.boss ? 5 : 3.5) : 0
         const hitShake = m.hitFlash > 0 ? Math.sin(m.hitFlash * 95) * 2.2 : 0
 
-        shadow(ctx, m.x + hoverX, m.y, (5.5 - (flying ? Math.sin(m.animT * 4.2) * 0.4 : 0)) * (def.boss ? 1.55 : 1))
+        shadow(
+          ctx,
+          m.x + hoverX,
+          m.y,
+          isWorldGolem
+            ? Math.max(18, w * 0.34)
+            : (5.5 - (flying ? Math.sin(m.animT * 4.2) * 0.4 : 0)) * (def.boss ? 1.55 : 1),
+        )
         if (m.uid === game.targetMonsterUid && !dying) {
           const pulse = 0.72 + Math.sin(t * 7) * 0.22
           ctx.save()
@@ -1845,7 +1853,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     ctx.save()
     const wx = game.worldBossWarning.originX
     const wy = game.worldBossWarning.originY - 6
-    const outerR = 72 * wbWarn.ringRadiusMul
+    const outerR = 112 * wbWarn.ringRadiusMul
     ctx.strokeStyle = wbWarn.borderColor
     ctx.globalAlpha = Math.min(0.85, wbWarn.borderAlpha * 1.35)
     ctx.lineWidth = 2.2
@@ -2285,7 +2293,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     const mScale = def.boss ? 1.65 : 1.05
     const h = catalogAtlas
       ? Math.round(
-          Math.max(18, Math.min(72, 16 + catalogAtlas.heightWorld * 0.28)) *
+          resolveCatalogMonsterWorldHeight(def.id, catalogAtlas.heightWorld) *
             (1 - catalogAtlas.footPadFrac),
         ) + (mSpec.flying ? 5 : 2)
       : Math.round(mSpec.canvasSize.height * mScale * 0.78) + (mSpec.flying ? 5 : 0)

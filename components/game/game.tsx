@@ -41,6 +41,8 @@ import { TargetMonsterBar } from './target-monster-bar'
 import { TitleScreen } from './title-screen'
 import { TouchControls } from './touch-controls'
 import { TopAnnouncementTicker, WorldBanner } from './world-banner'
+import { WorldBossEntranceOverlay } from './world-boss-entrance-overlay'
+import { WorldBossHpBar } from './world-boss-hp-bar'
 import { WorldBossVictoryOverlay } from './world-boss-victory-overlay'
 
 function LootToast() {
@@ -195,7 +197,8 @@ export function Game() {
       <div className="game-ui pointer-events-none absolute inset-0">
         {showTouch && <TouchControls />}
 
-        {/* Top Announcement Ticker */}
+        {/* Top Announcement Ticker & Global World Boss HP Bar */}
+        {!g.zenHud && <WorldBossHpBar />}
         {!g.zenHud && <TopAnnouncementTicker />}
 
         {/* ZONE 1: มุมซ้ายบน — Unit Frame + Quest/Party Strip + Buff Timer Strip + PK/Auto/Mount Toggles */}
@@ -277,6 +280,7 @@ export function Game() {
         <Panels />
         {showCheckin && <CheckinModal onClose={() => setShowCheckin(false)} />}
         <OfflineAfkModal />
+        <WorldBossEntranceOverlay />
         <WorldBossVictoryOverlay />
 
         {g.pendingNameChangeUid && (

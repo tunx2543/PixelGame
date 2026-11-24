@@ -644,6 +644,49 @@ export async function attackWorldBossOnline(input: {
   return nextState
 }
 
+export function subscribeWorldBossState(
+  onUpdate: (state: WorldBossRaidState) => void,
+): () => void {
+  let cancelled = false
+  const spec = getActiveWorldBoss()
+
+  void fetchWorldBossState().then((initial) => {
+    if (!cancelled) onUpdate(initial)
+  })
+
+  if (!isSignedInVerified()) {
+    return () => {
+      cancelled = true
+    }
+  }
+
+  const raidRef = doc(db, 'worldBoss', spec.cycleKey)
+  const unsub = onSnapshot(
+    raidRef,
+    (snap) => {
+      if (cancelled || !snap.exists()) return
+      const data = snap.data() as Omit<WorldBossRaidState, 'contributions'>
+      onUpdate({
+        cycleKey: data.cycleKey ?? spec.cycleKey,
+        bossId: data.bossId ?? spec.bossId,
+        name: data.name ?? spec.name,
+        maxHp: Number(data.maxHp ?? spec.maxHp),
+        currentHp: Math.max(0, Number(data.currentHp ?? spec.maxHp)),
+        totalDamageDealt: Math.max(0, Number(data.totalDamageDealt ?? 0)),
+        contributions: [],
+      })
+    },
+    () => {
+      // Keep current/local state gracefully on transient network or permission errors
+    },
+  )
+
+  return () => {
+    cancelled = true
+    unsub()
+  }
+}
+
 /* ========================================================================== */
 /* GUILD CHAT & GUILD RAID BOSS                                               */
 /* ========================================================================== */

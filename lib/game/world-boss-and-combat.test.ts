@@ -6,7 +6,9 @@ import {
   getCatalogMonsterAtlas,
   getCatalogMonsterFrameCount,
   hasCatalogMonsterAtlas,
+  resolveCatalogMonsterWorldHeight,
 } from './catalog-sprites'
+import { resolveCanvasTapAction } from './touch-movement'
 import { computeLevelGapModifiers } from './combat-balance'
 import {
   calculateEnemyAttack,
@@ -27,11 +29,18 @@ import {
   setStoredWorldBossTest,
 } from '../server/gm-events-store'
 import {
+  WORLD_BOSS_CRIT_SHAKE_MS,
+  WORLD_BOSS_DEFAULT_SPRITE_URL,
+  WORLD_BOSS_ENTRANCE_DURATION_MS,
   WORLD_BOSS_WARNING_LEAD_SEC,
+  buildEntranceLightningBolts,
+  buildEntranceSparks,
   buildVictoryCoinParticles,
   createWorldBossMapFx,
   evaluateWorldBossMapFx,
   evaluateWorldBossWarning,
+  isWorldBossCritHitActive,
+  resolveGlobalWorldBossHpBar,
 } from './world-boss-fx'
 
 const GM_EVENTS_FILES = [
@@ -228,11 +237,11 @@ describe('Level-gap combat rebalance', () => {
   })
 
   it('reduces player damage and boosts monster incoming damage in encounter combat', () => {
-    const lowSave = createDefaultEncounterSave('Lowbie')
-    lowSave.level = 5
-    const highSave = createDefaultEncounterSave('Veteran')
-    highSave.level = 35
     const enemy = rollEncounterForLevel(35, { forcedRarity: 'normal' })
+    const lowSave = createDefaultEncounterSave('Lowbie')
+    lowSave.level = Math.max(1, enemy.effectiveLevel - 25)
+    const highSave = createDefaultEncounterSave('Veteran')
+    highSave.level = enemy.effectiveLevel
 
     let lowDamageTotal = 0
     let highDamageTotal = 0
@@ -358,5 +367,134 @@ describe('World Boss full-map screen shake & particle overlay', () => {
       assert.ok(coin.opacity >= 0.8 && coin.opacity <= 1)
     }
   })
+
+  it('resolves global World Boss HP bar state with live encounter priority and handles enlarged world boss sprite/hitbox', () => {
+    const activeEventSpec = {
+      cycleKey: 'event_wb_20261123_2000',
+      name: 'โกเลมจักรกลโลกา',
+      level: 95,
+      element: 'earth',
+      maxHp: 1_500_000,
+      isActive: true,
+      isTestMode: false,
+      endsAtMs: Date.UTC(2026, 10, 23, 14, 0, 0),
+    }
+
+    // 1. Live map encounter overrides stale global raid HP
+    const localView = resolveGlobalWorldBossHpBar({
+      liveMapBoss: {
+        uid: 'wb-1',
+        name: 'โกเลมจักรกลโลกา',
+        level: 95,
+        element: 'earth',
+        hp: 750_000,
+        maxHp: 1_500_000,
+      },
+      activeEventSpec,
+      globalRaid: {
+        cycleKey: 'event_wb_20261123_2000',
+        name: 'โกเลมจักรกลโลกา',
+        hp: 1_400_000,
+        maxHp: 1_500_000,
+      },
+      currentMapId: 'world',
+    })
+    assert.ok(localView)
+    assert.equal(localView.isLocalEncounter, true)
+    assert.equal(localView.ratio, 0.5)
+    assert.equal(localView.percentText, '50.0%')
+
+    // 2. Fallback to active global raid HP when fighting elsewhere
+    const globalView = resolveGlobalWorldBossHpBar({
+      liveMapBoss: null,
+      activeEventSpec,
+      globalRaid: {
+        cycleKey: 'event_wb_20261123_2000',
+        name: 'โกเลมจักรกลโลกา',
+        hp: 300_000,
+        maxHp: 1_500_000,
+      },
+      currentMapId: 'town',
+    })
+    assert.ok(globalView)
+    assert.equal(globalView.isLocalEncounter, false)
+    assert.equal(globalView.ratio, 0.2)
+    assert.equal(globalView.hp, 300_000)
+
+    // 3. Hides cleanly when defeated on world map or event inactive
+    assert.equal(
+      resolveGlobalWorldBossHpBar({
+        liveMapBoss: null,
+        activeEventSpec,
+        currentMapId: 'world',
+        defeatedOnCurrentMap: true,
+      }),
+      null,
+    )
+    assert.equal(
+      resolveGlobalWorldBossHpBar({
+        liveMapBoss: null,
+        activeEventSpec: { ...activeEventSpec, isActive: false },
+        currentMapId: 'town',
+      }),
+      null,
+    )
+
+    // 4. World Boss sprite height is enlarged to colossal 136 world px vs normal max 72
+    assert.equal(resolveCatalogMonsterWorldHeight('world_golem', 200), 136)
+    assert.equal(resolveCatalogMonsterWorldHeight('slime', 200), 72)
+
+    // 5. Enlarged tap hitbox captures upper torso & wider horizontal body of World Boss
+    const tapUpperTorso = resolveCanvasTapAction(445, 300, {
+      tileSize: 32,
+      playerMapId: 'world',
+      playerOwnerId: 'p1',
+      npcs: [],
+      groundDrops: [],
+      monsters: [{ uid: 'wb-1', x: 400, y: 400, dead: false, defId: 'world_golem', isWorldBoss: true }],
+      remotePlayers: [],
+    })
+    assert.equal(tapUpperTorso.kind, 'monster')
+  })
+
+  it('builds deterministic World Boss entrance lightning strikes and impact sparks', () => {
+    assert.ok(WORLD_BOSS_ENTRANCE_DURATION_MS >= 2000 && WORLD_BOSS_ENTRANCE_DURATION_MS <= 3500)
+    const spriteDiskPath = path.join(process.cwd(), 'public', WORLD_BOSS_DEFAULT_SPRITE_URL.replace(/^\//, ''))
+    assert.equal(fs.existsSync(spriteDiskPath), true)
+
+    const boltsA = buildEntranceLightningBolts(11, 5)
+    const boltsB = buildEntranceLightningBolts(11, 5)
+    assert.equal(boltsA.length, 5)
+    assert.deepEqual(boltsA, boltsB)
+    assert.equal(boltsA[0]?.isMain, true)
+    for (const bolt of boltsA) {
+      const coords = bolt.points.split(' ')
+      assert.ok(coords.length >= 7)
+      assert.ok(bolt.strokeWidth >= 2)
+      assert.ok(bolt.durationSec > 0)
+    }
+
+    const sparks = buildEntranceSparks(11, 24)
+    assert.equal(sparks.length, 24)
+    for (const spark of sparks) {
+      assert.ok(Math.hypot(spark.endX, spark.endY) > 30)
+      assert.ok(spark.sizePx >= 4 && spark.sizePx <= 10)
+      assert.ok(spark.delaySec >= 0.3 && spark.delaySec <= 0.5)
+    }
+
+    assert.equal(isWorldBossCritHitActive(null, 1000), false)
+    assert.equal(
+      isWorldBossCritHitActive({ id: 1, isSoulCrit: false, damage: 4200, triggeredAtMs: 1000 }, 1120),
+      true,
+    )
+    assert.equal(
+      isWorldBossCritHitActive(
+        { id: 2, isSoulCrit: true, damage: 9500, triggeredAtMs: 1000 },
+        1000 + WORLD_BOSS_CRIT_SHAKE_MS + 10,
+      ),
+      false,
+    )
+  })
 })
+
 
