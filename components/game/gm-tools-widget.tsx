@@ -1,7 +1,14 @@
 'use client'
 
-import { ChevronDown, ChevronUp, Terminal } from 'lucide-react'
-import { castGmSkill, isCurrentAccountGm, openPanel } from '@/lib/game/engine'
+import { ChevronDown, ChevronUp, Flame, Terminal } from 'lucide-react'
+import {
+  castGmSkill,
+  gmEndEventWorldBossTestAction,
+  gmSummonEventWorldBossTestAction,
+  isCurrentAccountGm,
+  openPanel,
+} from '@/lib/game/engine'
+import { getActiveWorldBoss } from '@/lib/game/rpg-systems'
 import { updateUiPref, useUiLayout } from '@/lib/game/ui-layout'
 import { useGame } from '@/lib/game/use-game'
 
@@ -14,6 +21,7 @@ export function GmToolsWidget() {
   if (!isGmDev) return null
 
   const collapsed = layout.preferences.gmToolsCollapsed
+  const activeWorldBoss = getActiveWorldBoss()
 
   return (
     <div
@@ -86,6 +94,24 @@ export function GmToolsWidget() {
               ฟื้นฟู GM
             </button>
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (activeWorldBoss.isTestMode) {
+                void gmEndEventWorldBossTestAction()
+              } else {
+                void gmSummonEventWorldBossTestAction({ bossId: 'wb_world_golem', durationMinutes: 30, summonOnMap: true })
+              }
+            }}
+            className={`pixel-btn flex w-full items-center justify-center gap-1 border px-2 py-1 text-[9.5px] font-bold ${
+              activeWorldBoss.isTestMode
+                ? 'border-rose-400/70 bg-rose-500/20 text-rose-200 hover:bg-rose-500/30'
+                : 'border-rose-400/50 bg-rose-500/15 text-rose-200 hover:bg-rose-500/25'
+            }`}
+          >
+            <Flame className="size-3" aria-hidden />
+            {activeWorldBoss.isTestMode ? 'ปิดเทสบอสเวิลด์' : 'เรียกบอสเวิลด์เทส (GM)'}
+          </button>
           <button
             type="button"
             onClick={() => openPanel('dev-tools')}

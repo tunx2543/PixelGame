@@ -67,10 +67,12 @@ import {
   getActiveServerRates,
   getStats,
   gmBroadcastGiftAll,
+  gmEndEventWorldBossTestAction,
   gmKickPlayer,
   gmMutePlayer,
   gmSendSingleGiftMail,
   gmSetServerRatesAction,
+  gmSummonEventWorldBossTestAction,
   gmSummonPlayer,
   gmUnmutePlayer,
   gmWarpToPlayer,
@@ -80,6 +82,11 @@ import {
 } from '@/lib/game/engine'
 import { MAPS, MAP_ORDER, TILE } from '@/lib/game/maps'
 import { GM_EMAIL, PERMANENT_GM_GAME_UID } from '@/lib/game/permissions'
+import {
+  WORLD_BOSS_CATALOG,
+  WORLD_BOSS_EVENT_SCHEDULE_LABEL,
+  getActiveWorldBoss,
+} from '@/lib/game/rpg-systems'
 import { formatServerRateSummary, isServerRateBoostActive } from '@/lib/game/server-rates'
 import { createBan } from '@/lib/game/social'
 import { useGame } from '@/lib/game/use-game'
@@ -170,6 +177,11 @@ export function DevToolsPanel() {
   const [rateDurationMin, setRateDurationMin] = useState('60')
   const [rateLabel, setRateLabel] = useState('กิจกรรมคูณเซิร์ฟเวอร์')
   const [rateBusy, setRateBusy] = useState(false)
+
+  // GM World Boss Test state
+  const [wbTestBossId, setWbTestBossId] = useState('wb_world_golem')
+  const [wbTestDurationMin, setWbTestDurationMin] = useState('30')
+  const [wbTestBusy, setWbTestBusy] = useState(false)
 
   // Live Patch Notes Publisher state
   const [pnVersion, setPnVersion] = useState('1.4.3')
@@ -567,6 +579,98 @@ export function DevToolsPanel() {
                 </div>
               </div>
             </div>
+
+            {/* Event World Boss GM Test Controller */}
+            {(() => {
+              const activeWb = getActiveWorldBoss()
+              return (
+                <div className="space-y-2 border-2 border-rose-400/50 bg-rose-950/15 p-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="flex items-center gap-1.5 font-semibold text-rose-300">
+                      <Flame className="size-3.5" aria-hidden />
+                      บอสกิจกรรมเวิลด์บอส (GM Test Summon)
+                    </p>
+                    <span className="text-[10px] text-amber-200">
+                      {activeWb.isTestMode
+                        ? `กำลังเปิดเทส: ${activeWb.name}`
+                        : `ตารางปกติ: ${WORLD_BOSS_EVENT_SCHEDULE_LABEL}`}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <select
+                      value={wbTestBossId}
+                      onChange={(e) => setWbTestBossId(e.target.value)}
+                      className="min-w-0 flex-1 border border-border bg-background px-2 py-1 text-xs text-foreground"
+                    >
+                      {WORLD_BOSS_CATALOG.map((wb) => (
+                        <option key={wb.bossId} value={wb.bossId}>
+                          {wb.name} (Lv.{wb.level})
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={wbTestDurationMin}
+                      onChange={(e) => setWbTestDurationMin(e.target.value)}
+                      className="border border-border bg-background px-2 py-1 text-xs text-foreground"
+                    >
+                      <option value="15">15 นาที</option>
+                      <option value="30">30 นาที</option>
+                      <option value="60">60 นาที</option>
+                    </select>
+                    <PxButton
+                      variant="primary"
+                      disabled={wbTestBusy}
+                      onClick={() => {
+                        setWbTestBusy(true)
+                        void gmSummonEventWorldBossTestAction({
+                          bossId: wbTestBossId,
+                          durationMinutes: Number(wbTestDurationMin) || 30,
+                          summonOnMap: false,
+                        }).then((res) => {
+                          setStatusMsg(res.message)
+                          setWbTestBusy(false)
+                        })
+                      }}
+                    >
+                      เปิดกิจกรรมเทสทั้งเซิร์ฟ
+                    </PxButton>
+                    <PxButton
+                      variant="accent"
+                      disabled={wbTestBusy}
+                      onClick={() => {
+                        setWbTestBusy(true)
+                        void gmSummonEventWorldBossTestAction({
+                          bossId: wbTestBossId,
+                          durationMinutes: Number(wbTestDurationMin) || 30,
+                          summonOnMap: true,
+                        }).then((res) => {
+                          setStatusMsg(res.message)
+                          setWbTestBusy(false)
+                          if (res.ok) closePanel()
+                        })
+                      }}
+                    >
+                      เรียกเทส + เสกลงแมพ
+                    </PxButton>
+                    {activeWb.isTestMode && (
+                      <PxButton
+                        variant="danger"
+                        disabled={wbTestBusy}
+                        onClick={() => {
+                          setWbTestBusy(true)
+                          void gmEndEventWorldBossTestAction().then((res) => {
+                            setStatusMsg(res.message)
+                            setWbTestBusy(false)
+                          })
+                        }}
+                      >
+                        ปิดโหมดเทส
+                      </PxButton>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
           </div>
         )}
 

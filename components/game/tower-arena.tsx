@@ -29,6 +29,7 @@ import { listUserCharacters } from '@/lib/firebase/characters'
 import { pollPublicWorldEvents } from '@/lib/firebase/gm-events'
 import { AccountPanel } from './account-panel'
 import { JOBS, MAX_LEVEL, expToNext, normalizeJobId, type SkillDef } from '@/lib/game/data'
+import { computeLevelGapModifiers } from '@/lib/game/combat-balance'
 import { getSkillIconPath, getSkillVfxSpec } from '@/lib/game/vfx-specs'
 import {
   SAVE_KEY,
@@ -545,6 +546,35 @@ export function TowerArena() {
       const skillLv = skill ? nextSave.skillLevels?.[skill.id] ?? 1 : 1
       const mult = skill ? skill.mult * (skill.hits ?? 1) * (1 + (skillLv - 1) * 0.08) : 1
       const breakdown = calculatePlayerAttack(nextSave, currentEnemy, mult, skill ? skill.name : 'โจมตีปกติ', skill?.id ?? null)
+
+      setPlayerAttackPulse(performance.now())
+      setPlayerSkillColor(skill ? skill.color : null)
+      setPlayerSkillId(skill ? skill.id : null)
+
+      if (breakdown.isMiss || breakdown.damage <= 0) {
+        triggerAttackSound({
+          muted: mutedRef.current,
+          source: 'tower',
+          detail: { actor: 'player', isSkill: Boolean(skill), skillId: skill?.id },
+        })
+        pushPopup(
+          'enemy',
+          0,
+          breakdown.isMiss ? 'miss' : 'block',
+          breakdown.isMiss ? '#cbd5e1' : '#60a5fa',
+          { badge: 'ต่างเวล!' },
+        )
+        appendLog(
+          breakdown.isMiss
+            ? `${breakdown.label} พลาดเป้า! (ศัตรู Lv.${currentEnemy.effectiveLevel} สูงกว่ามาก)`
+            : `${breakdown.label} ถูกต้านทาน! (พลังโจมตีไม่พอเจาะเกราะ Lv.${currentEnemy.effectiveLevel})`,
+          'system',
+        )
+        saveRef.current = nextSave
+        setSave(nextSave)
+        return
+      }
+
       const inflicted = rollStatusInfliction(skill?.id ?? null, nextSave.rpgExt?.equippedRunes)
       if (inflicted === 'shield') {
         playerShieldRef.current = 4.0
@@ -557,9 +587,6 @@ export function TowerArena() {
         if (inflicted === 'stun') enemyTimerResetReqRef.current = true
       }
 
-      setPlayerAttackPulse(performance.now())
-      setPlayerSkillColor(skill ? skill.color : null)
-      setPlayerSkillId(skill ? skill.id : null)
       setEnemyHitPulse(performance.now())
 
       if (breakdown.isCrit) {
@@ -672,6 +699,11 @@ export function TowerArena() {
       enemyProgressRef.current = 0
       setEnemyAttackProgress(0)
       const counterBreakdown = calculatePlayerAttack(currentSave, currentEnemy, evalRes.counterMultiplier, 'โต้กลับ Parry!')
+      if (counterBreakdown.isMiss || counterBreakdown.damage <= 0) {
+        pushPopup('enemy', 0, 'miss', '#cbd5e1', { badge: 'ต่างเวล!' })
+        appendLog(`ปัดป้องได้ แต่โต้กลับพลาดเป้า! (ศัตรู Lv.${currentEnemy.effectiveLevel} สูงกว่ามาก)`, 'system')
+        return
+      }
       pushPopup('enemy', counterBreakdown.damage, 'crit', '#38bdf8', { badge: 'PARRY!' })
       appendLog(`PERFECT PARRY! โต้กลับ ${formatNum(counterBreakdown.damage)} ดาเมจ!`, 'crit')
       triggerCritSound({ muted: mutedRef.current, source: 'tower', detail: { parry: true } })
@@ -877,21 +909,33 @@ export function TowerArena() {
         petTimer += dt
         if (petTimer >= activePet.attackInterval) {
           petTimer -= activePet.attackInterval
-          const rawPet = (activePet.companionAtk * activePet.companionAtk) / Math.max(1, activePet.companionAtk + workingEnemy.defStat * 0.5)
-          const petDmg = Math.max(3, Math.round(rawPet * (0.94 + Math.random() * 0.12)))
-          const nextEnemyHp = Math.max(0, workingEnemy.hp - petDmg)
-          workingEnemy = { ...workingEnemy, hp: nextEnemyHp }
-          enemyRef.current = workingEnemy
-          setEnemy(workingEnemy)
+          const petGap = computeLevelGapModifiers(workingSave.level, workingEnemy.effectiveLevel, {
+            isBoss: workingEnemy.rarity === 'boss',
+          })
           setPetAttackPulse(performance.now())
-          setEnemyHitPulse(performance.now())
-          triggerPetAttackSound({ muted: mutedRef.current, source: 'tower', detail: { petId: activePet.def.id, damage: petDmg } })
-          triggerHitSound({ muted: mutedRef.current, source: 'tower', playSynthFallback: false, detail: { actor: 'pet', target: 'enemy', damage: petDmg } })
-          pushPopup('enemy', petDmg, 'pet', activePet.def.colors.accent, { badge: 'PET' })
-          appendLog(`${activePet.def.name} ช่วยโจมตี ${formatNum(petDmg)} ดาเมจ`, 'pet')
-          if (nextEnemyHp <= 0) {
-            handleVictory(workingSave, currentSpec)
-            return
+          if (petGap.missChance > 0 && Math.random() < petGap.missChance) {
+            pushPopup('enemy', 0, 'miss', '#cbd5e1', { badge: 'PET MISS' })
+            appendLog(`${activePet.def.name} โจมตีพลาดเป้า (ศัตรูเลเวลสูงกว่ามาก)`, 'system')
+          } else {
+            const rawPet = (activePet.companionAtk * activePet.companionAtk) / Math.max(1, activePet.companionAtk + workingEnemy.defStat * 0.5)
+            const petDmg = Math.max(petGap.minDamageFloor, Math.round(rawPet * petGap.damageMul * (0.94 + Math.random() * 0.12)))
+            if (petDmg <= 0) {
+              pushPopup('enemy', 0, 'block', '#60a5fa', { badge: 'PET RESIST' })
+            } else {
+              const nextEnemyHp = Math.max(0, workingEnemy.hp - petDmg)
+              workingEnemy = { ...workingEnemy, hp: nextEnemyHp }
+              enemyRef.current = workingEnemy
+              setEnemy(workingEnemy)
+              setEnemyHitPulse(performance.now())
+              triggerPetAttackSound({ muted: mutedRef.current, source: 'tower', detail: { petId: activePet.def.id, damage: petDmg } })
+              triggerHitSound({ muted: mutedRef.current, source: 'tower', playSynthFallback: false, detail: { actor: 'pet', target: 'enemy', damage: petDmg } })
+              pushPopup('enemy', petDmg, 'pet', activePet.def.colors.accent, { badge: 'PET' })
+              appendLog(`${activePet.def.name} ช่วยโจมตี ${formatNum(petDmg)} ดาเมจ`, 'pet')
+              if (nextEnemyHp <= 0) {
+                handleVictory(workingSave, currentSpec)
+                return
+              }
+            }
           }
         }
       }

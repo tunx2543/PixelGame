@@ -434,9 +434,9 @@ export function EncounterStageCanvas({
             const mStepIn = isEnemyAttacking && eAtkAge < 0.25
             const mStrike = isEnemyAttacking && eAtkAge >= 0.25
             const mAction: SpriteAction = mStrike ? 'attack' : mStepIn ? 'walk' : ph === 'FIGHTING' && flying ? 'walk' : 'idle'
-            const atkCount = getCatalogMonsterFrameCount(mon.def.id, 'attack')
-            const walkCount = getCatalogMonsterFrameCount(mon.def.id, 'walk')
-            const idleCount = getCatalogMonsterFrameCount(mon.def.id, 'idle')
+            const atkCount = getCatalogMonsterFrameCount(mon.def.id, 'attack', 'left')
+            const walkCount = getCatalogMonsterFrameCount(mon.def.id, 'walk', 'left')
+            const idleCount = getCatalogMonsterFrameCount(mon.def.id, 'idle', 'left')
             const mAtkFrame = mStrike ? Math.min(atkCount - 1, Math.floor(((eAtkAge - 0.25) / 0.75) * atkCount)) : 0
             const mFrame = mStrike
               ? mAtkFrame

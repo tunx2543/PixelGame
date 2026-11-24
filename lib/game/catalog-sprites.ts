@@ -79,6 +79,222 @@ function requestCatalogPageImage(url: string): HTMLImageElement | null {
   return img.complete && img.naturalWidth > 0 ? img : null
 }
 
+const WORLD_GOLEM_ID = 'world_golem'
+const WORLD_GOLEM_BOX_W = 112
+const WORLD_GOLEM_BOX_H = 112
+const WORLD_GOLEM_FOOT_PAD_FRAC = 19 / WORLD_GOLEM_BOX_H
+const WORLD_GOLEM_HEIGHT_WORLD = 200
+const WORLD_GOLEM_STOMP_COUNT = 13
+const WORLD_GOLEM_ATTACK_COUNTS: Record<Dir, number> = {
+  down: 14,
+  up: 17,
+  right: 17,
+  left: 17,
+}
+
+const WORLD_GOLEM_ROTATION_URLS = {
+  down: '/assets/world-boss/mech_golem/rotations/south.png',
+  up: '/assets/world-boss/mech_golem/rotations/north.png',
+  right: '/assets/world-boss/mech_golem/rotations/east.png',
+  left: '/assets/world-boss/mech_golem/rotations/west.png',
+} as const
+
+const WORLD_GOLEM_STOMP_SOUTH_URLS = Array.from(
+  { length: WORLD_GOLEM_STOMP_COUNT },
+  (_, idx) => `/assets/world-boss/mech_golem/stomp/south/frame_${String(idx).padStart(3, '0')}.png`,
+)
+
+const WORLD_GOLEM_STOMP_EAST_URLS = Array.from(
+  { length: WORLD_GOLEM_STOMP_COUNT },
+  (_, idx) => `/assets/world-boss/mech_golem/stomp/east/frame_${String(idx).padStart(3, '0')}.png`,
+)
+
+const WORLD_GOLEM_ATTACK_URLS: Record<Dir, string[]> = {
+  down: Array.from(
+    { length: WORLD_GOLEM_ATTACK_COUNTS.down },
+    (_, idx) => `/assets/world-boss/mech_golem/attack/south/frame_${String(idx).padStart(3, '0')}.png`,
+  ),
+  up: Array.from(
+    { length: WORLD_GOLEM_ATTACK_COUNTS.up },
+    (_, idx) => `/assets/world-boss/mech_golem/attack/north/frame_${String(idx).padStart(3, '0')}.png`,
+  ),
+  right: Array.from(
+    { length: WORLD_GOLEM_ATTACK_COUNTS.right },
+    (_, idx) => `/assets/world-boss/mech_golem/attack/east/frame_${String(idx).padStart(3, '0')}.png`,
+  ),
+  left: Array.from(
+    { length: WORLD_GOLEM_ATTACK_COUNTS.left },
+    (_, idx) => `/assets/world-boss/mech_golem/attack/west/frame_${String(idx).padStart(3, '0')}.png`,
+  ),
+}
+
+const WORLD_GOLEM_ALL_URLS = [
+  ...Object.values(WORLD_GOLEM_ROTATION_URLS),
+  ...WORLD_GOLEM_STOMP_SOUTH_URLS,
+  ...WORLD_GOLEM_STOMP_EAST_URLS,
+  ...WORLD_GOLEM_ATTACK_URLS.down,
+  ...WORLD_GOLEM_ATTACK_URLS.up,
+  ...WORLD_GOLEM_ATTACK_URLS.right,
+  ...WORLD_GOLEM_ATTACK_URLS.left,
+]
+
+const WORLD_GOLEM_PLACEHOLDER_FRAMES: CatalogAtlasFrame[] = Array.from(
+  { length: WORLD_GOLEM_STOMP_COUNT },
+  () => [0, 0, 0, WORLD_GOLEM_BOX_W, WORLD_GOLEM_BOX_H, 0, 0, 1, 1],
+)
+
+const WORLD_GOLEM_ATTACK_PLACEHOLDER_FRAMES: CatalogAtlasFrame[] = Array.from(
+  { length: 17 },
+  () => [0, 0, 0, WORLD_GOLEM_BOX_W, WORLD_GOLEM_BOX_H, 0, 0, 1, 1],
+)
+
+const WORLD_GOLEM_ATLAS_ENTRY: CatalogAtlasEntry = {
+  catId: WORLD_GOLEM_ID,
+  biome: 'world',
+  pages: [WORLD_GOLEM_ROTATION_URLS.down, WORLD_GOLEM_ROTATION_URLS.right],
+  boxW: WORLD_GOLEM_BOX_W,
+  boxH: WORLD_GOLEM_BOX_H,
+  footPadFrac: WORLD_GOLEM_FOOT_PAD_FRAC,
+  heightWorld: WORLD_GOLEM_HEIGHT_WORLD,
+  flying: false,
+  anims: {
+    idle: { ms: 160, frames: WORLD_GOLEM_PLACEHOLDER_FRAMES },
+    walk: { ms: 90, frames: WORLD_GOLEM_PLACEHOLDER_FRAMES },
+    attack: { ms: 65, frames: WORLD_GOLEM_ATTACK_PLACEHOLDER_FRAMES },
+    skill: { ms: 65, frames: WORLD_GOLEM_ATTACK_PLACEHOLDER_FRAMES },
+  },
+}
+
+function preloadWorldGolemAssets(): void {
+  for (const url of WORLD_GOLEM_ALL_URLS) {
+    requestCatalogPageImage(url)
+  }
+}
+
+function makeWorldGolemRotationSpec(img: HTMLImageElement, hdScale: number): SheetFrameDrawSpec {
+  return {
+    image: img,
+    sx: 0,
+    sy: 0,
+    sw: 80,
+    sh: 80,
+    flipX: false,
+    hdScale,
+    sheetId: `catalog_${WORLD_GOLEM_ID}`,
+    anchorX: 0.5,
+    anchorY: 1 - WORLD_GOLEM_FOOT_PAD_FRAC,
+    boxW: WORLD_GOLEM_BOX_W,
+    boxH: WORLD_GOLEM_BOX_H,
+    subX: 16 / WORLD_GOLEM_BOX_W,
+    subY: 16 / WORLD_GOLEM_BOX_H,
+    subW: 80 / WORLD_GOLEM_BOX_W,
+    subH: 80 / WORLD_GOLEM_BOX_H,
+    footPadFrac: WORLD_GOLEM_FOOT_PAD_FRAC,
+  }
+}
+
+function getWorldGolemFrameSpec(
+  dir: Dir,
+  action: SpriteAction,
+  frame: number,
+  isBoss = true,
+): SheetFrameDrawSpec | null {
+  preloadWorldGolemAssets()
+  const desiredWorldH = Math.max(18, Math.min(72, 16 + WORLD_GOLEM_HEIGHT_WORLD * 0.28))
+  const hdScale = Number(((WORLD_GOLEM_BOX_H * (isBoss ? 1.65 : 1.05)) / desiredWorldH).toFixed(4))
+
+  if (action === 'attack' || action === 'skill') {
+    const urls = WORLD_GOLEM_ATTACK_URLS[dir] ?? WORLD_GOLEM_ATTACK_URLS.down
+    const atkIdx = Math.abs(Math.floor(frame)) % urls.length
+    const atkImg = requestCatalogPageImage(urls[atkIdx])
+    if (atkImg) {
+      const isSouth = dir === 'down'
+      return {
+        image: atkImg,
+        sx: 0,
+        sy: 0,
+        sw: isSouth ? 112 : 108,
+        sh: isSouth ? 112 : 108,
+        flipX: false,
+        hdScale,
+        sheetId: `catalog_${WORLD_GOLEM_ID}`,
+        anchorX: 0.5,
+        anchorY: 1 - WORLD_GOLEM_FOOT_PAD_FRAC,
+        boxW: WORLD_GOLEM_BOX_W,
+        boxH: WORLD_GOLEM_BOX_H,
+        subX: isSouth ? 0 : 2 / WORLD_GOLEM_BOX_W,
+        subY: isSouth ? 0 : 2 / WORLD_GOLEM_BOX_H,
+        subW: (isSouth ? 112 : 108) / WORLD_GOLEM_BOX_W,
+        subH: (isSouth ? 112 : 108) / WORLD_GOLEM_BOX_H,
+        footPadFrac: WORLD_GOLEM_FOOT_PAD_FRAC,
+      }
+    }
+  }
+
+  const frameIdx = Math.abs(Math.floor(frame)) % WORLD_GOLEM_STOMP_COUNT
+
+  if (dir === 'up') {
+    const northImg =
+      requestCatalogPageImage(WORLD_GOLEM_ROTATION_URLS.up) ??
+      requestCatalogPageImage(WORLD_GOLEM_ROTATION_URLS.down)
+    return northImg ? makeWorldGolemRotationSpec(northImg, hdScale) : null
+  }
+
+  if (dir === 'left' || dir === 'right') {
+    const stompImg = requestCatalogPageImage(WORLD_GOLEM_STOMP_EAST_URLS[frameIdx])
+    if (stompImg) {
+      return {
+        image: stompImg,
+        sx: 0,
+        sy: 0,
+        sw: 108,
+        sh: 108,
+        flipX: dir === 'left',
+        hdScale,
+        sheetId: `catalog_${WORLD_GOLEM_ID}`,
+        anchorX: 0.5,
+        anchorY: 1 - WORLD_GOLEM_FOOT_PAD_FRAC,
+        boxW: WORLD_GOLEM_BOX_W,
+        boxH: WORLD_GOLEM_BOX_H,
+        subX: 2 / WORLD_GOLEM_BOX_W,
+        subY: 2 / WORLD_GOLEM_BOX_H,
+        subW: 108 / WORLD_GOLEM_BOX_W,
+        subH: 108 / WORLD_GOLEM_BOX_H,
+        footPadFrac: WORLD_GOLEM_FOOT_PAD_FRAC,
+      }
+    }
+    const rotUrl = dir === 'left' ? WORLD_GOLEM_ROTATION_URLS.left : WORLD_GOLEM_ROTATION_URLS.right
+    const rotImg = requestCatalogPageImage(rotUrl) ?? requestCatalogPageImage(WORLD_GOLEM_ROTATION_URLS.down)
+    return rotImg ? makeWorldGolemRotationSpec(rotImg, hdScale) : null
+  }
+
+  const southStompImg = requestCatalogPageImage(WORLD_GOLEM_STOMP_SOUTH_URLS[frameIdx])
+  if (southStompImg) {
+    return {
+      image: southStompImg,
+      sx: 0,
+      sy: 0,
+      sw: 112,
+      sh: 112,
+      flipX: false,
+      hdScale,
+      sheetId: `catalog_${WORLD_GOLEM_ID}`,
+      anchorX: 0.5,
+      anchorY: 1 - WORLD_GOLEM_FOOT_PAD_FRAC,
+      boxW: WORLD_GOLEM_BOX_W,
+      boxH: WORLD_GOLEM_BOX_H,
+      subX: 0,
+      subY: 0,
+      subW: 1,
+      subH: 1,
+      footPadFrac: WORLD_GOLEM_FOOT_PAD_FRAC,
+    }
+  }
+
+  const southFallbackImg = requestCatalogPageImage(WORLD_GOLEM_ROTATION_URLS.down)
+  return southFallbackImg ? makeWorldGolemRotationSpec(southFallbackImg, hdScale) : null
+}
+
 export function refreshCatalogMonsterSprites(revision?: string): string {
   const nextRev = invalidateMonsterAssetCache(revision)
   pageImageCache.clear()
@@ -87,15 +303,23 @@ export function refreshCatalogMonsterSprites(revision?: string): string {
 }
 
 export function hasCatalogMonsterAtlas(defId?: string | null): boolean {
-  return Boolean(defId && defId in CATALOG_MONSTERS)
+  if (!defId) return false
+  return defId === WORLD_GOLEM_ID || defId in CATALOG_MONSTERS
 }
 
 export function getCatalogMonsterAtlas(defId?: string | null): CatalogAtlasEntry | null {
   if (!defId) return null
+  if (defId === WORLD_GOLEM_ID) return WORLD_GOLEM_ATLAS_ENTRY
   return CATALOG_MONSTERS[defId] ?? null
 }
 
-export function getCatalogMonsterFrameCount(defId: string, action: SpriteAction): number {
+export function getCatalogMonsterFrameCount(defId: string, action: SpriteAction, dir: Dir = 'down'): number {
+  if (defId === WORLD_GOLEM_ID) {
+    if (action === 'attack' || action === 'skill') {
+      return WORLD_GOLEM_ATTACK_COUNTS[dir] ?? 14
+    }
+    return WORLD_GOLEM_STOMP_COUNT
+  }
   const entry = CATALOG_MONSTERS[defId]
   if (!entry) return action === 'walk' || action === 'run' ? 6 : 4
   const anim =
@@ -116,6 +340,9 @@ export function preloadMapCatalogSprites(mapId: string, forceRefresh = false): v
   }
   if (preloadedBiomes.has(mapId)) return
   preloadedBiomes.add(mapId)
+  if (mapId === 'world') {
+    preloadWorldGolemAssets()
+  }
   for (const entry of Object.values(CATALOG_MONSTERS)) {
     if (entry.biome === mapId) {
       for (const pageUrl of entry.pages) {
@@ -133,6 +360,9 @@ export function getCatalogMonsterFrameSpec(
   isBoss = false,
 ): SheetFrameDrawSpec | null {
   if (!defId || typeof document === 'undefined') return null
+  if (defId === WORLD_GOLEM_ID) {
+    return getWorldGolemFrameSpec(dir, action, frame, isBoss)
+  }
   const entry = CATALOG_MONSTERS[defId]
   if (!entry) return null
 

@@ -398,11 +398,19 @@
     100% { transform: scale(1); opacity: 1; filter: brightness(1); }
   }
 
+  @keyframes world-boss-screen-flash {
+    0% { opacity: 0; }
+    12% { opacity: var(--wb-flash-peak, 0.78); }
+    36% { opacity: calc(var(--wb-flash-peak, 0.78) * 0.42); }
+    100% { opacity: 0; }
+  }
+
   .chest-opening-shake { animation: chest-opening-shake 0.78s cubic-bezier(0.36, 0.07, 0.19, 0.97) forwards; will-change: transform, filter; }
   .chest-opening-flash { animation: chest-opening-flash 0.78s ease-out forwards; will-change: opacity, transform; }
   .chest-opening-ring { animation: chest-opening-ring 0.78s cubic-bezier(0.16, 1, 0.3, 1) forwards; will-change: opacity, transform; }
   .chest-opening-halo { animation: chest-opening-halo 0.78s ease-out forwards; will-change: opacity, transform; }
   .chest-revealed-pop { animation: chest-revealed-pop 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+  .world-boss-screen-flash { animation: world-boss-screen-flash 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards; will-change: opacity; }
 
   @media (prefers-reduced-motion: reduce) {
     .chest-opening-shake,
@@ -410,6 +418,7 @@
     .chest-opening-ring,
     .chest-opening-halo,
     .chest-revealed-pop,
+    .world-boss-screen-flash,
     .item-vfx-breathe,
     .item-vfx-rune-spin,
     .item-vfx-rune-spin-rev,

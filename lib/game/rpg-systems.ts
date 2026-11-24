@@ -928,64 +928,293 @@ export interface WorldBossScheduleSpec {
   bossId: string
   name: string
   monsterId: string
+  level: number
   element: ElementType
   maxHp: number
   atk: number
   def: number
+  startsAtMs: number
   endsAtMs: number
+  isActive: boolean
+  isTestMode: boolean
+  scheduleLabel: string
+  triggeredByName?: string
   milestones: Array<{ id: string; damage: number; gold: number; diamonds: number; stones: number; runeId?: string }>
 }
 
-const WORLD_BOSS_ROTATION = [
+export interface WorldBossTemplateSpec {
+  bossId: string
+  name: string
+  monsterId: string
+  level: number
+  element: ElementType
+  maxHp: number
+  atk: number
+  def: number
+}
+
+export interface WorldBossTestState {
+  active: boolean
+  cycleKey: string
+  bossId: string
+  name: string
+  monsterId: string
+  level: number
+  element: ElementType
+  maxHp: number
+  atk: number
+  def: number
+  startedAtMs: number
+  expiresAtMs: number
+  triggeredByName: string
+}
+
+export const WORLD_BOSS_EVENT_DAYS = [1, 3, 5] as const // Monday, Wednesday, Friday
+export const WORLD_BOSS_EVENT_HOUR_ICT = 20 // 20:00 Thailand time (UTC+7)
+export const WORLD_BOSS_EVENT_DURATION_MS = 60 * 60_000 // 20:00 - 21:00 ICT
+export const WORLD_BOSS_EVENT_SCHEDULE_LABEL = 'วันจันทร์ · พุธ · ศุกร์ เวลา 20:00 – 21:00 น.'
+const THAILAND_OFFSET_MS = 7 * 3_600_000
+
+const THAI_WEEKDAY_SHORT = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'] as const
+const THAI_MONTH_SHORT = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'] as const
+
+const DEFAULT_WORLD_BOSS_MILESTONES: WorldBossScheduleSpec['milestones'] = [
+  { id: 'wb_m1', damage: 1_500, gold: 800, diamonds: 15, stones: 2 },
+  { id: 'wb_m2', damage: 6_000, gold: 2_000, diamonds: 30, stones: 4 },
+  { id: 'wb_m3', damage: 18_000, gold: 4_500, diamonds: 60, stones: 8, runeId: 'rune_thunder' },
+  { id: 'wb_m4', damage: 45_000, gold: 10_000, diamonds: 120, stones: 15, runeId: 'rune_vampiric' },
+]
+
+export const WORLD_BOSS_CATALOG: readonly WorldBossTemplateSpec[] = [
   {
-    bossId: 'wb_earth_titan',
-    name: 'ยักษ์สว่านเหล็กปฐพี',
-    monsterId: 'cave_drill_colossus',
-    element: 'earth' as ElementType,
-    maxHp: 350_000,
-    atk: 190,
-    def: 75,
+    bossId: 'wb_world_golem',
+    name: 'โกเลมจักรกลโลกา (Colossal Mech-Golem)',
+    monsterId: 'world_golem',
+    level: 95,
+    element: 'earth',
+    maxHp: 1_500_000,
+    atk: 320,
+    def: 120,
   },
   {
-    bossId: 'wb_inferno_lord',
-    name: 'จอมราชันเพลิงโลกันตร์',
-    monsterId: 'volcano_inferno_sovereign',
-    element: 'fire' as ElementType,
-    maxHp: 450_000,
-    atk: 230,
-    def: 85,
+    bossId: 'wb_world_goat',
+    name: 'แพะแห่งโลกา (World Goat)',
+    monsterId: 'world_goat',
+    level: 95,
+    element: 'dark',
+    maxHp: 1_500_000,
+    atk: 320,
+    def: 120,
   },
   {
     bossId: 'wb_abyss_wyrm',
     name: 'ราชามังกรรอยแยกอเวจี',
     monsterId: 'abyss_rift_dragon_king',
-    element: 'dark' as ElementType,
+    level: 90,
+    element: 'dark',
     maxHp: 600_000,
     atk: 275,
     def: 95,
   },
+  {
+    bossId: 'wb_inferno_lord',
+    name: 'จอมราชันเพลิงโลกันตร์',
+    monsterId: 'volcano_inferno_sovereign',
+    level: 68,
+    element: 'fire',
+    maxHp: 450_000,
+    atk: 230,
+    def: 85,
+  },
+  {
+    bossId: 'wb_earth_titan',
+    name: 'ยักษ์สว่านเหล็กปฐพี',
+    monsterId: 'cave_drill_colossus',
+    level: 44,
+    element: 'earth',
+    maxHp: 350_000,
+    atk: 190,
+    def: 75,
+  },
 ] as const
 
-export function getActiveWorldBoss(nowMs = Date.now()): WorldBossScheduleSpec {
-  const slotMs = 3_600_000 // Rotates every hour cleanly
-  const slotIndex = Math.floor(nowMs / slotMs)
-  const template = WORLD_BOSS_ROTATION[Math.abs(slotIndex) % WORLD_BOSS_ROTATION.length]
+export function getWorldBossTemplate(bossId?: string | null): WorldBossTemplateSpec {
+  if (bossId) {
+    const found = WORLD_BOSS_CATALOG.find((b) => b.bossId === bossId || b.monsterId === bossId)
+    if (found) return found
+  }
+  return WORLD_BOSS_CATALOG[0]
+}
+
+let activeWorldBossTestOverride: WorldBossTestState | null = null
+
+export function sanitizeWorldBossTestState(
+  raw: unknown,
+  nowMs = Date.now(),
+): WorldBossTestState | null {
+  if (!raw || typeof raw !== 'object') return null
+  const obj = raw as Partial<WorldBossTestState>
+  if (!obj.active) return null
+  const expiresAtMs = typeof obj.expiresAtMs === 'number' && Number.isFinite(obj.expiresAtMs) ? obj.expiresAtMs : 0
+  if (expiresAtMs <= nowMs) return null
+  const template = getWorldBossTemplate(typeof obj.bossId === 'string' ? obj.bossId : null)
+  const startedAtMs =
+    typeof obj.startedAtMs === 'number' && Number.isFinite(obj.startedAtMs) ? obj.startedAtMs : nowMs
+  const cycleKey =
+    typeof obj.cycleKey === 'string' && /^[a-zA-Z0-9_-]{4,64}$/.test(obj.cycleKey.trim())
+      ? obj.cycleKey.trim()
+      : `test_wb_${Math.floor(startedAtMs)}`
   return {
-    cycleKey: `${template.bossId}_${slotIndex}`,
+    active: true,
+    cycleKey,
     bossId: template.bossId,
-    name: template.name,
+    name: typeof obj.name === 'string' && obj.name.trim() ? obj.name.trim().slice(0, 64) : template.name,
     monsterId: template.monsterId,
+    level: template.level,
     element: template.element,
-    maxHp: template.maxHp,
+    maxHp:
+      typeof obj.maxHp === 'number' && Number.isFinite(obj.maxHp) && obj.maxHp > 0
+        ? Math.round(obj.maxHp)
+        : template.maxHp,
     atk: template.atk,
     def: template.def,
-    endsAtMs: (slotIndex + 1) * slotMs,
-    milestones: [
-      { id: 'wb_m1', damage: 1_500, gold: 800, diamonds: 15, stones: 2 },
-      { id: 'wb_m2', damage: 6_000, gold: 2_000, diamonds: 30, stones: 4 },
-      { id: 'wb_m3', damage: 18_000, gold: 4_500, diamonds: 60, stones: 8, runeId: 'rune_thunder' },
-      { id: 'wb_m4', damage: 45_000, gold: 10_000, diamonds: 120, stones: 15, runeId: 'rune_vampiric' },
-    ],
+    startedAtMs,
+    expiresAtMs,
+    triggeredByName:
+      typeof obj.triggeredByName === 'string' && obj.triggeredByName.trim()
+        ? obj.triggeredByName.trim().slice(0, 24)
+        : 'GM',
+  }
+}
+
+export function setWorldBossTestOverride(next: WorldBossTestState | null): WorldBossTestState | null {
+  activeWorldBossTestOverride = sanitizeWorldBossTestState(next)
+  return activeWorldBossTestOverride
+}
+
+export function getWorldBossTestOverride(nowMs = Date.now()): WorldBossTestState | null {
+  if (!activeWorldBossTestOverride || activeWorldBossTestOverride.expiresAtMs <= nowMs) {
+    activeWorldBossTestOverride = null
+    return null
+  }
+  return activeWorldBossTestOverride
+}
+
+export function formatThaiWorldBossSlotLabel(startsAtMs: number): string {
+  const ict = new Date(startsAtMs + THAILAND_OFFSET_MS)
+  const dow = THAI_WEEKDAY_SHORT[ict.getUTCDay()]
+  const day = ict.getUTCDate()
+  const month = THAI_MONTH_SHORT[ict.getUTCMonth()]
+  const hh = String(ict.getUTCHours()).padStart(2, '0')
+  const mm = String(ict.getUTCMinutes()).padStart(2, '0')
+  return `${dow} ${day} ${month} ${hh}:${mm} น.`
+}
+
+export interface WorldBossOccurrence {
+  cycleKey: string
+  boss: WorldBossTemplateSpec
+  startsAtMs: number
+  endsAtMs: number
+  isActive: boolean
+}
+
+export function getScheduledWorldBossOccurrences(nowMs = Date.now(), count = 4): WorldBossOccurrence[] {
+  const safeCount = Math.max(1, Math.min(12, Math.floor(count)))
+  const ictNow = new Date(nowMs + THAILAND_OFFSET_MS)
+  const baseYear = ictNow.getUTCFullYear()
+  const baseMonth = ictNow.getUTCMonth()
+  const baseDay = ictNow.getUTCDate()
+  const primaryBoss = getWorldBossTemplate('wb_world_golem')
+  const occurrences: WorldBossOccurrence[] = []
+
+  for (let dayOffset = 0; dayOffset < 28 && occurrences.length < safeCount; dayOffset++) {
+    const startsAtMs =
+      Date.UTC(baseYear, baseMonth, baseDay + dayOffset, WORLD_BOSS_EVENT_HOUR_ICT, 0, 0, 0) - THAILAND_OFFSET_MS
+    const ictStart = new Date(startsAtMs + THAILAND_OFFSET_MS)
+    const weekday = ictStart.getUTCDay()
+    if (!WORLD_BOSS_EVENT_DAYS.includes(weekday as (typeof WORLD_BOSS_EVENT_DAYS)[number])) {
+      continue
+    }
+    const endsAtMs = startsAtMs + WORLD_BOSS_EVENT_DURATION_MS
+    if (endsAtMs <= nowMs) {
+      continue
+    }
+    const y = ictStart.getUTCFullYear()
+    const m = String(ictStart.getUTCMonth() + 1).padStart(2, '0')
+    const d = String(ictStart.getUTCDate()).padStart(2, '0')
+    occurrences.push({
+      cycleKey: `event_wb_${y}${m}${d}_2000`,
+      boss: primaryBoss,
+      startsAtMs,
+      endsAtMs,
+      isActive: nowMs >= startsAtMs && nowMs < endsAtMs,
+    })
+  }
+
+  return occurrences
+}
+
+export function getActiveWorldBoss(nowMs = Date.now()): WorldBossScheduleSpec {
+  const testOverride = getWorldBossTestOverride(nowMs)
+  if (testOverride) {
+    return {
+      cycleKey: testOverride.cycleKey,
+      bossId: testOverride.bossId,
+      name: testOverride.name,
+      monsterId: testOverride.monsterId,
+      level: testOverride.level,
+      element: testOverride.element,
+      maxHp: testOverride.maxHp,
+      atk: testOverride.atk,
+      def: testOverride.def,
+      startsAtMs: testOverride.startedAtMs,
+      endsAtMs: testOverride.expiresAtMs,
+      isActive: true,
+      isTestMode: true,
+      scheduleLabel: `GM Test · โดย ${testOverride.triggeredByName}`,
+      triggeredByName: testOverride.triggeredByName,
+      milestones: DEFAULT_WORLD_BOSS_MILESTONES.map((m) => ({ ...m })),
+    }
+  }
+
+  const nextOcc = getScheduledWorldBossOccurrences(nowMs, 1)[0]
+  if (!nextOcc) {
+    const fallback = getWorldBossTemplate('wb_world_golem')
+    return {
+      cycleKey: `event_wb_fallback`,
+      bossId: fallback.bossId,
+      name: fallback.name,
+      monsterId: fallback.monsterId,
+      level: fallback.level,
+      element: fallback.element,
+      maxHp: fallback.maxHp,
+      atk: fallback.atk,
+      def: fallback.def,
+      startsAtMs: nowMs,
+      endsAtMs: nowMs + WORLD_BOSS_EVENT_DURATION_MS,
+      isActive: false,
+      isTestMode: false,
+      scheduleLabel: WORLD_BOSS_EVENT_SCHEDULE_LABEL,
+      milestones: DEFAULT_WORLD_BOSS_MILESTONES.map((m) => ({ ...m })),
+    }
+  }
+
+  return {
+    cycleKey: nextOcc.cycleKey,
+    bossId: nextOcc.boss.bossId,
+    name: nextOcc.boss.name,
+    monsterId: nextOcc.boss.monsterId,
+    level: nextOcc.boss.level,
+    element: nextOcc.boss.element,
+    maxHp: nextOcc.boss.maxHp,
+    atk: nextOcc.boss.atk,
+    def: nextOcc.boss.def,
+    startsAtMs: nextOcc.startsAtMs,
+    endsAtMs: nextOcc.endsAtMs,
+    isActive: nextOcc.isActive,
+    isTestMode: false,
+    scheduleLabel: WORLD_BOSS_EVENT_SCHEDULE_LABEL,
+    milestones: DEFAULT_WORLD_BOSS_MILESTONES.map((m) => ({ ...m })),
   }
 }
 

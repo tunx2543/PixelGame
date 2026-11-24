@@ -39,6 +39,7 @@ import {
   recordBestiaryKillInState,
   type ElementType,
 } from './rpg-systems'
+import { computeLevelGapModifiers, type LevelGapTier } from './combat-balance'
 
 export type EncounterRarity = 'normal' | 'elite' | 'boss'
 
@@ -78,6 +79,9 @@ export interface CombatDamageBreakdown {
   elementalMultiplier: number
   elementalEffectiveness: 'super' | 'resist' | 'normal'
   label: string
+  isMiss?: boolean
+  levelDiff?: number
+  levelGapTier?: LevelGapTier
 }
 
 export interface EncounterDropReward {
@@ -333,12 +337,20 @@ export function calculatePlayerAttack(
   const attackerElement = getAttackElement(skillId, save.rpgExt?.equippedRunes)
   const defenderElement = getMonsterElement(enemy.def.id)
   const elemMatch = getElementMultiplier(attackerElement, defenderElement)
+  const gap = computeLevelGapModifiers(save.level, enemy.effectiveLevel, {
+    isBoss: enemy.rarity === 'boss',
+    isGmStaff: gmStaff,
+  })
+  const isMiss = !gmStaff && gap.missChance > 0 && Math.random() < gap.missChance
   const rawMitigated = gmStaff
     ? 9999999
-    : dmgFormula(breakdown.totalAtk * skillMultiplier, enemy.defStat) * elemMatch.multiplier * variance
-  const isCrit = !gmStaff && Math.random() < breakdown.critChance
+    : dmgFormula(breakdown.totalAtk * skillMultiplier, enemy.defStat) *
+      elemMatch.multiplier *
+      gap.damageMul *
+      variance
+  const isCrit = !gmStaff && !isMiss && Math.random() < breakdown.critChance
   const critMultiplier = isCrit ? 1.65 + breakdown.weaponPlus * 0.02 : 1
-  const damage = Math.max(1, Math.round(rawMitigated * critMultiplier))
+  const damage = isMiss ? 0 : Math.max(gap.minDamageFloor, Math.round(rawMitigated * critMultiplier))
 
   return {
     damage,
@@ -359,13 +371,19 @@ export function calculatePlayerAttack(
     elementalMultiplier: elemMatch.multiplier,
     elementalEffectiveness: elemMatch.effectiveness,
     label,
+    isMiss,
+    levelDiff: gap.levelDiff,
+    levelGapTier: gap.tier,
   }
 }
 
 export function calculateEnemyAttack(enemy: EncounterEnemy, save: SaveData): number {
   if (save.god) return 0
   const stats = getStats(save)
-  const raw = dmgFormula(enemy.atk * 1.35, stats.def) * rand(0.88, 1.12)
+  const gap = computeLevelGapModifiers(save.level, enemy.effectiveLevel, {
+    isBoss: enemy.rarity === 'boss',
+  })
+  const raw = dmgFormula(enemy.atk * 1.35, stats.def) * gap.incomingMul * rand(0.88, 1.12)
   return Math.max(1, Math.round(raw))
 }
 

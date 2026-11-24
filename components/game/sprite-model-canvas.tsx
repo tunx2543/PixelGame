@@ -240,10 +240,10 @@ export function SpriteModelCanvas({
       const isAttack = effectiveAction === 'attack'
       const isSkill = effectiveAction === 'skill'
       const isMountHop = effectiveAction === 'mount' || effectiveAction === 'dismount'
-      const atkCount = isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'attack') : 4
-      const skillCount = isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'skill') : 4
-      const walkMod = mode === 'job' ? 4 : isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'walk') : 6
-      const idleCount = isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'idle') : 4
+      const atkCount = isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'attack', dir) : 4
+      const skillCount = isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'skill', dir) : 4
+      const walkMod = mode === 'job' ? 4 : isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'walk', dir) : 6
+      const idleCount = isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'idle', dir) : 4
       const attackFrame = isAttack ? Math.min(atkCount - 1, Math.floor(attackProgress * atkCount)) : 0
       const skillFrame = isSkill ? Math.min(skillCount - 1, Math.floor(attackProgress * skillCount)) : 0
       const hopFrame = isMountHop ? Math.min(3, Math.floor(attackProgress * 4)) : 0

@@ -41,6 +41,7 @@ import { TargetMonsterBar } from './target-monster-bar'
 import { TitleScreen } from './title-screen'
 import { TouchControls } from './touch-controls'
 import { TopAnnouncementTicker, WorldBanner } from './world-banner'
+import { WorldBossVictoryOverlay } from './world-boss-victory-overlay'
 
 function LootToast() {
   const loot = game.lootToast
@@ -167,10 +168,29 @@ export function Game() {
     uiLayout.preferences.autoHideCombatHud &&
     isCombatActive
   const hideLeftSecondaryHud = isMobileCleanCombat && !mobileCombatReveal
+  const wbFx = g.worldBossMapFx
+  const showWbScreenFlash = Boolean(
+    wbFx &&
+      !uiLayout.preferences.disableShadowsAndGlow &&
+      g.time >= wbFx.startedAt &&
+      g.time - wbFx.startedAt < wbFx.duration,
+  )
+  const reduceFlashIntensity = uiLayout.preferences.reduceParticles || uiLayout.preferences.graphicsQuality === 'low'
 
   return (
     <div className="relative h-full w-full select-none overflow-hidden">
       <GameCanvas />
+
+      {showWbScreenFlash && wbFx && (
+        <div
+          key={`wb-flash-${wbFx.id}`}
+          aria-hidden
+          data-testid="world-boss-screen-flash"
+          className={`pointer-events-none absolute inset-0 z-[25] bg-white world-boss-screen-flash ${
+            reduceFlashIntensity ? '[--wb-flash-peak:0.38]' : '[--wb-flash-peak:0.78]'
+          }`}
+        />
+      )}
 
       <div className="game-ui pointer-events-none absolute inset-0">
         {showTouch && <TouchControls />}
@@ -257,6 +277,7 @@ export function Game() {
         <Panels />
         {showCheckin && <CheckinModal onClose={() => setShowCheckin(false)} />}
         <OfflineAfkModal />
+        <WorldBossVictoryOverlay />
 
         {g.pendingNameChangeUid && (
           <div

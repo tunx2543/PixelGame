@@ -6,6 +6,10 @@ import {
   sanitizeServerRates,
   type ServerRatesConfig,
 } from '@/lib/game/server-rates'
+import {
+  sanitizeWorldBossTestState,
+  type WorldBossTestState,
+} from '@/lib/game/rpg-systems'
 
 export type WorldAnnouncementVariant = 'gm' | 'news'
 export type WorldNewsCategory = 'gm' | 'enhance' | 'boss_kill' | 'gacha' | 'rare_drop'
@@ -63,6 +67,7 @@ interface GmEventsStoreData {
   directives: ServerGmDirectiveEvent[]
   giftDrops: ServerGiftDropEvent[]
   serverRates: ServerRatesConfig
+  worldBossTest: WorldBossTestState | null
 }
 
 const PRIMARY_DIR = path.join(process.cwd(), '.data')
@@ -97,6 +102,7 @@ function pruneStore(data: GmEventsStoreData, nowMs = Date.now()): GmEventsStoreD
       .filter((g) => g.expiresAtMs > nowMs && g.createdAtMs >= dropCutoff)
       .slice(-50),
     serverRates: getEffectiveServerRates(data.serverRates, nowMs),
+    worldBossTest: sanitizeWorldBossTestState(data.worldBossTest, nowMs),
   }
 }
 
@@ -116,6 +122,7 @@ function readStore(): GmEventsStoreData {
           directives: Array.isArray(parsed.directives) ? parsed.directives : [],
           giftDrops: Array.isArray(parsed.giftDrops) ? parsed.giftDrops : [],
           serverRates: sanitizeServerRates(parsed.serverRates),
+          worldBossTest: sanitizeWorldBossTestState(parsed.worldBossTest),
         })
         return memoryStore
       }
@@ -128,6 +135,7 @@ function readStore(): GmEventsStoreData {
     directives: [],
     giftDrops: [],
     serverRates: { ...DEFAULT_SERVER_RATES },
+    worldBossTest: null,
   }
   return memoryStore
 }
@@ -177,6 +185,24 @@ export function setServerRates(nextRates: ServerRatesConfig): ServerRatesConfig 
 export function getEffectiveStoredServerRates(nowMs = Date.now()): ServerRatesConfig {
   const store = readStore()
   return getEffectiveServerRates(store.serverRates, nowMs)
+}
+
+export function setStoredWorldBossTest(
+  nextState: WorldBossTestState | null,
+  nowMs = Date.now(),
+): WorldBossTestState | null {
+  const store = readStore()
+  const sanitized = sanitizeWorldBossTestState(nextState, nowMs)
+  writeStore({
+    ...store,
+    worldBossTest: sanitized,
+  })
+  return sanitized
+}
+
+export function getEffectiveStoredWorldBossTest(nowMs = Date.now()): WorldBossTestState | null {
+  const store = readStore()
+  return sanitizeWorldBossTestState(store.worldBossTest, nowMs)
 }
 
 export function addServerAnnouncement(event: ServerAnnouncementEvent): ServerAnnouncementEvent {
@@ -235,6 +261,7 @@ export function ackServerGmDirective(directiveId: string, targetUid: string): bo
 export function getPublicWorldEvents(sinceMs = 0): {
   announcements: ServerAnnouncementEvent[]
   serverRates: ServerRatesConfig
+  worldBossTest: WorldBossTestState | null
   serverTimeMs: number
 } {
   const nowMs = Date.now()
@@ -245,6 +272,7 @@ export function getPublicWorldEvents(sinceMs = 0): {
   return {
     announcements,
     serverRates: getEffectiveServerRates(store.serverRates, nowMs),
+    worldBossTest: sanitizeWorldBossTestState(store.worldBossTest, nowMs),
     serverTimeMs: nowMs,
   }
 }
@@ -254,6 +282,7 @@ export function getEventsForUser(userId: string, sinceMs = 0): {
   directives: ServerGmDirectiveEvent[]
   giftDrops: ServerGiftDropEvent[]
   serverRates: ServerRatesConfig
+  worldBossTest: WorldBossTestState | null
 } {
   const nowMs = Date.now()
   const store = readStore()
@@ -275,5 +304,6 @@ export function getEventsForUser(userId: string, sinceMs = 0): {
     directives,
     giftDrops,
     serverRates: getEffectiveServerRates(store.serverRates, nowMs),
+    worldBossTest: sanitizeWorldBossTestState(store.worldBossTest, nowMs),
   }
 }

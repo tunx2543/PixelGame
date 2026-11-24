@@ -819,12 +819,37 @@ export const BIOME_CATALOG_SPECS: BiomeMonsterCatalogSpec[] = [
     ],
   },
 
-  // 15. บอสโลก (WORLD · 1 ตัว — มอน 0 · บอส 1)
+  // 15. บอสโลก (WORLD · บอสกิจกรรม)
   {
     mapId: 'world',
     biomeName: 'บอสโลก',
     baseLevel: 90,
     entries: [
+      {
+        id: 'world_golem',
+        thaiName: 'โกเลมจักรกลโลกา',
+        englishName: 'Colossal Mech-Golem',
+        sprite: 'golem',
+        color: '#d97706',
+        elementType: 'earth',
+        elementLabel: 'ดิน',
+        tribe: 'จักรกล',
+        role: 'ประชิด',
+        size: 'ใหญ่',
+        stars: 5,
+        aggressive: true,
+        boss: true,
+        levelOffset: 5,
+        drops: [
+          { itemId: 'abyss_crystal', chance: 1 },
+          { itemId: 'dragon_armor', chance: 0.45 },
+          { itemId: 'flame_sword', chance: 0.3 },
+          { itemId: 'inferno_staff', chance: 0.3 },
+          { itemId: 'phoenix_bow', chance: 0.3 },
+          { itemId: 'demon_fang', chance: 0.3 },
+          { itemId: 'enhance_stone', chance: 1 },
+        ],
+      },
       {
         id: 'world_goat',
         thaiName: 'แพะแห่งโลกา',

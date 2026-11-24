@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Clock, Coins, Crown, Flame, Gift, MapPin, MessageSquare, Send, Shield, Sparkles, Swords, Trophy, Users } from 'lucide-react'
+import { computeLevelGapModifiers } from '@/lib/game/combat-balance'
 import { JOBS, normalizeJobId } from '@/lib/game/data'
 import {
   addItem,
@@ -9,10 +10,14 @@ import {
   claimWorldBossMilestoneAction,
   closePanel,
   getStats,
+  gmEndEventWorldBossTestAction,
+  gmSummonEventWorldBossTestAction,
+  isCurrentAccountGm,
   recordWorldBossDamageAction,
   saveGame,
   summonWorldBossInField,
   syncGuildStateAction,
+  triggerWorldBossVictory,
 } from '@/lib/game/engine'
 import {
   attackFieldBossOnline,
@@ -45,6 +50,9 @@ import {
 } from '@/lib/game/mmo-systems'
 import {
   ELEMENT_META,
+  WORLD_BOSS_CATALOG,
+  WORLD_BOSS_EVENT_SCHEDULE_LABEL,
+  formatThaiWorldBossSlotLabel,
   getActiveWorldBoss,
   getAttackElement,
   getElementMultiplier,
@@ -93,8 +101,12 @@ export function GuildBossPanel() {
   const [skillCdMs, setSkillCdMs] = useState(0)
   const [wbAnim, setWbAnim] = useState<'idle' | 'attack'>('idle')
   const [busy, setBusy] = useState(false)
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  const [gmTestBossId, setGmTestBossId] = useState<string>('wb_world_golem')
+  const [gmTestDurationMin, setGmTestDurationMin] = useState<number>(30)
 
   const currentGuildId = p ? sanitizeRpgExt(p.rpgExt).guildId : null
+  const activeBossSpec = getActiveWorldBoss(nowMs)
 
   const refreshData = useCallback(async () => {
     const [gList, wb] = await Promise.all([listGuildsOnline(), fetchWorldBossState()])
@@ -108,7 +120,12 @@ export function GuildBossPanel() {
 
   useEffect(() => {
     void refreshData()
-  }, [refreshData])
+  }, [refreshData, activeBossSpec.cycleKey])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     const unsub = subscribeFieldBoss(selectedFieldMap, setFieldBoss)
@@ -136,19 +153,31 @@ export function GuildBossPanel() {
 
   if (!p) return null
   const ext = sanitizeRpgExt(p.rpgExt)
-  const bossSpec = getActiveWorldBoss()
+  const bossSpec = activeBossSpec
   const bossElem = ELEMENT_META[bossSpec.element]
+  const isGmDev = Boolean(p.gm && isCurrentAccountGm())
   const fieldBossSpec = getFieldBossForMap(selectedFieldMap) ?? FIELD_BOSS_SPECS.meadow
   const fieldBossElem = ELEMENT_META[fieldBossSpec.element]
-  const wbSchedule = getWorldBossScheduleList(Date.now(), 4)
+  const wbSchedule = getWorldBossScheduleList(nowMs, 4)
   const sortedGuilds = [...guilds].sort(
     (a, b) => b.level - a.level || b.totalDonatedGold - a.totalDonatedGold || b.memberCount - a.memberCount,
   )
   const myGuild = guilds.find((item) => item.guildId === ext.guildId) ?? null
   const guildBuffs = ext.guildId ? getGuildBuffs(myGuild?.level ?? ext.guildLevel) : null
-  const remainingSec = Math.max(0, Math.floor((bossSpec.endsAtMs - Date.now()) / 1000))
-  const mins = Math.floor(remainingSec / 60)
-  const secs = remainingSec % 60
+
+  const targetSec = bossSpec.isActive
+    ? Math.max(0, Math.floor((bossSpec.endsAtMs - nowMs) / 1000))
+    : Math.max(0, Math.floor((bossSpec.startsAtMs - nowMs) / 1000))
+  const cdDays = Math.floor(targetSec / 86400)
+  const cdHours = Math.floor((targetSec % 86400) / 3600)
+  const mins = Math.floor((targetSec % 3600) / 60)
+  const secs = targetSec % 60
+  const countdownText =
+    cdDays > 0
+      ? `${cdDays} วัน ${String(cdHours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+      : cdHours > 0
+        ? `${String(cdHours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+        : `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
 
   const handleCreateGuild = async () => {
     if (busy) return
@@ -218,15 +247,34 @@ export function GuildBossPanel() {
 
   const handleAttackWorldBoss = async () => {
     if (attackCdMs > 0 || busy) return
+    if (!bossSpec.isActive) {
+      setNotice(`บอสกิจกรรมยังไม่เปิด (${WORLD_BOSS_EVENT_SCHEDULE_LABEL})`)
+      return
+    }
     setBusy(true)
     setWbAnim('attack')
     window.setTimeout(() => setWbAnim('idle'), 550)
     const s = getStats(p)
+    const gmStaff = p.equipment.weapon?.itemId === 'gm_golden_staff' && Boolean(p.gm)
+    const gap = computeLevelGapModifiers(p.level, bossSpec.level, {
+      isBoss: true,
+      isGmStaff: gmStaff,
+      isWorldBossRaid: true,
+    })
+    if (!gmStaff && gap.missChance > 0 && Math.random() < gap.missChance) {
+      setAttackCdMs(2500)
+      setBusy(false)
+      setNotice(`โจมตี ${bossSpec.name} (Lv.${bossSpec.level}) พลาดเป้า! (เลเวลห่าง ${gap.levelDiff})`)
+      return
+    }
     const atkElem = getAttackElement(null, ext.equippedRunes)
     const elem = getElementMultiplier(atkElem, bossSpec.element)
     const crit = Math.random() < s.crit
     const raw = ((s.atk * 2.2) ** 2) / Math.max(1, s.atk * 2.2 + bossSpec.def)
-    const damage = Math.max(45, Math.round(raw * elem.multiplier * (crit ? 1.65 : 1) * (0.92 + Math.random() * 0.16)))
+    const damage = Math.max(
+      15,
+      Math.round(raw * elem.multiplier * gap.damageMul * (crit ? 1.65 : 1) * (0.92 + Math.random() * 0.16)),
+    )
 
     recordWorldBossDamageAction(damage)
     const updatedWb = await attackWorldBossOnline({
@@ -235,7 +283,16 @@ export function GuildBossPanel() {
       level: p.level,
       damage,
     })
+    const prevHp = worldBoss?.currentHp ?? bossSpec.maxHp
     setWorldBoss(updatedWb)
+    if (prevHp > 0 && updatedWb.currentHp <= 0) {
+      triggerWorldBossVictory({
+        bossName: bossSpec.name,
+        gold: 0,
+        diamonds: 15,
+        exp: 0,
+      })
+    }
     setAttackCdMs(3000)
     setBusy(false)
     setNotice(
@@ -245,6 +302,10 @@ export function GuildBossPanel() {
 
   const handleSkillWorldBoss = async () => {
     if (skillCdMs > 0 || busy) return
+    if (!bossSpec.isActive) {
+      setNotice(`บอสกิจกรรมยังไม่เปิด (${WORLD_BOSS_EVENT_SCHEDULE_LABEL})`)
+      return
+    }
     const job = JOBS[normalizeJobId(p.jobId)]
     const bestSkill = [...(job?.skills ?? [])]
       .filter((sk) => sk.kind !== 'heal')
@@ -256,11 +317,20 @@ export function GuildBossPanel() {
     setWbAnim('attack')
     window.setTimeout(() => setWbAnim('idle'), 650)
     const s = getStats(p)
+    const gmStaff = p.equipment.weapon?.itemId === 'gm_golden_staff' && Boolean(p.gm)
+    const gap = computeLevelGapModifiers(p.level, bossSpec.level, {
+      isBoss: true,
+      isGmStaff: gmStaff,
+      isWorldBossRaid: true,
+    })
     const atkElem = getAttackElement(bestSkill?.id ?? null, ext.equippedRunes)
     const elem = getElementMultiplier(atkElem, bossSpec.element)
     const crit = Math.random() < Math.min(0.95, s.crit + 0.15)
     const raw = ((s.atk * skillMult) ** 2) / Math.max(1, s.atk * skillMult + bossSpec.def)
-    const damage = Math.max(120, Math.round(raw * elem.multiplier * (crit ? 1.7 : 1) * (0.95 + Math.random() * 0.15)))
+    const damage = Math.max(
+      45,
+      Math.round(raw * elem.multiplier * gap.damageMul * (crit ? 1.7 : 1) * (0.95 + Math.random() * 0.15)),
+    )
 
     recordWorldBossDamageAction(damage)
     const updatedWb = await attackWorldBossOnline({
@@ -269,7 +339,16 @@ export function GuildBossPanel() {
       level: p.level,
       damage,
     })
+    const prevHp = worldBoss?.currentHp ?? bossSpec.maxHp
     setWorldBoss(updatedWb)
+    if (prevHp > 0 && updatedWb.currentHp <= 0) {
+      triggerWorldBossVictory({
+        bossName: bossSpec.name,
+        gold: 0,
+        diamonds: 15,
+        exp: 0,
+      })
+    }
     setSkillCdMs(5000)
     setBusy(false)
     setNotice(
@@ -286,15 +365,62 @@ export function GuildBossPanel() {
     closePanel()
   }
 
+  const handleGmSummonTestWorldBoss = async (summonOnMap: boolean) => {
+    if (busy || !isGmDev) return
+    setBusy(true)
+    const res = await gmSummonEventWorldBossTestAction({
+      bossId: gmTestBossId,
+      durationMinutes: gmTestDurationMin,
+      summonOnMap,
+    })
+    setBusy(false)
+    setNotice(res.message)
+    if (res.ok) {
+      await refreshData()
+      if (summonOnMap) closePanel()
+    }
+  }
+
+  const handleGmEndTestWorldBoss = async () => {
+    if (busy || !isGmDev) return
+    setBusy(true)
+    const res = await gmEndEventWorldBossTestAction()
+    setBusy(false)
+    setNotice(res.message)
+    if (res.ok) {
+      await refreshData()
+    }
+  }
+
   const handleAttackFieldBoss = async () => {
     if (fieldCdMs > 0 || busy) return
     setBusy(true)
     const s = getStats(p)
+    const gmStaff = p.equipment.weapon?.itemId === 'gm_golden_staff' && Boolean(p.gm)
+    const gap = computeLevelGapModifiers(p.level, fieldBossSpec.level, {
+      isBoss: true,
+      isGmStaff: gmStaff,
+    })
+    if (!gmStaff && gap.missChance > 0 && Math.random() < gap.missChance) {
+      setFieldCdMs(2000)
+      setBusy(false)
+      setNotice(`โจมตี ${fieldBossSpec.name} (Lv.${fieldBossSpec.level}) พลาดเป้า! (เลเวลห่าง ${gap.levelDiff} เลเวล)`)
+      return
+    }
     const atkElem = getAttackElement(null, ext.equippedRunes)
     const elem = getElementMultiplier(atkElem, fieldBossSpec.element)
     const crit = Math.random() < s.crit
     const raw = ((s.atk * 2.0) ** 2) / Math.max(1, s.atk * 2.0 + fieldBossSpec.def)
-    const damage = Math.max(35, Math.round(raw * elem.multiplier * (crit ? 1.55 : 1) * (0.9 + Math.random() * 0.2)))
+    const damage = Math.max(
+      gap.minDamageFloor,
+      Math.round(raw * elem.multiplier * gap.damageMul * (crit ? 1.55 : 1) * (0.9 + Math.random() * 0.2)),
+    )
+    if (damage <= 0) {
+      setFieldCdMs(2000)
+      setBusy(false)
+      setNotice(`พลังโจมตีไม่พอเจาะเกราะ ${fieldBossSpec.name} (Lv.${fieldBossSpec.level})!`)
+      return
+    }
 
     const res = await attackFieldBossOnline(selectedFieldMap, damage, p.name)
     if (res.state) setFieldBoss(res.state)
@@ -391,33 +517,71 @@ export function GuildBossPanel() {
                       label={`โมเดลบอสโลก ${bossSpec.name}`}
                     />
                   </div>
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <h3 className="text-base font-bold text-rose-300">{bossSpec.name}</h3>
+                      <span className="border border-amber-400/50 bg-amber-950/60 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">
+                        Lv.{bossSpec.level}
+                      </span>
                       <span
                         className="border border-border/60 px-1.5 py-0.5 text-[10px] font-bold"
                         style={{ color: bossElem.color, background: bossElem.bg }}
                       >
                         {bossElem.label}
                       </span>
+                      {bossSpec.isTestMode ? (
+                        <span className="border border-cyan-400/70 bg-cyan-500/20 px-1.5 py-0.5 text-[10px] font-bold text-cyan-200">
+                          GM TEST · กำลังเปิดทดสอบ
+                        </span>
+                      ) : bossSpec.isActive ? (
+                        <span className="border border-emerald-400/70 bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-200">
+                          กำลังเปิดศึก!
+                        </span>
+                      ) : (
+                        <span className="border border-slate-400/40 bg-slate-800/70 px-1.5 py-0.5 text-[10px] font-bold text-slate-200">
+                          รอเวลาเปิดศึก
+                        </span>
+                      )}
                     </div>
+                    <p className="mt-1 text-[11px] font-semibold text-amber-200">
+                      กำหนดการกิจกรรม: {WORLD_BOSS_EVENT_SCHEDULE_LABEL}
+                    </p>
                     <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
-                      รีเซ็ตบอสตัวถัดไปใน {String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')} · ดาเมจของคุณ: {formatNum(ext.worldBossDamage)}
+                      {bossSpec.isActive
+                        ? `เหลือเวลาอีก ${countdownText}`
+                        : `เปิดศึกถัดไปใน ${countdownText} (${formatThaiWorldBossSlotLabel(bossSpec.startsAtMs)})`}
+                      {' · '}ดาเมจของคุณ: {formatNum(ext.worldBossDamage)}
                     </p>
                     <div className="mt-2 flex flex-wrap gap-1.5">
-                      <PxButton disabled={attackCdMs > 0 || busy} onClick={handleAttackWorldBoss}>
+                      <PxButton disabled={!bossSpec.isActive || attackCdMs > 0 || busy} onClick={handleAttackWorldBoss}>
                         <span className="flex items-center gap-1">
                           <Swords className="size-3.5" aria-hidden />
-                          {attackCdMs > 0 ? `รอ ${(attackCdMs / 1000).toFixed(1)}s` : 'โจมตีบอส!'}
+                          {!bossSpec.isActive
+                            ? 'เปิด 20:00 น.'
+                            : attackCdMs > 0
+                              ? `รอ ${(attackCdMs / 1000).toFixed(1)}s`
+                              : 'โจมตีบอส!'}
                         </span>
                       </PxButton>
-                      <PxButton variant="accent" disabled={skillCdMs > 0 || busy} onClick={handleSkillWorldBoss}>
+                      <PxButton
+                        variant="accent"
+                        disabled={!bossSpec.isActive || skillCdMs > 0 || busy}
+                        onClick={handleSkillWorldBoss}
+                      >
                         <span className="flex items-center gap-1">
                           <Sparkles className="size-3.5" aria-hidden />
-                          {skillCdMs > 0 ? `สกิล ${(skillCdMs / 1000).toFixed(1)}s` : 'ใช้สกิลโจมตี!'}
+                          {!bossSpec.isActive
+                            ? 'รอเปิดกิจกรรม'
+                            : skillCdMs > 0
+                              ? `สกิล ${(skillCdMs / 1000).toFixed(1)}s`
+                              : 'ใช้สกิลโจมตี!'}
                         </span>
                       </PxButton>
-                      <PxButton variant="secondary" disabled={busy} onClick={handleSummonWorldBossOnMap}>
+                      <PxButton
+                        variant="secondary"
+                        disabled={(!bossSpec.isActive && !isGmDev) || busy}
+                        onClick={handleSummonWorldBossOnMap}
+                      >
                         <span className="flex items-center gap-1">
                           <MapPin className="size-3.5 text-amber-300" aria-hidden />
                           ปะทะบอสโลกบนแมพ
@@ -427,6 +591,62 @@ export function GuildBossPanel() {
                   </div>
                 </div>
               </div>
+
+              {isGmDev && (
+                <div className="space-y-2 border border-gold/50 bg-gold/10 p-2.5 text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-bold text-gold">เครื่องมือ GM · เรียกบอสกิจกรรมเวิลด์บอส (ทดสอบ)</span>
+                    <span className="text-[10px] text-amber-200">
+                      {bossSpec.isTestMode ? 'กำลังเปิดโหมดทดสอบทั้งเซิร์ฟ' : 'เรียกเทสได้ทุกเวลาโดยไม่ต้องรอ 20:00 น.'}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <select
+                      value={gmTestBossId}
+                      onChange={(e) => setGmTestBossId(e.target.value)}
+                      className="min-w-0 flex-1 border border-border bg-background px-2 py-1 text-xs text-foreground"
+                    >
+                      {WORLD_BOSS_CATALOG.map((wb) => (
+                        <option key={wb.bossId} value={wb.bossId}>
+                          {wb.name} (Lv.{wb.level})
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={gmTestDurationMin}
+                      onChange={(e) => setGmTestDurationMin(Number(e.target.value) || 30)}
+                      className="border border-border bg-background px-2 py-1 text-xs text-foreground"
+                    >
+                      <option value={15}>15 นาที</option>
+                      <option value={30}>30 นาที</option>
+                      <option value={60}>60 นาที</option>
+                    </select>
+                    <PxButton
+                      variant="primary"
+                      disabled={busy}
+                      onClick={() => void handleGmSummonTestWorldBoss(false)}
+                    >
+                      เปิดบอสเทสทั้งเซิร์ฟ
+                    </PxButton>
+                    <PxButton
+                      variant="accent"
+                      disabled={busy}
+                      onClick={() => void handleGmSummonTestWorldBoss(true)}
+                    >
+                      เรียกเทส + ลงแมพ
+                    </PxButton>
+                    {bossSpec.isTestMode && (
+                      <PxButton
+                        variant="danger"
+                        disabled={busy}
+                        onClick={() => void handleGmEndTestWorldBoss()}
+                      >
+                        ปิดโหมดเทส
+                      </PxButton>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {worldBoss && (
                 <div className="space-y-1">
@@ -508,14 +728,20 @@ export function GuildBossPanel() {
 
               <div className="border-t border-border/60 pt-2">
                 <h4 className="flex items-center gap-1.5 text-xs font-bold text-amber-300">
-                  <Clock className="size-3.5" aria-hidden /> ตารางเวิลด์บอสล่วงหน้า
+                  <Clock className="size-3.5" aria-hidden /> ตารางบอสกิจกรรมเวิลด์บอส (จันทร์·พุธ·ศุกร์ 20:00 น.)
                 </h4>
                 <div className="mt-1.5 space-y-1">
                   {wbSchedule.map((slot) => {
                     const elem = ELEMENT_META[slot.boss.element]
-                    const startDate = new Date(slot.startsAtMs)
-                    const hhmm = `${String(startDate.getHours()).padStart(2, '0')}:00`
-                    const waitMins = Math.ceil(slot.startsInSec / 60)
+                    const waitHours = Math.floor(slot.startsInSec / 3600)
+                    const waitDays = Math.floor(waitHours / 24)
+                    const remHours = waitHours % 24
+                    const waitLabel =
+                      waitDays > 0
+                        ? `อีก ${waitDays} วัน ${remHours} ชม.`
+                        : waitHours > 0
+                          ? `อีก ${waitHours} ชม. ${Math.floor((slot.startsInSec % 3600) / 60)} น.`
+                          : `อีก ${Math.max(1, Math.ceil(slot.startsInSec / 60))} นาที`
                     return (
                       <div
                         key={slot.cycleKey}
@@ -537,11 +763,15 @@ export function GuildBossPanel() {
                             />
                           </div>
                           <span className="truncate">
-                            <strong className="text-foreground">{hhmm}</strong> · {slot.boss.name}
+                            <strong className="text-foreground">{slot.slotLabel}</strong> · {slot.boss.name}
                           </span>
                         </div>
                         <span className="shrink-0 text-[10px]" style={{ color: elem.color }}>
-                          {slot.isCurrent ? 'กำลังเปิดศึก' : `อีก ${waitMins} นาที`}
+                          {slot.boss.isTestMode
+                            ? 'GM Test เปิดอยู่'
+                            : slot.isCurrent
+                              ? 'กำลังเปิดศึก!'
+                              : waitLabel}
                         </span>
                       </div>
                     )

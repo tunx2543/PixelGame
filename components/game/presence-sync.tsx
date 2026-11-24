@@ -48,6 +48,7 @@ import {
   applyGmSummonWarp,
   applyGmUnmuteDirective,
   applyServerRatesUpdate,
+  applyWorldBossTestUpdate,
   game,
   getStats,
   notify,
@@ -725,6 +726,7 @@ export function PresenceSync() {
           .then((res) => {
             if (!res || stopped || !game.p) return
             applyServerRatesUpdate(res.serverRates)
+            applyWorldBossTestUpdate(res.worldBossTest)
             for (const ann of res.announcements) handleIncomingAnnouncement(ann)
             for (const dir of res.directives) handleIncomingDirective(dir)
             const claimedSet = new Set(game.p.claimedGiftDropIds ?? [])
@@ -768,6 +770,7 @@ export function PresenceSync() {
       void pollPublicWorldEvents(lastGmRelaySinceMs).then((res) => {
         if (!res || stopped || !game.p) return
         applyServerRatesUpdate(res.serverRates)
+        applyWorldBossTestUpdate(res.worldBossTest)
         for (const ann of res.announcements) handleIncomingAnnouncement(ann)
         lastGmRelaySinceMs = Math.max(0, res.serverTimeMs - 14_000)
       })

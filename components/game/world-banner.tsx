@@ -15,7 +15,7 @@ import { ensurePremiumState, game, isCurrentAccountGm, notify, openPanel } from 
 import { getWorldTimePhase } from '@/lib/game/extended-systems'
 import { getFieldBossForMap } from '@/lib/game/mmo-systems'
 import { TOPUP_MILESTONES } from '@/lib/game/premium/topup'
-import { getActiveWorldBoss, todayIsoDate } from '@/lib/game/rpg-systems'
+import { formatThaiWorldBossSlotLabel, getActiveWorldBoss, todayIsoDate } from '@/lib/game/rpg-systems'
 import { countClaimableQuests } from '@/lib/game/systems'
 import { useGame } from '@/lib/game/use-game'
 import { cn } from '@/lib/utils'
@@ -31,13 +31,17 @@ export function TopAnnouncementTicker() {
   const map = p ? (game.p ? p.mapId : 'town') : 'town'
   const nowMs = Date.now()
   const announcement = game.announcement && game.announcement.until > nowMs ? game.announcement : null
-  const worldBoss = getActiveWorldBoss()
-  const wbRemainSec = Math.max(0, Math.floor((worldBoss.endsAtMs - nowMs) / 1000))
+  const worldBoss = getActiveWorldBoss(nowMs)
+  const wbRemainSec = worldBoss.isActive
+    ? Math.max(0, Math.floor((worldBoss.endsAtMs - nowMs) / 1000))
+    : Math.max(0, Math.floor((worldBoss.startsAtMs - nowMs) / 1000))
   const wbMin = Math.floor(wbRemainSec / 60)
   const fieldBoss = p ? getFieldBossForMap(map) : null
 
-  let headline = `ยินดีต้อนรับสู่โลก Pixel Quest · บอสโลก ${worldBoss.name} เหลือเวลาอีก ${wbMin} นาที`
-  let eventKey = p ? `welcome:${worldBoss.name}` : ''
+  let headline = worldBoss.isActive
+    ? `★ บอสกิจกรรม ${worldBoss.name}${worldBoss.isTestMode ? ' (GM Test)' : ''} กำลังเปิดศึก! เหลือเวลาอีก ${wbMin} นาที ★`
+    : `บอสกิจกรรม ${worldBoss.name} เปิดทุก จันทร์·พุธ·ศุกร์ 20:00 น. (รอบถัดไป ${formatThaiWorldBossSlotLabel(worldBoss.startsAtMs)})`
+  let eventKey = p ? `welcome:${worldBoss.cycleKey}:${worldBoss.isActive ? 'live' : 'wait'}` : ''
   let iconKind: 'megaphone' | 'shield' | 'flame' = 'flame'
 
   if (announcement) {
@@ -117,9 +121,13 @@ export function WorldBanner() {
   const map = game.p ? p.mapId : 'town'
   const totalOnline = game.onlinePlayers.filter((other) => !other.invisible).length
   const worldPhase = getWorldTimePhase()
-  const worldBoss = getActiveWorldBoss()
-  const wbRemainSec = Math.max(0, Math.floor((worldBoss.endsAtMs - Date.now()) / 1000))
+  const nowMs = Date.now()
+  const worldBoss = getActiveWorldBoss(nowMs)
+  const wbRemainSec = worldBoss.isActive
+    ? Math.max(0, Math.floor((worldBoss.endsAtMs - nowMs) / 1000))
+    : Math.max(0, Math.floor((worldBoss.startsAtMs - nowMs) / 1000))
   const wbMin = Math.floor(wbRemainSec / 60)
+  const wbBadgeLabel = worldBoss.isActive ? (wbMin > 0 ? `${wbMin}m` : 'LIVE') : '20:00'
   const fieldBoss = getFieldBossForMap(map)
 
   const prem = ensurePremiumState(p)
@@ -158,10 +166,10 @@ export function WorldBanner() {
             iconId="event-flash"
             size="sm"
             tone="border-amber-300/85 bg-[radial-gradient(circle_at_35%_28%,#62471d_0%,#2d210e_60%,#140e06_100%)] group-hover:scale-105"
-            badgeAlert={Boolean(questAlert || game.invasion?.active)}
+            badgeAlert={Boolean(questAlert || game.invasion?.active || worldBoss.isActive)}
           />
           <span className="font-mono text-[8.5px] font-bold text-white [text-shadow:0_1px_2px_#000] tabular-nums">
-            {wbMin}m
+            {wbBadgeLabel}
           </span>
         </button>
 

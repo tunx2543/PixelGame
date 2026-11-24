@@ -2,6 +2,7 @@
 
 import { motion } from 'motion/react'
 import { MONSTERS } from '@/lib/game/data'
+import { computeLevelGapModifiers } from '@/lib/game/combat-balance'
 import { getTargetMonster } from '@/lib/game/engine'
 import { ELEMENT_META, getMonsterElement } from '@/lib/game/rpg-systems'
 import { useGame } from '@/lib/game/use-game'
@@ -25,6 +26,12 @@ export function TargetMonsterBar({ offsetTouch = false }: { offsetTouch?: boolea
   const elemMeta = ELEMENT_META[elem]
   const displayName = target.worldBossName || def.name
   const isBoss = Boolean(def.boss || target.worldBossName)
+  const gmStaff = p.equipment.weapon?.itemId === 'gm_golden_staff' && Boolean(p.gm)
+  const levelGap = computeLevelGapModifiers(p.level, def.level, {
+    isBoss,
+    isGmStaff: gmStaff,
+    isWorldBossRaid: Boolean(target.isWorldBoss),
+  })
 
   return (
     <motion.div
@@ -56,16 +63,31 @@ export function TargetMonsterBar({ offsetTouch = false }: { offsetTouch?: boolea
             )}
           </div>
 
-          <span
-            className="shrink-0 rounded border px-1.5 py-px text-[9px] font-extrabold"
-            style={{
-              color: elemMeta.color,
-              borderColor: `${elemMeta.color}66`,
-              backgroundColor: elemMeta.bg,
-            }}
-          >
-            {elemMeta.label}
-          </span>
+          <div className="flex shrink-0 items-center gap-1">
+            {levelGap.warningLabel && (
+              <span
+                className={`rounded border px-1.5 py-px text-[9px] font-extrabold ${
+                  levelGap.tier === 'overwhelming'
+                    ? 'border-rose-400 bg-rose-600/80 text-white'
+                    : levelGap.tier === 'danger'
+                      ? 'border-orange-400/80 bg-orange-950/80 text-orange-200'
+                      : 'border-amber-400/60 bg-amber-950/70 text-amber-200'
+                }`}
+              >
+                {levelGap.warningLabel}
+              </span>
+            )}
+            <span
+              className="shrink-0 rounded border px-1.5 py-px text-[9px] font-extrabold"
+              style={{
+                color: elemMeta.color,
+                borderColor: `${elemMeta.color}66`,
+                backgroundColor: elemMeta.bg,
+              }}
+            >
+              {elemMeta.label}
+            </span>
+          </div>
         </div>
 
         <div className="relative h-3.5 w-full overflow-hidden rounded-full border border-[#2a1216] bg-[#160b0e] shadow-inner">

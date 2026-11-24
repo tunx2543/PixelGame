@@ -26,6 +26,8 @@ export interface OpenWindowEntry {
 export interface UiPreferences {
   questTrackerCollapsed: boolean
   questTrackerHidden: boolean
+  leaderboardCollapsed: boolean
+  leaderboardHidden: boolean
   townServicesOpen: boolean
   gmToolsCollapsed: boolean
   legacyQuickPotions: boolean
@@ -92,6 +94,8 @@ export const GRAPHICS_QUALITY_PRESETS: Record<
 const DEFAULT_PREFERENCES: UiPreferences = {
   questTrackerCollapsed: false,
   questTrackerHidden: false,
+  leaderboardCollapsed: false,
+  leaderboardHidden: false,
   townServicesOpen: false,
   gmToolsCollapsed: true,
   legacyQuickPotions: true,

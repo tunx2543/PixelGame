@@ -361,11 +361,14 @@ function buildMonsterSpec(def: MonsterDef): MonsterModelSpec {
   const catalogAtlas = getCatalogMonsterAtlas(def.id)
   const archetype: MonsterModelArchetype = def.id
   const flying = Boolean(catalogAtlas?.flying || catalogMeta?.flying)
-  const supports4Way = false
+  const supports4Way = def.id === 'world_golem'
 
   const canvasSize = catalogMeta
     ? catalogMeta.boss
-      ? catalogMeta.tribe === 'มังกร' || catalogMeta.id === 'world_goat' || catalogMeta.id === 'coast_drowned_captain'
+      ? catalogMeta.tribe === 'มังกร' ||
+        catalogMeta.id === 'world_golem' ||
+        catalogMeta.id === 'world_goat' ||
+        catalogMeta.id === 'coast_drowned_captain'
         ? { width: 42, height: 38 }
         : { width: 38, height: 36 }
       : catalogMeta.size === 'ใหญ่'

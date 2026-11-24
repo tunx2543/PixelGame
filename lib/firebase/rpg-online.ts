@@ -18,7 +18,7 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore'
-import { auth, db } from './client'
+import { auth, db, handleFirestoreError, OperationType } from './client'
 import { MONSTERS } from '@/lib/game/data'
 import { purgeStaleLocalMonsterCaches } from '@/lib/game/monster-cache'
 import {
@@ -352,6 +352,92 @@ export async function syncLeaderboardHero(entry: LeaderboardHeroEntry): Promise<
   }
 }
 
+export type LeaderboardSortMetric = 'level' | 'tower'
+
+export interface MainLeaderboardSnapshot {
+  entries: LeaderboardHeroEntry[]
+  source: 'firestore' | 'guest' | 'fallback'
+  errorMessage?: string
+}
+
+export function sortLeaderboardByMetric(
+  entries: LeaderboardHeroEntry[],
+  metric: LeaderboardSortMetric,
+): LeaderboardHeroEntry[] {
+  return [...entries].sort((a, b) => {
+    if (metric === 'tower') {
+      return (
+        b.highestTowerFloor - a.highestTowerFloor ||
+        b.level - a.level ||
+        b.combatPower - a.combatPower ||
+        b.arenaRating - a.arenaRating
+      )
+    }
+    return (
+      b.level - a.level ||
+      b.highestTowerFloor - a.highestTowerFloor ||
+      b.combatPower - a.combatPower ||
+      b.arenaRating - a.arenaRating
+    )
+  })
+}
+
+async function queryFirestoreLeaderboardDocs(): Promise<LeaderboardHeroEntry[]> {
+  const path = 'leaderboard'
+  try {
+    const q = query(
+      collection(db, path),
+      where('combatPower', '>=', 1),
+      orderBy('combatPower', 'desc'),
+      limit(50),
+    )
+    const snap = await getDocs(q)
+    return snap.docs.map((d) => d.data() as LeaderboardHeroEntry)
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path)
+  }
+}
+
+export async function fetchMainLeaderboardSnapshot(
+  selfEntry?: LeaderboardHeroEntry,
+): Promise<MainLeaderboardSnapshot> {
+  const localMap = readLocalJson<Record<string, LeaderboardHeroEntry>>(LOCAL_LEADERBOARD_KEY, {})
+  const merged = new Map<string, LeaderboardHeroEntry>()
+
+  if (!isSignedInVerified()) {
+    for (const seed of SEED_RIVAL_HEROES) merged.set(seed.userId, seed)
+    for (const [k, v] of Object.entries(localMap)) merged.set(k, v)
+    if (selfEntry) merged.set(selfEntry.userId, selfEntry)
+    return {
+      entries: [...merged.values()],
+      source: 'guest',
+    }
+  }
+
+  try {
+    const remoteDocs = await queryFirestoreLeaderboardDocs()
+    for (const data of remoteDocs) {
+      merged.set(data.userId, data)
+    }
+    if (selfEntry) {
+      merged.set(selfEntry.userId, selfEntry)
+    }
+    return {
+      entries: [...merged.values()],
+      source: 'firestore',
+    }
+  } catch {
+    for (const seed of SEED_RIVAL_HEROES) merged.set(seed.userId, seed)
+    for (const [k, v] of Object.entries(localMap)) merged.set(k, v)
+    if (selfEntry) merged.set(selfEntry.userId, selfEntry)
+    return {
+      entries: [...merged.values()],
+      source: 'fallback',
+      errorMessage: 'เชื่อมต่ออันดับ Firestore ไม่สำเร็จ กำลังแสดงข้อมูลสำรอง',
+    }
+  }
+}
+
 export async function fetchLeaderboardHeroes(selfEntry?: LeaderboardHeroEntry): Promise<LeaderboardHeroEntry[]> {
   const localMap = readLocalJson<Record<string, LeaderboardHeroEntry>>(LOCAL_LEADERBOARD_KEY, {})
   const merged = new Map<string, LeaderboardHeroEntry>()
@@ -361,15 +447,8 @@ export async function fetchLeaderboardHeroes(selfEntry?: LeaderboardHeroEntry): 
 
   if (isSignedInVerified()) {
     try {
-      const q = query(
-        collection(db, 'leaderboard'),
-        where('combatPower', '>=', 1),
-        orderBy('combatPower', 'desc'),
-        limit(35),
-      )
-      const snap = await getDocs(q)
-      for (const d of snap.docs) {
-        const data = d.data() as LeaderboardHeroEntry
+      const remoteDocs = await queryFirestoreLeaderboardDocs()
+      for (const data of remoteDocs) {
         merged.set(data.userId, data)
       }
     } catch {
@@ -398,9 +477,12 @@ export async function fetchWorldBossState(): Promise<WorldBossRaidState> {
   })
 
   const normalizedLocalBossId = normalizeMonsterId(fallbackLocal.bossId)
-  const localBossValid = Boolean(MONSTERS[normalizedLocalBossId]) && normalizedLocalBossId === spec.bossId
+  const localBossMatches =
+    fallbackLocal.bossId === spec.bossId ||
+    normalizedLocalBossId === spec.monsterId ||
+    Boolean(MONSTERS[spec.monsterId])
   const activeLocal =
-    fallbackLocal.cycleKey === spec.cycleKey && localBossValid
+    fallbackLocal.cycleKey === spec.cycleKey && localBossMatches
       ? fallbackLocal
       : {
           cycleKey: spec.cycleKey,
@@ -446,7 +528,7 @@ export async function fetchWorldBossState(): Promise<WorldBossRaidState> {
       }
     } else {
       const normalizedCloudBossId = normalizeMonsterId(raidData.bossId)
-      if (!MONSTERS[normalizedCloudBossId] || normalizedCloudBossId !== spec.bossId) {
+      if (raidData.bossId !== spec.bossId && normalizedCloudBossId !== spec.monsterId) {
         raidData = {
           ...raidData,
           bossId: spec.bossId,

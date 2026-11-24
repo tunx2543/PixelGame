@@ -1,7 +1,14 @@
 import { normalizeJobId, type EquipmentSlot, type ItemDef } from './data'
 import type { PartyRecord } from '../firebase/party-helpers'
 import type { RemotePlayerSnapshot } from '../firebase/presence-helpers'
-import { getActiveWorldBoss, type ElementType, type WorldBossScheduleSpec } from './rpg-systems'
+import {
+  WORLD_BOSS_EVENT_SCHEDULE_LABEL,
+  formatThaiWorldBossSlotLabel,
+  getActiveWorldBoss,
+  getScheduledWorldBossOccurrences,
+  type ElementType,
+  type WorldBossScheduleSpec,
+} from './rpg-systems'
 
 /* ========================================================================== */
 /* 1. EQUIPMENT RARITY, RANDOM SUB-STATS (AFFIXES) & REFORGE                  */
@@ -505,24 +512,55 @@ export interface WorldBossScheduleItem {
   startsInSec: number
   endsInSec: number
   isCurrent: boolean
+  slotLabel: string
 }
 
 export function getWorldBossScheduleList(nowMs = Date.now(), count = 4): WorldBossScheduleItem[] {
+  const occurrences = getScheduledWorldBossOccurrences(nowMs, count)
+  const activeSpec = getActiveWorldBoss(nowMs)
   const items: WorldBossScheduleItem[] = []
-  const currentBucket = Math.floor(nowMs / 3600_000)
 
-  for (let i = 0; i < count; i++) {
-    const startsAtMs = (currentBucket + i) * 3600_000
-    const endsAtMs = startsAtMs + 3600_000
-    const boss = getActiveWorldBoss(startsAtMs + 1000)
+  if (activeSpec.isTestMode) {
     items.push({
-      cycleKey: boss.cycleKey,
-      boss,
-      startsAtMs,
-      endsAtMs,
-      startsInSec: Math.max(0, Math.floor((startsAtMs - nowMs) / 1000)),
-      endsInSec: Math.max(0, Math.floor((endsAtMs - nowMs) / 1000)),
-      isCurrent: i === 0,
+      cycleKey: activeSpec.cycleKey,
+      boss: activeSpec,
+      startsAtMs: activeSpec.startsAtMs,
+      endsAtMs: activeSpec.endsAtMs,
+      startsInSec: 0,
+      endsInSec: Math.max(0, Math.floor((activeSpec.endsAtMs - nowMs) / 1000)),
+      isCurrent: true,
+      slotLabel: `GM Test · โดย ${activeSpec.triggeredByName ?? 'GM'}`,
+    })
+  }
+
+  for (const occ of occurrences) {
+    if (items.length >= count) break
+    const bossSpec: WorldBossScheduleSpec = {
+      cycleKey: occ.cycleKey,
+      bossId: occ.boss.bossId,
+      name: occ.boss.name,
+      monsterId: occ.boss.monsterId,
+      level: occ.boss.level,
+      element: occ.boss.element,
+      maxHp: occ.boss.maxHp,
+      atk: occ.boss.atk,
+      def: occ.boss.def,
+      startsAtMs: occ.startsAtMs,
+      endsAtMs: occ.endsAtMs,
+      isActive: occ.isActive,
+      isTestMode: false,
+      scheduleLabel: WORLD_BOSS_EVENT_SCHEDULE_LABEL,
+      milestones: activeSpec.milestones,
+    }
+    items.push({
+      cycleKey: occ.cycleKey,
+      boss: bossSpec,
+      startsAtMs: occ.startsAtMs,
+      endsAtMs: occ.endsAtMs,
+      startsInSec: Math.max(0, Math.floor((occ.startsAtMs - nowMs) / 1000)),
+      endsInSec: Math.max(0, Math.floor((occ.endsAtMs - nowMs) / 1000)),
+      isCurrent: occ.isActive,
+      slotLabel: formatThaiWorldBossSlotLabel(occ.startsAtMs),
     })
   }
 

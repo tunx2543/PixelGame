@@ -501,6 +501,35 @@ export function MonsterEncounterArena() {
         skill?.id ?? null,
       )
 
+      setSave(nextSave)
+      setLastBreakdown(breakdown)
+      setPlayerAttackPulse(performance.now())
+      setPlayerSkillColor(skill ? skill.color : null)
+      setPlayerSkillId(skill ? skill.id : null)
+
+      if (breakdown.isMiss || breakdown.damage <= 0) {
+        triggerAttackSound({
+          muted: mutedRef.current,
+          source: 'encounter',
+          detail: { actor: 'player', isSkill: Boolean(skill), skillId: skill?.id },
+        })
+        pushPopup(
+          'enemy',
+          0,
+          breakdown.isMiss ? 'miss' : 'block',
+          breakdown.isMiss ? '#cbd5e1' : '#60a5fa',
+          { badge: 'ต่างเวล!' },
+        )
+        appendLog(
+          breakdown.isMiss
+            ? `${breakdown.label} พลาดเป้า! (ศัตรู Lv.${currentEnemy.effectiveLevel} สูงกว่ามาก)`
+            : `${breakdown.label} ถูกต้านทาน! (พลังโจมตีไม่พอเจาะเกราะ Lv.${currentEnemy.effectiveLevel})`,
+          'system',
+        )
+        saveRef.current = nextSave
+        return
+      }
+
       const inflicted = rollStatusInfliction(skill?.id ?? null, nextSave.rpgExt?.equippedRunes)
       if (inflicted === 'shield') {
         playerShieldRef.current = 4.0
@@ -515,11 +544,6 @@ export function MonsterEncounterArena() {
         appendLog(`ศัตรูติดสถานะ ${STATUS_META[inflicted].label}!`, 'crit')
       }
 
-      setSave(nextSave)
-      setLastBreakdown(breakdown)
-      setPlayerAttackPulse(performance.now())
-      setPlayerSkillColor(skill ? skill.color : null)
-      setPlayerSkillId(skill ? skill.id : null)
       setEnemyHitPulse(performance.now())
 
       if (breakdown.isCrit) {
@@ -637,6 +661,11 @@ export function MonsterEncounterArena() {
       enemyProgressRef.current = 0
       setEnemyAttackProgress(0)
       const counterBreakdown = calculatePlayerAttack(currentSave, currentEnemy, evalRes.counterMultiplier, 'โต้กลับ Parry!')
+      if (counterBreakdown.isMiss || counterBreakdown.damage <= 0) {
+        pushPopup('enemy', 0, 'miss', '#cbd5e1', { badge: 'ต่างเวล!' })
+        appendLog(`ปัดป้องได้ แต่โต้กลับพลาดเป้า! (ศัตรู Lv.${currentEnemy.effectiveLevel} สูงกว่ามาก)`, 'system')
+        return
+      }
       pushPopup('enemy', counterBreakdown.damage, 'crit', '#38bdf8', { badge: 'PARRY!' })
       appendLog(`PERFECT PARRY! ปัดป้องสมบูรณ์และสวนกลับ ${formatNum(counterBreakdown.damage)} ดาเมจ!`, 'crit')
       triggerCritSound({ muted: mutedRef.current, source: 'encounter', detail: { parry: true } })

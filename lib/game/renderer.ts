@@ -60,6 +60,7 @@ import { getUiPreferences } from './ui-layout'
 import { EQUIPMENT_RARITY_META, resolveEffectiveRarity } from './mmo-systems'
 import { resolveItemVfxSpec } from './item-vfx'
 import { resolveItemImagePath } from './items'
+import { evaluateWorldBossMapFx, evaluateWorldBossWarning } from './world-boss-fx'
 
 const itemAssetImageCache = new Map<string, HTMLImageElement>()
 
@@ -256,20 +257,29 @@ function drawWeaponAttackOverlay(
 }
 
 function monsterFacing(
-  _defId: string,
+  defId: string,
   _sprite: MonsterSprite,
   x: number,
-  _y: number,
+  y: number,
   vx: number,
-  _vy: number,
+  vy: number,
   flip: boolean,
   provoked: boolean,
 ): Dir {
+  const is4Way = defId === 'world_golem'
   if (provoked) {
     const dx = (game.p?.x ?? x) - x
+    const dy = (game.p?.y ?? y) - y
+    if (is4Way && Math.abs(dy) > Math.abs(dx) * 1.35 && Math.abs(dy) > 1) {
+      return dy >= 0 ? 'down' : 'up'
+    }
     if (Math.abs(dx) > 1) return dx < 0 ? 'left' : 'right'
   }
+  if (is4Way && Math.abs(vy) > Math.abs(vx) * 1.35 && Math.abs(vy) > 0.05) {
+    return vy >= 0 ? 'down' : 'up'
+  }
   if (Math.abs(vx) > 0.05) return vx < 0 ? 'left' : 'right'
+  if (is4Way && !provoked) return 'down'
   return flip ? 'left' : 'right'
 }
 
@@ -298,9 +308,15 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   const mapW = map.width * TILE
   const mapH = map.height * TILE
   const cam = stepSmoothCamera(cameraState, p.x, p.y, viewW, viewH, mapW, mapH, map.id, dt, game.facing)
-  const camX = cam.x
-  const camY = cam.y
-  lastRenderCam = { mapId: map.id, x: camX, y: camY }
+  const wbMapFx = evaluateWorldBossMapFx(game.worldBossMapFx, t, cw, ch, {
+    reduceParticles,
+    disableShake: uiPrefs.disableShadowsAndGlow,
+    dpr,
+  })
+  const wbWarn = evaluateWorldBossWarning(game.worldBossWarning, t, { reduceParticles })
+  const camX = cam.x + wbMapFx.shakeX
+  const camY = cam.y + wbMapFx.shakeY
+  lastRenderCam = { mapId: map.id, x: cam.x, y: cam.y }
 
   ctx.setTransform(1, 0, 0, 1, 0, 0)
   ctx.fillStyle = THEME_BG[map.theme]
@@ -734,10 +750,11 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         const action: SpriteAction = attacking ? 'attack' : walking ? 'walk' : 'idle'
         const dir = monsterFacing(def.id, def.sprite, m.x, m.y, m.vx, m.vy, m.flip, m.provoked)
         const speedMul = m.provoked ? 1.3 : 1
-        const atkCount = getCatalogMonsterFrameCount(def.id, 'attack')
-        const walkCount = getCatalogMonsterFrameCount(def.id, 'walk')
-        const idleCount = getCatalogMonsterFrameCount(def.id, 'idle')
-        const attackProgress = attacking ? Math.max(0, Math.min(1, 1 - m.lunge / 0.3)) : 0
+        const atkCount = getCatalogMonsterFrameCount(def.id, 'attack', dir)
+        const walkCount = getCatalogMonsterFrameCount(def.id, 'walk', dir)
+        const idleCount = getCatalogMonsterFrameCount(def.id, 'idle', dir)
+        const lungeMax = m.lungeMax ?? (m.isWorldBoss || def.id === 'world_golem' ? 0.95 : 0.3)
+        const attackProgress = attacking ? Math.max(0, Math.min(1, 1 - m.lunge / Math.max(0.05, lungeMax))) : 0
         const attackFrame = Math.min(atkCount - 1, Math.floor(attackProgress * atkCount))
         const walkFrame = Math.floor(m.animT * 7.5 * speedMul) % walkCount
         const idleFrame = Math.floor(m.animT * 5.0) % idleCount
@@ -774,7 +791,8 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         const faceLen = Math.hypot(faceDx, faceDy) || 1
         const faceX = faceDx / faceLen
         const faceY = faceDy / faceLen
-        const attackReach = attacking ? Math.sin(attackProgress * Math.PI) * (def.boss ? 5 : 3.5) : 0
+        const isWorldGolem = def.id === 'world_golem' || Boolean(m.isWorldBoss)
+        const attackReach = attacking && !isWorldGolem ? Math.sin(attackProgress * Math.PI) * (def.boss ? 5 : 3.5) : 0
         const hitShake = m.hitFlash > 0 ? Math.sin(m.hitFlash * 95) * 2.2 : 0
 
         shadow(ctx, m.x + hoverX, m.y, (5.5 - (flying ? Math.sin(m.animT * 4.2) * 0.4 : 0)) * (def.boss ? 1.55 : 1))
@@ -826,7 +844,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           ctx.ellipse(0, -h / 2, w * 0.32, h * 0.32, 0, 0, Math.PI * 2)
           ctx.fill()
         }
-        if (attacking) {
+        if (attacking && !isWorldGolem) {
           ctx.globalAlpha = Math.min(1, m.lunge / 0.12)
           ctx.strokeStyle = def.boss ? (mSpec.accentColor || '#ff6b6b') : '#fff1ad'
           ctx.lineWidth = def.boss ? 2.2 : 1.6
@@ -1822,6 +1840,24 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     ctx.restore()
   }
 
+  // World-space World Boss pre-attack telegraph ring centered on boss (1.5s before map-wide attack)
+  if (wbWarn.active && game.worldBossWarning) {
+    ctx.save()
+    const wx = game.worldBossWarning.originX
+    const wy = game.worldBossWarning.originY - 6
+    const outerR = 72 * wbWarn.ringRadiusMul
+    ctx.strokeStyle = wbWarn.borderColor
+    ctx.globalAlpha = Math.min(0.85, wbWarn.borderAlpha * 1.35)
+    ctx.lineWidth = 2.2
+    ctx.beginPath()
+    ctx.ellipse(wx, wy, outerR, outerR * 0.42, 0, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.globalAlpha = wbWarn.pulseAlpha
+    ctx.fillStyle = wbWarn.borderColor
+    ctx.fill()
+    ctx.restore()
+  }
+
   ctx.setTransform(1, 0, 0, 1, 0, 0)
 
   // Ambient weather / biome particles in screen space
@@ -1877,6 +1913,151 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         ctx.globalAlpha = 0.55
         ctx.fillRect(Math.round(px), Math.round(py), Math.max(2, Math.round(1.5 * dpr)), Math.max(2, Math.round(1.5 * dpr)))
       }
+    }
+    ctx.restore()
+  }
+
+  // Subtle pulsing Warning glowing border & telegraph banner 1.5s before World Boss map-wide skill
+  if (wbWarn.active) {
+    ctx.save()
+    if (!disableGlow) {
+      const warnGlow = ctx.createRadialGradient(
+        cw * 0.5,
+        ch * 0.5,
+        Math.min(cw, ch) * 0.3,
+        cw * 0.5,
+        ch * 0.5,
+        Math.hypot(cw * 0.5, ch * 0.5),
+      )
+      warnGlow.addColorStop(0, 'rgba(0,0,0,0)')
+      warnGlow.addColorStop(0.72, 'rgba(0,0,0,0)')
+      warnGlow.addColorStop(1, wbWarn.glowColor)
+      ctx.globalAlpha = wbWarn.pulseAlpha * 2.4
+      ctx.fillStyle = warnGlow
+      ctx.fillRect(0, 0, cw, ch)
+    }
+
+    const inset = Math.max(2, Math.round(3 * dpr))
+    ctx.globalAlpha = wbWarn.borderAlpha
+    ctx.strokeStyle = wbWarn.borderColor
+    ctx.lineWidth = Math.max(2, Math.round(4 * dpr))
+    ctx.strokeRect(inset, inset, Math.max(1, cw - inset * 2), Math.max(1, ch - inset * 2))
+
+    // Sleek compact top-center telegraph strip
+    const pillW = Math.min(cw * 0.72, 232 * dpr)
+    const pillH = 26 * dpr
+    const pillX = (cw - pillW) * 0.5
+    const pillY = Math.round(46 * dpr)
+    ctx.globalAlpha = 0.88
+    ctx.fillStyle = 'rgba(15, 12, 20, 0.84)'
+    ctx.beginPath()
+    ctx.roundRect(pillX, pillY, pillW, pillH, 6 * dpr)
+    ctx.fill()
+    ctx.globalAlpha = Math.min(0.95, wbWarn.borderAlpha + 0.35)
+    ctx.strokeStyle = wbWarn.borderColor
+    ctx.lineWidth = Math.max(1, 1.4 * dpr)
+    ctx.stroke()
+
+    // Draining 1.5s charge bar inside pill bottom
+    const barPad = 6 * dpr
+    const barW = Math.max(0, (pillW - barPad * 2) * (1 - wbWarn.progress))
+    ctx.globalAlpha = 0.9
+    ctx.fillStyle = wbWarn.borderColor
+    ctx.fillRect(pillX + barPad, pillY + pillH - 4.5 * dpr, barW, 2.2 * dpr)
+
+    ctx.globalAlpha = 0.96
+    ctx.font = `800 ${Math.round(9.5 * dpr)}px ${font}`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = wbWarn.progress >= 0.6 ? '#fecaca' : '#fde68a'
+    ctx.fillText(
+      `⚠ WARNING · สกิลทั้งแมพ ${wbWarn.remainingSec.toFixed(1)}s`,
+      cw * 0.5,
+      pillY + (pillH - 4 * dpr) * 0.5,
+    )
+    ctx.restore()
+  }
+
+  // Full-map World Boss attack overlay (screen-space flash, vignette, shockwave ring & particles)
+  if (wbMapFx.active) {
+    ctx.save()
+    if (wbMapFx.vignetteAlpha > 0) {
+      if (disableGlow) {
+        ctx.strokeStyle = wbMapFx.vignetteColor
+        ctx.globalAlpha = wbMapFx.vignetteAlpha * 0.85
+        ctx.lineWidth = Math.max(6, 12 * dpr)
+        ctx.strokeRect(0, 0, cw, ch)
+      } else {
+        const edgeGrad = ctx.createRadialGradient(
+          cw * 0.5,
+          ch * 0.5,
+          Math.min(cw, ch) * 0.24,
+          cw * 0.5,
+          ch * 0.5,
+          Math.hypot(cw * 0.5, ch * 0.5),
+        )
+        edgeGrad.addColorStop(0, 'rgba(0,0,0,0)')
+        edgeGrad.addColorStop(1, wbMapFx.vignetteColor)
+        ctx.globalAlpha = wbMapFx.vignetteAlpha
+        ctx.fillStyle = edgeGrad
+        ctx.fillRect(0, 0, cw, ch)
+      }
+    }
+
+    if (wbMapFx.flashAlpha > 0) {
+      ctx.globalAlpha = wbMapFx.flashAlpha
+      ctx.fillStyle = wbMapFx.flashColor
+      ctx.fillRect(0, 0, cw, ch)
+    }
+
+    if (wbMapFx.ringAlpha > 0) {
+      const maxRadius = Math.hypot(cw * 0.5, ch * 0.5) * 1.05
+      const ringRadius = Math.max(12 * dpr, wbMapFx.ringProgress * maxRadius)
+      ctx.globalAlpha = wbMapFx.ringAlpha
+      ctx.strokeStyle = wbMapFx.ringColor
+      ctx.lineWidth = Math.max(2, (1 - wbMapFx.ringProgress * 0.55) * 6 * dpr)
+      ctx.beginPath()
+      ctx.arc(cw * 0.5, ch * 0.5, ringRadius, 0, Math.PI * 2)
+      ctx.stroke()
+
+      if (wbMapFx.variant === 'slam' && wbMapFx.ringProgress > 0.12) {
+        const secondaryProgress = Math.max(0, wbMapFx.ringProgress - 0.12)
+        ctx.globalAlpha = wbMapFx.ringAlpha * 0.55
+        ctx.strokeStyle = '#fef08a'
+        ctx.lineWidth = Math.max(1.5, 3 * dpr)
+        ctx.beginPath()
+        ctx.arc(cw * 0.5, ch * 0.5, secondaryProgress * maxRadius * 0.88, 0, Math.PI * 2)
+        ctx.stroke()
+      }
+    }
+
+    for (const pt of wbMapFx.particles) {
+      ctx.save()
+      ctx.translate(pt.x, pt.y)
+      ctx.rotate(pt.angle)
+      if (pt.kind === 'beam') {
+        ctx.globalAlpha = pt.alpha * 0.72
+        ctx.fillStyle = pt.color
+        ctx.fillRect(-pt.streakLen * 0.5, -pt.size * 0.5, pt.streakLen, pt.size)
+        ctx.globalAlpha = pt.alpha
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(-pt.streakLen * 0.35, -pt.size * 0.2, pt.streakLen * 0.7, Math.max(1, pt.size * 0.4))
+      } else if (pt.kind === 'shard') {
+        ctx.globalAlpha = pt.alpha * 0.65
+        ctx.fillStyle = pt.color
+        ctx.fillRect(-pt.streakLen * 0.55, -pt.size * 0.4, pt.streakLen * 0.85, pt.size * 0.8)
+        ctx.globalAlpha = pt.alpha
+        ctx.fillStyle = '#fef08a'
+        ctx.fillRect(0, -pt.size * 0.5, pt.size, pt.size)
+      } else {
+        ctx.globalAlpha = pt.alpha * 0.55
+        ctx.fillStyle = pt.color
+        ctx.fillRect(-pt.streakLen * 0.5, -pt.size * 0.35, pt.streakLen, pt.size * 0.7)
+        ctx.globalAlpha = pt.alpha
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(-pt.size * 0.45, -pt.size * 0.45, pt.size * 0.9, pt.size * 0.9)
+      }
+      ctx.restore()
     }
     ctx.restore()
   }

@@ -22,6 +22,10 @@ import {
   sanitizeServerRates,
   type ServerRatesConfig,
 } from '@/lib/game/server-rates'
+import {
+  sanitizeWorldBossTestState,
+  type WorldBossTestState,
+} from '@/lib/game/rpg-systems'
 
 export type WorldAnnouncementVariant = 'gm' | 'news'
 export type WorldNewsCategory = 'gm' | 'enhance' | 'boss_kill' | 'gacha' | 'rare_drop'
@@ -960,9 +964,68 @@ export async function publishServerRatesConfig(input: {
   }
 }
 
+export async function publishWorldBossTestConfig(input: {
+  active: boolean
+  bossId?: string
+  durationMinutes?: number
+  authorName?: string
+}): Promise<{ ok: boolean; worldBossTest: WorldBossTestState | null; message: string }> {
+  const user = auth.currentUser
+  if (!isSignedInVerified() || !user || !isGmAccountUser(user)) {
+    return {
+      ok: false,
+      worldBossTest: null,
+      message: 'คำสั่งเรียกบอสกิจกรรม (GM Test) สงวนเฉพาะบัญชี GM ที่ยืนยันตัวตนแล้ว',
+    }
+  }
+  try {
+    const headers = await getBearerHeaders()
+    const res = await fetch('/api/gm/events', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(
+        input.active
+          ? {
+              action: 'summon_world_boss_test',
+              bossId: input.bossId ?? 'wb_world_golem',
+              durationMinutes: input.durationMinutes ?? 30,
+              authorName: input.authorName ?? 'GM',
+            }
+          : {
+              action: 'end_world_boss_test',
+              authorName: input.authorName ?? 'GM',
+            },
+      ),
+    })
+    const data = (await res.json().catch(() => null)) as {
+      ok?: boolean
+      worldBossTest?: WorldBossTestState | null
+      message?: string
+    } | null
+    if (!res.ok || !data?.ok) {
+      return {
+        ok: false,
+        worldBossTest: null,
+        message: data?.message || 'อัปเดตสถานะบอสกิจกรรมไม่สำเร็จ',
+      }
+    }
+    const clean = sanitizeWorldBossTestState(data.worldBossTest ?? null)
+    return {
+      ok: true,
+      worldBossTest: clean,
+      message: clean
+        ? `เรียกบอสกิจกรรม "${clean.name}" โหมดทดสอบ GM แล้ว (${Math.max(1, Math.round((clean.expiresAtMs - clean.startedAtMs) / 60_000))} นาที)`
+        : 'ปิดโหมดทดสอบบอสกิจกรรมเวิลด์บอสแล้ว',
+    }
+  } catch {
+    return { ok: false, worldBossTest: null, message: 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อเรียกบอสกิจกรรมได้' }
+  }
+}
+
 export async function pollPublicWorldEvents(sinceMs: number): Promise<{
   announcements: WorldAnnouncementRecord[]
   serverRates: ServerRatesConfig
+  worldBossTest: WorldBossTestState | null
   serverTimeMs: number
 } | null> {
   try {
@@ -974,12 +1037,14 @@ export async function pollPublicWorldEvents(sinceMs: number): Promise<{
       ok?: boolean
       announcements?: WorldAnnouncementRecord[]
       serverRates?: ServerRatesConfig
+      worldBossTest?: WorldBossTestState | null
       serverTimeMs?: number
     }
     if (!data.ok) return null
     return {
       announcements: Array.isArray(data.announcements) ? data.announcements : [],
       serverRates: data.serverRates ? sanitizeServerRates(data.serverRates) : { ...DEFAULT_SERVER_RATES },
+      worldBossTest: sanitizeWorldBossTestState(data.worldBossTest ?? null),
       serverTimeMs: typeof data.serverTimeMs === 'number' ? data.serverTimeMs : Date.now(),
     }
   } catch {
@@ -992,6 +1057,7 @@ export async function pollServerGmEvents(sinceMs: number): Promise<{
   directives: GmDirectiveRecord[]
   giftDrops: ServerGiftDropRecord[]
   serverRates: ServerRatesConfig
+  worldBossTest: WorldBossTestState | null
   serverTimeMs: number
 } | null> {
   const user = auth.currentUser
@@ -1009,6 +1075,7 @@ export async function pollServerGmEvents(sinceMs: number): Promise<{
       directives?: GmDirectiveRecord[]
       giftDrops?: ServerGiftDropRecord[]
       serverRates?: ServerRatesConfig
+      worldBossTest?: WorldBossTestState | null
       serverTimeMs?: number
     }
     if (!data.ok) return null
@@ -1017,6 +1084,7 @@ export async function pollServerGmEvents(sinceMs: number): Promise<{
       directives: Array.isArray(data.directives) ? data.directives : [],
       giftDrops: Array.isArray(data.giftDrops) ? data.giftDrops : [],
       serverRates: data.serverRates ? sanitizeServerRates(data.serverRates) : { ...DEFAULT_SERVER_RATES },
+      worldBossTest: sanitizeWorldBossTestState(data.worldBossTest ?? null),
       serverTimeMs: typeof data.serverTimeMs === 'number' ? data.serverTimeMs : Date.now(),
     }
   } catch {

@@ -5,6 +5,7 @@ import {
   clampServerMultiplier,
   formatServerRateSummary,
 } from '@/lib/game/server-rates'
+import { getWorldBossTemplate } from '@/lib/game/rpg-systems'
 import { resolveActorFromRequest } from '@/lib/server/premium-security'
 import {
   ackServerGmDirective,
@@ -12,8 +13,10 @@ import {
   addServerGiftDrop,
   addServerGmDirective,
   getEffectiveStoredServerRates,
+  getEffectiveStoredWorldBossTest,
   getEventsForUser,
   setServerRates,
+  setStoredWorldBossTest,
   type GmDirectiveAction,
 } from '@/lib/server/gm-events-store'
 
@@ -40,11 +43,12 @@ export async function GET(req: Request) {
       directives: [],
       giftDrops: [],
       serverRates: getEffectiveStoredServerRates(),
+      worldBossTest: getEffectiveStoredWorldBossTest(),
       serverTimeMs: Date.now(),
     })
   }
 
-  const { announcements, directives, giftDrops, serverRates } = getEventsForUser(auth.actor.uid, sinceMs)
+  const { announcements, directives, giftDrops, serverRates, worldBossTest } = getEventsForUser(auth.actor.uid, sinceMs)
 
   return NextResponse.json({
     ok: true,
@@ -52,6 +56,7 @@ export async function GET(req: Request) {
     directives,
     giftDrops,
     serverRates,
+    worldBossTest,
     serverTimeMs: Date.now(),
   })
 }
@@ -157,6 +162,69 @@ export async function POST(req: Request) {
     })
 
     return NextResponse.json({ ok: true, serverRates: nextRates })
+  }
+
+  if (body.action === 'summon_world_boss_test' || body.action === 'end_world_boss_test') {
+    const nowMs = Date.now()
+    const authorName =
+      typeof body.authorName === 'string' && body.authorName.trim()
+        ? body.authorName.trim().slice(0, 24)
+        : 'GM'
+
+    if (body.action === 'end_world_boss_test') {
+      setStoredWorldBossTest(null, nowMs)
+      addServerAnnouncement({
+        announcementId: sanitizeId(undefined, 'wbend'),
+        authorUid: auth.actor.uid,
+        authorName,
+        authorGameUid: PERMANENT_GM_GAME_UID,
+        body: 'GM ปิดโหมดทดสอบบอสกิจกรรมเวิลด์บอสแล้ว (กลับสู่ตารางเวลาปกติ จันทร์·พุธ·ศุกร์ 20:00 น.)',
+        variant: 'gm',
+        category: 'gm',
+        createdAtMs: nowMs,
+        expiresAtMs: nowMs + 10_000,
+      })
+      return NextResponse.json({ ok: true, worldBossTest: null })
+    }
+
+    const template = getWorldBossTemplate(typeof body.bossId === 'string' ? body.bossId : null)
+    const rawDuration = Number(body.durationMinutes ?? 30)
+    const durationMinutes =
+      Number.isFinite(rawDuration) && rawDuration > 0
+        ? Math.max(5, Math.min(180, Math.round(rawDuration)))
+        : 30
+    const testState = setStoredWorldBossTest(
+      {
+        active: true,
+        cycleKey: `test_wb_${nowMs.toString(36)}`,
+        bossId: template.bossId,
+        name: template.name,
+        monsterId: template.monsterId,
+        level: template.level,
+        element: template.element,
+        maxHp: template.maxHp,
+        atk: template.atk,
+        def: template.def,
+        startedAtMs: nowMs,
+        expiresAtMs: nowMs + durationMinutes * 60_000,
+        triggeredByName: authorName,
+      },
+      nowMs,
+    )
+
+    addServerAnnouncement({
+      announcementId: sanitizeId(undefined, 'wbtest'),
+      authorUid: auth.actor.uid,
+      authorName,
+      authorGameUid: PERMANENT_GM_GAME_UID,
+      body: `★ [GM Test] อัญเชิญบอสกิจกรรมเวิลด์บอส "${template.name}" (Lv.${template.level}) เปิดให้ทดสอบนาน ${durationMinutes} นาที! ★`.slice(0, 240),
+      variant: 'gm',
+      category: 'gm',
+      createdAtMs: nowMs,
+      expiresAtMs: nowMs + 14_000,
+    })
+
+    return NextResponse.json({ ok: true, worldBossTest: testState })
   }
 
   if (body.action === 'announce') {
