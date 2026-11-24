@@ -10,6 +10,10 @@ import {
   sanitizeWorldBossTestState,
   type WorldBossTestState,
 } from '@/lib/game/rpg-systems'
+import {
+  sanitizeFestivalOverrideState,
+  type FestivalOverrideState,
+} from '@/lib/game/festival-events'
 
 export type WorldAnnouncementVariant = 'gm' | 'news'
 export type WorldNewsCategory = 'gm' | 'enhance' | 'boss_kill' | 'gacha' | 'rare_drop'
@@ -68,6 +72,7 @@ interface GmEventsStoreData {
   giftDrops: ServerGiftDropEvent[]
   serverRates: ServerRatesConfig
   worldBossTest: WorldBossTestState | null
+  festivalOverride: FestivalOverrideState | null
 }
 
 const PRIMARY_DIR = path.join(process.cwd(), '.data')
@@ -103,6 +108,7 @@ function pruneStore(data: GmEventsStoreData, nowMs = Date.now()): GmEventsStoreD
       .slice(-50),
     serverRates: getEffectiveServerRates(data.serverRates, nowMs),
     worldBossTest: sanitizeWorldBossTestState(data.worldBossTest, nowMs),
+    festivalOverride: sanitizeFestivalOverrideState(data.festivalOverride, nowMs),
   }
 }
 
@@ -123,6 +129,7 @@ function readStore(): GmEventsStoreData {
           giftDrops: Array.isArray(parsed.giftDrops) ? parsed.giftDrops : [],
           serverRates: sanitizeServerRates(parsed.serverRates),
           worldBossTest: sanitizeWorldBossTestState(parsed.worldBossTest),
+          festivalOverride: sanitizeFestivalOverrideState(parsed.festivalOverride),
         })
         return memoryStore
       }
@@ -136,6 +143,7 @@ function readStore(): GmEventsStoreData {
     giftDrops: [],
     serverRates: { ...DEFAULT_SERVER_RATES },
     worldBossTest: null,
+    festivalOverride: null,
   }
   return memoryStore
 }
@@ -205,6 +213,24 @@ export function getEffectiveStoredWorldBossTest(nowMs = Date.now()): WorldBossTe
   return sanitizeWorldBossTestState(store.worldBossTest, nowMs)
 }
 
+export function setStoredFestivalOverride(
+  nextState: FestivalOverrideState | null,
+  nowMs = Date.now(),
+): FestivalOverrideState | null {
+  const store = readStore()
+  const sanitized = sanitizeFestivalOverrideState(nextState, nowMs)
+  writeStore({
+    ...store,
+    festivalOverride: sanitized,
+  })
+  return sanitized
+}
+
+export function getEffectiveStoredFestivalOverride(nowMs = Date.now()): FestivalOverrideState | null {
+  const store = readStore()
+  return sanitizeFestivalOverrideState(store.festivalOverride, nowMs)
+}
+
 export function addServerAnnouncement(event: ServerAnnouncementEvent): ServerAnnouncementEvent {
   const store = readStore()
   const deduped = store.announcements.filter((a) => a.announcementId !== event.announcementId)
@@ -262,6 +288,7 @@ export function getPublicWorldEvents(sinceMs = 0): {
   announcements: ServerAnnouncementEvent[]
   serverRates: ServerRatesConfig
   worldBossTest: WorldBossTestState | null
+  festivalOverride: FestivalOverrideState | null
   serverTimeMs: number
 } {
   const nowMs = Date.now()
@@ -273,6 +300,7 @@ export function getPublicWorldEvents(sinceMs = 0): {
     announcements,
     serverRates: getEffectiveServerRates(store.serverRates, nowMs),
     worldBossTest: sanitizeWorldBossTestState(store.worldBossTest, nowMs),
+    festivalOverride: sanitizeFestivalOverrideState(store.festivalOverride, nowMs),
     serverTimeMs: nowMs,
   }
 }
@@ -283,6 +311,7 @@ export function getEventsForUser(userId: string, sinceMs = 0): {
   giftDrops: ServerGiftDropEvent[]
   serverRates: ServerRatesConfig
   worldBossTest: WorldBossTestState | null
+  festivalOverride: FestivalOverrideState | null
 } {
   const nowMs = Date.now()
   const store = readStore()
@@ -305,5 +334,6 @@ export function getEventsForUser(userId: string, sinceMs = 0): {
     giftDrops,
     serverRates: getEffectiveServerRates(store.serverRates, nowMs),
     worldBossTest: sanitizeWorldBossTestState(store.worldBossTest, nowMs),
+    festivalOverride: sanitizeFestivalOverrideState(store.festivalOverride, nowMs),
   }
 }

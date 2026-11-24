@@ -11,8 +11,9 @@ import {
   Users,
 } from 'lucide-react'
 import { useDailyMissions } from '@/lib/game/daily-missions'
-import { ensurePremiumState, game, isCurrentAccountGm, notify, openPanel } from '@/lib/game/engine'
+import { ensurePremiumState, game, getActiveFestivalState, isCurrentAccountGm, notify, openPanel } from '@/lib/game/engine'
 import { getWorldTimePhase } from '@/lib/game/extended-systems'
+import { countClaimableFestivalBadges } from '@/lib/game/festival-events'
 import { getFieldBossForMap } from '@/lib/game/mmo-systems'
 import { TOPUP_MILESTONES } from '@/lib/game/premium/topup'
 import { formatThaiWorldBossSlotLabel, getActiveWorldBoss, todayIsoDate } from '@/lib/game/rpg-systems'
@@ -37,12 +38,14 @@ export function TopAnnouncementTicker() {
     : Math.max(0, Math.floor((worldBoss.startsAtMs - nowMs) / 1000))
   const wbMin = Math.floor(wbRemainSec / 60)
   const fieldBoss = p ? getFieldBossForMap(map) : null
+  const activeFestival = getActiveFestivalState(nowMs)
 
   let headline = worldBoss.isActive
     ? `★ บอสกิจกรรม ${worldBoss.name}${worldBoss.isTestMode ? ' (GM Test)' : ''} กำลังเปิดศึก! เหลือเวลาอีก ${wbMin} นาที ★`
     : `บอสกิจกรรม ${worldBoss.name} เปิดทุก จันทร์·พุธ·ศุกร์ 20:00 น. (รอบถัดไป ${formatThaiWorldBossSlotLabel(worldBoss.startsAtMs)})`
   let eventKey = p ? `welcome:${worldBoss.cycleKey}:${worldBoss.isActive ? 'live' : 'wait'}` : ''
   let iconKind: 'megaphone' | 'shield' | 'flame' = 'flame'
+  let clickTarget: 'guild' | 'events' = 'guild'
 
   if (announcement) {
     headline = `${announcement.authorName ? `[${announcement.authorName}] ` : ''}${announcement.body}`
@@ -56,6 +59,11 @@ export function TopAnnouncementTicker() {
     headline = `ฟิลด์บอสประจำแมพ: ${fieldBoss.name} (Lv.${fieldBoss.level}) ปรากฏตัวแล้ว!`
     eventKey = `fb:${map}:${fieldBoss.name}`
     iconKind = 'shield'
+  } else if (!worldBoss.isActive && (activeFestival.isGmOverride || activeFestival.def.kind === 'seasonal')) {
+    headline = `🎉 ${activeFestival.title} กำลังจัดอยู่! (EXP +${activeFestival.expBonusPct}% · DROP +${activeFestival.dropBonusPct}% · Gold +${activeFestival.goldBonusPct}%) — คลิกเพื่อรับของขวัญ & แลกไอเทม`
+    eventKey = `fest:${activeFestival.cycleKey}:${activeFestival.expBonusPct}`
+    iconKind = 'flame'
+    clickTarget = 'events'
   }
 
   const isVisible = Boolean(p && eventKey && hiddenEventKey !== eventKey)
@@ -78,7 +86,7 @@ export function TopAnnouncementTicker() {
           key={eventKey}
           type="button"
           data-testid="top-announcement-ticker"
-          onClick={() => openPanel('guild')}
+          onClick={() => openPanel(clickTarget)}
           aria-label="ประกาศกิจกรรมเซิร์ฟเวอร์"
           initial={{ opacity: 0, y: -8, scale: 0.96 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -139,8 +147,12 @@ export function WorldBanner() {
   const isGmDev = Boolean(p.gm && isCurrentAccountGm())
   const shopAlert =
     topupBadge.approvedUnclaimed + (isGmDev ? topupBadge.gmPending : 0) + claimableMilestones + claimableDailyTopup > 0
+  const festivalBadgeCount = countClaimableFestivalBadges(p.extV2?.festival, nowMs, game.festivalOverride)
   const questAlert =
-    countClaimableQuests(p.questState, p.towerState, p.petState, p.kills) + dailyMissions.claimableCount > 0
+    countClaimableQuests(p.questState, p.towerState, p.petState, p.kills) +
+      dailyMissions.claimableCount +
+      festivalBadgeCount >
+    0
   const bpArchiveCount = p.extV2?.battlePass?.expiredArchive?.length ?? 0
 
   return (

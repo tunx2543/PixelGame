@@ -6,6 +6,7 @@ import { Star, X } from 'lucide-react'
 import { useDailyMissions } from '@/lib/game/daily-missions'
 import {
   ensurePremiumState,
+  game,
   isCurrentAccountGm,
   openPanel,
   quitToTitle,
@@ -13,6 +14,7 @@ import {
   say,
   type PanelId,
 } from '@/lib/game/engine'
+import { countClaimableFestivalBadges, getActiveFestivalEvent } from '@/lib/game/festival-events'
 import type { MenuIconId } from '@/lib/game/menu-icons'
 import { TOPUP_MILESTONES } from '@/lib/game/premium/topup'
 import { todayIsoDate } from '@/lib/game/rpg-systems'
@@ -206,6 +208,37 @@ export function AsuraDailyHelperModal({
               </Link>
             </div>
           </div>
+
+          {(() => {
+            const nowMs = Date.now()
+            const activeFest = getActiveFestivalEvent(nowMs, game.festivalOverride)
+            const festBadge = countClaimableFestivalBadges(p.extV2?.festival, nowMs, game.festivalOverride)
+            return (
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-500/40 bg-[#1a130b]/90 p-2.5">
+                <div>
+                  <p className="font-bold text-amber-300">
+                    4. {activeFest.title}{festBadge > 0 ? ` (${festBadge} พร้อมรับ)` : ''}
+                  </p>
+                  <p className="text-[10.5px] text-slate-300 tabular-nums">
+                    EXP +{activeFest.expBonusPct}% · DROP +{activeFest.dropBonusPct}% · Gold +{activeFest.goldBonusPct}%
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose()
+                    openPanel('events')
+                  }}
+                  className={cn(
+                    'px-3 py-1.5 text-xs font-bold whitespace-nowrap',
+                    festBadge > 0 ? 'asura-tab-active' : 'asura-tab',
+                  )}
+                >
+                  เปิดกิจกรรม
+                </button>
+              </div>
+            )
+          })()}
         </div>
       </div>
     </div>
@@ -253,6 +286,7 @@ export function AsuraMenuModal({
     topupBadge.approvedUnclaimed + (isGmDev ? topupBadge.gmPending : 0) + claimableMilestones + claimableDailyTopup
   const claimableQuests =
     countClaimableQuests(p.questState, p.towerState, p.petState, p.kills) + dailyMissions.claimableCount
+  const festivalBadgeCount = countClaimableFestivalBadges(p.extV2?.festival, Date.now(), game.festivalOverride)
 
   const openAndClose = (panel: PanelId) => {
     onClose()
@@ -455,6 +489,14 @@ export function AsuraMenuModal({
       iconId: 'gacha',
       tone: 'border-fuchsia-300/85 bg-[radial-gradient(circle_at_35%_28%,#8f3278_0%,#4a163d_65%,#24091e_100%)]',
       onClick: () => openAndClose('redeem'),
+    },
+    {
+      id: 'events',
+      label: 'เทศกาล/กิจกรรม',
+      iconId: 'event-flash',
+      badgeCount: festivalBadgeCount,
+      tone: 'border-amber-300/90 bg-[radial-gradient(circle_at_35%_28%,#9c5416_0%,#4f2708_65%,#261104_100%)]',
+      onClick: () => openAndClose('events'),
     },
   ]
 

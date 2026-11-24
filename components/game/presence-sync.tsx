@@ -43,6 +43,7 @@ import { getEffectiveVipBonuses } from '@/lib/game/premium/vip'
 import { sanitizePremiumState } from '@/lib/game/premium/wallet'
 import { getActivePetBonuses } from '@/lib/game/systems'
 import {
+  applyFestivalOverrideUpdate,
   applyGmKickDirective,
   applyGmMuteDirective,
   applyGmSummonWarp,
@@ -727,6 +728,7 @@ export function PresenceSync() {
             if (!res || stopped || !game.p) return
             applyServerRatesUpdate(res.serverRates)
             applyWorldBossTestUpdate(res.worldBossTest)
+            applyFestivalOverrideUpdate(res.festivalOverride)
             for (const ann of res.announcements) handleIncomingAnnouncement(ann)
             for (const dir of res.directives) handleIncomingDirective(dir)
             const claimedSet = new Set(game.p.claimedGiftDropIds ?? [])
@@ -771,6 +773,7 @@ export function PresenceSync() {
         if (!res || stopped || !game.p) return
         applyServerRatesUpdate(res.serverRates)
         applyWorldBossTestUpdate(res.worldBossTest)
+        applyFestivalOverrideUpdate(res.festivalOverride)
         for (const ann of res.announcements) handleIncomingAnnouncement(ann)
         lastGmRelaySinceMs = Math.max(0, res.serverTimeMs - 14_000)
       })

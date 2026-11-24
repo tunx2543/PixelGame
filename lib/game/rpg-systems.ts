@@ -365,6 +365,10 @@ export const TITLE_DEFS: TitleDef[] = [
   { id: 'dragon_bane', name: 'ผู้สยบมังกรอเวจี', color: '#a78bfa', requirement: 'ปราบบอสราชามังกรรอยแยก (หรือบอสเผ่ามังกร) อย่างน้อย 1 ตัว', hpBonus: 120, atkBonus: 42, defBonus: 22, critBonus: 0.04 },
   { id: 'reborn_ascendant', name: 'ผู้จุติเทวะ', color: '#f472b6', requirement: 'จุติครบ 5 ครั้งขึ้นไป', hpBonus: 160, atkBonus: 55, defBonus: 30, critBonus: 0.04 },
   { id: 'celestial_legend', name: 'ราชันย์ดารานิรันดร์', color: '#fde047', requirement: 'จุติครบสูงสุด 6 ครั้ง', hpBonus: 260, atkBonus: 85, defBonus: 45, critBonus: 0.06 },
+  { id: 'loy_krathong_lantern', name: 'ผู้จุดประทีปจันทร์กระจ่าง', color: '#fde047', requirement: 'แลกรับจากร้านค้าเทศกาลลอยกระทง', hpBonus: 45, atkBonus: 16, defBonus: 10, critBonus: 0.02 },
+  { id: 'songkran_blessed', name: 'ผู้พิทักษ์สายน้ำสงกรานต์', color: '#38bdf8', requirement: 'แลกรับจากร้านค้าเทศกาลสงกรานต์', hpBonus: 55, atkBonus: 14, defBonus: 14, critBonus: 0.02 },
+  { id: 'winter_celebrant', name: 'ดาราแห่งเหมันตฤดู', color: '#93c5fd', requirement: 'แลกรับจากร้านค้าเทศกาลปีใหม่', hpBonus: 70, atkBonus: 22, defBonus: 16, critBonus: 0.03 },
+  { id: 'grand_festival_hero', name: 'วีรชนแห่งเทศกาลนิรันดร์', color: '#fb7185', requirement: 'แลกรับจากร้านค้ากิจกรรมเทศกาลพิเศษ', hpBonus: 90, atkBonus: 28, defBonus: 20, critBonus: 0.03 },
 ]
 
 export function evaluateUnlockedTitleIds(save: Pick<SaveData, 'kills' | 'rebirthCount' | 'questState' | 'towerState' | 'rpgExt'>): string[] {

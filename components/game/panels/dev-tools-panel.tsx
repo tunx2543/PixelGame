@@ -64,6 +64,7 @@ import {
   devSpawnMonster,
   devTeleport,
   getActiveCharacterSlot,
+  getActiveFestivalState,
   getActiveServerRates,
   getStats,
   gmBroadcastGiftAll,
@@ -71,6 +72,7 @@ import {
   gmKickPlayer,
   gmMutePlayer,
   gmSendSingleGiftMail,
+  gmSetFestivalEventAction,
   gmSetServerRatesAction,
   gmSummonEventWorldBossTestAction,
   gmSummonPlayer,
@@ -80,6 +82,12 @@ import {
   openPanel,
   saveGame,
 } from '@/lib/game/engine'
+import {
+  FESTIVAL_EVENTS,
+  formatFestivalRemaining,
+  getFestivalEventDef,
+  type FestivalEventId,
+} from '@/lib/game/festival-events'
 import { MAPS, MAP_ORDER, TILE } from '@/lib/game/maps'
 import { GM_EMAIL, PERMANENT_GM_GAME_UID } from '@/lib/game/permissions'
 import {
@@ -182,6 +190,15 @@ export function DevToolsPanel() {
   const [wbTestBossId, setWbTestBossId] = useState('wb_world_golem')
   const [wbTestDurationMin, setWbTestDurationMin] = useState('30')
   const [wbTestBusy, setWbTestBusy] = useState(false)
+
+  // GM Festival / In-Game Event Controller state
+  const [festEventId, setFestEventId] = useState<FestivalEventId>('loy_krathong')
+  const [festDurationMin, setFestDurationMin] = useState('180')
+  const [festCustomTitle, setFestCustomTitle] = useState('')
+  const [festExpPct, setFestExpPct] = useState('50')
+  const [festDropPct, setFestDropPct] = useState('50')
+  const [festGoldPct, setFestGoldPct] = useState('50')
+  const [festBusy, setFestBusy] = useState(false)
 
   // Live Patch Notes Publisher state
   const [pnVersion, setPnVersion] = useState('1.4.3')
@@ -1538,6 +1555,170 @@ export function DevToolsPanel() {
                     >
                       <RotateCcw className="mr-1 inline size-3.5" aria-hidden />
                       รีเซ็ตกลับ x1
+                    </PxButton>
+                  </div>
+                </form>
+              )
+            })()}
+
+            {/* GM Festival & In-Game Event Live Controller */}
+            {(() => {
+              const activeFest = getActiveFestivalState()
+              return (
+                <form
+                  className="space-y-2.5 border-2 border-fuchsia-400/50 bg-fuchsia-950/15 p-2.5"
+                  onSubmit={async (e) => {
+                    e.preventDefault()
+                    if (festBusy) return
+                    setFestBusy(true)
+                    try {
+                      const res = await gmSetFestivalEventAction({
+                        active: true,
+                        eventId: festEventId,
+                        durationMinutes: Math.max(0, Math.floor(Number(festDurationMin) || 0)),
+                        customTitle: festCustomTitle.trim() || undefined,
+                        expBonusPct: Math.max(0, Math.min(500, Math.round(Number(festExpPct) || 0))),
+                        dropBonusPct: Math.max(0, Math.min(500, Math.round(Number(festDropPct) || 0))),
+                        goldBonusPct: Math.max(0, Math.min(500, Math.round(Number(festGoldPct) || 0))),
+                      })
+                      setStatusMsg(res.message)
+                    } finally {
+                      setFestBusy(false)
+                    }
+                  }}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="flex items-center gap-1.5 font-semibold text-fuchsia-200">
+                      <Sparkles className="size-3.5 text-fuchsia-300" aria-hidden />
+                      ควบคุมกิจกรรมเทศกาล & กิจกรรมในเกมทั้งเซิร์ฟเวอร์
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => openPanel('events')}
+                      className="border border-fuchsia-300/50 bg-fuchsia-500/15 px-2 py-0.5 text-[10px] font-semibold text-fuchsia-200 hover:bg-fuchsia-500/25"
+                    >
+                      เปิดหน้าต่างกิจกรรม
+                    </button>
+                  </div>
+
+                  <div
+                    className={`flex flex-wrap items-center justify-between gap-2 border px-2.5 py-1.5 text-[11px] ${
+                      activeFest.isGmOverride
+                        ? 'border-fuchsia-400/60 bg-fuchsia-500/15 text-fuchsia-100'
+                        : 'border-border bg-background/70 text-muted-foreground'
+                    }`}
+                  >
+                    <span className="font-semibold">
+                      กำลังจัดอยู่: {activeFest.title} (EXP +{activeFest.expBonusPct}% · DROP +{activeFest.dropBonusPct}% · Gold +{activeFest.goldBonusPct}%)
+                    </span>
+                    <span className="font-mono text-[10px]">
+                      {activeFest.isGmOverride
+                        ? `GM เปิดพิเศษ · ${formatFestivalRemaining(activeFest.endsAtMs)}`
+                        : `ปฏิทินอัตโนมัติ · ${formatFestivalRemaining(activeFest.endsAtMs)}`}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                      <span>เลือกเทศกาล / กิจกรรม</span>
+                      <select
+                        value={festEventId}
+                        onChange={(e) => {
+                          const nextId = e.target.value as FestivalEventId
+                          setFestEventId(nextId)
+                          const def = getFestivalEventDef(nextId)
+                          if (def) {
+                            setFestExpPct(String(def.expBonusPct))
+                            setFestDropPct(String(def.dropBonusPct))
+                            setFestGoldPct(String(def.goldBonusPct))
+                          }
+                        }}
+                        className="w-full border border-border bg-background px-2 py-1 text-xs text-foreground"
+                      >
+                        {FESTIVAL_EVENTS.map((ev) => (
+                          <option key={ev.id} value={ev.id}>
+                            [{ev.kind === 'seasonal' ? 'เทศกาล' : 'ในเกม'}] {ev.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                      <span>ชื่อหัวข้อพิเศษ (เว้นว่างใช้ชื่อเทศกาลเดิม)</span>
+                      <input
+                        value={festCustomTitle}
+                        onChange={(e) => setFestCustomTitle(e.target.value)}
+                        maxLength={80}
+                        placeholder="เช่น ฉลองเซิร์ฟเวอร์เปิดใหม่..."
+                        className="w-full border border-border bg-background px-2 py-1 text-xs text-foreground"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                      <span>โบนัส EXP (%)</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={500}
+                        value={festExpPct}
+                        onChange={(e) => setFestExpPct(e.target.value)}
+                        className="w-full border border-border bg-background px-2 py-1 text-xs text-foreground"
+                      />
+                    </label>
+                    <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                      <span>โบนัส DROP (%)</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={500}
+                        value={festDropPct}
+                        onChange={(e) => setFestDropPct(e.target.value)}
+                        className="w-full border border-border bg-background px-2 py-1 text-xs text-foreground"
+                      />
+                    </label>
+                    <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                      <span>โบนัส Gold (%)</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={500}
+                        value={festGoldPct}
+                        onChange={(e) => setFestGoldPct(e.target.value)}
+                        className="w-full border border-border bg-background px-2 py-1 text-xs text-foreground"
+                      />
+                    </label>
+                    <label className="space-y-0.5 text-[10px] text-muted-foreground">
+                      <span>เวลา (นาที, 0=ไม่จำกัด)</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={20160}
+                        value={festDurationMin}
+                        onChange={(e) => setFestDurationMin(e.target.value)}
+                        className="w-full border border-border bg-background px-2 py-1 text-xs text-foreground"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5">
+                    <PxButton type="submit" variant="accent" disabled={festBusy}>
+                      <Sparkles className="mr-1 inline size-3.5" aria-hidden />
+                      {festBusy ? 'กำลังประกาศกิจกรรม...' : 'เปิดกิจกรรมนี้ทั้งเซิร์ฟเวอร์'}
+                    </PxButton>
+                    <PxButton
+                      type="button"
+                      variant="secondary"
+                      disabled={festBusy || !activeFest.isGmOverride}
+                      onClick={() => {
+                        setFestBusy(true)
+                        void gmSetFestivalEventAction({ active: false })
+                          .then((r) => setStatusMsg(r.message))
+                          .finally(() => setFestBusy(false))
+                      }}
+                    >
+                      <RotateCcw className="mr-1 inline size-3.5" aria-hidden />
+                      คืนค่าปฏิทินอัตโนมัติ
                     </PxButton>
                   </div>
                 </form>

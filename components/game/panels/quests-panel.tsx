@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import { Check, Cloud, Coins, Dices, Gem, Hammer, Sparkles } from 'lucide-react'
-import { claimDailyMissionReward, claimQuestReward } from '@/lib/game/engine'
+import { claimDailyMissionReward, claimQuestReward, game, openPanel } from '@/lib/game/engine'
 import { useDailyMissions } from '@/lib/game/daily-missions'
+import { countClaimableFestivalBadges } from '@/lib/game/festival-events'
 import { playQuestClaimSfx } from '@/lib/game/sfx'
 import {
   QUEST_DEFS,
@@ -29,6 +30,7 @@ export function QuestsPanel() {
   const qs = sanitizeQuestState(p.questState, p.kills)
   const ts = sanitizeTowerState(p.towerState)
   const ps = sanitizePetState(p.petState, p.ownedGemItems, p.equippedGemCompanion)
+  const festBadgeCount = countClaimableFestivalBadges(p.extV2?.festival, Date.now(), game.festivalOverride)
 
   const filtered = QUEST_DEFS.filter((q) => q.category === tab)
   const randomMissions = dailyState.board?.missions ?? []
@@ -72,9 +74,15 @@ export function QuestsPanel() {
               ภารกิจความสำเร็จ
             </button>
           </div>
-          <span className="text-xs text-muted-foreground tabular-nums">
-            กำจัดมอนสเตอร์วันนี้: {formatNum(qs.dailyKills)} · รวมทั้งหมด: {formatNum(qs.totalKills)}
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <PxButton variant={festBadgeCount > 0 ? 'accent' : 'secondary'} onClick={() => openPanel('events')}>
+              <Sparkles className="mr-1 inline size-3.5" aria-hidden />
+              เทศกาล & กิจกรรม{festBadgeCount > 0 ? ` (${festBadgeCount})` : ''}
+            </PxButton>
+            <span className="text-xs text-muted-foreground tabular-nums">
+              กำจัดมอนสเตอร์วันนี้: {formatNum(qs.dailyKills)} · รวมทั้งหมด: {formatNum(qs.totalKills)}
+            </span>
+          </div>
         </div>
 
         {notice && (

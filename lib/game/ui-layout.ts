@@ -140,6 +140,7 @@ export const WINDOW_META: Record<PanelId, { title: string; defaultW: number; def
   guide: { title: 'คู่มือ & แจ้งข้อมูล', defaultW: 640, defaultH: 510 },
   'treasure-chest': { title: 'หีบสมบัติ & สุ่มไอเทม', defaultW: 820, defaultH: 560 },
   redeem: { title: 'แลกไอเทมโค้ด (Redeem Code)', defaultW: 540, defaultH: 480 },
+  events: { title: 'เทศกาล & กิจกรรมเซิร์ฟเวอร์', defaultW: 780, defaultH: 560 },
 }
 
 export function getSafeZoneBounds(vw: number, vh: number) {

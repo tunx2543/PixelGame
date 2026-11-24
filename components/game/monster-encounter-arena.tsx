@@ -27,14 +27,18 @@ import { ITEMS, JOBS, MAX_LEVEL, MAX_PLUS, enhanceCost, enhanceRate, expToNext, 
 import { getSkillIconPath, getSkillVfxSpec } from '@/lib/game/vfx-specs'
 import {
   SAVE_KEY,
+  applyFestivalOverrideUpdate,
   applyServerRatesUpdate,
   getActiveCharacterSlot,
+  getActiveFestivalOverride,
   getActiveServerRates,
   getStats,
   setActiveCharacterSlot,
   setGameAccountIdentity,
   type SaveData,
 } from '@/lib/game/engine'
+import { sanitizeExtV2 } from '@/lib/game/extended-systems'
+import { computeFestivalMultipliers, recordFestivalProgressInState } from '@/lib/game/festival-events'
 import { recordDailyMissionProgress } from '@/lib/game/daily-missions'
 import {
   calculateEnemyAttack,
@@ -267,6 +271,7 @@ export function MonsterEncounterArena() {
     void pollPublicWorldEvents(0).then((res) => {
       if (active && res) {
         applyServerRatesUpdate(res.serverRates, { silent: true })
+        applyFestivalOverrideUpdate(res.festivalOverride, { silent: true })
       }
     })
     return () => {
@@ -394,7 +399,31 @@ export function MonsterEncounterArena() {
     (currentSave: SaveData, defeatedEnemy: EncounterEnemy) => {
       if (phaseRef.current === 'VICTORY') return
       phaseRef.current = 'VICTORY'
-      const outcome = settleEncounterVictory(currentSave, defeatedEnemy, getActiveServerRates())
+      const festOverride = typeof window !== 'undefined' ? getActiveFestivalOverride() : null
+      const festMul = computeFestivalMultipliers(Date.now(), festOverride)
+      const baseRates = getActiveServerRates()
+      const outcome = settleEncounterVictory(currentSave, defeatedEnemy, {
+        expMultiplier: (baseRates?.expMultiplier ?? 1) * festMul.expMul,
+        dropMultiplier: (baseRates?.dropMultiplier ?? 1) * festMul.dropMul,
+      })
+      const bonusGold = Math.max(0, Math.round(outcome.goldEarned * (festMul.goldMul - 1)))
+      if (bonusGold > 0) {
+        outcome.nextSave.gold += bonusGold
+        outcome.goldEarned += bonusGold
+      }
+      const extV2 = sanitizeExtV2(outcome.nextSave.extV2)
+      const tokenGain = defeatedEnemy.rarity === 'boss' ? 4 : defeatedEnemy.rarity === 'elite' ? 2 : 1
+      extV2.festival = recordFestivalProgressInState(
+        extV2.festival,
+        {
+          kills: 1,
+          bossKills: defeatedEnemy.rarity !== 'normal' ? 1 : 0,
+          tokensEarned: tokenGain,
+        },
+        Date.now(),
+        festOverride,
+      ).next
+      outcome.nextSave.extV2 = extV2
       saveRef.current = outcome.nextSave
       setSave(outcome.nextSave)
       setVictoryResult(outcome)

@@ -26,6 +26,11 @@ import {
   sanitizeWorldBossTestState,
   type WorldBossTestState,
 } from '@/lib/game/rpg-systems'
+import {
+  sanitizeFestivalOverrideState,
+  type FestivalEventId,
+  type FestivalOverrideState,
+} from '@/lib/game/festival-events'
 
 export type WorldAnnouncementVariant = 'gm' | 'news'
 export type WorldNewsCategory = 'gm' | 'enhance' | 'boss_kill' | 'gacha' | 'rare_drop'
@@ -1022,10 +1027,77 @@ export async function publishWorldBossTestConfig(input: {
   }
 }
 
+export async function publishFestivalEventConfig(input: {
+  active: boolean
+  eventId?: FestivalEventId
+  durationMinutes?: number
+  customTitle?: string
+  expBonusPct?: number
+  dropBonusPct?: number
+  goldBonusPct?: number
+  authorName?: string
+}): Promise<{ ok: boolean; festivalOverride: FestivalOverrideState | null; message: string }> {
+  const user = auth.currentUser
+  if (!isSignedInVerified() || !user || !isGmAccountUser(user)) {
+    return {
+      ok: false,
+      festivalOverride: null,
+      message: 'คำสั่งเปิด/ปิดกิจกรรมเทศกาลสงวนเฉพาะบัญชี GM ที่ยืนยันตัวตนแล้ว',
+    }
+  }
+  try {
+    const headers = await getBearerHeaders()
+    const res = await fetch('/api/gm/events', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(
+        input.active
+          ? {
+              action: 'set_festival_event',
+              eventId: input.eventId ?? 'loy_krathong',
+              durationMinutes: input.durationMinutes ?? 0,
+              customTitle: input.customTitle ?? '',
+              expBonusPct: input.expBonusPct,
+              dropBonusPct: input.dropBonusPct,
+              goldBonusPct: input.goldBonusPct,
+              authorName: input.authorName ?? 'GM',
+            }
+          : {
+              action: 'clear_festival_event',
+              authorName: input.authorName ?? 'GM',
+            },
+      ),
+    })
+    const data = (await res.json().catch(() => null)) as {
+      ok?: boolean
+      festivalOverride?: FestivalOverrideState | null
+      message?: string
+    } | null
+    if (!res.ok || !data?.ok) {
+      return {
+        ok: false,
+        festivalOverride: null,
+        message: data?.message || 'อัปเดตสถานะกิจกรรมเทศกาลไม่สำเร็จ',
+      }
+    }
+    const clean = sanitizeFestivalOverrideState(data.festivalOverride ?? null)
+    return {
+      ok: true,
+      festivalOverride: clean,
+      message: clean
+        ? `เปิดกิจกรรมเทศกาล "${clean.customTitle || clean.eventId}" ทั้งเซิร์ฟเวอร์เรียบร้อยแล้ว!`
+        : 'ปิดโหมดบังคับกิจกรรมและกลับสู่ปฏิทินเทศกาลอัตโนมัติแล้ว',
+    }
+  } catch {
+    return { ok: false, festivalOverride: null, message: 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อตั้งค่ากิจกรรมเทศกาลได้' }
+  }
+}
+
 export async function pollPublicWorldEvents(sinceMs: number): Promise<{
   announcements: WorldAnnouncementRecord[]
   serverRates: ServerRatesConfig
   worldBossTest: WorldBossTestState | null
+  festivalOverride: FestivalOverrideState | null
   serverTimeMs: number
 } | null> {
   try {
@@ -1038,6 +1110,7 @@ export async function pollPublicWorldEvents(sinceMs: number): Promise<{
       announcements?: WorldAnnouncementRecord[]
       serverRates?: ServerRatesConfig
       worldBossTest?: WorldBossTestState | null
+      festivalOverride?: FestivalOverrideState | null
       serverTimeMs?: number
     }
     if (!data.ok) return null
@@ -1045,6 +1118,7 @@ export async function pollPublicWorldEvents(sinceMs: number): Promise<{
       announcements: Array.isArray(data.announcements) ? data.announcements : [],
       serverRates: data.serverRates ? sanitizeServerRates(data.serverRates) : { ...DEFAULT_SERVER_RATES },
       worldBossTest: sanitizeWorldBossTestState(data.worldBossTest ?? null),
+      festivalOverride: sanitizeFestivalOverrideState(data.festivalOverride ?? null),
       serverTimeMs: typeof data.serverTimeMs === 'number' ? data.serverTimeMs : Date.now(),
     }
   } catch {
@@ -1058,6 +1132,7 @@ export async function pollServerGmEvents(sinceMs: number): Promise<{
   giftDrops: ServerGiftDropRecord[]
   serverRates: ServerRatesConfig
   worldBossTest: WorldBossTestState | null
+  festivalOverride: FestivalOverrideState | null
   serverTimeMs: number
 } | null> {
   const user = auth.currentUser
@@ -1076,6 +1151,7 @@ export async function pollServerGmEvents(sinceMs: number): Promise<{
       giftDrops?: ServerGiftDropRecord[]
       serverRates?: ServerRatesConfig
       worldBossTest?: WorldBossTestState | null
+      festivalOverride?: FestivalOverrideState | null
       serverTimeMs?: number
     }
     if (!data.ok) return null
@@ -1085,6 +1161,7 @@ export async function pollServerGmEvents(sinceMs: number): Promise<{
       giftDrops: Array.isArray(data.giftDrops) ? data.giftDrops : [],
       serverRates: data.serverRates ? sanitizeServerRates(data.serverRates) : { ...DEFAULT_SERVER_RATES },
       worldBossTest: sanitizeWorldBossTestState(data.worldBossTest ?? null),
+      festivalOverride: sanitizeFestivalOverrideState(data.festivalOverride ?? null),
       serverTimeMs: typeof data.serverTimeMs === 'number' ? data.serverTimeMs : Date.now(),
     }
   } catch {

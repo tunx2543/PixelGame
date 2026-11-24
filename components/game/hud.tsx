@@ -15,6 +15,7 @@ import { expToNext } from '@/lib/game/data'
 import {
   game,
   gatherNearbyNodeAction,
+  getActiveFestivalState,
   getActiveServerRates,
   interact,
   jobExpToNext,
@@ -23,6 +24,7 @@ import {
   toggleMountRiding,
   togglePkModeAction,
 } from '@/lib/game/engine'
+import { formatFestivalRemaining } from '@/lib/game/festival-events'
 import {
   findNearbyGatheringNode,
   getActiveAsuraBoostSummary,
@@ -157,6 +159,8 @@ export function AsuraBuffAndToggleStrip() {
   const nearbyNode = findNearbyGatheringNode(p.mapId, p.x, p.y)
   const nearNpc = !game.panel ? game.nearNpc : null
 
+  const activeFestival = getActiveFestivalState(nowMs)
+
   const buffBadges: Array<{
     key: string
     tag: string
@@ -164,7 +168,18 @@ export function AsuraBuffAndToggleStrip() {
     remain: string
     tone: string
     iconId: MenuIconId
+    onClick?: () => void
   }> = []
+
+  buffBadges.push({
+    key: `festival_${activeFestival.def.id}`,
+    tag: activeFestival.def.kind === 'seasonal' ? 'FEST' : 'EVT',
+    title: `${activeFestival.title} • EXP +${activeFestival.expBonusPct}% DROP +${activeFestival.dropBonusPct}% Gold +${activeFestival.goldBonusPct}% (${formatFestivalRemaining(activeFestival.endsAtMs, nowMs)}) — คลิกเพื่อเปิดหน้าเทศกาล`,
+    remain: activeFestival.def.kind === 'seasonal' ? 'เทศกาล' : 'EVT',
+    tone: 'border-amber-300/90 bg-gradient-to-b from-amber-600/95 to-rose-950/95 text-amber-100 shadow-[0_0_8px_rgba(251,191,36,0.4)] hover:brightness-115',
+    iconId: 'event-flash',
+    onClick: () => openPanel('events'),
+  })
 
   if (serverRates.expMultiplier > 1) {
     const rateRemain =
@@ -275,22 +290,41 @@ export function AsuraBuffAndToggleStrip() {
         </button>
 
         {buffExpanded &&
-          buffBadges.map((b) => (
-            <div
-              key={b.key}
-              title={b.title}
-              className={cn(
-                'relative flex size-7 flex-col items-center justify-between rounded border px-0.5 py-0.5 shadow-md sm:size-7',
-                b.tone,
-              )}
-            >
-              <GameArtIcon iconId={b.iconId} size={14} />
-              <span className="font-mono text-[7.5px] font-extrabold leading-none text-white tabular-nums">
-                {b.remain}
-              </span>
-              <span className="sr-only">{b.tag}</span>
-            </div>
-          ))}
+          buffBadges.map((b) =>
+            b.onClick ? (
+              <button
+                key={b.key}
+                type="button"
+                onClick={b.onClick}
+                title={b.title}
+                className={cn(
+                  'relative flex size-7 flex-col items-center justify-between rounded border px-0.5 py-0.5 shadow-md transition-transform hover:scale-105 sm:size-7',
+                  b.tone,
+                )}
+              >
+                <GameArtIcon iconId={b.iconId} size={14} />
+                <span className="font-mono text-[7px] font-extrabold leading-none text-white tabular-nums">
+                  {b.remain}
+                </span>
+                <span className="sr-only">{b.tag}</span>
+              </button>
+            ) : (
+              <div
+                key={b.key}
+                title={b.title}
+                className={cn(
+                  'relative flex size-7 flex-col items-center justify-between rounded border px-0.5 py-0.5 shadow-md sm:size-7',
+                  b.tone,
+                )}
+              >
+                <GameArtIcon iconId={b.iconId} size={14} />
+                <span className="font-mono text-[7.5px] font-extrabold leading-none text-white tabular-nums">
+                  {b.remain}
+                </span>
+                <span className="sr-only">{b.tag}</span>
+              </div>
+            ),
+          )}
       </div>
 
       {/* Row 2: Quick Action Toggles (AutoSkill, AutoFarm, PK, Mount) + Context Prompt */}

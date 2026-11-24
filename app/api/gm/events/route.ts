@@ -6,16 +6,19 @@ import {
   formatServerRateSummary,
 } from '@/lib/game/server-rates'
 import { getWorldBossTemplate } from '@/lib/game/rpg-systems'
+import { getFestivalEventDef, isValidFestivalEventId } from '@/lib/game/festival-events'
 import { resolveActorFromRequest } from '@/lib/server/premium-security'
 import {
   ackServerGmDirective,
   addServerAnnouncement,
   addServerGiftDrop,
   addServerGmDirective,
+  getEffectiveStoredFestivalOverride,
   getEffectiveStoredServerRates,
   getEffectiveStoredWorldBossTest,
   getEventsForUser,
   setServerRates,
+  setStoredFestivalOverride,
   setStoredWorldBossTest,
   type GmDirectiveAction,
 } from '@/lib/server/gm-events-store'
@@ -44,11 +47,13 @@ export async function GET(req: Request) {
       giftDrops: [],
       serverRates: getEffectiveStoredServerRates(),
       worldBossTest: getEffectiveStoredWorldBossTest(),
+      festivalOverride: getEffectiveStoredFestivalOverride(),
       serverTimeMs: Date.now(),
     })
   }
 
-  const { announcements, directives, giftDrops, serverRates, worldBossTest } = getEventsForUser(auth.actor.uid, sinceMs)
+  const { announcements, directives, giftDrops, serverRates, worldBossTest, festivalOverride } =
+    getEventsForUser(auth.actor.uid, sinceMs)
 
   return NextResponse.json({
     ok: true,
@@ -57,6 +62,7 @@ export async function GET(req: Request) {
     giftDrops,
     serverRates,
     worldBossTest,
+    festivalOverride,
     serverTimeMs: Date.now(),
   })
 }
@@ -225,6 +231,79 @@ export async function POST(req: Request) {
     })
 
     return NextResponse.json({ ok: true, worldBossTest: testState })
+  }
+
+  if (body.action === 'set_festival_event' || body.action === 'clear_festival_event') {
+    const nowMs = Date.now()
+    const authorName =
+      typeof body.authorName === 'string' && body.authorName.trim()
+        ? body.authorName.trim().slice(0, 24)
+        : 'GM'
+
+    if (body.action === 'clear_festival_event') {
+      setStoredFestivalOverride(null, nowMs)
+      addServerAnnouncement({
+        announcementId: sanitizeId(undefined, 'festend'),
+        authorUid: auth.actor.uid,
+        authorName,
+        authorGameUid: PERMANENT_GM_GAME_UID,
+        body: 'GM กลับสู่ตารางเวลาเทศกาล & กิจกรรมประจำวันตามปฏิทินอัตโนมัติแล้ว',
+        variant: 'gm',
+        category: 'gm',
+        createdAtMs: nowMs,
+        expiresAtMs: nowMs + 10_000,
+      })
+      return NextResponse.json({ ok: true, festivalOverride: null })
+    }
+
+    if (!isValidFestivalEventId(body.eventId)) {
+      return NextResponse.json({ ok: false, message: 'ไม่พบรหัสกิจกรรมเทศกาลนี้' }, { status: 400 })
+    }
+    const def = getFestivalEventDef(body.eventId)!
+    const rawDurationMin = Number(body.durationMinutes ?? 0)
+    const durationMinutes =
+      Number.isFinite(rawDurationMin) && rawDurationMin > 0
+        ? Math.max(5, Math.min(43_200, Math.round(rawDurationMin)))
+        : 0
+    const clampPct = (val: unknown, fallback: number) => {
+      const n = Number(val)
+      if (!Number.isFinite(n)) return fallback
+      return Math.max(0, Math.min(500, Math.round(n)))
+    }
+    const customTitle =
+      typeof body.customTitle === 'string' && body.customTitle.trim()
+        ? body.customTitle.trim().slice(0, 80)
+        : undefined
+    const festivalOverride = setStoredFestivalOverride(
+      {
+        active: true,
+        eventId: def.id,
+        cycleKey: `override:${def.id}:${nowMs.toString(36)}`,
+        customTitle,
+        expBonusPct: body.expBonusPct !== undefined ? clampPct(body.expBonusPct, def.expBonusPct) : def.expBonusPct,
+        dropBonusPct: body.dropBonusPct !== undefined ? clampPct(body.dropBonusPct, def.dropBonusPct) : def.dropBonusPct,
+        goldBonusPct: body.goldBonusPct !== undefined ? clampPct(body.goldBonusPct, def.goldBonusPct) : def.goldBonusPct,
+        startedAtMs: nowMs,
+        expiresAtMs: durationMinutes > 0 ? nowMs + durationMinutes * 60_000 : null,
+        triggeredByName: authorName,
+      },
+      nowMs,
+    )
+
+    const displayName = customTitle || def.name
+    addServerAnnouncement({
+      announcementId: sanitizeId(undefined, 'fest'),
+      authorUid: auth.actor.uid,
+      authorName,
+      authorGameUid: PERMANENT_GM_GAME_UID,
+      body: `🎉 กิจกรรมพิเศษเซิร์ฟเวอร์ "${displayName}" เปิดฉากแล้ว! (EXP +${festivalOverride?.expBonusPct ?? def.expBonusPct}% · DROP +${festivalOverride?.dropBonusPct ?? def.dropBonusPct}% · Gold +${festivalOverride?.goldBonusPct ?? def.goldBonusPct}%)`.slice(0, 240),
+      variant: 'gm',
+      category: 'gm',
+      createdAtMs: nowMs,
+      expiresAtMs: nowMs + 14_000,
+    })
+
+    return NextResponse.json({ ok: true, festivalOverride })
   }
 
   if (body.action === 'announce') {

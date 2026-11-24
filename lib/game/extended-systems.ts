@@ -1,5 +1,10 @@
 import { ITEMS, type EquipmentSlot, type ItemDef } from './data'
 import {
+  createDefaultFestivalPlayerState,
+  sanitizeFestivalPlayerState,
+  type FestivalPlayerState,
+} from './festival-events'
+import {
   createDefaultSpiritAwakeningState,
   sanitizeSpiritAwakeningState,
   type SpiritAwakeningState,
@@ -590,6 +595,42 @@ export const COSMETIC_DEFS: CosmeticDef[] = [
     secondaryColor: '#1e3a8a',
     diamondCost: 40,
   },
+  {
+    id: 'frame_loy_krathong',
+    slot: 'frame',
+    name: 'กรอบชื่อจันทร์กระจ่างลอยกระทง',
+    description: 'กรอบชื่อพิเศษประจำเทศกาลลอยกระทงแสงจันทร์ (ปลดล็อกจากร้านเทศกาล)',
+    primaryColor: '#fde047',
+    secondaryColor: '#1d4ed8',
+    diamondCost: 60,
+  },
+  {
+    id: 'wing_songkran',
+    slot: 'wing',
+    name: 'ปีกสายน้ำมหาสงกรานต์',
+    description: 'ปีกหยดน้ำสีฟ้าคริสตัลประจำเทศกาลสงกรานต์ (ปลดล็อกจากร้านเทศกาล)',
+    primaryColor: '#38bdf8',
+    secondaryColor: '#0284c7',
+    diamondCost: 75,
+  },
+  {
+    id: 'wing_winter_star',
+    slot: 'wing',
+    name: 'ปีกเหมันต์ดาวพร่างพราว',
+    description: 'ปีกคริสตัลหิมะแห่งเทศกาลปีใหม่ (ปลดล็อกจากร้านเทศกาล)',
+    primaryColor: '#e0f2fe',
+    secondaryColor: '#60a5fa',
+    diamondCost: 85,
+  },
+  {
+    id: 'wskin_festival_crimson',
+    slot: 'weaponSkin',
+    name: 'สกินอาวุธเปลวประทีปมงคล',
+    description: 'เอฟเฟกต์คมดาบสีแดงทองมงคลแห่งเทศกาล',
+    primaryColor: '#fb7185',
+    secondaryColor: '#f59e0b',
+    diamondCost: 55,
+  },
 ]
 
 export function getCosmeticDef(id: string | null | undefined): CosmeticDef | null {
@@ -763,6 +804,7 @@ export interface PlayerExtensionV2 {
   coopClears: number
   quickSlots: Array<string | null>
   spiritAwakening?: SpiritAwakeningState
+  festival?: FestivalPlayerState
 }
 
 export function createDefaultExtV2(): PlayerExtensionV2 {
@@ -804,6 +846,7 @@ export function createDefaultExtV2(): PlayerExtensionV2 {
     coopClears: 0,
     quickSlots: [...DEFAULT_QUICK_SLOTS],
     spiritAwakening: createDefaultSpiritAwakeningState(),
+    festival: createDefaultFestivalPlayerState(),
   }
 }
 
@@ -985,6 +1028,7 @@ export function sanitizeExtV2(raw: unknown): PlayerExtensionV2 {
     coopClears: Math.max(0, Math.floor(Number(obj.coopClears ?? 0) || 0)),
     quickSlots: sanitizeQuickSlots(obj.quickSlots),
     spiritAwakening: sanitizeSpiritAwakeningState(obj.spiritAwakening),
+    festival: sanitizeFestivalPlayerState(obj.festival),
   }
 }
 

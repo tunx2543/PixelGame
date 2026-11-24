@@ -35,6 +35,7 @@ import {
 } from '@/lib/firebase/characters'
 import type { PartyInviteRecord, PartyRecord } from '@/lib/firebase/party-helpers'
 import {
+  publishFestivalEventConfig,
   publishServerGiftDrop,
   publishServerRatesConfig,
   publishWorldAnnouncement,
@@ -49,6 +50,18 @@ import {
   type WorldAnnouncementVariant,
   type WorldNewsCategory,
 } from '@/lib/firebase/gm-events'
+import {
+  claimFestivalDailyGiftInState,
+  claimFestivalMissionInState,
+  computeFestivalMultipliers,
+  getActiveFestivalEvent,
+  recordFestivalProgressInState,
+  sanitizeFestivalOverrideState,
+  spendFestivalTokensForShopInState,
+  type FestivalEventId,
+  type FestivalOverrideState,
+  type ResolvedActiveFestival,
+} from './festival-events'
 import { computeLevelGapModifiers } from './combat-balance'
 import {
   DEFAULT_SERVER_RATES,
@@ -791,6 +804,7 @@ export type PanelId =
   | 'guide'
   | 'treasure-chest'
   | 'redeem'
+  | 'events'
 export type ChatType = 'system' | 'player' | 'gm' | 'loot' | 'error' | 'npc'
 export interface ChatMsg {
   id: number
@@ -922,6 +936,7 @@ export const game = {
   cameraZoomScale: 1,
   serverRates: { ...DEFAULT_SERVER_RATES } as ServerRatesConfig,
   worldBossTest: null as WorldBossTestState | null,
+  festivalOverride: null as FestivalOverrideState | null,
   worldBossMapFx: null as WorldBossMapFxState | null,
   worldBossMapFxSeq: 0,
   worldBossWarning: null as WorldBossWarningState | null,
@@ -1170,6 +1185,191 @@ export async function gmSetServerRatesAction(input: {
     notify()
   }
   return res
+}
+
+export function getActiveFestivalState(nowMs = Date.now()): ResolvedActiveFestival {
+  return getActiveFestivalEvent(nowMs, game.festivalOverride)
+}
+
+export function getActiveFestivalOverride(): FestivalOverrideState | null {
+  return sanitizeFestivalOverrideState(game.festivalOverride)
+}
+
+export function applyFestivalOverrideUpdate(
+  nextState: FestivalOverrideState | null,
+  options?: { silent?: boolean },
+) {
+  const clean = sanitizeFestivalOverrideState(nextState)
+  const prev = sanitizeFestivalOverrideState(game.festivalOverride)
+  const changed =
+    Boolean(prev) !== Boolean(clean) ||
+    prev?.cycleKey !== clean?.cycleKey ||
+    prev?.expiresAtMs !== clean?.expiresAtMs ||
+    prev?.expBonusPct !== clean?.expBonusPct ||
+    prev?.dropBonusPct !== clean?.dropBonusPct ||
+    prev?.goldBonusPct !== clean?.goldBonusPct
+
+  game.festivalOverride = clean
+  if (changed && !options?.silent && game.p) {
+    const resolved = getActiveFestivalState()
+    if (clean) {
+      say(
+        'system',
+        `🎉 กิจกรรมพิเศษเซิร์ฟเวอร์ "${resolved.title}" เริ่มแล้ว! (EXP +${resolved.expBonusPct}% · DROP +${resolved.dropBonusPct}% · Gold +${resolved.goldBonusPct}%)`,
+        undefined,
+        { channel: 'world' },
+      )
+    } else if (prev) {
+      say(
+        'system',
+        `🎉 กลับสู่ปฏิทินเทศกาลอัตโนมัติ: ${resolved.title}`,
+        undefined,
+        { channel: 'world' },
+      )
+    }
+  }
+  if (changed) notify()
+}
+
+export async function gmSetFestivalEventAction(input: {
+  active: boolean
+  eventId?: FestivalEventId
+  durationMinutes?: number
+  customTitle?: string
+  expBonusPct?: number
+  dropBonusPct?: number
+  goldBonusPct?: number
+}): Promise<{ ok: boolean; festivalOverride: FestivalOverrideState | null; message: string }> {
+  const p = game.p
+  if (!p || !p.gm || !isCurrentAccountGm()) {
+    return {
+      ok: false,
+      festivalOverride: null,
+      message: 'คำสั่งเปิด/ปิดกิจกรรมเทศกาลสงวนเฉพาะ GM สูงสุดเท่านั้น',
+    }
+  }
+  const res = await publishFestivalEventConfig({
+    ...input,
+    authorName: p.name,
+  })
+  if (res.ok) {
+    applyFestivalOverrideUpdate(res.festivalOverride, { silent: true })
+    say('gm', `[DEV] ${res.message}`, undefined, { channel: 'world' })
+    notify()
+  }
+  return res
+}
+
+export function claimFestivalDailyGiftAction(): { ok: boolean; message: string } {
+  const p = player()
+  const extV2 = sanitizeExtV2(p.extV2)
+  const res = claimFestivalDailyGiftInState(extV2.festival, Date.now(), game.festivalOverride)
+  if (!res.ok) {
+    return { ok: false, message: 'message' in res ? res.message : 'รับของขวัญรายวันไม่สำเร็จ' }
+  }
+  extV2.festival = res.next
+  p.extV2 = extV2
+  p.gold += res.gift.gold
+  if (res.gift.diamonds > 0) {
+    commitDiamondDelta(p, res.gift.diamonds, {
+      source: 'festival_daily_gift',
+      note: `ของขวัญรายวันเทศกาล ${res.active.title}`,
+    })
+  }
+  saveGame()
+  notify()
+  const msg = `รับของขวัญรายวัน "${res.active.title}" สำเร็จ! (+${res.gift.tokens} ${res.active.def.tokenName}, +${res.gift.gold.toLocaleString()} G, +${res.gift.diamonds} เพชร)`
+  say('loot', msg)
+  return { ok: true, message: msg }
+}
+
+export function claimFestivalMissionAction(missionId: string): { ok: boolean; message: string } {
+  const p = player()
+  const extV2 = sanitizeExtV2(p.extV2)
+  const res = claimFestivalMissionInState(extV2.festival, missionId, Date.now(), game.festivalOverride)
+  if (!res.ok) {
+    return { ok: false, message: 'message' in res ? res.message : 'รับรางวัลภารกิจไม่สำเร็จ' }
+  }
+  extV2.festival = res.next
+  extV2.battlePass = grantBattlePassExpToState(extV2.battlePass, 25).next
+  p.extV2 = extV2
+  if (res.mission.rewardGold > 0) p.gold += res.mission.rewardGold
+  if (res.mission.rewardDiamonds > 0) {
+    commitDiamondDelta(p, res.mission.rewardDiamonds, {
+      source: 'festival_mission',
+      note: `รางวัลภารกิจเทศกาล: ${res.mission.title}`,
+    })
+  }
+  saveGame()
+  notify()
+  const msg = `รับรางวัลภารกิจ "${res.mission.title}": +${res.mission.rewardTokens} ${res.active.def.tokenName}${res.mission.rewardGold > 0 ? `, +${res.mission.rewardGold.toLocaleString()} G` : ''}${res.mission.rewardDiamonds > 0 ? `, +${res.mission.rewardDiamonds} เพชร` : ''}`
+  say('loot', msg)
+  return { ok: true, message: msg }
+}
+
+export function exchangeFestivalShopRewardAction(rewardId: string): { ok: boolean; message: string } {
+  const p = player()
+  const extV2 = sanitizeExtV2(p.extV2)
+  const active = getActiveFestivalState()
+  const target = active.def.shopRewards.find((r) => r.id === rewardId)
+  if (!target) return { ok: false, message: 'ไม่พบของรางวัลนี้ในร้านค้าเทศกาล' }
+
+  if (target.kind === 'cosmetic' && target.cosmeticId && extV2.unlockedCosmetics.includes(target.cosmeticId)) {
+    return { ok: false, message: 'คุณปลดล็อกแฟชั่นชิ้นนี้แล้ว' }
+  }
+  if (target.kind === 'title' && target.titleId) {
+    const curRpg = sanitizeRpgExt(p.rpgExt)
+    if (curRpg.titles.includes(target.titleId)) {
+      return { ok: false, message: 'คุณมีฉายาพิเศษนี้อยู่แล้ว' }
+    }
+  }
+  if (target.kind === 'item' && target.itemId) {
+    const qty = Math.max(1, target.qty ?? 1)
+    if (!addItem(target.itemId, qty)) {
+      return { ok: false, message: 'กระเป๋าเต็ม กรุณาเคลียร์ช่องเก็บของก่อนแลก' }
+    }
+  }
+
+  const spendRes = spendFestivalTokensForShopInState(extV2.festival, rewardId, Date.now(), game.festivalOverride)
+  if (!spendRes.ok) {
+    if (target.kind === 'item' && target.itemId) {
+      removeItemId(target.itemId, Math.max(1, target.qty ?? 1))
+    }
+    return { ok: false, message: 'message' in spendRes ? spendRes.message : 'แลกรางวัลไม่สำเร็จ' }
+  }
+
+  extV2.festival = spendRes.next
+  if (target.kind === 'cosmetic' && target.cosmeticId) {
+    const cDef = getCosmeticDef(target.cosmeticId)
+    if (!extV2.unlockedCosmetics.includes(target.cosmeticId)) {
+      extV2.unlockedCosmetics.push(target.cosmeticId)
+    }
+    if (cDef?.slot === 'wing') extV2.equippedWing = target.cosmeticId
+    else if (cDef?.slot === 'weaponSkin') extV2.equippedWeaponSkin = target.cosmeticId
+    else if (cDef?.slot === 'frame') extV2.equippedFrame = target.cosmeticId
+  } else if (target.kind === 'title' && target.titleId) {
+    const rpg = sanitizeRpgExt(p.rpgExt)
+    if (!rpg.titles.includes(target.titleId)) {
+      rpg.titles = [...rpg.titles, target.titleId]
+      rpg.activeTitle = target.titleId
+    }
+    p.rpgExt = rpg
+  } else if (target.kind === 'currency') {
+    if (target.gold && target.gold > 0) p.gold += target.gold
+    if (target.diamonds && target.diamonds > 0) {
+      commitDiamondDelta(p, target.diamonds, {
+        source: 'festival_shop',
+        note: `แลกรางวัลร้านค้าเทศกาล: ${target.name}`,
+      })
+    }
+  }
+
+  p.extV2 = extV2
+  saveGame()
+  notify()
+  const msg = `แลก "${target.name}" สำเร็จ! (-${target.costTokens} ${spendRes.active.def.tokenName})`
+  say('loot', msg)
+  return { ok: true, message: msg }
 }
 
 export function adjustCameraZoomAction(delta: number) {
@@ -3054,9 +3254,29 @@ function killMonster(m: Monster) {
   const jobGoldMul = 1 + (currentJob().goldBonus ?? 0)
   const bpRes = grantBattlePassExpToState(extV2.battlePass, def.boss || m.isWorldBoss ? 45 : 12)
   extV2.battlePass = bpRes.next
+  const festMul = computeFestivalMultipliers(Date.now(), game.festivalOverride)
+  const festBoss = Boolean(def.boss || m.isWorldBoss)
+  const festTokenRoll = m.isWorldBoss ? 8 : def.boss ? 4 : Math.random() < 0.45 ? 1 : 0
+  const festProgRes = recordFestivalProgressInState(
+    extV2.festival,
+    {
+      kills: 1,
+      bossKills: festBoss ? 1 : 0,
+      tokensEarned: festTokenRoll,
+    },
+    Date.now(),
+    game.festivalOverride,
+  )
+  extV2.festival = festProgRes.next
   p.extV2 = extV2
   if (bpRes.leveledUp) {
     say('loot', `★ Battle Pass เลื่อนเป็น Lv.${bpRes.next.level}! เปิดดูรางวัลได้เลย`)
+  }
+  if (festTokenRoll > 0) {
+    addFloat(m.x, m.y - 42, `+${festTokenRoll} ${festMul.active.def.tokenName}`, festMul.active.def.accentColor, 9)
+    if (festBoss) {
+      say('loot', `🎉 ได้รับ ${festMul.active.def.tokenName} x${festTokenRoll} จาก ${m.worldBossName ?? def.name}!`)
+    }
   }
   addEffect({ type: 'burst', x: m.x, y: m.y - 6, r: def.boss || m.isWorldBoss ? 30 : 14, color: def.color, max: 0.4 })
   const baseGold = randInt(def.gold[0], def.gold[1])
@@ -3067,6 +3287,7 @@ function killMonster(m: Monster) {
       (game.partyGoldMul || 1) *
       guildGoldMul *
       talentBonus.goldMul *
+      festMul.goldMul *
       (1 + (getStats(p).affixGoldPct ?? 0) / 100),
   )
   const vipBonus = getEffectiveVipBonuses(ensurePremiumState(p).vip)
@@ -3082,6 +3303,7 @@ function killMonster(m: Monster) {
       vipBonus.expMul *
       timeExpMul *
       activeServerRates.expMultiplier *
+      festMul.expMul *
       (1 + ((getStats(p).affixExpPct ?? 0) + asuraKillBoosts.expBonusPct) / 100),
   )
   p.gold += gold
@@ -3124,7 +3346,7 @@ function killMonster(m: Monster) {
   for (const d of [...junkDrops, ...dynamicDrops]) {
     if (seen.has(d.itemId)) continue
     seen.add(d.itemId)
-    const effectiveDropChance = applyServerDropChance(d.chance, activeServerRates.dropMultiplier)
+    const effectiveDropChance = applyServerDropChance(d.chance, activeServerRates.dropMultiplier * festMul.dropMul)
     if (Math.random() < effectiveDropChance) {
       dropItem(d.itemId, 1, m.x, m.y)
       droppedItems.push({ itemId: d.itemId, qty: 1 })
@@ -5384,6 +5606,13 @@ export function gatherNearbyNodeAction(nodeId?: string): { ok: boolean; message:
   extV2.gatherCount += 1
   const bpRes = grantBattlePassExpToState(extV2.battlePass, 15)
   extV2.battlePass = bpRes.next
+  const gatherFest = recordFestivalProgressInState(
+    extV2.festival,
+    { gathers: 1, tokensEarned: 1 },
+    Date.now(),
+    game.festivalOverride,
+  )
+  extV2.festival = gatherFest.next
   p.extV2 = extV2
   game.gatherCd = 1.6
   addFloat(p.x, p.y - 26, `+${addedNames[0]}`, node.color, 9)
@@ -6209,6 +6438,12 @@ export function recordCoopDungeonClearAction(gold: number, diamonds: number, exp
   const extV2 = sanitizeExtV2(p.extV2)
   extV2.coopClears += 1
   extV2.battlePass = grantBattlePassExpToState(extV2.battlePass, 35).next
+  extV2.festival = recordFestivalProgressInState(
+    extV2.festival,
+    { bossKills: 1, tokensEarned: 4 },
+    Date.now(),
+    game.festivalOverride,
+  ).next
   p.extV2 = extV2
   gainExp(exp)
   saveGame()

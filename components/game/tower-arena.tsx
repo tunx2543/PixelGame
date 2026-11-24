@@ -33,8 +33,10 @@ import { computeLevelGapModifiers } from '@/lib/game/combat-balance'
 import { getSkillIconPath, getSkillVfxSpec } from '@/lib/game/vfx-specs'
 import {
   SAVE_KEY,
+  applyFestivalOverrideUpdate,
   applyServerRatesUpdate,
   getActiveCharacterSlot,
+  getActiveFestivalOverride,
   getActiveServerRates,
   getInventoryCapacity,
   getStats,
@@ -43,6 +45,8 @@ import {
   syncExternalDiamondDelta,
   type SaveData,
 } from '@/lib/game/engine'
+import { sanitizeExtV2 } from '@/lib/game/extended-systems'
+import { computeFestivalMultipliers, recordFestivalProgressInState } from '@/lib/game/festival-events'
 import { recordDailyMissionProgress } from '@/lib/game/daily-missions'
 import {
   calculateEnemyAttack,
@@ -309,6 +313,7 @@ export function TowerArena() {
     void pollPublicWorldEvents(0).then((res) => {
       if (active && res) {
         applyServerRatesUpdate(res.serverRates, { silent: true })
+        applyFestivalOverrideUpdate(res.festivalOverride, { silent: true })
       }
     })
     return () => {
@@ -411,8 +416,12 @@ export function TowerArena() {
       const petBonus = getActivePetBonuses(nextSave.petState, nextSave.equippedGemCompanion, nextSave.ownedGemItems)
 
       const activeServerRates = typeof window !== 'undefined' ? getActiveServerRates() : null
-      const goldEarned = Math.round(spec.clearGold * (petBonus?.goldMul ?? 1))
-      const expEarned = Math.round(spec.clearExp * (petBonus?.expMul ?? 1) * (activeServerRates?.expMultiplier ?? 1))
+      const festOverride = typeof window !== 'undefined' ? getActiveFestivalOverride() : null
+      const festMul = computeFestivalMultipliers(Date.now(), festOverride)
+      const goldEarned = Math.round(spec.clearGold * (petBonus?.goldMul ?? 1) * festMul.goldMul)
+      const expEarned = Math.round(
+        spec.clearExp * (petBonus?.expMul ?? 1) * (activeServerRates?.expMultiplier ?? 1) * festMul.expMul,
+      )
       const diamondsEarned = isFirstClear ? spec.firstClearDiamonds : spec.isBossFloor ? 5 : 1
 
       nextSave.kills = (nextSave.kills ?? 0) + 1
@@ -429,6 +438,19 @@ export function TowerArena() {
         { kills: 1, bossKills: spec.isBossFloor ? 1 : 0, towerClears: 1 },
         nextSave.kills,
       )
+      const extV2 = sanitizeExtV2(nextSave.extV2)
+      extV2.festival = recordFestivalProgressInState(
+        extV2.festival,
+        {
+          kills: 1,
+          bossKills: spec.isBossFloor ? 1 : 0,
+          towerClears: 1,
+          tokensEarned: spec.isBossFloor ? 5 : 2,
+        },
+        Date.now(),
+        festOverride,
+      ).next
+      nextSave.extV2 = extV2
       const sanitizedPets = sanitizePetState(nextSave.petState, nextSave.ownedGemItems, nextSave.equippedGemCompanion)
       nextSave.petState = grantActivePetExp(sanitizedPets, Math.max(8, Math.round(expEarned * 0.3))).nextPetState
 
