@@ -4,10 +4,12 @@ import { useState } from 'react'
 import { ITEMS, SHOP_STOCK } from '@/lib/game/data'
 import { buyItem, hasVipRemoteAccess, isNearTownNpcRole, itemLabel, sellItem, sellPrice } from '@/lib/game/engine'
 import { compareEquipmentItem } from '@/lib/game/item-compare'
+import { resolveEffectiveRarity } from '@/lib/game/mmo-systems'
 import { useGame } from '@/lib/game/use-game'
 import { cn } from '@/lib/utils'
 import { formatNum } from '../format'
 import { ItemIcon } from '../item-icon'
+import { ItemVfxBox } from '../item-vfx'
 import { PanelFrame, PxButton } from './panels'
 
 const TYPE_NAME: Record<string, string> = { stick: 'กระบอง', sword: 'ดาบ', staff: 'คทา', bow: 'ธนู', dagger: 'มีด' }
@@ -46,10 +48,16 @@ export function ShopPanel() {
       </div>
 
       {tooltipDef && (
-        <div className="mb-3 flex items-center gap-3 border-2 border-primary/50 bg-background/80 p-2.5 text-xs">
-          <div className="grid size-11 shrink-0 place-items-center border border-border bg-muted">
+        <div className="mb-3 flex items-center gap-3 rounded-lg border border-primary/50 bg-background/85 p-2.5 text-xs shadow-md">
+          <ItemVfxBox
+            itemId={tooltipDef.id}
+            rarity={resolveEffectiveRarity(undefined, tooltipDef)}
+            element={tooltipDef.element}
+            size="sm"
+            className="size-11 shrink-0 rounded-md p-1"
+          >
             <ItemIcon itemId={tooltipDef.id} size={36} />
-          </div>
+          </ItemVfxBox>
           <div className="min-w-0 flex-1">
             <p className="truncate font-bold text-primary">{tooltipDef.name}</p>
             <p className="truncate text-[11px] text-muted-foreground">
@@ -69,15 +77,24 @@ export function ShopPanel() {
             if (!def) return null
             const stack = def.kind === 'consumable' || def.kind === 'material'
             const cmp = compareEquipmentItem({ itemId: id, plus: 0 }, p)
+            const rarity = resolveEffectiveRarity(undefined, def)
             return (
               <li
                 key={id}
                 title={`${def.name} — ${def.description}`}
                 onMouseEnter={() => setHoveredItemId(id)}
                 onMouseLeave={() => setHoveredItemId((cur) => (cur === id ? null : cur))}
-                className="flex items-center gap-3 border-2 border-border bg-muted p-2"
+                className="flex items-center gap-3 rounded-lg border border-border/90 bg-muted/90 p-2 shadow-sm transition-colors hover:border-primary/50"
               >
-                <ItemIcon itemId={id} size={36} />
+                <ItemVfxBox
+                  itemId={id}
+                  rarity={rarity}
+                  element={def.element}
+                  size="sm"
+                  className="size-11 shrink-0 rounded-md p-1"
+                >
+                  <ItemIcon itemId={id} size={36} />
+                </ItemVfxBox>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <p className="truncate text-sm text-foreground">{def.name}</p>
@@ -131,15 +148,24 @@ export function ShopPanel() {
         <ul className="grid gap-2 md:grid-cols-2">
           {p.inventory.map((it) => {
             const def = ITEMS[it.itemId]
+            const rarity = def ? resolveEffectiveRarity(it, def) : 'common'
             return (
               <li
                 key={it.uid}
                 title={def ? `${def.name} — ${def.description}` : undefined}
                 onMouseEnter={() => setHoveredItemId(it.itemId)}
                 onMouseLeave={() => setHoveredItemId((cur) => (cur === it.itemId ? null : cur))}
-                className="flex items-center gap-3 border-2 border-border bg-muted p-2"
+                className="flex items-center gap-3 rounded-lg border border-border/90 bg-muted/90 p-2 shadow-sm transition-colors hover:border-primary/50"
               >
-                <ItemIcon itemId={it.itemId} size={36} />
+                <ItemVfxBox
+                  itemId={it.itemId}
+                  rarity={rarity}
+                  element={def?.element}
+                  size="sm"
+                  className="size-11 shrink-0 rounded-md p-1"
+                >
+                  <ItemIcon itemId={it.itemId} size={36} />
+                </ItemVfxBox>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm text-foreground">
                     {itemLabel(it)} {it.qty > 1 && <span className="text-muted-foreground">x{it.qty}</span>}

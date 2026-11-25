@@ -131,6 +131,7 @@ export interface AuditLogEntry {
     | 'TOPUP_MILESTONE_CLAIM'
     | 'DAILY_TOPUP_CLAIM'
     | 'REDEEM_CODE'
+    | 'WING_GACHA'
   characterId: string
   actorUid: string
   actorRole: 'gm' | 'player'

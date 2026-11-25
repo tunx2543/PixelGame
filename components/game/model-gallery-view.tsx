@@ -463,7 +463,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                             : 'border-border bg-background hover:border-primary/60'
                         }`}
                       >
-                        <img src={getSkillIconPath(s.id)} alt="" width={16} height={16} className="pixelated size-4 shrink-0" />
+                        <img src={getSkillIconPath(s.id)} alt="" width={16} height={16} className="size-4 shrink-0 rounded-[3px]" />
                         <span className="font-semibold" style={{ color: vfx.primaryColor }}>
                           {s.name}
                         </span>

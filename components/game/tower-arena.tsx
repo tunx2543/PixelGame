@@ -1381,7 +1381,7 @@ export function TowerArena() {
                       alt=""
                       width={20}
                       height={20}
-                      className="pixelated size-5 shrink-0 border border-border/80 bg-[#0e0f1a]"
+                      className="size-5 shrink-0 rounded-[3px] border border-border/80 bg-[#0e0f1a]"
                     />
                     <span className="min-w-0 leading-tight">
                       <span className="block truncate text-[11px] font-semibold" style={{ color: vfx.primaryColor }}>

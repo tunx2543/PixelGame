@@ -512,34 +512,137 @@ export function renderSkillIconBmpDataUrl(
     }
   }
 
-  // 3) Composite dark outline around foreground glyph + foreground colors onto background
-  for (let y = 1; y < ICON_SIZE - 1; y++) {
-    for (let x = 1; x < ICON_SIZE - 1; x++) {
-      const p = y * ICON_SIZE + x
-      if (fgMask[p]) continue
-      const hasNeighbor =
-        fgMask[p - 1] ||
-        fgMask[p + 1] ||
-        fgMask[p - ICON_SIZE] ||
-        fgMask[p + ICON_SIZE]
-      if (hasNeighbor) {
-        const idx = p * 3
-        pixels[idx] = darkInk[0]
-        pixels[idx + 1] = darkInk[1]
-        pixels[idx + 2] = darkInk[2]
+  // 3) Smooth 72x72 (3x) 2.5D beveled badge + drop shadow + relief shading
+  const OUT = 72
+  const outPixels = new Uint8Array(OUT * OUT * 3)
+
+  const sampleMask = (fx: number, fy: number): number => {
+    const x0 = Math.max(0, Math.min(ICON_SIZE - 1, Math.floor(fx)))
+    const y0 = Math.max(0, Math.min(ICON_SIZE - 1, Math.floor(fy)))
+    const x1 = Math.min(ICON_SIZE - 1, x0 + 1)
+    const y1 = Math.min(ICON_SIZE - 1, y0 + 1)
+    const tx = fx - x0
+    const ty = fy - y0
+    const m00 = fgMask[y0 * ICON_SIZE + x0]
+    const m10 = fgMask[y0 * ICON_SIZE + x1]
+    const m01 = fgMask[y1 * ICON_SIZE + x0]
+    const m11 = fgMask[y1 * ICON_SIZE + x1]
+    const top = m00 + (m10 - m00) * tx
+    const bot = m01 + (m11 - m01) * tx
+    return top + (bot - top) * ty
+  }
+
+  const sampleColor = (fx: number, fy: number): Rgb => {
+    const x0 = Math.max(0, Math.min(ICON_SIZE - 1, Math.floor(fx)))
+    const y0 = Math.max(0, Math.min(ICON_SIZE - 1, Math.floor(fy)))
+    const x1 = Math.min(ICON_SIZE - 1, x0 + 1)
+    const y1 = Math.min(ICON_SIZE - 1, y0 + 1)
+    const tx = fx - x0
+    const ty = fy - y0
+    const pts = [
+      [x0, y0, (1 - tx) * (1 - ty)],
+      [x1, y0, tx * (1 - ty)],
+      [x0, y1, (1 - tx) * ty],
+      [x1, y1, tx * ty],
+    ] as const
+    let wSum = 0
+    let rSum = 0
+    let gSum = 0
+    let bSum = 0
+    for (const [cx, cy, w] of pts) {
+      const p = cy * ICON_SIZE + cx
+      if (!fgMask[p]) continue
+      const idx = p * 3
+      rSum += fgPixels[idx] * w
+      gSum += fgPixels[idx + 1] * w
+      bSum += fgPixels[idx + 2] * w
+      wSum += w
+    }
+    if (wSum <= 0.0001) return primary
+    return [rSum / wSum, gSum / wSum, bSum / wSum]
+  }
+
+  const clampByte = (v: number) => (v < 0 ? 0 : v > 255 ? 255 : Math.round(v))
+
+  for (let py = 0; py < OUT; py++) {
+    for (let px = 0; px < OUT; px++) {
+      // Rounded 2.5D bevel badge background
+      const qx = Math.abs(px - (OUT - 1) * 0.5) - (OUT * 0.5 - 8)
+      const qy = Math.abs(py - (OUT - 1) * 0.5) - (OUT * 0.5 - 8)
+      const sdBox = Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - 7
+
+      const radial = Math.hypot((px - OUT * 0.5) / (OUT * 0.52), (py - OUT * 0.5) / (OUT * 0.52))
+      let bg = mixRgb(bgGlow, bgDeep, Math.min(1, radial * 0.96))
+
+      // Inner recessed sheen on upper-left quadrant
+      const sheen = Math.max(0, 1 - Math.hypot((px - OUT * 0.34) / 28, (py - OUT * 0.28) / 20))
+      if (sheen > 0) {
+        bg = mixRgb(bg, rimLight, sheen * 0.22)
       }
+
+      if (sdBox > 0) {
+        bg = darkInk
+      } else if (sdBox > -2.4) {
+        // 3D beveled frame rim lit from top-left
+        const nx = (px - OUT * 0.5) / (OUT * 0.5)
+        const ny = (py - OUT * 0.5) / (OUT * 0.5)
+        const rimLit = (-nx * 0.7 - ny * 0.7) * 0.5 + 0.5
+        bg = mixRgb(rimShadow, rimLight, rimLit)
+      } else if (sdBox > -4.2) {
+        bg = mixRgb(bg, darkInk, 0.45)
+      }
+
+      const fx = ((px + 0.5) / OUT) * (ICON_SIZE - 1)
+      const fy = ((py + 0.5) / OUT) * (ICON_SIZE - 1)
+      const occ = sampleMask(fx, fy)
+      const occShadow = sampleMask(fx - 0.9, fy - 1.15)
+      const occGx = sampleMask(fx + 0.45, fy) - sampleMask(fx - 0.45, fy)
+      const occGy = sampleMask(fx, fy + 0.45) - sampleMask(fx, fy - 0.45)
+
+      let r = bg[0]
+      let g = bg[1]
+      let b = bg[2]
+
+      // Drop shadow onto badge surface
+      if (occShadow > 0.28 && occ < 0.48 && sdBox < -1) {
+        const sAlpha = Math.min(1, (occShadow - 0.28) / 0.4) * 0.52
+        r = r * (1 - sAlpha) + darkInk[0] * sAlpha
+        g = g * (1 - sAlpha) + darkInk[1] * sAlpha
+        b = b * (1 - sAlpha) + darkInk[2] * sAlpha
+      }
+
+      // Dark contour halo around glyph
+      if (occ > 0.18 && occ <= 0.44) {
+        const edgeA = Math.min(1, (occ - 0.18) / 0.22) * 0.88
+        r = r * (1 - edgeA) + darkInk[0] * edgeA
+        g = g * (1 - edgeA) + darkInk[1] * edgeA
+        b = b * (1 - edgeA) + darkInk[2] * edgeA
+      }
+
+      // Shaded 2.5D glyph surface
+      if (occ > 0.4) {
+        const alpha = Math.min(1, (occ - 0.4) / 0.22)
+        const col = sampleColor(fx, fy)
+        // Top-left directional relief lighting from occupancy gradient + dome lift
+        const lightBias = (-occGx * 0.72 - occGy * 0.72) * 0.55 + (occ - 0.65) * 0.38
+        const spec = Math.max(0, lightBias - 0.22) * 1.4
+        const shade = Math.max(0.58, Math.min(1.28, 0.95 + lightBias))
+        const fgR = col[0] * shade + 255 * spec * 0.24
+        const fgG = col[1] * shade + 255 * spec * 0.24
+        const fgB = col[2] * shade + 255 * spec * 0.24
+        r = r * (1 - alpha) + fgR * alpha
+        g = g * (1 - alpha) + fgG * alpha
+        b = b * (1 - alpha) + fgB * alpha
+      }
+
+      const oIdx = (py * OUT + px) * 3
+      outPixels[oIdx] = clampByte(r)
+      outPixels[oIdx + 1] = clampByte(g)
+      outPixels[oIdx + 2] = clampByte(b)
     }
   }
 
-  for (let p = 0; p < ICON_SIZE * ICON_SIZE; p++) {
-    if (!fgMask[p]) continue
-    const idx = p * 3
-    pixels[idx] = fgPixels[idx]
-    pixels[idx + 1] = fgPixels[idx + 1]
-    pixels[idx + 2] = fgPixels[idx + 2]
-  }
-
-  const url = encodeBmp24(pixels, ICON_SIZE, ICON_SIZE)
+  const url = encodeBmp24(outPixels, OUT, OUT)
   bmpCache.set(cacheKey, url)
   return url
 }

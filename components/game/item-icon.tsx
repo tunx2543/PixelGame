@@ -2,6 +2,7 @@
 
 import { ITEMS } from '@/lib/game/data'
 import type { InvItem } from '@/lib/game/engine'
+import { resolveItemImagePath } from '@/lib/game/items'
 import { resolveEffectiveRarity, type EquipmentRarity } from '@/lib/game/mmo-systems'
 import { itemIconUrl } from '@/lib/game/sprites'
 import { cn } from '@/lib/utils'
@@ -10,10 +11,11 @@ import { ItemVfxBox } from './item-vfx'
 export function ItemIcon({ itemId, size = 32, className }: { itemId: string; size?: number; className?: string }) {
   const def = ITEMS[itemId]
   if (!def) return null
+  const primarySrc = resolveItemImagePath(def)
 
   return (
     <img
-      src={def.asset ? def.asset : itemIconUrl(def.icon, def.color)}
+      src={primarySrc}
       onError={(event) => {
         event.currentTarget.onerror = null
         event.currentTarget.src = itemIconUrl(def.icon, def.color)
@@ -23,7 +25,7 @@ export function ItemIcon({ itemId, size = 32, className }: { itemId: string; siz
       width={size}
       height={size}
       referrerPolicy="no-referrer"
-      className={cn('pixelated shrink-0 object-contain', className)}
+      className={cn('shrink-0 object-contain drop-shadow-[0_2px_3px_rgba(0,0,0,0.58)]', className)}
       draggable={false}
     />
   )

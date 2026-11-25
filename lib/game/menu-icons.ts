@@ -1428,16 +1428,20 @@ function renderTemplateCanvas(tmpl: IconTemplate): HTMLCanvasElement {
   const rows = tmpl.rows
   const w = Math.max(...rows.map((r) => r.length))
   const h = rows.length
-  const pad = 1
-  const cw = w + pad * 2
-  const ch = h + pad * 2
+  const pad = 2
+  const scale = 4
+  const gw = w + pad * 2
+  const gh = h + pad * 2
+  const cw = gw * scale
+  const ch = gh * scale
   const canvas = document.createElement('canvas')
   canvas.width = cw
   canvas.height = ch
   const ctx = canvas.getContext('2d')!
-  ctx.imageSmoothingEnabled = false
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
 
-  const filled: boolean[][] = Array.from({ length: ch }, () => Array<boolean>(cw).fill(false))
+  const filled: boolean[][] = Array.from({ length: gh }, () => Array<boolean>(gw).fill(false))
   for (let y = 0; y < h; y++) {
     const row = rows[y]
     for (let x = 0; x < row.length; x++) {
@@ -1447,25 +1451,56 @@ function renderTemplateCanvas(tmpl: IconTemplate): HTMLCanvasElement {
     }
   }
 
-  // 1px dark pixel outline
+  // Soft 2.5D drop shadow
+  ctx.save()
+  ctx.fillStyle = 'rgba(7, 10, 22, 0.42)'
+  for (let y = 0; y < gh; y++) {
+    for (let x = 0; x < gw; x++) {
+      if (!filled[y][x]) continue
+      ctx.beginPath()
+      ctx.roundRect(x * scale + 1.5, y * scale + 2.5, scale + 0.6, scale + 0.6, 1.5)
+      ctx.fill()
+    }
+  }
+  ctx.restore()
+
+  // Smooth rounded dark contour outline
   ctx.fillStyle = OUTLINE
-  for (let y = 0; y < ch; y++) {
-    for (let x = 0; x < cw; x++) {
-      if (filled[y][x]) continue
-      if (filled[y - 1]?.[x] || filled[y + 1]?.[x] || filled[y]?.[x - 1] || filled[y]?.[x + 1]) {
-        ctx.fillRect(x, y, 1, 1)
-      }
+  for (let y = 0; y < gh; y++) {
+    for (let x = 0; x < gw; x++) {
+      if (!filled[y][x]) continue
+      ctx.beginPath()
+      ctx.roundRect(x * scale - 1.6, y * scale - 1.6, scale + 3.2, scale + 3.2, 2.2)
+      ctx.fill()
     }
   }
 
-  // Fill pixels
+  // Main beveled body + 2.5D top-left highlight & bottom-right shadow per cell
   for (let y = 0; y < h; y++) {
     const row = rows[y]
     for (let x = 0; x < row.length; x++) {
       const col = tmpl.palette[row[x]]
       if (!col) continue
+      const gx = x + pad
+      const gy = y + pad
+      const px = gx * scale
+      const py = gy * scale
+      const r = 1.1
       ctx.fillStyle = col
-      ctx.fillRect(x + pad, y + pad, 1, 1)
+      ctx.beginPath()
+      ctx.roundRect(px - 0.35, py - 0.35, scale + 0.7, scale + 0.7, r)
+      ctx.fill()
+
+      // Top-left bevel highlight when exposed above or left
+      if (!filled[gy - 1]?.[gx] || !filled[gy]?.[gx - 1]) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.28)'
+        ctx.fillRect(px, py, scale, 1.1)
+      }
+      // Bottom-right depth shading when exposed below or right
+      if (!filled[gy + 1]?.[gx] || !filled[gy]?.[gx + 1]) {
+        ctx.fillStyle = 'rgba(6, 10, 24, 0.3)'
+        ctx.fillRect(px, py + scale - 1.1, scale, 1.1)
+      }
     }
   }
 

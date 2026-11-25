@@ -236,7 +236,7 @@ export function WardrobePanel() {
                         className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
                       >
                         {def?.iconAsset ? (
-                          <img src={def.iconAsset} alt="" className="pixelated size-5 shrink-0 object-contain" />
+                          <img src={def.iconAsset} alt="" className="size-5 shrink-0 object-contain" />
                         ) : (
                           <span className="grid size-5 shrink-0 place-items-center rounded border border-border/50 bg-muted/50 text-[9px] text-muted-foreground">
                             -
@@ -372,7 +372,7 @@ export function WardrobePanel() {
                     <img
                       src={f.iconAsset ?? `/assets/fashion/icons/${f.id}.png`}
                       alt={f.name}
-                      className="pixelated size-11 object-contain"
+                      className="size-11 object-contain"
                     />
                   </div>
                   <div className="min-w-0 flex-1">

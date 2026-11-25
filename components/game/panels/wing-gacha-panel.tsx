@@ -31,7 +31,7 @@ const RARITY_ORDER: Record<PremiumRarity, number> = {
   ตำนาน: 1,
   อีปิก: 2,
   หายาก: 3,
-  ธรรมดา: 4,
+  ทั่วไป: 4,
 }
 
 function rarityBadgeClass(rarity: PremiumRarity): string {
@@ -265,7 +265,7 @@ export function WingGachaPanel() {
                       <img
                         src={item.def.iconAsset ?? `/assets/fashion/icons/${item.fashionId}.png`}
                         alt={item.def.name}
-                        className="pixelated size-10 object-contain"
+                        className="size-10 object-contain"
                       />
                     </div>
                     <div className="min-w-0 flex-1">
@@ -347,7 +347,7 @@ export function WingGachaPanel() {
                   <img
                     src={entry.def.iconAsset ?? `/assets/fashion/icons/${entry.fashionId}.png`}
                     alt={entry.def.name}
-                    className="pixelated size-11 object-contain"
+                    className="size-11 object-contain"
                   />
                 </div>
                 <div className="min-w-0 flex-1">

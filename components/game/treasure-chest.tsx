@@ -183,55 +183,247 @@ export function PixelChestCanvas({
     if (!ctx) return
 
     const pal = CHEST_PALETTES[tierId] ?? CHEST_PALETTES.wooden
-    const rows = open ? OPEN_CHEST_ROWS : CLOSED_CHEST_ROWS
-    const cols = rows[0].length
-    const rCount = rows.length
+    const w = 240
+    const h = 188
+    canvas.width = w
+    canvas.height = h
+    ctx.clearRect(0, 0, w, h)
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
 
-    canvas.width = cols
-    canvas.height = rCount
-    ctx.clearRect(0, 0, cols, rCount)
-    ctx.imageSmoothingEnabled = false
-
-    const map: Record<string, string> = {
-      O: pal.outline,
-      D: pal.bodyDark,
-      B: pal.bodyMid,
-      M: pal.bodyMid,
-      L: pal.bodyLight,
-      T: pal.trimMid,
-      G: pal.trimLight,
-      I: pal.interior,
-      C: pal.gold,
+    const rr = (x: number, y: number, rw: number, rh: number, r: number) => {
+      ctx.beginPath()
+      ctx.roundRect(x, y, rw, rh, r)
     }
 
-    for (let y = 0; y < rCount; y++) {
-      const row = rows[y]
-      for (let x = 0; x < row.length; x++) {
-        const ch = row[x]
-        if (ch === '.') continue
-        if (ch === 'D' && y >= 6 && y <= 9 && x >= 9 && x <= 10) {
-          ctx.fillStyle = pal.gem
-        } else {
-          ctx.fillStyle = map[ch] ?? pal.bodyMid
-        }
-        ctx.fillRect(x, y, 1, 1)
+    // Ground ambient drop shadow (gives 2.5D floating weight)
+    const shadowGrad = ctx.createRadialGradient(w * 0.5, h * 0.87, 10, w * 0.5, h * 0.87, 94)
+    shadowGrad.addColorStop(0, 'rgba(4, 7, 18, 0.72)')
+    shadowGrad.addColorStop(0.6, 'rgba(4, 7, 18, 0.34)')
+    shadowGrad.addColorStop(1, 'rgba(4, 7, 18, 0)')
+    ctx.fillStyle = shadowGrad
+    ctx.beginPath()
+    ctx.ellipse(w * 0.5, h * 0.87, 92, 18, 0, 0, Math.PI * 2)
+    ctx.fill()
+
+    // Subtle tier aura behind chest
+    if (tierId === 'golden' || tierId === 'mythic' || open) {
+      const aura = ctx.createRadialGradient(w * 0.5, h * 0.48, 8, w * 0.5, h * 0.48, 92)
+      aura.addColorStop(0, `${pal.gemGlow}55`)
+      aura.addColorStop(0.55, `${pal.gold}24`)
+      aura.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.fillStyle = aura
+      ctx.beginPath()
+      ctx.arc(w * 0.5, h * 0.48, 92, 0, Math.PI * 2)
+      ctx.fill()
+    }
+
+    // 2.5D Chest Base (front + right side bevel for depth)
+    const bx = 34
+    const by = open ? 86 : 82
+    const bw = 152
+    const bh = 74
+
+    // Right 3D side panel
+    ctx.fillStyle = pal.bodyDark
+    ctx.beginPath()
+    ctx.moveTo(bx + bw - 6, by + 2)
+    ctx.lineTo(bx + bw + 22, by - 12)
+    ctx.lineTo(bx + bw + 22, by + bh - 12)
+    ctx.lineTo(bx + bw - 4, by + bh)
+    ctx.closePath()
+    ctx.fill()
+    ctx.strokeStyle = pal.outline
+    ctx.lineWidth = 3
+    ctx.stroke()
+
+    // Right side metallic strap
+    ctx.fillStyle = pal.trimDark
+    ctx.beginPath()
+    ctx.moveTo(bx + bw + 6, by - 4)
+    ctx.lineTo(bx + bw + 14, by - 8)
+    ctx.lineTo(bx + bw + 14, by + bh - 8)
+    ctx.lineTo(bx + bw + 6, by + bh - 4)
+    ctx.closePath()
+    ctx.fill()
+
+    // Main front chest body with gradient
+    const bodyGrad = ctx.createLinearGradient(bx, by, bx, by + bh)
+    bodyGrad.addColorStop(0, pal.bodyLight)
+    bodyGrad.addColorStop(0.45, pal.bodyMid)
+    bodyGrad.addColorStop(1, pal.bodyDark)
+    ctx.fillStyle = bodyGrad
+    rr(bx, by, bw, bh, 10)
+    ctx.fill()
+    ctx.strokeStyle = pal.outline
+    ctx.lineWidth = 3.5
+    ctx.stroke()
+
+    // Horizontal plank seams on front
+    ctx.strokeStyle = 'rgba(0,0,0,0.28)'
+    ctx.lineWidth = 2
+    for (const py of [by + 25, by + 49]) {
+      ctx.beginPath()
+      ctx.moveTo(bx + 16, py)
+      ctx.lineTo(bx + bw - 16, py)
+      ctx.stroke()
+    }
+
+    // Metallic rim & vertical bands on front
+    const trimGrad = ctx.createLinearGradient(bx, by, bx, by + bh)
+    trimGrad.addColorStop(0, pal.trimLight)
+    trimGrad.addColorStop(0.5, pal.trimMid)
+    trimGrad.addColorStop(1, pal.trimDark)
+    ctx.fillStyle = trimGrad
+    for (const sx of [bx + 4, bx + bw - 18]) {
+      rr(sx, by + 2, 14, bh - 4, 4)
+      ctx.fill()
+      ctx.strokeStyle = pal.outline
+      ctx.lineWidth = 2
+      ctx.stroke()
+    }
+    // Bottom metallic rail
+    rr(bx + 2, by + bh - 12, bw - 4, 10, 4)
+    ctx.fill()
+    ctx.stroke()
+
+    if (open) {
+      // Open lid tilted backwards + glowing interior treasure
+      ctx.save()
+      const lidGrad = ctx.createLinearGradient(bx, 18, bx, 88)
+      lidGrad.addColorStop(0, pal.bodyLight)
+      lidGrad.addColorStop(1, pal.bodyDark)
+      ctx.fillStyle = lidGrad
+      ctx.beginPath()
+      ctx.moveTo(bx + 12, 22)
+      ctx.quadraticCurveTo(bx + bw * 0.5, 8, bx + bw + 16, 18)
+      ctx.lineTo(bx + bw + 18, 72)
+      ctx.lineTo(bx, 86)
+      ctx.closePath()
+      ctx.fill()
+      ctx.strokeStyle = pal.outline
+      ctx.lineWidth = 3.5
+      ctx.stroke()
+
+      // Interior dark cavity
+      ctx.fillStyle = pal.interior
+      ctx.beginPath()
+      ctx.moveTo(bx + 8, by + 4)
+      ctx.lineTo(bx + 20, by - 16)
+      ctx.lineTo(bx + bw + 12, by - 16)
+      ctx.lineTo(bx + bw - 6, by + 4)
+      ctx.closePath()
+      ctx.fill()
+
+      // Treasure gold coins mound + light beam
+      const coinGrad = ctx.createRadialGradient(bx + bw * 0.52, by - 6, 4, bx + bw * 0.52, by - 6, 56)
+      coinGrad.addColorStop(0, '#fef9c3')
+      coinGrad.addColorStop(0.55, pal.gold)
+      coinGrad.addColorStop(1, 'rgba(245, 158, 11, 0)')
+      ctx.fillStyle = coinGrad
+      ctx.beginPath()
+      ctx.ellipse(bx + bw * 0.52, by - 6, 52, 16, 0, 0, Math.PI * 2)
+      ctx.fill()
+
+      // Gold coins pile details
+      for (let i = 0; i < 9; i++) {
+        const cx = bx + 34 + i * 12
+        const cy = by - 5 - (i % 3) * 3
+        ctx.fillStyle = i % 2 === 0 ? '#fde047' : '#f59e0b'
+        ctx.beginPath()
+        ctx.ellipse(cx, cy, 7, 4, 0, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.strokeStyle = '#92400e'
+        ctx.lineWidth = 1
+        ctx.stroke()
       }
+      ctx.restore()
+    } else {
+      // Closed 2.5D arched domed lid (front + 3D side arc)
+      ctx.fillStyle = pal.bodyDark
+      ctx.beginPath()
+      ctx.moveTo(bx + bw - 6, by + 4)
+      ctx.quadraticCurveTo(bx + bw + 10, by - 40, bx + bw + 22, by - 12)
+      ctx.lineTo(bx + bw + 22, by - 10)
+      ctx.lineTo(bx + bw - 4, by + 4)
+      ctx.closePath()
+      ctx.fill()
+      ctx.strokeStyle = pal.outline
+      ctx.lineWidth = 3
+
+      const lidGrad = ctx.createLinearGradient(bx, by - 46, bx, by + 8)
+      lidGrad.addColorStop(0, pal.bodyLight)
+      lidGrad.addColorStop(0.5, pal.bodyMid)
+      lidGrad.addColorStop(1, pal.bodyDark)
+      ctx.fillStyle = lidGrad
+      ctx.beginPath()
+      ctx.moveTo(bx - 4, by + 4)
+      ctx.quadraticCurveTo(bx + 2, by - 42, bx + 26, by - 44)
+      ctx.lineTo(bx + bw - 14, by - 48)
+      ctx.quadraticCurveTo(bx + bw + 14, by - 40, bx + bw + 18, by - 12)
+      ctx.lineTo(bx + bw - 2, by + 4)
+      ctx.closePath()
+      ctx.fill()
+      ctx.strokeStyle = pal.outline
+      ctx.lineWidth = 3.5
+      ctx.stroke()
+
+      // Curved metallic lid straps
+      ctx.fillStyle = trimGrad
+      for (const sx of [bx + 6, bx + bw - 22]) {
+        rr(sx, by - 40, 14, 44, 6)
+        ctx.fill()
+        ctx.strokeStyle = pal.outline
+        ctx.lineWidth = 2
+        ctx.stroke()
+      }
+
+      // Lid top rim overhang lip
+      rr(bx - 5, by - 4, bw + 6, 12, 5)
+      ctx.fillStyle = trimGrad
+      ctx.fill()
+      ctx.strokeStyle = pal.outline
+      ctx.lineWidth = 2.5
+      ctx.stroke()
     }
 
-    // Add bright gem highlight dot
-    ctx.fillStyle = pal.gemGlow
-    ctx.fillRect(9, open ? 6 : 9, 1, 1)
+    // Center ornate lock plate + 2.5D faceted gemstone
+    const lx = bx + bw * 0.5
+    const ly = by + (open ? 12 : 4)
+    ctx.fillStyle = trimGrad
+    rr(lx - 15, ly - 10, 30, 32, 7)
+    ctx.fill()
+    ctx.strokeStyle = pal.outline
+    ctx.lineWidth = 2.5
+    ctx.stroke()
+
+    const gemGrad = ctx.createRadialGradient(lx - 3, ly + 2, 1, lx, ly + 6, 11)
+    gemGrad.addColorStop(0, '#ffffff')
+    gemGrad.addColorStop(0.35, pal.gemGlow)
+    gemGrad.addColorStop(0.8, pal.gem)
+    gemGrad.addColorStop(1, pal.outline)
+    ctx.fillStyle = gemGrad
+    ctx.beginPath()
+    ctx.moveTo(lx, ly - 4)
+    ctx.lineTo(lx + 9, ly + 6)
+    ctx.lineTo(lx, ly + 16)
+    ctx.lineTo(lx - 9, ly + 6)
+    ctx.closePath()
+    ctx.fill()
+    ctx.strokeStyle = pal.outline
+    ctx.lineWidth = 1.8
+    ctx.stroke()
   }, [tierId, open])
 
   const height = Math.round(size * 0.78)
   return (
     <canvas
       ref={canvasRef}
-      width={20}
-      height={15}
+      width={240}
+      height={188}
       style={{ width: size, height }}
       aria-hidden="true"
-      className={cn('pixelated select-none', className)}
+      className={cn('select-none drop-shadow-[0_6px_12px_rgba(0,0,0,0.45)]', className)}
     />
   )
 }

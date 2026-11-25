@@ -2131,7 +2131,7 @@ const FILE_ITEMS: Record<string, ItemDef> = Object.fromEntries(
                   ? ['archer', 'sinister', 'nekobaku', 'mamushi']
                   : entry.job === 'thief'
                     ? ['novice', 'thief', 'kensei', 'sinister', 'mamushi']
-                    : [entry.job],
+                    : undefined,
         gmOnly: entry.job === 'gm',
       },
     ]

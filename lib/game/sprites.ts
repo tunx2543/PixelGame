@@ -3134,21 +3134,116 @@ const ICONS: Record<string, string[]> = {
 }
 
 export function itemIconUrl(icon: string, color: string) {
-  const key = `${icon}|${color}`
+  const key = `25d|${icon}|${color}`
   const hit = iconCache.get(key)
   if (hit) return hit
-  const rows = ICONS[icon] ?? ICONS.stone
-  const c = renderTemplate(rows, {
-    c: color,
-    d: shade(color, -0.35),
-    l: shade(color, 0.55),
-    w: '#f1f1f1',
-    k: '#5c3d2e',
-    g: '#e9c46a',
-    n: '#7f5539',
-    o: shade(color, -0.2),
-    y: '#fff3b0',
-  })
+
+  const size = 48
+  const c = document.createElement('canvas')
+  c.width = size
+  c.height = size
+  const ctx = c.getContext('2d')!
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+
+  const light = shade(color, 0.45)
+  const dark = shade(color, -0.35)
+
+  // Subtle 2.5D drop shadow
+  ctx.fillStyle = 'rgba(5, 8, 18, 0.48)'
+  ctx.beginPath()
+  ctx.ellipse(25, 41, 14, 4.5, 0, 0, Math.PI * 2)
+  ctx.fill()
+
+  const grad = ctx.createLinearGradient(8, 8, 40, 40)
+  grad.addColorStop(0, light)
+  grad.addColorStop(0.5, color)
+  grad.addColorStop(1, dark)
+
+  ctx.strokeStyle = '#101424'
+  ctx.lineWidth = 2.4
+  ctx.lineJoin = 'round'
+  ctx.lineCap = 'round'
+
+  if (icon === 'potion') {
+    ctx.fillStyle = '#b47844'
+    ctx.beginPath()
+    ctx.roundRect(19, 6, 10, 6, 2)
+    ctx.fill()
+    ctx.stroke()
+
+    ctx.fillStyle = grad
+    ctx.beginPath()
+    ctx.arc(24, 28, 13, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+
+    ctx.fillStyle = 'rgba(255,255,255,0.55)'
+    ctx.beginPath()
+    ctx.ellipse(19, 23, 3.5, 5.5, -0.4, 0, Math.PI * 2)
+    ctx.fill()
+  } else if (icon === 'sword' || icon === 'dagger') {
+    ctx.fillStyle = grad
+    ctx.beginPath()
+    ctx.moveTo(39, 8)
+    ctx.lineTo(35, 19)
+    ctx.lineTo(20, 34)
+    ctx.lineTo(14, 28)
+    ctx.lineTo(29, 13)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+
+    ctx.fillStyle = '#f5be48'
+    ctx.beginPath()
+    ctx.roundRect(11, 27, 14, 5, 2)
+    ctx.fill()
+    ctx.stroke()
+  } else if (icon === 'armor' || icon === 'cloak') {
+    ctx.fillStyle = grad
+    ctx.beginPath()
+    ctx.moveTo(14, 10)
+    ctx.lineTo(34, 10)
+    ctx.lineTo(40, 38)
+    ctx.lineTo(24, 41)
+    ctx.lineTo(8, 38)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+  } else if (icon === 'shoes') {
+    ctx.fillStyle = grad
+    ctx.beginPath()
+    ctx.roundRect(13, 12, 12, 22, 4)
+    ctx.roundRect(13, 28, 23, 10, 4)
+    ctx.fill()
+    ctx.stroke()
+  } else if (icon === 'accessory') {
+    ctx.strokeStyle = '#f5be48'
+    ctx.lineWidth = 4
+    ctx.beginPath()
+    ctx.arc(24, 26, 12, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.fillStyle = grad
+    ctx.beginPath()
+    ctx.moveTo(24, 9)
+    ctx.lineTo(31, 16)
+    ctx.lineTo(24, 23)
+    ctx.lineTo(17, 16)
+    ctx.closePath()
+    ctx.fill()
+  } else {
+    ctx.fillStyle = grad
+    ctx.beginPath()
+    ctx.moveTo(24, 7)
+    ctx.lineTo(38, 18)
+    ctx.lineTo(32, 38)
+    ctx.lineTo(16, 38)
+    ctx.lineTo(10, 18)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+  }
+
   const url = c.toDataURL()
   iconCache.set(key, url)
   return url

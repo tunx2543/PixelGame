@@ -554,10 +554,11 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       ctx.restore()
     }
 
-    // Crisp Pixel-Art Item PNG Sprite (centered 22x22)
+    // Smooth 2.5D Item PNG Sprite (centered 22x22)
     if (spriteImg) {
       const prevSmooth = ctx.imageSmoothingEnabled
-      ctx.imageSmoothingEnabled = false
+      ctx.imageSmoothingEnabled = true
+      ctx.imageSmoothingQuality = 'high'
       ctx.drawImage(spriteImg, Math.round(drop.x - 11), Math.round(drop.y - 19 + bob), 22, 22)
       ctx.imageSmoothingEnabled = prevSmooth
     } else {

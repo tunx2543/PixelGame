@@ -33,8 +33,8 @@ export function GameArtIcon({
       width={size}
       height={size}
       draggable={false}
-      style={{ width: size, height: size, imageRendering: 'pixelated' }}
-      className={cn('shrink-0 select-none object-contain', className)}
+      style={{ width: size, height: size }}
+      className={cn('shrink-0 select-none object-contain drop-shadow-[0_1px_2px_rgba(0,0,0,0.55)]', className)}
     />
   )
 }

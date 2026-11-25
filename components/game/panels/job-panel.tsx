@@ -195,7 +195,7 @@ export function JobPanel() {
                       alt=""
                       width={28}
                       height={28}
-                      className="pixelated size-7 shrink-0 rounded border border-border/80 bg-[#0e0f1a] object-cover"
+                      className="size-7 shrink-0 rounded border border-border/80 bg-[#0e0f1a] object-cover"
                     />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[11px] font-bold" style={{ color: vfx.primaryColor }}>
@@ -313,7 +313,7 @@ export function JobPanel() {
                             alt=""
                             width={24}
                             height={24}
-                            className="pixelated size-6 shrink-0 rounded border border-border/70 bg-[#0e0f1a] object-cover"
+                            className="size-6 shrink-0 rounded border border-border/70 bg-[#0e0f1a] object-cover"
                           />
                           <div className="min-w-0 flex-1 leading-tight">
                             <p className="truncate font-bold" style={{ color: vfx.primaryColor }}>

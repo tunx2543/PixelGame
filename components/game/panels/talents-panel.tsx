@@ -159,7 +159,7 @@ export function TalentsPanel() {
                         alt=""
                         width={32}
                         height={32}
-                        className="pixelated size-8 shrink-0 rounded border border-border/80 bg-[#0e0f1a] object-cover"
+                        className="size-8 shrink-0 rounded border border-border/80 bg-[#0e0f1a] object-cover"
                       />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-1">
