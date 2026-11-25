@@ -175,6 +175,9 @@ export function classifyItem25dArchetype(
   }
 
   // Consumables / Materials / Special
+  if (id === 'event_token') return 'ticket'
+  if (id === 'event_lucky_box' || id === 'event_mythic_chest') return 'chest_box'
+  if (id === 'event_festival_feast') return 'food_platter'
   if (id === 'imperial_gold_key' || name.includes('กุญแจ')) return 'key'
   if (id === 'starlight_loot_magnet' || name.includes('แม่เหล็ก')) return 'magnet'
   if (id === 'ancient_forge_emblem' || id === 'soul_awakening_relic' || id === 'mythic_awakening_core') return 'emblem'

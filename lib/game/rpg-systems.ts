@@ -369,6 +369,7 @@ export const TITLE_DEFS: TitleDef[] = [
   { id: 'songkran_blessed', name: 'ผู้พิทักษ์สายน้ำสงกรานต์', color: '#38bdf8', requirement: 'แลกรับจากร้านค้าเทศกาลสงกรานต์', hpBonus: 55, atkBonus: 14, defBonus: 14, critBonus: 0.02 },
   { id: 'winter_celebrant', name: 'ดาราแห่งเหมันตฤดู', color: '#93c5fd', requirement: 'แลกรับจากร้านค้าเทศกาลปีใหม่', hpBonus: 70, atkBonus: 22, defBonus: 16, critBonus: 0.03 },
   { id: 'grand_festival_hero', name: 'วีรชนแห่งเทศกาลนิรันดร์', color: '#fb7185', requirement: 'แลกรับจากร้านค้ากิจกรรมเทศกาลพิเศษ', hpBonus: 90, atkBonus: 28, defBonus: 20, critBonus: 0.03 },
+  { id: 'event_collector', name: 'ผู้พิชิตกิจกรรมนิรันดร์', color: '#facc15', requirement: 'แลกรับจากร้านแลกโทเคนกิจกรรม', hpBonus: 75, atkBonus: 24, defBonus: 18, critBonus: 0.03 },
 ]
 
 export function evaluateUnlockedTitleIds(save: Pick<SaveData, 'kills' | 'rebirthCount' | 'questState' | 'towerState' | 'rpgExt'>): string[] {

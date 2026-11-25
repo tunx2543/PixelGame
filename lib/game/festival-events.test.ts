@@ -3,20 +3,29 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { after, beforeEach, describe, it } from 'node:test'
 import {
+  EVENT_TOKEN_SHOP_REWARDS,
+  FESTIVAL_EVENTS,
   canClaimFestivalDailyGift,
   claimFestivalDailyGiftInState,
   claimFestivalMissionInState,
   computeFestivalMultipliers,
   countClaimableFestivalBadges,
   createDefaultFestivalPlayerState,
+  depositUniversalEventTokensInState,
   getActiveFestivalEvent,
   getBangkokDateParts,
+  getEventTokenShopCycleKey,
   getFestivalTokenCount,
+  getUniversalEventTokenCount,
   recordFestivalProgressInState,
   sanitizeFestivalOverrideState,
   sanitizeFestivalPlayerState,
   spendFestivalTokensForShopInState,
+  spendUniversalEventTokensForShopInState,
 } from './festival-events'
+import { ITEMS } from './data'
+import { COSMETIC_DEFS } from './extended-systems'
+import { TITLE_DEFS } from './rpg-systems'
 import {
   getEffectiveStoredFestivalOverride,
   getPublicWorldEvents,
@@ -267,3 +276,107 @@ describe('gm-events-store festivalOverride persistence', () => {
     assert.equal(getEffectiveStoredFestivalOverride(now + 1000), null)
   })
 })
+
+describe('universal event tokens, event items & event token shop', () => {
+  it('grants, deposits, and sanitizes universal event tokens safely', () => {
+    const now = bangkokMs(2026, 11, 24, 15, 0)
+    let state = createDefaultFestivalPlayerState()
+    assert.equal(getUniversalEventTokenCount(state), 0)
+
+    const prog = recordFestivalProgressInState(state, { kills: 5, tokensEarned: 12 }, now)
+    state = prog.next
+    assert.equal(prog.universalTokensAdded, 12)
+    assert.equal(getUniversalEventTokenCount(state), 12)
+
+    const gift = claimFestivalDailyGiftInState(state, now)
+    assert.equal(gift.ok, true)
+    if (!gift.ok) throw new Error('expected gift ok')
+    state = gift.next
+    assert.equal(getUniversalEventTokenCount(state), 12 + gift.universalTokensAdded)
+
+    const dep = depositUniversalEventTokensInState(state, 25)
+    assert.equal(dep.added, 25)
+    assert.equal(getUniversalEventTokenCount(dep.next), 12 + gift.universalTokensAdded + 25)
+
+    // Clamps negative / absurd values on sanitize
+    const clamped = sanitizeFestivalPlayerState({ ...dep.next, universalTokens: 5_000_000 })
+    assert.equal(getUniversalEventTokenCount(clamped), 999_999)
+    const zeroed = sanitizeFestivalPlayerState({ ...dep.next, universalTokens: -15 })
+    assert.equal(getUniversalEventTokenCount(zeroed), 0)
+  })
+
+  it('enforces weekly reset limits, lifetime cosmetic limits, and balance checks in Event Token Shop', () => {
+    const week1 = bangkokMs(2026, 11, 24, 15, 0)
+    const nextWeek = bangkokMs(2026, 12, 2, 15, 0)
+    let state = depositUniversalEventTokensInState(createDefaultFestivalPlayerState(), 200).next
+
+    // Lifetime cosmetic limit (1 max across all weeks)
+    const buyFrame = spendUniversalEventTokensForShopInState(state, 'evt_frame_champ', week1)
+    assert.equal(buyFrame.ok, true)
+    if (!buyFrame.ok) throw new Error('expected frame purchase ok')
+    state = buyFrame.next
+    assert.equal(getUniversalEventTokenCount(state), 120)
+
+    const buyFrameAgainNextWeek = spendUniversalEventTokensForShopInState(state, 'evt_frame_champ', nextWeek)
+    assert.equal(buyFrameAgainNextWeek.ok, false)
+
+    // Weekly item limit resets across ISO weeks
+    const keyW1 = getEventTokenShopCycleKey({ kind: 'item' }, week1)
+    const keyW2 = getEventTokenShopCycleKey({ kind: 'item' }, nextWeek)
+    assert.notEqual(keyW1, keyW2)
+
+    // evt_mythic_chest costs 45 (we have 120 -> can buy 2, 3rd fails due to insufficient tokens)
+    const chest1 = spendUniversalEventTokensForShopInState(state, 'evt_mythic_chest', week1)
+    assert.equal(chest1.ok, true)
+    if (!chest1.ok) throw new Error('expected chest1 ok')
+    state = chest1.next
+
+    const chest2 = spendUniversalEventTokensForShopInState(state, 'evt_mythic_chest', week1)
+    assert.equal(chest2.ok, true)
+    if (!chest2.ok) throw new Error('expected chest2 ok')
+    state = chest2.next
+    assert.equal(getUniversalEventTokenCount(state), 30)
+
+    const chestTooExpensive = spendUniversalEventTokensForShopInState(state, 'evt_mythic_chest', week1)
+    assert.equal(chestTooExpensive.ok, false)
+  })
+
+  it('validates all event item, cosmetic, title definitions and PNG artwork exist on disk', () => {
+    const requiredEventItemAssets = [
+      'event_token',
+      'event_lucky_box',
+      'event_mythic_chest',
+      'event_festival_feast',
+      'event_star_charm',
+    ]
+    for (const itemId of requiredEventItemAssets) {
+      const def = ITEMS[itemId]
+      assert.ok(def, `Missing ITEMS.${itemId}`)
+      assert.ok(def.asset, `Missing asset path on ITEMS.${itemId}`)
+      const diskPath = path.join(process.cwd(), 'public', def.asset.replace(/^\//, ''))
+      assert.equal(fs.existsSync(diskPath), true, `Missing PNG artwork on disk: ${diskPath}`)
+    }
+
+    const cosmeticIds = new Set(COSMETIC_DEFS.map((c) => c.id))
+    const titleIds = new Set(TITLE_DEFS.map((t) => t.id))
+    const allRewards = [
+      ...EVENT_TOKEN_SHOP_REWARDS,
+      ...FESTIVAL_EVENTS.flatMap((ev) => ev.shopRewards),
+    ]
+
+    for (const reward of allRewards) {
+      if (reward.itemId) {
+        assert.ok(ITEMS[reward.itemId], `Shop reward ${reward.id} references missing item ${reward.itemId}`)
+      }
+      if (reward.cosmeticId) {
+        assert.ok(cosmeticIds.has(reward.cosmeticId), `Shop reward ${reward.id} references missing cosmetic ${reward.cosmeticId}`)
+        const iconPath = path.join(process.cwd(), 'public', 'assets', 'fashion', 'icons', `${reward.cosmeticId}.png`)
+        assert.equal(fs.existsSync(iconPath), true, `Missing cosmetic icon PNG: ${iconPath}`)
+      }
+      if (reward.titleId) {
+        assert.ok(titleIds.has(reward.titleId), `Shop reward ${reward.id} references missing title ${reward.titleId}`)
+      }
+    }
+  })
+})
+

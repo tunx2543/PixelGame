@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'motion/react'
 import {
+  ArrowDownToLine,
   CalendarDays,
   Check,
   Clock,
@@ -20,21 +21,27 @@ import { ITEMS } from '@/lib/game/data'
 import {
   claimFestivalDailyGiftAction,
   claimFestivalMissionAction,
+  depositAllEventTokensFromBagAction,
   exchangeFestivalShopRewardAction,
+  exchangeUniversalEventShopRewardAction,
   getActiveFestivalState,
   isCurrentAccountGm,
   openPanel,
 } from '@/lib/game/engine'
 import { getCosmeticDef, sanitizeExtV2 } from '@/lib/game/extended-systems'
 import {
+  EVENT_TOKEN_NAME,
+  EVENT_TOKEN_SHOP_REWARDS,
   FESTIVAL_EVENTS,
   canClaimFestivalDailyGift,
   formatFestivalRemaining,
+  getEventTokenShopCycleKey,
   getFestivalCycleProgress,
   getFestivalMissionClaimKey,
   getFestivalMissionMetricValue,
   getFestivalShopPurchaseKey,
   getFestivalTokenCount,
+  getUniversalEventTokenCount,
   type FestivalEventId,
 } from '@/lib/game/festival-events'
 import { TITLE_DEFS, sanitizeRpgExt } from '@/lib/game/rpg-systems'
@@ -45,7 +52,24 @@ import { formatNum } from '../format'
 import { ItemIcon } from '../item-icon'
 import { PanelFrame, PxButton } from './panels'
 
-type EventsTab = 'missions' | 'shop' | 'calendar'
+type EventsTab = 'missions' | 'shop' | 'event-shop' | 'calendar'
+
+function CosmeticIconThumb({ cosmeticId, name }: { cosmeticId: string; name: string }) {
+  const [failed, setFailed] = useState(false)
+  if (failed) {
+    return <Sparkles className="size-5 text-pink-300" aria-hidden />
+  }
+  return (
+    <img
+      src={`/assets/fashion/icons/${cosmeticId}.png`}
+      alt={name}
+      width={28}
+      height={28}
+      onError={() => setFailed(true)}
+      className="size-7 object-contain"
+    />
+  )
+}
 
 const EVENT_THEME_CLASSES: Record<
   FestivalEventId,
@@ -125,7 +149,12 @@ export function EventsPanel() {
   const active = getActiveFestivalState(nowMs)
   const theme = EVENT_THEME_CLASSES[active.def.id]
   const tokenBalance = getFestivalTokenCount(fest, active.def.id)
+  const universalBalance = getUniversalEventTokenCount(fest)
+  const bagEventTokens = p.inventory
+    .filter((it) => it.itemId === 'event_token' && it.qty > 0)
+    .reduce((sum, it) => sum + it.qty, 0)
   const dailyReady = canClaimFestivalDailyGift(fest, active.def.id, nowMs)
+  const dailyUniversalTokens = Math.max(8, Math.round(active.def.dailyGift.tokens * 0.75))
   const cycleProgress = getFestivalCycleProgress(fest, active.cycleKey)
   const isGmDev = Boolean(p.gm && isCurrentAccountGm())
 
@@ -153,10 +182,22 @@ export function EventsPanel() {
     setNotice({ ok: res.ok, text: res.message })
   }
 
+  const handleDepositBagTokens = () => {
+    const res = depositAllEventTokensFromBagAction()
+    if (res.ok) playQuestClaimSfx(false)
+    setNotice({ ok: res.ok, text: res.message })
+  }
+
+  const handleExchangeUniversalReward = (rewardId: string) => {
+    const res = exchangeUniversalEventShopRewardAction(rewardId)
+    if (res.ok) playQuestClaimSfx(true)
+    setNotice({ ok: res.ok, text: res.message })
+  }
+
   return (
     <PanelFrame
       title="เทศกาลตามฤดูกาล & กิจกรรมเซิร์ฟเวอร์"
-      subtitle="กิจกรรมสลับตามปฏิทินไทย (UTC+7) และกิจกรรมพิเศษจาก GM พร้อมภารกิจและร้านค้าแลกของรางวัล"
+      subtitle="กิจกรรมสลับตามปฏิทินไทย (UTC+7) และระบบโทเคนกิจกรรมสำหรับแลกไอเทมและของสะสมถาวร"
     >
       <div className="space-y-4">
         {/* Hero Banner */}
@@ -194,24 +235,49 @@ export function EventsPanel() {
                 โบนัสทั้งเซิร์ฟเวอร์: EXP +{active.expBonusPct}% · DROP +{active.dropBonusPct}% · Gold +{active.goldBonusPct}%
               </p>
               <p className="text-[10.5px] text-slate-400">
-                ช่วงเวลา: {active.def.scheduleLabel} · หา{active.def.tokenName}ได้จากมอนสเตอร์ บอส ทักษะชีวิต และหอคอย
+                ช่วงเวลา: {active.def.scheduleLabel} · หา{active.def.tokenName}และ{EVENT_TOKEN_NAME}ได้จากมอนสเตอร์ บอส และภารกิจ
               </p>
             </div>
 
-            <div className="flex shrink-0 flex-col gap-2 border border-white/15 bg-black/40 p-2.5 md:w-56">
-              <div className="flex items-center justify-between gap-2">
-                <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-300">
-                  <Ticket className="size-3.5 text-amber-300" aria-hidden />
-                  {active.def.tokenName}
-                </span>
-                <span className="font-mono text-base font-extrabold text-amber-300 tabular-nums">
-                  {formatNum(tokenBalance)}
-                </span>
+            <div className="flex shrink-0 flex-col gap-2 border border-white/15 bg-black/45 p-2.5 md:w-64">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-300">
+                    <Ticket className="size-3.5 text-amber-300" aria-hidden />
+                    {active.def.tokenName}
+                  </span>
+                  <span className="font-mono text-sm font-extrabold text-amber-300 tabular-nums">
+                    {formatNum(tokenBalance)}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-1.5 text-[11px] font-semibold text-sky-200">
+                    <ItemIcon itemId="event_token" size={16} />
+                    {EVENT_TOKEN_NAME}
+                  </span>
+                  <span className="font-mono text-sm font-extrabold text-sky-300 tabular-nums">
+                    {formatNum(universalBalance)}
+                  </span>
+                </div>
+
+                {bagEventTokens > 0 && (
+                  <PxButton
+                    variant="secondary"
+                    onClick={handleDepositBagTokens}
+                    className="w-full"
+                  >
+                    <span className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap">
+                      <ArrowDownToLine className="size-3.5 text-sky-300" aria-hidden />
+                      ฝากเข้าคลัง (+{formatNum(bagEventTokens)})
+                    </span>
+                  </PxButton>
+                )}
               </div>
 
               <div className="border-t border-white/10 pt-2">
                 <p className="mb-1.5 text-[10.5px] text-slate-300 tabular-nums">
-                  ของขวัญรายวัน: +{active.def.dailyGift.tokens} โทเคน · +{formatNum(active.def.dailyGift.gold)} G · +{active.def.dailyGift.diamonds} เพชร
+                  ของขวัญรายวัน: +{active.def.dailyGift.tokens} {active.def.tokenName} · +{dailyUniversalTokens} โทเคนกิจกรรม · +{formatNum(active.def.dailyGift.gold)} G · +{active.def.dailyGift.diamonds} เพชร
                 </p>
                 <PxButton
                   variant={dailyReady ? 'accent' : 'secondary'}
@@ -220,12 +286,12 @@ export function EventsPanel() {
                   className="w-full"
                 >
                   {dailyReady ? (
-                    <span className="inline-flex items-center justify-center gap-1.5">
+                    <span className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap">
                       <Gift className="size-3.5" aria-hidden />
                       รับของขวัญเทศกาลวันนี้
                     </span>
                   ) : (
-                    <span className="inline-flex items-center justify-center gap-1.5">
+                    <span className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap">
                       <Check className="size-3.5" aria-hidden />
                       รับของขวัญวันนี้แล้ว
                     </span>
@@ -277,7 +343,20 @@ export function EventsPanel() {
               )}
             >
               <ShoppingBag className="size-3.5" aria-hidden />
-              ร้านแลกของรางวัล
+              ร้านค้าเทศกาล
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab('event-shop')}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap',
+                tab === 'event-shop'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              <ItemIcon itemId="event_token" size={14} />
+              ร้านโทเคนกิจกรรม
             </button>
             <button
               type="button"
@@ -317,6 +396,7 @@ export function EventsPanel() {
                 const current = Math.min(mission.target, rawProgress)
                 const pct = Math.min(100, Math.round((current / Math.max(1, mission.target)) * 100))
                 const ready = !claimed && current >= mission.target
+                const missionUniversalTokens = Math.max(8, Math.round(mission.rewardTokens * 0.7))
 
                 return (
                   <div
@@ -355,6 +435,10 @@ export function EventsPanel() {
                           <Ticket className="size-3" aria-hidden />
                           +{mission.rewardTokens}
                         </span>
+                        <span className="inline-flex items-center gap-1 text-sky-300">
+                          <ItemIcon itemId="event_token" size={14} />
+                          +{missionUniversalTokens}
+                        </span>
                         {mission.rewardGold > 0 && (
                           <span className="inline-flex items-center gap-1 text-gold">
                             <Coins className="size-3" aria-hidden />
@@ -384,7 +468,7 @@ export function EventsPanel() {
           </div>
         )}
 
-        {/* Tab 2: Token Exchange Shop */}
+        {/* Tab 2: Seasonal Token Exchange Shop */}
         {tab === 'shop' && (
           <div className="space-y-2.5">
             <div className="flex flex-wrap items-center justify-between gap-2 border border-amber-400/35 bg-amber-950/15 px-3 py-2 text-xs">
@@ -433,7 +517,7 @@ export function EventsPanel() {
                         {itemDef ? (
                           <ItemIcon itemId={itemDef.id} size={28} />
                         ) : cosDef ? (
-                          <Sparkles className="size-5 text-pink-300" aria-hidden />
+                          <CosmeticIconThumb cosmeticId={cosDef.id} name={cosDef.name} />
                         ) : titleDef ? (
                           <Crown className="size-5 text-amber-300" aria-hidden />
                         ) : (
@@ -488,7 +572,134 @@ export function EventsPanel() {
           </div>
         )}
 
-        {/* Tab 3: All Festivals & In-Game Schedule Calendar */}
+        {/* Tab 3: Universal Event Token Exchange */}
+        {tab === 'event-shop' && (
+          <div className="space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2 border border-sky-400/40 bg-sky-950/20 px-3 py-2 text-xs">
+              <div className="flex items-center gap-2 text-slate-200">
+                <ItemIcon itemId="event_token" size={20} />
+                <span>
+                  ใช้ <strong className="text-sky-300">{EVENT_TOKEN_NAME}</strong> แลกไอเทมกิจกรรม กล่องสุ่ม เครื่องราง และของสะสมถาวรได้ทุกฤดูกาล
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {bagEventTokens > 0 && (
+                  <PxButton variant="secondary" onClick={handleDepositBagTokens}>
+                    <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                      <ArrowDownToLine className="size-3 text-sky-300" aria-hidden />
+                      ฝากจากกระเป๋า (+{formatNum(bagEventTokens)})
+                    </span>
+                  </PxButton>
+                )}
+                <span className="font-mono font-bold text-sky-300 tabular-nums">
+                  คงเหลือ: {formatNum(universalBalance)}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+              {EVENT_TOKEN_SHOP_REWARDS.map((reward) => {
+                const cycleKey = getEventTokenShopCycleKey(reward, nowMs)
+                const purchaseKey = getFestivalShopPurchaseKey(cycleKey, reward.id)
+                const boughtCount = fest.shopPurchases[purchaseKey] ?? 0
+                const limitReached = boughtCount >= reward.limitPerCycle
+                const itemDef = reward.itemId ? ITEMS[reward.itemId] : null
+                const cosDef = reward.cosmeticId ? getCosmeticDef(reward.cosmeticId) : null
+                const titleDef = reward.titleId ? TITLE_DEFS.find((t) => t.id === reward.titleId) : null
+                const alreadyOwnedCosmetic = Boolean(
+                  reward.kind === 'cosmetic' &&
+                    reward.cosmeticId &&
+                    extV2.unlockedCosmetics.includes(reward.cosmeticId),
+                )
+                const alreadyOwnedTitle = Boolean(
+                  reward.kind === 'title' && reward.titleId && rpgExt.titles.includes(reward.titleId),
+                )
+                const owned = alreadyOwnedCosmetic || alreadyOwnedTitle
+                const canAfford = universalBalance >= reward.costTokens
+                const canBuy = !owned && !limitReached && canAfford
+
+                return (
+                  <div
+                    key={reward.id}
+                    className={cn(
+                      'flex flex-col justify-between gap-2.5 border-2 p-3',
+                      owned || limitReached
+                        ? 'border-border/60 bg-muted/25 opacity-80'
+                        : canAfford
+                          ? 'border-border bg-muted/50 hover:border-sky-300/60'
+                          : 'border-border bg-muted/35',
+                    )}
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <div className="grid size-10 shrink-0 place-items-center border border-border bg-background/80">
+                        {itemDef ? (
+                          <ItemIcon itemId={itemDef.id} size={28} />
+                        ) : cosDef ? (
+                          <CosmeticIconThumb cosmeticId={cosDef.id} name={cosDef.name} />
+                        ) : titleDef ? (
+                          <Crown className="size-5 text-amber-300" aria-hidden />
+                        ) : (
+                          <Gem className="size-5 text-cyan-300" aria-hidden />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <h4 className="truncate text-xs font-bold text-foreground">{reward.name}</h4>
+                          <span className="shrink-0 font-mono text-[10.5px] text-muted-foreground tabular-nums">
+                            {boughtCount}/{reward.limitPerCycle}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">{reward.description}</p>
+                        {cosDef && (
+                          <p className="mt-1 text-[10px] font-semibold text-pink-300">
+                            ของกิจกรรมถาวร: {cosDef.name}
+                          </p>
+                        )}
+                        {titleDef && (
+                          <p className="mt-1 text-[10px] font-semibold text-amber-300 tabular-nums">
+                            โบนัสฉายา: +{titleDef.hpBonus} HP · +{titleDef.atkBonus} ATK · +{titleDef.defBonus} DEF · +{Math.round(titleDef.critBonus * 100)}% CRIT
+                          </p>
+                        )}
+                        {!cosDef && !titleDef && (
+                          <p className="mt-1 text-[10px] text-slate-400">
+                            จำกัดสัปดาห์ละ {reward.limitPerCycle} ครั้ง
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-2">
+                      <span className="inline-flex items-center gap-1.5 font-mono text-xs font-bold text-sky-300 tabular-nums">
+                        <ItemIcon itemId="event_token" size={16} />
+                        {formatNum(reward.costTokens)} {EVENT_TOKEN_NAME}
+                      </span>
+
+                      <PxButton
+                        variant={canBuy ? 'accent' : 'secondary'}
+                        disabled={!canBuy}
+                        onClick={() => handleExchangeUniversalReward(reward.id)}
+                      >
+                        {owned
+                          ? 'ครอบครองแล้ว'
+                          : limitReached
+                            ? 'แลกครบสิทธิ์'
+                            : canAfford
+                              ? 'แลกรางวัล'
+                              : 'โทเคนไม่พอ'}
+                      </PxButton>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="border border-border bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
+              <strong className="text-foreground">วิธีหาโทเคนกิจกรรม:</strong> ปราบมอนสเตอร์และบอสบนแมพ · รับของขวัญเทศกาลรายวัน · เคลียร์ภารกิจกิจกรรม · เปิดกล่องสุ่มของขวัญกิจกรรม (หากมีเหรียญในกระเป๋ากด &ldquo;ฝากเข้าคลัง&rdquo; หรือกดใช้จากกระเป๋าได้ทันที)
+            </div>
+          </div>
+        )}
+
+        {/* Tab 4: All Festivals & In-Game Schedule Calendar */}
         {tab === 'calendar' && (
           <div className="space-y-3">
             <div className="space-y-2">

@@ -86,6 +86,7 @@ export interface FestivalCycleProgress {
 
 export interface FestivalPlayerState {
   tokens: Record<string, number>
+  universalTokens: number
   cycleProgress: Record<string, FestivalCycleProgress>
   claimedMissionKeys: string[]
   claimedDailyGiftKeys: string[]
@@ -265,6 +266,26 @@ export const FESTIVAL_EVENTS: FestivalEventDef[] = [
         qty: 1,
         costTokens: 45,
         limitPerCycle: 2,
+      },
+      {
+        id: 'lk_lucky_box',
+        name: 'กล่องสุ่มของขวัญกิจกรรม',
+        description: 'เปิดสุ่มโทเคนกิจกรรม หินตีบวก เพชร หรือเครื่องรางดาราแห่งเทศกาล',
+        kind: 'item',
+        itemId: 'event_lucky_box',
+        qty: 1,
+        costTokens: 32,
+        limitPerCycle: 4,
+      },
+      {
+        id: 'lk_feast',
+        name: 'สำรับอาหารเทศกาลมงคล x2',
+        description: 'ฟื้น HP 1,500 · MP 500 พร้อมบัฟ ATK +22%, DEF +18%, EXP +40% นาน 15 นาที',
+        kind: 'item',
+        itemId: 'event_festival_feast',
+        qty: 2,
+        costTokens: 22,
+        limitPerCycle: 5,
       },
       {
         id: 'lk_diamonds',
@@ -1002,6 +1023,88 @@ export const FESTIVAL_EVENTS: FestivalEventDef[] = [
   },
 ]
 
+export const EVENT_TOKEN_NAME = 'โทเคนกิจกรรม'
+
+export const EVENT_TOKEN_SHOP_REWARDS: FestivalShopRewardDef[] = [
+  {
+    id: 'evt_lucky_box',
+    name: 'กล่องสุ่มของขวัญกิจกรรม',
+    description: 'เปิดลุ้นโทเคนกิจกรรม x5–15, หินตีบวก, เพชร 8–20 เม็ด หรือเครื่องรางดารา',
+    kind: 'item',
+    itemId: 'event_lucky_box',
+    qty: 1,
+    costTokens: 15,
+    limitPerCycle: 10,
+  },
+  {
+    id: 'evt_mythic_chest',
+    name: 'หีบมหาสมบัติกิจกรรม',
+    description: 'การันตีเพชร 20–40 เม็ด + ทอง 6,000–15,000 G + หินตีบวก x10–18 + โบนัสพิเศษ',
+    kind: 'item',
+    itemId: 'event_mythic_chest',
+    qty: 1,
+    costTokens: 45,
+    limitPerCycle: 4,
+  },
+  {
+    id: 'evt_feast',
+    name: 'สำรับอาหารเทศกาลมงคล x2',
+    description: 'ฟื้น HP 1,500 / MP 500 + บัฟ ATK +22%, DEF +18%, CRIT +10%, EXP +40% (15น.)',
+    kind: 'item',
+    itemId: 'event_festival_feast',
+    qty: 2,
+    costTokens: 12,
+    limitPerCycle: 8,
+  },
+  {
+    id: 'evt_star_charm',
+    name: 'เครื่องรางดาราแห่งเทศกาล',
+    description: 'เครื่องประดับกิจกรรมระดับตำนาน สวมใส่ได้ตั้งแต่ Lv.1 (+42 ATK, +54 DEF)',
+    kind: 'item',
+    itemId: 'event_star_charm',
+    qty: 1,
+    costTokens: 60,
+    limitPerCycle: 2,
+  },
+  {
+    id: 'evt_frame_champ',
+    name: 'กรอบชื่อแชมป์เปี้ยนกิจกรรม',
+    description: 'ปลดล็อกกรอบชื่อทองคำสลักแสงเหนือแบบถาวร (สวมใส่ได้ในห้องแต่งตัว)',
+    kind: 'cosmetic',
+    cosmeticId: 'frame_event_champion',
+    costTokens: 80,
+    limitPerCycle: 1,
+  },
+  {
+    id: 'evt_wskin_aurora',
+    name: 'สกินอาวุธแสงเหนือแห่งเทศกาล',
+    description: 'ปลดล็อกเอฟเฟกต์ฟันอาวุธแสงออโรร่าแบบถาวร (สวมใส่ได้ในห้องแต่งตัว)',
+    kind: 'cosmetic',
+    cosmeticId: 'wskin_event_aurora',
+    costTokens: 85,
+    limitPerCycle: 1,
+  },
+  {
+    id: 'evt_title_collector',
+    name: 'ฉายา: ผู้พิชิตกิจกรรมนิรันดร์',
+    description: 'ปลดล็อกฉายาถาวร +75 HP, +24 ATK, +18 DEF, +3% CRIT',
+    kind: 'title',
+    titleId: 'event_collector',
+    costTokens: 70,
+    limitPerCycle: 1,
+  },
+  {
+    id: 'evt_stones_bundle',
+    name: 'ชุดหินตีบวกกิจกรรม x12',
+    description: 'หินตีบวก 12 ก้อน สำหรับเสริมพลังอาวุธและชุดเกราะ',
+    kind: 'item',
+    itemId: 'enhance_stone',
+    qty: 12,
+    costTokens: 20,
+    limitPerCycle: 6,
+  },
+]
+
 const EVENT_BY_ID = new Map<FestivalEventId, FestivalEventDef>(
   FESTIVAL_EVENTS.map((ev) => [ev.id, ev]),
 )
@@ -1244,6 +1347,7 @@ export function computeFestivalMultipliers(
 export function createDefaultFestivalPlayerState(): FestivalPlayerState {
   return {
     tokens: {},
+    universalTokens: 0,
     cycleProgress: {},
     claimedMissionKeys: [],
     claimedDailyGiftKeys: [],
@@ -1264,6 +1368,12 @@ export function sanitizeFestivalPlayerState(raw: unknown): FestivalPlayerState {
       }
     }
   }
+
+  const rawUniversal = Number(obj.universalTokens ?? 0)
+  const universalTokens =
+    Number.isFinite(rawUniversal) && rawUniversal > 0
+      ? Math.min(999_999, Math.floor(rawUniversal))
+      : 0
 
   const cycleProgress: Record<string, FestivalCycleProgress> = {}
   if (obj.cycleProgress && typeof obj.cycleProgress === 'object') {
@@ -1299,6 +1409,7 @@ export function sanitizeFestivalPlayerState(raw: unknown): FestivalPlayerState {
 
   return {
     tokens,
+    universalTokens,
     cycleProgress,
     claimedMissionKeys,
     claimedDailyGiftKeys,
@@ -1311,6 +1422,10 @@ export function getFestivalTokenCount(
   eventId: FestivalEventId,
 ): number {
   return Math.max(0, Math.floor(state?.tokens?.[eventId] ?? 0))
+}
+
+export function getUniversalEventTokenCount(state: FestivalPlayerState | undefined): number {
+  return Math.max(0, Math.floor(state?.universalTokens ?? 0))
 }
 
 export function getFestivalCycleProgress(
@@ -1360,10 +1475,11 @@ export function recordFestivalProgressInState(
     gathers?: number
     towerClears?: number
     tokensEarned?: number
+    universalTokensEarned?: number
   },
   nowMs = Date.now(),
   override: FestivalOverrideState | null = null,
-): { next: FestivalPlayerState; active: ResolvedActiveFestival; tokensAdded: number } {
+): { next: FestivalPlayerState; active: ResolvedActiveFestival; tokensAdded: number; universalTokensAdded: number } {
   const active = getActiveFestivalEvent(nowMs, override)
   const next = sanitizeFestivalPlayerState(state)
   const cur = getFestivalCycleProgress(next, active.cycleKey)
@@ -1380,7 +1496,15 @@ export function recordFestivalProgressInState(
     next.tokens[active.def.id] = (next.tokens[active.def.id] ?? 0) + tokensAdded
   }
 
-  return { next, active, tokensAdded }
+  const universalTokensAdded =
+    delta.universalTokensEarned !== undefined
+      ? Math.max(0, Math.floor(delta.universalTokensEarned))
+      : tokensAdded
+  if (universalTokensAdded > 0) {
+    next.universalTokens = Math.min(999_999, next.universalTokens + universalTokensAdded)
+  }
+
+  return { next, active, tokensAdded, universalTokensAdded }
 }
 
 export function claimFestivalDailyGiftInState(
@@ -1393,6 +1517,7 @@ export function claimFestivalDailyGiftInState(
       next: FestivalPlayerState
       active: ResolvedActiveFestival
       gift: FestivalDailyGiftDef
+      universalTokensAdded: number
     }
   | { ok: false; reason: 'already_claimed'; message: string } {
   const active = getActiveFestivalEvent(nowMs, override)
@@ -1407,14 +1532,17 @@ export function claimFestivalDailyGiftInState(
     }
   }
 
+  const universalTokensAdded = Math.max(8, Math.round(active.def.dailyGift.tokens * 0.75))
   next.claimedDailyGiftKeys = [...next.claimedDailyGiftKeys, key].slice(-60)
   next.tokens[active.def.id] = (next.tokens[active.def.id] ?? 0) + active.def.dailyGift.tokens
+  next.universalTokens = Math.min(999_999, next.universalTokens + universalTokensAdded)
 
   return {
     ok: true,
     next,
     active,
     gift: active.def.dailyGift,
+    universalTokensAdded,
   }
 }
 
@@ -1429,6 +1557,7 @@ export function claimFestivalMissionInState(
       next: FestivalPlayerState
       active: ResolvedActiveFestival
       mission: FestivalMissionDef
+      universalTokensAdded: number
     }
   | { ok: false; message: string } {
   const active = getActiveFestivalEvent(nowMs, override)
@@ -1449,14 +1578,17 @@ export function claimFestivalMissionInState(
     return { ok: false, message: `ภารกิจยังไม่สำเร็จ (${currentVal}/${mission.target})` }
   }
 
+  const universalTokensAdded = Math.max(8, Math.round(mission.rewardTokens * 0.7))
   next.claimedMissionKeys = [...next.claimedMissionKeys, claimKey].slice(-80)
   next.tokens[active.def.id] = (next.tokens[active.def.id] ?? 0) + mission.rewardTokens
+  next.universalTokens = Math.min(999_999, next.universalTokens + universalTokensAdded)
 
   return {
     ok: true,
     next,
     active,
     mission,
+    universalTokensAdded,
   }
 }
 
@@ -1522,6 +1654,73 @@ export function spendFestivalTokensForShopInState(
     next,
     active,
     reward,
+  }
+}
+
+export function depositUniversalEventTokensInState(
+  state: FestivalPlayerState | undefined,
+  amount: number,
+): { next: FestivalPlayerState; added: number } {
+  const next = sanitizeFestivalPlayerState(state)
+  const cleanAmt = Math.max(0, Math.floor(amount))
+  if (cleanAmt <= 0) return { next, added: 0 }
+  const before = next.universalTokens
+  next.universalTokens = Math.min(999_999, before + cleanAmt)
+  return { next, added: next.universalTokens - before }
+}
+
+export function getEventTokenShopCycleKey(
+  reward: Pick<FestivalShopRewardDef, 'kind'>,
+  nowMs = Date.now(),
+): string {
+  if (reward.kind === 'cosmetic' || reward.kind === 'title') {
+    return 'event_token:lifetime'
+  }
+  const { isoWeekKey } = getBangkokDateParts(nowMs)
+  return `event_token:${isoWeekKey}`
+}
+
+export function spendUniversalEventTokensForShopInState(
+  state: FestivalPlayerState | undefined,
+  rewardId: string,
+  nowMs = Date.now(),
+):
+  | {
+      ok: true
+      next: FestivalPlayerState
+      reward: FestivalShopRewardDef
+      purchaseKey: string
+    }
+  | { ok: false; message: string } {
+  const reward = EVENT_TOKEN_SHOP_REWARDS.find((r) => r.id === rewardId)
+  if (!reward) {
+    return { ok: false, message: 'ไม่พบไอเทมนี้ในร้านโทเคนกิจกรรม' }
+  }
+
+  const next = sanitizeFestivalPlayerState(state)
+  const cycleKey = getEventTokenShopCycleKey(reward, nowMs)
+  const purchaseKey = getFestivalShopPurchaseKey(cycleKey, reward.id)
+  const boughtCount = next.shopPurchases[purchaseKey] ?? 0
+  if (boughtCount >= reward.limitPerCycle) {
+    return { ok: false, message: `แลกไอเทมนี้ครบสิทธิ์ (${reward.limitPerCycle}/${reward.limitPerCycle}) แล้ว` }
+  }
+
+  const balance = getUniversalEventTokenCount(next)
+  if (balance < reward.costTokens) {
+    return {
+      ok: false,
+      message: `${EVENT_TOKEN_NAME} ไม่พอ (ต้องการ ${reward.costTokens} · มี ${balance})`,
+    }
+  }
+
+  next.universalTokens = balance - reward.costTokens
+  next.shopPurchases[purchaseKey] = boughtCount + 1
+
+  return {
+    ok: true,
+    next,
+    reward,
+    purchaseKey,
   }
 }
 

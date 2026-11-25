@@ -218,6 +218,17 @@ export const FOOD_BUFF_DEFS: FoodBuffDef[] = [
     ],
     goldCost: 420,
   },
+  {
+    itemId: 'event_festival_feast',
+    name: 'สำรับอาหารเทศกาลมงคล',
+    durationSec: 900,
+    atkPct: 22,
+    defPct: 18,
+    critBonus: 0.1,
+    expMul: 1.4,
+    ingredients: [],
+    goldCost: 0,
+  },
 ]
 
 export function lifeSkillExpToNext(level: number): number {
@@ -585,6 +596,24 @@ export const COSMETIC_DEFS: CosmeticDef[] = [
     primaryColor: '#fb7185',
     secondaryColor: '#f59e0b',
     diamondCost: 55,
+  },
+  {
+    id: 'frame_event_champion',
+    slot: 'frame',
+    name: 'กรอบชื่อแชมป์เปี้ยนกิจกรรม',
+    description: 'กรอบชื่อทองคำสลักแสงเหนือสำหรับผู้สะสมโทเคนกิจกรรม (แลกรับจากร้านโทเคนกิจกรรม)',
+    primaryColor: '#f59e0b',
+    secondaryColor: '#e11d48',
+    diamondCost: 70,
+  },
+  {
+    id: 'wskin_event_aurora',
+    slot: 'weaponSkin',
+    name: 'สกินอาวุธแสงเหนือแห่งเทศกาล',
+    description: 'เปลี่ยนเอฟเฟกต์ฟันอาวุธเป็นประกายออโรร่ามรกตฟ้าแห่งเทศกาล',
+    primaryColor: '#34d399',
+    secondaryColor: '#38bdf8',
+    diamondCost: 75,
   },
 ]
 

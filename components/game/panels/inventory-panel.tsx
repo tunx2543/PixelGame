@@ -146,6 +146,9 @@ const QUEST_ITEM_IDS = new Set([
   'town_warp_tome',
   'astral_bag_expansion',
   'name_change_ticket',
+  'event_token',
+  'event_lucky_box',
+  'event_mythic_chest',
 ])
 
 const SLOT_LABELS: Record<EquipmentSlot, string> = {
@@ -233,9 +236,9 @@ export function InventoryPanel() {
         if (typeFilter === 'necklace' && cat !== 'necklace') return false
         if (typeFilter === 'charm' && cat !== 'charm') return false
         if (typeFilter === 'special' && cat !== 'special') return false
-        if (typeFilter === 'potion' && !(def.kind === 'consumable' && (def.heal || def.mana) && !def.id.startsWith('food_'))) return false
-        if (typeFilter === 'food' && !def.id.startsWith('food_')) return false
-        if (typeFilter === 'scroll' && !(def.kind === 'consumable' && !(def.heal || def.mana) && !def.id.startsWith('food_'))) return false
+        if (typeFilter === 'potion' && !(def.kind === 'consumable' && (def.heal || def.mana) && !def.id.startsWith('food_') && def.id !== 'event_festival_feast')) return false
+        if (typeFilter === 'food' && !def.id.startsWith('food_') && def.id !== 'event_festival_feast') return false
+        if (typeFilter === 'scroll' && !(def.kind === 'consumable' && !(def.heal || def.mana) && !def.id.startsWith('food_') && def.id !== 'event_festival_feast')) return false
       }
 
       // Rarity filter

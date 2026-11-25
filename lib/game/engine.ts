@@ -57,13 +57,17 @@ import {
   type WorldNewsCategory,
 } from '@/lib/firebase/gm-events'
 import {
+  EVENT_TOKEN_NAME,
+  EVENT_TOKEN_SHOP_REWARDS,
   claimFestivalDailyGiftInState,
   claimFestivalMissionInState,
   computeFestivalMultipliers,
+  depositUniversalEventTokensInState,
   getActiveFestivalEvent,
   recordFestivalProgressInState,
   sanitizeFestivalOverrideState,
   spendFestivalTokensForShopInState,
+  spendUniversalEventTokensForShopInState,
   type FestivalEventId,
   type FestivalOverrideState,
   type ResolvedActiveFestival,
@@ -1285,7 +1289,7 @@ export function claimFestivalDailyGiftAction(): { ok: boolean; message: string }
   }
   saveGame()
   notify()
-  const msg = `รับของขวัญรายวัน "${res.active.title}" สำเร็จ! (+${res.gift.tokens} ${res.active.def.tokenName}, +${res.gift.gold.toLocaleString()} G, +${res.gift.diamonds} เพชร)`
+  const msg = `รับของขวัญรายวัน "${res.active.title}" สำเร็จ! (+${res.gift.tokens} ${res.active.def.tokenName}, +${res.universalTokensAdded} ${EVENT_TOKEN_NAME}, +${res.gift.gold.toLocaleString()} G, +${res.gift.diamonds} เพชร)`
   say('loot', msg)
   return { ok: true, message: msg }
 }
@@ -1309,7 +1313,7 @@ export function claimFestivalMissionAction(missionId: string): { ok: boolean; me
   }
   saveGame()
   notify()
-  const msg = `รับรางวัลภารกิจ "${res.mission.title}": +${res.mission.rewardTokens} ${res.active.def.tokenName}${res.mission.rewardGold > 0 ? `, +${res.mission.rewardGold.toLocaleString()} G` : ''}${res.mission.rewardDiamonds > 0 ? `, +${res.mission.rewardDiamonds} เพชร` : ''}`
+  const msg = `รับรางวัลภารกิจ "${res.mission.title}": +${res.mission.rewardTokens} ${res.active.def.tokenName}, +${res.universalTokensAdded} ${EVENT_TOKEN_NAME}${res.mission.rewardGold > 0 ? `, +${res.mission.rewardGold.toLocaleString()} G` : ''}${res.mission.rewardDiamonds > 0 ? `, +${res.mission.rewardDiamonds} เพชร` : ''}`
   say('loot', msg)
   return { ok: true, message: msg }
 }
@@ -1375,6 +1379,91 @@ export function exchangeFestivalShopRewardAction(rewardId: string): { ok: boolea
   saveGame()
   notify()
   const msg = `แลก "${target.name}" สำเร็จ! (-${target.costTokens} ${spendRes.active.def.tokenName})`
+  say('loot', msg)
+  return { ok: true, message: msg }
+}
+
+export function depositAllEventTokensFromBagAction(): { ok: boolean; count: number; message: string } {
+  const p = player()
+  const totalInBag = countItem('event_token')
+  if (totalInBag <= 0) {
+    return { ok: false, count: 0, message: `ไม่มี${EVENT_TOKEN_NAME}ในกระเป๋า` }
+  }
+  const extV2 = sanitizeExtV2(p.extV2)
+  const dep = depositUniversalEventTokensInState(extV2.festival, totalInBag)
+  if (dep.added <= 0) {
+    return { ok: false, count: 0, message: `กระเป๋า${EVENT_TOKEN_NAME}เต็มขีดจำกัดแล้ว` }
+  }
+  removeItemId('event_token', dep.added)
+  extV2.festival = dep.next
+  p.extV2 = extV2
+  saveGame()
+  notify()
+  const msg = `ฝาก ${EVENT_TOKEN_NAME} x${dep.added} จากกระเป๋าเข้าคลังกิจกรรมแล้ว (คงเหลือ ${dep.next.universalTokens.toLocaleString()} เหรียญ)`
+  say('loot', msg)
+  return { ok: true, count: dep.added, message: msg }
+}
+
+export function exchangeUniversalEventShopRewardAction(rewardId: string): { ok: boolean; message: string } {
+  const p = player()
+  const extV2 = sanitizeExtV2(p.extV2)
+  const target = EVENT_TOKEN_SHOP_REWARDS.find((r) => r.id === rewardId)
+  if (!target) return { ok: false, message: 'ไม่พบของรางวัลนี้ในร้านโทเคนกิจกรรม' }
+
+  if (target.kind === 'cosmetic' && target.cosmeticId && extV2.unlockedCosmetics.includes(target.cosmeticId)) {
+    return { ok: false, message: 'คุณปลดล็อกแฟชั่นชิ้นนี้แล้ว' }
+  }
+  if (target.kind === 'title' && target.titleId) {
+    const curRpg = sanitizeRpgExt(p.rpgExt)
+    if (curRpg.titles.includes(target.titleId)) {
+      return { ok: false, message: 'คุณมีฉายาพิเศษนี้อยู่แล้ว' }
+    }
+  }
+  if (target.kind === 'item' && target.itemId) {
+    const qty = Math.max(1, target.qty ?? 1)
+    if (!addItem(target.itemId, qty)) {
+      return { ok: false, message: 'กระเป๋าเต็ม กรุณาเคลียร์ช่องเก็บของก่อนแลก' }
+    }
+  }
+
+  const spendRes = spendUniversalEventTokensForShopInState(extV2.festival, rewardId, Date.now())
+  if (!spendRes.ok) {
+    if (target.kind === 'item' && target.itemId) {
+      removeItemId(target.itemId, Math.max(1, target.qty ?? 1))
+    }
+    return { ok: false, message: 'message' in spendRes ? spendRes.message : 'แลกรางวัลไม่สำเร็จ' }
+  }
+
+  extV2.festival = spendRes.next
+  if (target.kind === 'cosmetic' && target.cosmeticId) {
+    const cDef = getCosmeticDef(target.cosmeticId)
+    if (!extV2.unlockedCosmetics.includes(target.cosmeticId)) {
+      extV2.unlockedCosmetics.push(target.cosmeticId)
+    }
+    if (cDef?.slot === 'wing') extV2.equippedWing = target.cosmeticId
+    else if (cDef?.slot === 'weaponSkin') extV2.equippedWeaponSkin = target.cosmeticId
+    else if (cDef?.slot === 'frame') extV2.equippedFrame = target.cosmeticId
+  } else if (target.kind === 'title' && target.titleId) {
+    const rpg = sanitizeRpgExt(p.rpgExt)
+    if (!rpg.titles.includes(target.titleId)) {
+      rpg.titles = [...rpg.titles, target.titleId]
+      rpg.activeTitle = target.titleId
+    }
+    p.rpgExt = rpg
+  } else if (target.kind === 'currency') {
+    if (target.gold && target.gold > 0) p.gold += target.gold
+    if (target.diamonds && target.diamonds > 0) {
+      commitDiamondDelta(p, target.diamonds, {
+        source: 'event_token_shop',
+        note: `แลกร้านโทเคนกิจกรรม: ${target.name}`,
+      })
+    }
+  }
+
+  p.extV2 = extV2
+  saveGame()
+  notify()
+  const msg = `แลก "${target.name}" สำเร็จ! (-${target.costTokens} ${EVENT_TOKEN_NAME})`
   say('loot', msg)
   return { ok: true, message: msg }
 }
@@ -2170,6 +2259,121 @@ export function consumeItem(id: string): boolean {
     addItem('pet_exp_elixir', 2)
     addFloat(p.x, p.y - 30, 'ผลึกคู่หู x5!', '#f472b6', 10)
     return succeedConsume('คุณมีคู่หูครบทุกตัวแล้ว! ได้รับผลึกวิวัฒนาการคู่หู x5 และน้ำทิพย์คู่หู x2 แทน', 'loot')
+  }
+
+  if (def.id === 'event_token') {
+    const extV2 = sanitizeExtV2(p.extV2)
+    const dep = depositUniversalEventTokensInState(extV2.festival, 1)
+    if (dep.added <= 0) {
+      return failConsume(`กระเป๋า${EVENT_TOKEN_NAME}เต็มขีดจำกัดแล้ว`)
+    }
+    removeUid(p.inventory, id, 1)
+    extV2.festival = dep.next
+    p.extV2 = extV2
+    if (cdDur > 0) game.itemCd[def.id] = cdDur
+    addFloat(p.x, p.y - 28, `+1 ${EVENT_TOKEN_NAME}`, '#facc15', 10)
+    return succeedConsume(`ฝาก ${EVENT_TOKEN_NAME} x1 เข้ากระเป๋าโทเคนแล้ว (รวม ${dep.next.universalTokens.toLocaleString()} เหรียญ)`, 'loot')
+  }
+
+  if (def.id === 'event_lucky_box') {
+    removeUid(p.inventory, id, 1)
+    const extV2 = sanitizeExtV2(p.extV2)
+    const roll = Math.random()
+    const notes: string[] = []
+    if (roll < 0.08) {
+      const tokenGain = randInt(10, 15)
+      const dep = depositUniversalEventTokensInState(extV2.festival, tokenGain)
+      extV2.festival = dep.next
+      p.extV2 = extV2
+      notes.push(`+${tokenGain} ${EVENT_TOKEN_NAME}`)
+      if (addItem('event_star_charm', 1)) {
+        notes.push('เครื่องรางดาราแห่งเทศกาล x1')
+        addFloat(p.x, p.y - 34, '★ เครื่องรางดารา!', '#38bdf8', 11)
+      } else {
+        commitDiamondDelta(p, 25, { source: 'event_lucky_box', note: 'แจ็คพอตกล่องของขวัญกิจกรรม' })
+        p.gold += 5000
+        notes.push('+25 เพชร', '+5,000 G')
+        addFloat(p.x, p.y - 34, '+25 เพชร!', '#38bdf8', 11)
+      }
+    } else if (roll < 0.36) {
+      const tokenGain = randInt(8, 15)
+      const diamondGain = randInt(8, 18)
+      const dep = depositUniversalEventTokensInState(extV2.festival, tokenGain)
+      extV2.festival = dep.next
+      p.extV2 = extV2
+      commitDiamondDelta(p, diamondGain, { source: 'event_lucky_box', note: 'เปิดกล่องสุ่มของขวัญกิจกรรม' })
+      notes.push(`+${tokenGain} ${EVENT_TOKEN_NAME}`, `+${diamondGain} เพชร`)
+      addFloat(p.x, p.y - 30, `+${tokenGain} โทเคน · +${diamondGain} เพชร`, '#fb7185', 10)
+    } else if (roll < 0.66) {
+      const tokenGain = randInt(5, 10)
+      const dep = depositUniversalEventTokensInState(extV2.festival, tokenGain)
+      extV2.festival = dep.next
+      p.extV2 = extV2
+      notes.push(`+${tokenGain} ${EVENT_TOKEN_NAME}`)
+      if (addItem('event_festival_feast', 2)) {
+        notes.push('สำรับอาหารเทศกาลมงคล x2')
+      } else {
+        p.gold += 3500
+        notes.push('+3,500 G')
+      }
+      addFloat(p.x, p.y - 30, 'สำรับอาหารเทศกาล!', '#fbbf24', 10)
+    } else if (roll < 0.88) {
+      const tokenGain = randInt(5, 9)
+      const stoneQty = randInt(4, 8)
+      const dep = depositUniversalEventTokensInState(extV2.festival, tokenGain)
+      extV2.festival = dep.next
+      p.extV2 = extV2
+      p.gold += 2500
+      notes.push(`+${tokenGain} ${EVENT_TOKEN_NAME}`, '+2,500 G')
+      if (addItem('enhance_stone', stoneQty)) {
+        notes.push(`หินตีบวก x${stoneQty}`)
+      }
+      addFloat(p.x, p.y - 30, `หินตีบวก x${stoneQty}!`, '#facc15', 10)
+    } else {
+      const tokenGain = randInt(6, 12)
+      const diamondGain = randInt(12, 20)
+      const dep = depositUniversalEventTokensInState(extV2.festival, tokenGain)
+      extV2.festival = dep.next
+      p.extV2 = extV2
+      p.gold += 4000
+      commitDiamondDelta(p, diamondGain, { source: 'event_lucky_box', note: 'เปิดกล่องสุ่มของขวัญกิจกรรม' })
+      notes.push(`+${tokenGain} ${EVENT_TOKEN_NAME}`, `+${diamondGain} เพชร`, '+4,000 G')
+      addFloat(p.x, p.y - 30, `+${diamondGain} เพชร!`, '#38bdf8', 10)
+    }
+    if (cdDur > 0) game.itemCd[def.id] = cdDur
+    return succeedConsume(`★ เปิดกล่องสุ่มของขวัญกิจกรรมได้รับ: ${notes.join(' · ')}`, 'loot')
+  }
+
+  if (def.id === 'event_mythic_chest') {
+    removeUid(p.inventory, id, 1)
+    const extV2 = sanitizeExtV2(p.extV2)
+    const diamondGain = randInt(20, 40)
+    const goldGain = randInt(6000, 15000)
+    const stoneQty = randInt(10, 18)
+    const tokenGain = randInt(10, 18)
+    const dep = depositUniversalEventTokensInState(extV2.festival, tokenGain)
+    extV2.festival = dep.next
+    p.extV2 = extV2
+    p.gold += goldGain
+    commitDiamondDelta(p, diamondGain, { source: 'event_mythic_chest', note: 'เปิดหีบมหาสมบัติกิจกรรม' })
+    const notes: string[] = [
+      `+${diamondGain} เพชร`,
+      `+${goldGain.toLocaleString()} G`,
+      `+${tokenGain} ${EVENT_TOKEN_NAME}`,
+    ]
+    if (addItem('enhance_stone', stoneQty)) {
+      notes.push(`หินตีบวก x${stoneQty}`)
+    }
+    const bonusId = Math.random() < 0.5 ? 'enhance_protect_scroll_1' : 'event_lucky_box'
+    if (addItem(bonusId, 1)) {
+      notes.push(`${ITEMS[bonusId]?.name ?? bonusId} x1`)
+    } else {
+      commitDiamondDelta(p, 8, { source: 'event_mythic_chest', note: 'โบนัสกระเป๋าเต็มหีบมหาสมบัติกิจกรรม' })
+      notes.push('+8 เพชร')
+    }
+    if (cdDur > 0) game.itemCd[def.id] = cdDur
+    addFloat(p.x, p.y - 34, `+${diamondGain} เพชร · +${tokenGain} โทเคน!`, '#f59e0b', 11)
+    return succeedConsume(`★ เปิดหีบมหาสมบัติกิจกรรมได้รับ: ${notes.join(' · ')}`, 'loot')
   }
 
   const foodDef = getFoodBuffForItem(def.id)
@@ -3366,6 +3570,25 @@ function killMonster(m: Monster) {
         )
       }
     }
+  }
+  if (m.isWorldBoss) {
+    dropItem('event_lucky_box', 1, m.x, m.y)
+    dropItem('event_token', 2, m.x, m.y)
+    droppedItems.push({ itemId: 'event_lucky_box', qty: 1 }, { itemId: 'event_token', qty: 2 })
+    say('loot', `★ บอสโลกดรอป กล่องสุ่มของขวัญกิจกรรม x1 และ ${EVENT_TOKEN_NAME} x2!`)
+  } else if (def.boss) {
+    if (Math.random() < 0.45) {
+      dropItem('event_token', 1, m.x, m.y)
+      droppedItems.push({ itemId: 'event_token', qty: 1 })
+      say('loot', `${EVENT_TOKEN_NAME} ตกพื้นจากบอส!`)
+    }
+    if (Math.random() < 0.22) {
+      dropItem('event_festival_feast', 1, m.x, m.y)
+      droppedItems.push({ itemId: 'event_festival_feast', qty: 1 })
+    }
+  } else if (Math.random() < 0.04) {
+    dropItem('event_token', 1, m.x, m.y)
+    droppedItems.push({ itemId: 'event_token', qty: 1 })
   }
   pushKillToast({
     kind: 'kill',
