@@ -10,11 +10,12 @@ const layerImageCache = new Map<string, HTMLImageElement | null>()
 export function getFashionLayerImage(fashionId: string | null | undefined): HTMLImageElement | null {
   if (!fashionId || typeof document === 'undefined') return null
   const def = getFashionItemDef(fashionId)
-  if (!def?.layerSheetAsset) return null
+  const assetSrc = def?.wingAnimSheetAsset ?? def?.wingSpriteAsset ?? def?.layerSheetAsset
+  if (!assetSrc) return null
   const cached = layerImageCache.get(fashionId)
   if (cached !== undefined) return cached
   const img = new Image()
-  img.src = def.layerSheetAsset
+  img.src = assetSrc
   layerImageCache.set(fashionId, img)
   return img
 }
@@ -86,7 +87,10 @@ export function resolveFashionLoadoutFromRemote(other: {
   }
 }
 
-export function getFashionRenderSignature(loadout: FashionLoadout | null | undefined): string {
+export function getFashionRenderSignature(
+  loadout: FashionLoadout | null | undefined,
+  timeSec?: number,
+): string {
   if (!loadout) return ''
   const orderedSlots: FashionSlot[] = [
     'hat',
@@ -107,6 +111,16 @@ export function getFashionRenderSignature(loadout: FashionLoadout | null | undef
       if (!id) return ''
       const img = getFashionLayerImage(id)
       const ready = img ? (img.complete && img.naturalWidth > 0 ? '1' : '0') : 'n'
+      if (slot === 'wings' && timeSec !== undefined) {
+        const def = getFashionItemDef(id)
+        if (def?.wingAnimSheetAsset) {
+          const frames = Math.max(1, def.wingAnimFrames ?? 16)
+          return `${slot}:${id}@${ready}:f${Math.floor(timeSec * 12) % frames}`
+        }
+        if (def?.wingSpriteAsset) {
+          return `${slot}:${id}@${ready}:w${Math.floor(timeSec * 6) % 8}`
+        }
+      }
       return `${slot}:${id}@${ready}`
     })
     .filter(Boolean)
@@ -131,8 +145,9 @@ export function drawCharacterFashionLayers(opts: {
   dw: number
   dh: number
   alpha?: number
+  timeSec?: number
 }): boolean {
-  const { ctx, loadout, phase, dir, frame, dx, dy, dw, dh, alpha = 1 } = opts
+  const { ctx, loadout, phase, dir, frame, dx, dy, dw, dh, alpha = 1, timeSec } = opts
   if (!loadout) return false
 
   let slots: FashionSlot[] = []
@@ -146,6 +161,7 @@ export function drawCharacterFashionLayers(opts: {
 
   if (slots.length === 0) return false
 
+  const t = timeSec ?? (typeof performance !== 'undefined' ? performance.now() / 1000 : 0)
   const row = DIR_ROW[dir] ?? 0
   const col = Math.abs(frame < 0 ? 0 : Math.floor(frame)) % 4
   const sx = col * 168
@@ -160,8 +176,59 @@ export function drawCharacterFashionLayers(opts: {
   for (const slot of slots) {
     const id = loadout[slot]
     if (!id) continue
+    const def = getFashionItemDef(id)
     const img = getFashionLayerImage(id)
     if (!img || !img.complete || img.naturalWidth <= 0) continue
+
+    if (slot === 'wings' && (def?.wingAnimSheetAsset || def?.wingSpriteAsset)) {
+      const sideBiasX = dir === 'left' ? dw * 0.12 : dir === 'right' ? -dw * 0.12 : 0
+      const scaleX = dir === 'left' || dir === 'right' ? 0.72 : 1
+      const flapBob = def.wingAnimSheetAsset ? 0 : Math.sin(t * 5.2) * (dh * 0.025)
+      const flapScaleY = def.wingAnimSheetAsset ? 1 : 1 + Math.sin(t * 5.2) * 0.055
+      const targetH = dh * (def.wingAnimSheetAsset ? 0.96 : 0.88)
+      const targetW = dw * (def.wingAnimSheetAsset ? 1.24 : 1.14) * scaleX
+      const anchorX = dx + dw * 0.5 + sideBiasX
+      const anchorY = dy + dh * (dir === 'up' ? 0.45 : 0.42) + flapBob
+
+      ctx.save()
+      ctx.imageSmoothingEnabled = false
+      ctx.translate(anchorX, anchorY)
+      ctx.scale(1, flapScaleY)
+
+      if (def.wingAnimSheetAsset) {
+        const frames = Math.max(1, def.wingAnimFrames ?? 16)
+        const frameW = Math.max(1, Math.floor(img.naturalWidth / frames))
+        const frameH = Math.max(1, img.naturalHeight)
+        const frameIdx = Math.floor(t * 12) % frames
+        ctx.drawImage(
+          img,
+          frameIdx * frameW,
+          0,
+          frameW,
+          frameH,
+          -targetW / 2,
+          -targetH / 2,
+          targetW,
+          targetH,
+        )
+      } else {
+        ctx.drawImage(
+          img,
+          0,
+          0,
+          img.naturalWidth,
+          img.naturalHeight,
+          -targetW / 2,
+          -targetH / 2,
+          targetW,
+          targetH,
+        )
+      }
+      ctx.restore()
+      drewAny = true
+      continue
+    }
+
     ctx.drawImage(img, sx, sy, 168, 192, dx, dy, dw, dh)
     drewAny = true
   }

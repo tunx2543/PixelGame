@@ -10,6 +10,7 @@ import { WindowManager } from '../window-manager'
 import { useWindowContext } from '../window-context'
 import { EnhancePanel } from './enhance-panel'
 import { GachaPanel } from './gacha-panel'
+import { WingGachaPanel } from './wing-gacha-panel'
 import { GemShopPanel } from './gem-shop-panel'
 import { FriendsPanel } from './friends-panel'
 import { GmSummonPanel } from './gm-summon-panel'
@@ -49,6 +50,8 @@ export function renderPanelById(id: PanelId, g: ReturnType<typeof useGame>): Rea
       return <EnhancePanel />
     case 'gacha':
       return <GachaPanel />
+    case 'wing-gacha':
+      return <WingGachaPanel />
     case 'friends':
       return (
         <PanelFrame title="เพื่อน & UID" subtitle="ค้นหา UID · คำขอเป็นเพื่อน · สถานะออนไลน์">

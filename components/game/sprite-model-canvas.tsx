@@ -352,7 +352,7 @@ export function SpriteModelCanvas({
       const sourceReady = drawable.sheetSpec
         ? drawable.sheetSpec.image.complete && drawable.sheetSpec.image.naturalWidth > 0
         : Boolean(drawable.canvas && drawable.canvas.width > 0 && drawable.canvas.height > 0)
-      const fashionSig = mode === 'job' ? getFashionRenderSignature(fashion) : ''
+      const fashionSig = mode === 'job' ? getFashionRenderSignature(fashion, reducedMotion ? undefined : elapsed) : ''
       const mountSig = mode === 'mount' ? `m${mountLevel}|${mountSkinId ?? ''}|${showRider ? riderJobId : ''}` : ''
       const petSig = mode === 'pet' ? `p${getPetVisualTier(petLevel, petStars)}` : ''
       const sig = `${effectiveAction}|${frame}|${hoverY}|${lungeOffset}|${slashBucket}|${auraBucket}|${rebirthCount}|${spiritStage}|${gmReady ? '1' : '0'}|${sheetId}|${sourceReady ? '1' : '0'}|${mMotionBucket}|${fashionSig}|${mountSig}|${petSig}|${canvas.width}x${canvas.height}`
@@ -407,6 +407,7 @@ export function SpriteModelCanvas({
                 dy: 0,
                 dw: drawable.width,
                 dh: drawable.height,
+                timeSec: elapsed,
               })
               drawResolvedDrawable(offCtx, drawable, 0, 0, drawable.width, drawable.height)
               drawCharacterFashionLayers({
@@ -419,6 +420,7 @@ export function SpriteModelCanvas({
                 dy: 0,
                 dw: drawable.width,
                 dh: drawable.height,
+                timeSec: elapsed,
               })
               drawCharacterFashionLayers({
                 ctx: offCtx,
@@ -430,6 +432,7 @@ export function SpriteModelCanvas({
                 dy: 0,
                 dw: drawable.width,
                 dh: drawable.height,
+                timeSec: elapsed,
               })
               ctx.drawImage(offscreenPortraitCanvas, sx, sy, cropW, cropH, 0, 0, canvas.width, canvas.height)
             } else {
@@ -522,6 +525,7 @@ export function SpriteModelCanvas({
               dy,
               dw: drawW,
               dh: drawH,
+              timeSec: elapsed,
             })
           }
           drawResolvedDrawable(ctx, drawable, dx, dy, drawW, drawH)
@@ -582,6 +586,7 @@ export function SpriteModelCanvas({
               dy,
               dw: drawW,
               dh: drawH,
+              timeSec: elapsed,
             })
             drawCharacterFashionLayers({
               ctx,
@@ -593,6 +598,7 @@ export function SpriteModelCanvas({
               dy,
               dw: drawW,
               dh: drawH,
+              timeSec: elapsed,
             })
           }
           ctx.restore()

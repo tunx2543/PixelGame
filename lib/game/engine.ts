@@ -22,6 +22,12 @@ import { LEGACY_MAP_ALIASES, MAPS, MAP_ORDER, TILE, boxBlocked, isSolidPx, norma
 import { normalizeMonsterId } from './biome-monsters'
 import { GEM_SHOP_ITEMS } from './gem-shop'
 import { preloadMapCatalogSprites } from './catalog-sprites'
+import {
+  executeWingGachaBatch,
+  type WingGachaBatchResult,
+  type WingGachaCount,
+  type WingGachaCurrency,
+} from './wing-gacha'
 import type { Dir } from './sprites'
 import { GM_ACTIVE_SKILLS } from './gm-sprite'
 import { createClient } from '@/lib/supabase/client'
@@ -805,6 +811,7 @@ export type PanelId =
   | 'treasure-chest'
   | 'redeem'
   | 'events'
+  | 'wing-gacha'
 export type ChatType = 'system' | 'player' | 'gm' | 'loot' | 'error' | 'npc'
 export interface ChatMsg {
   id: number
@@ -3834,7 +3841,7 @@ function die() {
 
 /* ---------------- NPC systems ---------------- */
 
-const ROLE_PANEL: Record<NpcRole, PanelId> = { shop: 'shop', enhance: 'enhance', job: 'job', storage: 'storage', gacha: 'gacha', rebirth: 'rebirth' }
+const ROLE_PANEL: Record<NpcRole, PanelId> = { shop: 'shop', enhance: 'enhance', job: 'job', storage: 'storage', gacha: 'gacha', wing_gacha: 'wing-gacha', rebirth: 'rebirth' }
 
 export function hasVipRemoteAccess(target?: SaveData | null): boolean {
   const activePlayer = target ?? game.p
@@ -4453,6 +4460,7 @@ const VIP_REMOTE_NPC_PANEL_MESSAGES: Partial<Record<PanelId, string>> = {
 const TOWN_ONLY_NPC_PANEL_MESSAGES: Partial<Record<PanelId, string>> = {
   job: 'กรุณาเดินไปคุยกับ ปรมาจารย์อาร์ค ในเมืองเพื่อเปลี่ยนอาชีพ',
   gacha: 'กรุณาเดินไปคุยกับ มาดามแคปซูล ในเมืองเพื่อสุ่มกาชา',
+  'wing-gacha': 'กรุณาเดินไปที่ ตู้ไข่สุ่มปีก ข้างน้ำพุกลางเมืองเพื่อสุ่มปีก',
   rebirth: 'กรุณาเดินไปคุยกับ เทวทูตแห่งการจุติ ในเมืองเพื่อจุติ',
 }
 
@@ -4467,6 +4475,12 @@ export function openPanel(id: PanelId, options?: { fromNpc?: boolean }) {
     if (id === 'shop' || id === 'enhance' || id === 'storage') {
       if (!isNearTownNpcRole(id) && !hasVipRemoteAccess()) {
         say('error', VIP_REMOTE_NPC_PANEL_MESSAGES[id] ?? 'ต้องเปิดใช้งาน VIP หรือคุยกับ NPC ในเมือง')
+        notify()
+        return
+      }
+    } else if (id === 'wing-gacha') {
+      if (!isNearTownNpcRole('wing_gacha', 140)) {
+        say('error', TOWN_ONLY_NPC_PANEL_MESSAGES['wing-gacha'] ?? 'กรุณาเดินไปที่ ตู้ไข่สุ่มปีก ข้างน้ำพุกลางเมือง')
         notify()
         return
       }
@@ -7064,11 +7078,12 @@ export function equipFashionAction(slot: FashionSlot, fashionId: string | null):
   const def = getFashionItemDef(fashionId)
   if (!def || def.slot !== slot) return { ok: false, message: 'ไม่พบแฟชั่นในหมวดหมู่นี้' }
   const isVipExclusive = bonuses.active && bonuses.exclusiveFashionIds.includes(fashionId)
-  const unlocked = prem.fashion.unlockedIds.includes(fashionId) || isVipExclusive || Boolean(def.freeStarter)
+  const gachaUnlocked = Boolean(prem.fashion.gachaUnlockedIds?.includes(fashionId))
+  const unlocked = prem.fashion.unlockedIds.includes(fashionId) || gachaUnlocked || isVipExclusive || Boolean(def.freeStarter)
   if (!unlocked) {
     return { ok: false, message: 'ยังไม่ได้ปลดล็อกแฟชั่นชิ้นนี้' }
   }
-  if (def.vipRequired && (!bonuses.active || bonuses.level < def.vipRequired)) {
+  if (!gachaUnlocked && def.vipRequired && (!bonuses.active || bonuses.level < def.vipRequired)) {
     return { ok: false, message: `ต้องมี VIP ${def.vipRequired} ที่ยังไม่หมดอายุจึงจะสวมใส่ได้` }
   }
 
@@ -7096,6 +7111,66 @@ export function equipFashionAction(slot: FashionSlot, fashionId: string | null):
   saveGame()
   notify()
   return { ok: true, message: `สวมใส่ ${def.name} สำเร็จ!` }
+}
+
+export function rollWingGachaAction(
+  currency: WingGachaCurrency,
+  count: WingGachaCount,
+): WingGachaBatchResult {
+  const p = player()
+  const prem = ensurePremiumState(p)
+  const gachaUnlockedIds = prem.fashion.gachaUnlockedIds ?? []
+
+  const result = executeWingGachaBatch({
+    gold: p.gold,
+    diamonds: p.diamonds ?? 0,
+    unlockedIds: prem.fashion.unlockedIds,
+    gachaUnlockedIds,
+    currency,
+    count,
+  })
+
+  if (!result.ok) {
+    say('error', result.error ?? 'ไม่สามารถสุ่มปีกได้')
+    notify()
+    return result
+  }
+
+  p.gold = result.nextGold
+  p.diamonds = result.nextDiamonds
+  prem.fashion.unlockedIds = result.unlockedIds
+  prem.fashion.gachaUnlockedIds = result.gachaUnlockedIds
+
+  if (result.totalDuplicateStones > 0) {
+    addItem('enhance_stone', result.totalDuplicateStones)
+  }
+
+  const newRares = result.results.filter((r) => r.isNew && (r.rarity === 'ตำนาน' || r.rarity === 'มายา'))
+  for (const rarePull of newRares) {
+    void broadcastWorldNewsAction(
+      'gacha',
+      `${p.name} สุ่มตู้ปีกน้ำพุเมืองได้ปีกระดับ ${rarePull.rarity} "${rarePull.def.name}"!`,
+    )
+  }
+
+  const newCount = result.results.filter((r) => r.isNew).length
+  const summaryNames = result.results.map((r) => r.def.name).join(', ')
+  logPremiumAudit(p, {
+    action: 'WING_GACHA',
+    details: `สุ่มปีก ${count} ครั้ง (${currency}): ${summaryNames}`,
+    verifiedByServer: false,
+  })
+  say(
+    'loot',
+    `สุ่มตู้ปีก ${count} ครั้ง: ได้รับ ${summaryNames}${newCount > 0 ? ` (ปลดล็อกใหม่ ${newCount} แบบ!)` : ''}${
+      result.totalDuplicateGold > 0
+        ? ` · ชดเชยซ้ำ +${result.totalDuplicateGold.toLocaleString()} G & หินตีบวก x${result.totalDuplicateStones}`
+        : ''
+    }`,
+  )
+  saveGame()
+  notify()
+  return result
 }
 
 /* ---------------- Real-Money Top-Up Actions ---------------- */

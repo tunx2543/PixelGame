@@ -64,7 +64,8 @@ export function compareEquipmentItem(
 
   const isCompatibleJob =
     def.kind === 'weapon'
-      ? !def.weaponType || job.weaponTypes.includes(def.weaponType)
+      ? (!def.weaponType || job.weaponTypes.includes(def.weaponType)) &&
+        (!def.allowedJobs?.length || def.allowedJobs.includes(job.id))
       : !def.allowedJobs?.length || def.allowedJobs.includes(job.id)
   const meetsLevel = player.level >= (def.reqLevel ?? 1)
 

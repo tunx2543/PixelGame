@@ -2005,6 +2005,59 @@ const BASE_ITEMS: Record<string, ItemDef> = {
   kris: weapon('kris', 'กริช', 'dagger', 32, 2500, 2, 15, '#e9c46a', { defaultRarity: 'uncommon' }),
   shadow_dagger: weapon('shadow_dagger', 'มีดเงา', 'dagger', 64, 9000, 3, 25, '#7b2cbf', { defaultRarity: 'rare', element: 'shadow' }),
   demon_fang: weapon('demon_fang', 'เขี้ยวปีศาจ', 'dagger', 115, 25000, 4, 38, '#d00000', { defaultRarity: 'epic', element: 'shadow' }),
+
+  // ---- Pawchemist Bomb Flasks (staff slot) ----
+  pawchemist_molotov_flask: weapon('pawchemist_molotov_flask', 'ขวดระเบิดโมโลตอฟ Pawchemist', 'staff', 16, 420, 1, 10, '#f472b6', {
+    defaultRarity: 'common',
+    element: 'fire',
+    allowedJobs: ['nekobaku'],
+    description: 'ขวดระเบิดแอลเคมีสำหรับ Pawchemist ลงช่องคทา (ATK +16)',
+  }),
+  pawchemist_fizz_bomb: weapon('pawchemist_fizz_bomb', 'ขวดฟองฟู่แปรธาตุ', 'staff', 48, 3200, 2, 20, '#38bdf8', {
+    defaultRarity: 'rare',
+    element: 'arcane',
+    allowedJobs: ['nekobaku'],
+    description: 'ขวดน้ำยาฟองซ่าอัดแรงดันของ Pawchemist ลงช่องคทา (ATK +48)',
+  }),
+  pawchemist_crimson_flask: weapon('pawchemist_crimson_flask', 'ขวดเพลิงโลหิต Pawchemist', 'staff', 95, 11500, 3, 35, '#fb7185', {
+    defaultRarity: 'epic',
+    element: 'fire',
+    allowedJobs: ['nekobaku'],
+    description: 'ขวดน้ำยาระเบิดเข้มข้นสีแดงฉานสำหรับ Pawchemist ลงช่องคทา (ATK +95)',
+  }),
+  pawchemist_blazing_bomb: weapon('pawchemist_blazing_bomb', 'ระเบิดเพลิงกัมปนาท', 'staff', 215, 52000, 4, 55, '#f97316', {
+    defaultRarity: 'epic',
+    element: 'fire',
+    allowedJobs: ['nekobaku'],
+    description: 'ขวดระเบิดเพลิงแรงสูงประทับตรา Pawchemist ลงช่องคทา Lv.55 (ATK +215)',
+  }),
+  pawchemist_solar_bomb: weapon('pawchemist_solar_bomb', 'ขวดสุริยันแปรธาตุ', 'staff', 435, 130000, 5, 75, '#facc15', {
+    defaultRarity: 'legendary',
+    element: 'fire',
+    allowedJobs: ['nekobaku'],
+    description: 'ขวดระเบิดแกนสุริยะระดับตำนานของ Pawchemist ลงช่องคทา Lv.75 (ATK +435)',
+  }),
+  pawchemist_mythic_elixir: weapon('pawchemist_mythic_elixir', 'มหาศาสตราขวดยาอมฤต Pawchemist', 'staff', 1170, 680000, 6, 100, '#fde047', {
+    defaultRarity: 'mythic',
+    element: 'holy',
+    allowedJobs: ['nekobaku'],
+    description: 'ขวดยาแปรธาตุระดับเทพแห่ง Pawchemist ลงช่องคทา Lv.100 (ATK +1,170)',
+  }),
+
+  // ---- Grimcaller & Arcanist Grimoires (staff slot) ----
+  grimcaller_occult_grimoire: weapon('grimcaller_occult_grimoire', 'ตำรามนต์ดำเนตรอเวจี', 'staff', 225, 52000, 4, 45, '#a855f7', {
+    defaultRarity: 'epic',
+    element: 'shadow',
+    allowedJobs: ['wicked_necromancer', 'mage'],
+    description: 'คัมภีร์มนต์ดำสำหรับ Grimcaller และ Arcanist ลงช่องคทา (ATK +225)',
+  }),
+  arcanist_celestial_tome: weapon('arcanist_celestial_tome', 'คัมภีร์ดาราจักร Arcanist', 'staff', 610, 210000, 5, 80, '#38bdf8', {
+    defaultRarity: 'legendary',
+    element: 'arcane',
+    allowedJobs: ['mage', 'cleric', 'wicked_necromancer', 'the_king'],
+    description: 'คัมภีร์เวทแสงดาวขั้นสูงสำหรับสายจอมเวทและนักบวช ลงช่องคทา (ATK +610)',
+  }),
+
   abyss_crystal: { id: 'abyss_crystal', name: 'ผลึกอเวจี', kind: 'material', itemCategory: 'special', price: 1800, sellPrice: 900, defaultRarity: 'legendary', element: 'shadow', icon: 'core', color: '#8b5cf6', description: 'ผลึกหายากจากดันเจี้ยนห้วงอเวจี', tier: 5 },
 
   cloth_armor: armor('cloth_armor', 'ชุดผ้า', 5, 100, 1, 1, '#d4a373', { defaultRarity: 'common' }),
@@ -2030,7 +2083,7 @@ const FILE_ITEMS: Record<string, ItemDef> = Object.fromEntries(
     const weaponType = isWeapon
       ? entry.id === 'weapon_004'
         ? 'stick'
-        : entry.job === 'mage'
+        : entry.id === 'weapon_022' || entry.job === 'mage'
           ? 'staff'
           : entry.job === 'archer'
             ? 'bow'
@@ -2071,12 +2124,14 @@ const FILE_ITEMS: Record<string, ItemDef> = Object.fromEntries(
           entry.job === 'all' || entry.job === 'gm'
             ? undefined
             : entry.job === 'swordsman'
-              ? ['swordsman', 'kensei', 'templar', 'the_king', 'iron_fist']
+              ? ['novice', 'swordsman', 'merchant', 'kensei', 'iron_fist', 'templar', 'the_king']
               : entry.job === 'mage'
-                ? ['mage', 'cleric', 'wicked_necromancer']
-                : entry.job === 'thief'
-                  ? ['thief', 'sinister', 'nekobaku', 'mamushi']
-                  : [entry.job],
+                ? ['mage', 'cleric', 'wicked_necromancer', 'the_king', 'nekobaku']
+                : entry.job === 'archer'
+                  ? ['archer', 'sinister', 'nekobaku', 'mamushi']
+                  : entry.job === 'thief'
+                    ? ['novice', 'thief', 'kensei', 'sinister', 'mamushi']
+                    : [entry.job],
         gmOnly: entry.job === 'gm',
       },
     ]
@@ -2117,6 +2172,9 @@ export const SHOP_STOCK: string[] = [
   'wood_staff',
   'short_bow',
   'knife',
+  'pawchemist_molotov_flask',
+  'pawchemist_fizz_bomb',
+  'grimcaller_occult_grimoire',
   'iron_visor_helm',
   'leather_archer_bracer',
   'knight_heater_shield',

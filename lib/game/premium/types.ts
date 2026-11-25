@@ -204,6 +204,10 @@ export interface FashionItemDef {
   accentColor: string
   iconAsset?: string
   layerSheetAsset?: string
+  wingSpriteAsset?: string
+  wingAnimSheetAsset?: string
+  wingAnimFrames?: number
+  gachaOnly?: boolean
   goldPrice?: number
   diamondPrice?: number
   freeStarter?: boolean
@@ -223,6 +227,7 @@ export interface FashionItemDef {
 
 export interface FashionState {
   unlockedIds: string[]
+  gachaUnlockedIds?: string[]
   equipped: Record<FashionSlot, string | null>
 }
 

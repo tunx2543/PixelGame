@@ -94,7 +94,7 @@ export type Theme =
   | 'dream'
   | 'colosseum'
 
-export type NpcRole = 'shop' | 'enhance' | 'job' | 'storage' | 'gacha' | 'rebirth'
+export type NpcRole = 'shop' | 'enhance' | 'job' | 'storage' | 'gacha' | 'wing_gacha' | 'rebirth'
 
 export type MapObjectKind =
   | 'lamp_post'
@@ -504,6 +504,16 @@ function buildTown(): MapDef {
         y: 14.5,
         colors: { hair: '#ffffff', body: '#e0fbfc', legs: '#98c1d9', accent: '#ffd166', skin: '#f2c6a0' },
         greeting: 'เมื่อเจ้าพร้อม ข้าจะนำทางสู่การจุติและการเริ่มต้นใหม่',
+      },
+      {
+        id: 'wing_gacha_machine',
+        name: 'ตู้ไข่สุ่มปีก',
+        title: 'สุ่มปีก 23 แบบ',
+        role: 'wing_gacha',
+        x: 23.5,
+        y: 16.9,
+        colors: { hair: '#67e8f9', body: '#0284c7', legs: '#1e293b', accent: '#fde047' },
+        greeting: 'ตู้ไข่สุ่มปีกแห่งน้ำพุเมือง! ลองเสี่ยงโชคสุ่มปีก 23 แบบเลยไหม?',
       },
     ],
   }

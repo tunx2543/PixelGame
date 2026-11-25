@@ -236,7 +236,7 @@ export function WardrobePanel() {
                         className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
                       >
                         {def?.iconAsset ? (
-                          <img src={def.iconAsset} alt="" className="size-5 shrink-0 object-contain" />
+                          <img src={def.iconAsset} alt="" className="pixelated size-5 shrink-0 object-contain" />
                         ) : (
                           <span className="grid size-5 shrink-0 place-items-center rounded border border-border/50 bg-muted/50 text-[9px] text-muted-foreground">
                             -
@@ -343,10 +343,11 @@ export function WardrobePanel() {
         <div className="grid gap-2.5 sm:grid-cols-2">
           {fashionItems.map((f) => {
             const isVipExclusive = vipBonuses.active && vipBonuses.exclusiveFashionIds.includes(f.id)
-            const unlocked = prem.fashion.unlockedIds.includes(f.id) || isVipExclusive || Boolean(f.freeStarter)
+            const gachaUnlocked = Boolean(prem.fashion.gachaUnlockedIds?.includes(f.id))
+            const unlocked = prem.fashion.unlockedIds.includes(f.id) || gachaUnlocked || isVipExclusive || Boolean(f.freeStarter)
             const equipped = equippedLoadout[f.slot] === f.id
             const isPreviewing = previewOverrides[f.slot] === f.id
-            const vipBlocked = Boolean(f.vipRequired && (!vipBonuses.active || vipBonuses.level < f.vipRequired))
+            const vipBlocked = !gachaUnlocked && Boolean(f.vipRequired && (!vipBonuses.active || vipBonuses.level < f.vipRequired))
             const linkedProd = PREMIUM_CATALOG.find(
               (prod) => prod.payload?.fashionId === f.id || prod.itemId === f.linkedGemItemId,
             )
@@ -371,7 +372,7 @@ export function WardrobePanel() {
                     <img
                       src={f.iconAsset ?? `/assets/fashion/icons/${f.id}.png`}
                       alt={f.name}
-                      className="size-11 object-contain"
+                      className="pixelated size-11 object-contain"
                     />
                   </div>
                   <div className="min-w-0 flex-1">
@@ -457,6 +458,10 @@ export function WardrobePanel() {
                         <Gem className="size-3 text-cyan-200" aria-hidden />
                         ซื้อ {formatNum(f.diamondPrice)} เพชร
                       </span>
+                    </PxButton>
+                  ) : f.gachaOnly ? (
+                    <PxButton variant="secondary" onClick={() => openPanel('wing-gacha')}>
+                      สุ่มได้ที่ตู้ปีกน้ำพุเมือง
                     </PxButton>
                   ) : linkedProd ? (
                     <PxButton variant="secondary" onClick={() => openPanel('gem-shop')}>

@@ -703,6 +703,73 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     ents.push({
       y: fy,
       draw: () => {
+        if (n.role === 'wing_gacha') {
+          const pulse = 0.55 + Math.sin(t * 4.5) * 0.25
+          const wingBob = Math.sin(t * 3.8) * 1.4
+          shadow(ctx, fx, fy + 1, 9.5)
+          if (near && !game.panel) {
+            ctx.save()
+            ctx.strokeStyle = `rgba(103, 232, 249, ${pulse + 0.15})`
+            ctx.fillStyle = `rgba(56, 189, 248, ${(pulse + 0.1) * 0.25})`
+            ctx.lineWidth = 1.4
+            ctx.beginPath()
+            ctx.ellipse(fx, fy + 1, 13.5, 5.5, 0, 0, Math.PI * 2)
+            ctx.fill()
+            ctx.stroke()
+            ctx.restore()
+          }
+          ctx.save()
+          ctx.translate(Math.round(fx), Math.round(fy))
+          // Ornate stone-gold pedestal
+          ctx.fillStyle = '#1e293b'
+          ctx.fillRect(-9, -4, 18, 5)
+          ctx.fillStyle = '#d97706'
+          ctx.fillRect(-8, -5, 16, 2)
+          // Cabinet lower housing
+          ctx.fillStyle = '#0f172a'
+          ctx.fillRect(-7, -14, 14, 10)
+          ctx.fillStyle = '#0284c7'
+          ctx.fillRect(-6, -13, 12, 8)
+          // Coin slot & capsule dispense chute
+          ctx.fillStyle = '#fde047'
+          ctx.fillRect(2, -11, 2, 3)
+          ctx.fillStyle = '#020617'
+          ctx.fillRect(-4, -9, 5, 3)
+          ctx.fillStyle = '#38bdf8'
+          ctx.fillRect(-3, -8, 3, 1)
+          // Crystal glass capsule dome
+          ctx.fillStyle = '#164e63'
+          ctx.fillRect(-8, -28, 16, 14)
+          ctx.fillStyle = `rgba(103, 232, 249, ${0.32 + pulse * 0.18})`
+          ctx.fillRect(-7, -27, 14, 12)
+          ctx.strokeStyle = '#67e8f9'
+          ctx.lineWidth = 1
+          ctx.strokeRect(-7.5, -27.5, 15, 13)
+          // Floating miniature wing silhouette inside dome
+          ctx.fillStyle = '#fde047'
+          ctx.fillRect(-5, Math.round(-23 + wingBob), 3, 3)
+          ctx.fillRect(2, Math.round(-23 + wingBob), 3, 3)
+          ctx.fillStyle = '#f472b6'
+          ctx.fillRect(-2, Math.round(-21 + wingBob), 4, 3)
+          ctx.fillStyle = '#ffffff'
+          ctx.fillRect(-6, Math.round(-24 + wingBob), 2, 2)
+          ctx.fillRect(4, Math.round(-24 + wingBob), 2, 2)
+          // Glass shine reflection
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.55)'
+          ctx.fillRect(-6, -26, 2, 7)
+          // Winged golden crown cap on top of dome
+          ctx.fillStyle = '#f59e0b'
+          ctx.fillRect(-6, -30, 12, 3)
+          ctx.fillStyle = '#fde047'
+          ctx.fillRect(-9, -32, 3, 3)
+          ctx.fillRect(6, -32, 3, 3)
+          ctx.fillRect(-2, -33, 4, 3)
+          ctx.fillStyle = '#a855f7'
+          ctx.fillRect(-1, -32, 2, 2)
+          ctx.restore()
+          return
+        }
+
         const phase = t * 2.6 + fx * 0.15
         const breath = Math.sin(phase)
         const scaleX = 1 - breath * 0.018
@@ -1103,6 +1170,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           dy: remoteDy,
           dw: remoteW,
           dh: remoteH,
+          timeSec: t,
         })
         drawResolvedDrawable(
           ctx,
@@ -1122,6 +1190,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           dy: remoteDy,
           dw: remoteW,
           dh: remoteH,
+          timeSec: t,
         })
         drawCharacterFashionLayers({
           ctx,
@@ -1133,6 +1202,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           dy: remoteDy,
           dw: remoteW,
           dh: remoteH,
+          timeSec: t,
         })
         if (remoteAttacking && !isRemoteGmEpic && !remoteRiderDrawable.sheetId) {
           drawWeaponAttackOverlay(ctx, other.facing, remoteWeapon, atkProgress, remoteWeaponColor)
@@ -1584,6 +1654,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         dw: drawW,
         dh: drawH,
         alpha: p.invisible ? 0.2 : 1,
+        timeSec: t,
       })
       drawResolvedDrawable(ctx, localRiderDrawable, localDx, localDy, drawW, drawH)
       drawCharacterFashionLayers({
@@ -1597,6 +1668,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         dw: drawW,
         dh: drawH,
         alpha: p.invisible ? 0.2 : 1,
+        timeSec: t,
       })
       drawCharacterFashionLayers({
         ctx,
@@ -1609,6 +1681,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         dw: drawW,
         dh: drawH,
         alpha: p.invisible ? 0.2 : 1,
+        timeSec: t,
       })
       if ((attacking || (castingSkill && !isGmEpic)) && !isGmEpic && !localRiderDrawable.sheetId) {
         drawWeaponAttackOverlay(
@@ -2176,6 +2249,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     shop: 'npc-pouch',
     job: 'npc-job',
     gacha: 'npc-gacha',
+    wing_gacha: 'bp-wings',
     rebirth: 'npc-rebirth',
   }
 
