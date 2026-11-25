@@ -2401,6 +2401,22 @@ export function renderHdPetSprite(
   return c
 }
 
+const MOUNT_ARCHETYPE_BACK_H: Record<string, number> = {
+  cat: 38,
+  dog: 43,
+  turtle: 50,
+  dragon: 56,
+  wolf: 60,
+  chocobo: 60,
+  panda: 63,
+  horse: 65,
+  elephant: 84,
+}
+
+export function getMountBackHeightHd(archetype: string): number {
+  return MOUNT_ARCHETYPE_BACK_H[archetype] ?? 64
+}
+
 export function drawMountLevelAndSkinFx(
   ctx: CanvasRenderingContext2D,
   W: number,
@@ -2425,7 +2441,8 @@ export function drawMountLevelAndSkinFx(
       : isWalk
         ? Math.round(Math.sin(phase * Math.PI * 2) * 3)
         : Math.round(Math.sin(phase * Math.PI * 2) * 1.5)
-  const backY = footY - 56 + bobY
+  const archBackH = getMountBackHeightHd(spec.archetype)
+  const backY = footY - archBackH + bobY
 
   const skinTint =
     mountSkinId === 'mount_skin_astral'
@@ -2450,37 +2467,50 @@ export function drawMountLevelAndSkinFx(
 
   const tierPrimary = skinTint?.primary ?? spec.auraColor ?? spec.colors.accent
 
-  if (tier <= 1 && !skinTint) {
-    // Tier 1 (Lv.1-2): clean motion speed lines only when sprinting
-    if (isRun) {
-      ctx.save()
-      ctx.strokeStyle = 'rgba(255,255,255,0.42)'
-      ctx.lineWidth = 2
-      const dirSign = dir === 'left' ? 1 : dir === 'right' ? -1 : 0
-      if (dirSign !== 0) {
-        for (let i = 0; i < 2; i++) {
-          const ly = backY + 12 + i * 16
-          ctx.beginPath()
-          ctx.moveTo(cx + dirSign * 42, ly)
-          ctx.lineTo(cx + dirSign * 72, ly)
-          ctx.stroke()
-        }
+  const drawDirectionalSpeedLines = (alpha: number, strokeCol: string, lineCount: number, lineWidth: number) => {
+    ctx.save()
+    ctx.strokeStyle = strokeCol
+    ctx.globalAlpha = alpha
+    ctx.lineWidth = lineWidth
+    if (dir === 'left' || dir === 'right') {
+      const dirSign = dir === 'left' ? 1 : -1
+      for (let i = 0; i < lineCount; i++) {
+        const ly = backY + 8 + i * 14
+        ctx.beginPath()
+        ctx.moveTo(cx + dirSign * 44, ly)
+        ctx.lineTo(cx + dirSign * 78, ly)
+        ctx.stroke()
       }
-      ctx.restore()
+    } else {
+      const yDir = dir === 'up' ? 1 : -1
+      const yBase = dir === 'up' ? footY - 8 : backY - 18
+      for (let i = 0; i < lineCount; i++) {
+        const lx = cx + (i - (lineCount - 1) / 2) * 20
+        ctx.beginPath()
+        ctx.moveTo(lx, yBase)
+        ctx.lineTo(lx, yBase + yDir * 24)
+        ctx.stroke()
+      }
+    }
+    ctx.restore()
+  }
+
+  if (tier <= 1 && !skinTint) {
+    if (isRun) {
+      drawDirectionalSpeedLines(0.42, 'rgba(255,255,255,0.9)', 2, 2)
     }
     return
   }
 
   ctx.save()
 
-  // Optional skin ethereal wash / crest shimmer
   if (skinTint) {
-    const washGrad = ctx.createRadialGradient(cx, backY + 10, 6, cx, backY + 10, 58)
+    const washGrad = ctx.createRadialGradient(cx, backY + 12, 6, cx, backY + 12, 58)
     washGrad.addColorStop(0, skinTint.glow)
     washGrad.addColorStop(1, 'rgba(0,0,0,0)')
     ctx.fillStyle = washGrad
     ctx.beginPath()
-    ctx.ellipse(cx, backY + 10, 60, 44, 0, 0, Math.PI * 2)
+    ctx.ellipse(cx, backY + 12, 60, 44, 0, 0, Math.PI * 2)
     ctx.fill()
   }
 
@@ -2488,9 +2518,9 @@ export function drawMountLevelAndSkinFx(
   if (tier >= 2) {
     const armorCol = tier >= 3 ? '#f59e0b' : '#cbd5e1'
     const armorHi = tier >= 3 ? '#fef08a' : '#f8fafc'
-    const chestX = dir === 'right' ? cx + 32 : dir === 'left' ? cx - 32 : cx
-    const chestY = backY + 16
-    if (dir !== 'up') {
+    if (isSide) {
+      const chestX = dir === 'right' ? cx + 30 : cx - 30
+      const chestY = backY + 18
       ctx.fillStyle = armorCol
       ctx.strokeStyle = HD_INK
       ctx.lineWidth = 2
@@ -2507,12 +2537,34 @@ export function drawMountLevelAndSkinFx(
       ctx.beginPath()
       ctx.arc(chestX, chestY, 3.2, 0, Math.PI * 2)
       ctx.fill()
-    }
 
-    // Polished saddle blanket trim & stirrup jewel
-    const saddleX = dir === 'right' ? cx - 4 : dir === 'left' ? cx + 4 : cx
-    ctx.fillStyle = tierAccent
-    ctx.fillRect(saddleX - (isSide ? 14 : 11), backY - 2, isSide ? 28 : 22, 3)
+      const saddleX = dir === 'right' ? cx - 6 : cx + 6
+      ctx.fillStyle = tierAccent
+      ctx.fillRect(saddleX - 14, backY - 1, 28, 3)
+    } else if (dir === 'down') {
+      // Lower chest crest below mount chin so it never obscures mount eyes
+      const chestY = Math.min(footY - 20, backY + 34)
+      ctx.fillStyle = armorCol
+      ctx.strokeStyle = HD_INK
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.moveTo(cx, chestY - 6)
+      ctx.lineTo(cx + 8, chestY)
+      ctx.lineTo(cx, chestY + 7)
+      ctx.lineTo(cx - 8, chestY)
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+
+      ctx.fillStyle = armorHi
+      ctx.beginPath()
+      ctx.arc(cx, chestY, 2.5, 0, Math.PI * 2)
+      ctx.fill()
+    } else {
+      // Rear view: gilded saddle cantle band above hindquarters
+      ctx.fillStyle = tierAccent
+      ctx.fillRect(cx - 12, backY + 2, 24, 3)
+    }
   }
 
   // Tier 3+ (Lv.5+): Golden crest & radiant ground rune ring
@@ -2525,7 +2577,6 @@ export function drawMountLevelAndSkinFx(
     ctx.stroke()
 
     if (tier >= 4) {
-      // Arcane outer ring + flank starlight runes
       ctx.globalAlpha = 0.34
       ctx.lineWidth = 1.8
       ctx.beginPath()
@@ -2535,7 +2586,7 @@ export function drawMountLevelAndSkinFx(
     ctx.globalAlpha = 1
   }
 
-  // Tier 4+ (Lv.7+): Wing/flank glowing motes & dash trail
+  // Tier 4+ (Lv.7+): Wing/flank glowing motes
   if (tier >= 4) {
     const moteCount = tier >= 5 ? 5 : 3
     for (let i = 0; i < moteCount; i++) {
@@ -2551,7 +2602,7 @@ export function drawMountLevelAndSkinFx(
 
   // Tier 5 (Lv.9-10): Sovereign Halo Crown floating over mount
   if (tier >= 5 || skinTint) {
-    const crownY = backY - 38 + Math.round(Math.sin(phase * Math.PI * 2) * 2)
+    const crownY = Math.max(12, backY - 36 + Math.round(Math.sin(phase * Math.PI * 2) * 2))
     ctx.strokeStyle = tierAccent
     ctx.lineWidth = 2.6
     ctx.beginPath()
@@ -2567,22 +2618,42 @@ export function drawMountLevelAndSkinFx(
   }
 
   if (isRun) {
-    ctx.strokeStyle = tierAccent
-    ctx.globalAlpha = 0.55
-    ctx.lineWidth = 2.5
-    const dirSign = dir === 'left' ? 1 : dir === 'right' ? -1 : 0
-    if (dirSign !== 0) {
-      for (let i = 0; i < 3; i++) {
-        const ly = backY + 4 + i * 14
-        ctx.beginPath()
-        ctx.moveTo(cx + dirSign * 44, ly)
-        ctx.lineTo(cx + dirSign * 80, ly)
-        ctx.stroke()
-      }
-    }
+    drawDirectionalSpeedLines(0.55, tierAccent, 3, 2.5)
   }
 
   ctx.restore()
+}
+
+function drawDragonWingPair(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  wy: number,
+  flap: number,
+  wingColor: string,
+  ribColor: string,
+  span = 52,
+) {
+  for (const sx of [-1, 1]) {
+    ctx.fillStyle = wingColor
+    ctx.beginPath()
+    ctx.moveTo(cx + sx * 10, wy)
+    ctx.lineTo(cx + sx * span, wy - 28 + flap)
+    ctx.lineTo(cx + sx * (span - 8), wy + 4 + flap * 0.4)
+    ctx.lineTo(cx + sx * (span * 0.56), wy - 4 + flap * 0.25)
+    ctx.lineTo(cx + sx * 12, wy + 12)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+
+    ctx.strokeStyle = ribColor
+    ctx.lineWidth = 2.2
+    ctx.beginPath()
+    ctx.moveTo(cx + sx * 12, wy + 1)
+    ctx.lineTo(cx + sx * (span - 4), wy - 22 + flap)
+    ctx.stroke()
+    ctx.strokeStyle = HD_INK
+    ctx.lineWidth = 2.8
+  }
 }
 
 export function renderHdMountSprite(
@@ -2600,103 +2671,1166 @@ export function renderHdMountSprite(
   c.dataset.footPadFrac = String(MOUNT_FOOT_PAD_FRAC)
   const cx = W / 2
   const footY = H - Math.round(H * MOUNT_FOOT_PAD_FRAC)
+  const arch = spec.archetype
   const isRun = action === 'run' || action === 'attack' || action === 'skill'
   const isWalk = action === 'walk'
   const isMountPose = action === 'mount' || action === 'dismount'
   const mod = isRun || isWalk ? 6 : 4
   const bob = isRun
-    ? Math.sin((f / mod) * Math.PI * 2) * 6 - 3
+    ? Math.sin((f / mod) * Math.PI * 2) * 5 - 2.5
     : isWalk
-      ? Math.sin((f / mod) * Math.PI * 2) * 4
+      ? Math.sin((f / mod) * Math.PI * 2) * 3.5
       : isMountPose
-        ? 4
-        : Math.sin((f / mod) * Math.PI * 2) * 2
+        ? 3.5
+        : Math.sin((f / mod) * Math.PI * 2) * 1.5
+  const flap = isRun
+    ? Math.sin((f / 6) * Math.PI * 2) * 9
+    : isWalk
+      ? Math.sin((f / 6) * Math.PI * 2) * 5
+      : Math.sin((f / 4) * Math.PI * 2) * 3
+  const stride = isRun
+    ? Math.sin((f / 6) * Math.PI * 2) * 16
+    : isWalk
+      ? Math.sin((f / 6) * Math.PI * 2) * 11
+      : 0
+  const tailSwing = isRun || isWalk ? Math.sin((f / 6) * Math.PI * 2) * 7 : Math.sin((f / 4) * Math.PI * 2) * 2.5
+
   const c1 = spec.colors.primary
-  const hi = shadeCol(c1, 0.32)
-  const dark = shadeCol(spec.colors.secondary, -0.25)
+  const c2 = spec.colors.secondary
+  const acc = spec.colors.accent
+  const saddle = spec.colors.saddle
+  const hi = shadeCol(c1, 0.28)
+  const dark = shadeCol(c2, -0.22)
+  const backH = getMountBackHeightHd(arch)
+  const backY = footY - backH + bob
+
+  const isChocobo = arch === 'chocobo'
+  const isElephant = arch === 'elephant'
+  const isTurtle = arch === 'turtle'
+  const isPanda = arch === 'panda'
+  const isHorse = arch === 'horse'
+  const isWolf = arch === 'wolf'
+  const isDog = arch === 'dog'
+  const isCat = arch === 'cat'
+  const isDragon = arch === 'dragon'
+
+  const eyeColor = isDragon ? '#fde047' : isWolf || isChocobo ? acc : '#1e1b4b'
 
   ctx.save()
+  ctx.strokeStyle = HD_INK
+  ctx.lineWidth = 2.8
+
+  // ============================================================================
+  // 1) FRONT VIEW (dir === 'down') & REAR VIEW (dir === 'up')
+  // ============================================================================
+  if (dir === 'down' || dir === 'up') {
+    const isFront = dir === 'down'
+    const chestRx = isElephant ? 38 : isTurtle ? 36 : isPanda ? 32 : isChocobo ? 24 : 26
+    const chestRy = isElephant ? 30 : isTurtle ? 22 : isPanda ? 24 : 21
+    const bodyCy = Math.min(footY - 22, backY + chestRy)
+    const legLiftL = isWalk || isRun ? Math.max(0, stride * 0.45) : 0
+    const legLiftR = isWalk || isRun ? Math.max(0, -stride * 0.45) : 0
+    const legW = isElephant ? 14 : isPanda ? 12 : isChocobo ? 8 : 10
+    const legSpanX = isElephant ? 20 : isTurtle ? 22 : isPanda ? 16 : isChocobo ? 11 : 14
+    const legH = Math.max(18, footY - (bodyCy + chestRy * 0.45) + 4)
+
+    // --- REAR HEAD / EARS / HORNS / WINGS (drawn BEHIND torso when facing UP) ---
+    if (!isFront) {
+      if (isDragon || spec.flying) {
+        drawDragonWingPair(ctx, cx, backY + 12, flap, c2, acc, 54)
+      }
+      const hy = Math.max(22, backY - 6)
+      // Back-of-head silhouette (no eyes!)
+      if (isElephant) {
+        for (const sx of [-1, 1]) {
+          ctx.fillStyle = c2
+          ctx.beginPath()
+          ctx.ellipse(cx + sx * 30, hy + 8, 15, 19, sx * 0.2, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.stroke()
+        }
+        ctx.fillStyle = c1
+        ctx.beginPath()
+        ctx.ellipse(cx, hy + 4, 21, 18, 0, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+      } else if (isTurtle) {
+        // Low green head peeking at the top rim of the shell
+        ctx.fillStyle = hi
+        ctx.beginPath()
+        ctx.arc(cx, backY + 2, 11, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+      } else {
+        // Ears / Horns / Crest peeking cleanly behind rider/neck
+        if (isPanda) {
+          ctx.fillStyle = c2
+          for (const sx of [-1, 1]) {
+            ctx.beginPath()
+            ctx.arc(cx + sx * 13, hy - 10, 7, 0, Math.PI * 2)
+            ctx.fill()
+            ctx.stroke()
+          }
+          ctx.fillStyle = '#f8fafc'
+        } else if (isHorse) {
+          ctx.fillStyle = c1
+          for (const sx of [-1, 1]) {
+            ctx.beginPath()
+            ctx.moveTo(cx + sx * 8, hy - 8)
+            ctx.lineTo(cx + sx * 14, hy - 22)
+            ctx.lineTo(cx + sx * 15, hy - 5)
+            ctx.closePath()
+            ctx.fill()
+            ctx.stroke()
+          }
+          ctx.fillStyle = c1
+        } else if (isChocobo) {
+          ctx.fillStyle = '#fef08a'
+          for (const sx of [-1, 0, 1]) {
+            ctx.beginPath()
+            ctx.moveTo(cx + sx * 5 - 3, hy - 10)
+            ctx.lineTo(cx + sx * 9, hy - 22 - (sx === 0 ? 4 : 0))
+            ctx.lineTo(cx + sx * 5 + 3, hy - 10)
+            ctx.closePath()
+            ctx.fill()
+            ctx.stroke()
+          }
+          ctx.fillStyle = '#fef08a'
+        } else if (isDragon) {
+          ctx.fillStyle = acc
+          for (const sx of [-1, 1]) {
+            ctx.beginPath()
+            ctx.moveTo(cx + sx * 7, hy - 10)
+            ctx.lineTo(cx + sx * 18, hy - 28)
+            ctx.lineTo(cx + sx * 14, hy - 6)
+            ctx.closePath()
+            ctx.fill()
+            ctx.stroke()
+          }
+          ctx.fillStyle = c1
+        } else {
+          // Wolf / Dog / Cat pointed ears
+          ctx.fillStyle = isDog ? c1 : c2
+          for (const sx of [-1, 1]) {
+            ctx.beginPath()
+            ctx.moveTo(cx + sx * 6, hy - 8)
+            ctx.lineTo(cx + sx * 15, hy - 22)
+            ctx.lineTo(cx + sx * 16, hy - 4)
+            ctx.closePath()
+            ctx.fill()
+            ctx.stroke()
+          }
+          ctx.fillStyle = c1
+        }
+
+        // Back of cranium
+        ctx.beginPath()
+        ctx.ellipse(cx, hy, 15, 13, 0, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+
+        // Mane / Sprout on back of head
+        if (isHorse) {
+          ctx.fillStyle = c2
+          ctx.beginPath()
+          ctx.roundRect(cx - 5, hy - 12, 10, 22, 4)
+          ctx.fill()
+          ctx.stroke()
+        } else if (isPanda) {
+          ctx.strokeStyle = acc
+          ctx.lineWidth = 2.6
+          ctx.beginPath()
+          ctx.moveTo(cx, hy - 12)
+          ctx.lineTo(cx + 2, hy - 20)
+          ctx.stroke()
+          ctx.fillStyle = acc
+          ctx.beginPath()
+          ctx.ellipse(cx + 6, hy - 20, 5, 3, -0.35, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.strokeStyle = HD_INK
+          ctx.lineWidth = 2.8
+        }
+      }
+    } else if (isDragon || spec.flying) {
+      // Front view: wings spread behind torso
+      drawDragonWingPair(ctx, cx, backY + 12, flap, c2, acc, 54)
+    }
+
+    // --- FAR PAIR OF LEGS (visible subtly between/outside near legs) ---
+    ctx.fillStyle = dark
+    if (!isChocobo) {
+      for (const [lx, lift] of [
+        [cx - legSpanX - 5, legLiftR * 0.6],
+        [cx + legSpanX + 5, legLiftL * 0.6],
+      ] as const) {
+        ctx.beginPath()
+        ctx.roundRect(lx - legW * 0.4, footY - legH - lift - 2, legW * 0.8, legH, 4)
+        ctx.fill()
+        ctx.stroke()
+      }
+    }
+
+    // --- FOREGROUND PAIR OF LEGS ---
+    for (const [lx, lift] of [
+      [cx - legSpanX, legLiftL],
+      [cx + legSpanX, legLiftR],
+    ] as const) {
+      ctx.fillStyle = isChocobo ? '#f97316' : isPanda ? c2 : c1
+      ctx.beginPath()
+      ctx.roundRect(lx - legW / 2, footY - legH - lift, legW, legH, 4)
+      ctx.fill()
+      ctx.stroke()
+      if (isHorse) {
+        ctx.fillStyle = '#334155'
+        ctx.beginPath()
+        ctx.roundRect(lx - legW / 2, footY - 8 - lift, legW, 8, 2)
+        ctx.fill()
+        ctx.stroke()
+      } else if (isChocobo) {
+        // 3 avian toes
+        ctx.fillStyle = '#f97316'
+        ctx.beginPath()
+        ctx.ellipse(lx, footY - lift - 1, 7, 3.5, 0, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+      } else if (isElephant) {
+        ctx.fillStyle = '#e2e8f0'
+        for (const tx of [-3, 3]) {
+          ctx.beginPath()
+          ctx.arc(lx + tx, footY - lift - 2, 2.2, 0, Math.PI * 2)
+          ctx.fill()
+        }
+      }
+    }
+
+    // --- BODY TORSO / SHELL ---
+    if (isTurtle) {
+      // Domed hexagonal rock shell
+      ctx.fillStyle = gradVert(ctx, cx, backY, bodyCy + chestRy, '#854d0e', c2)
+      ctx.beginPath()
+      ctx.ellipse(cx, bodyCy, chestRx, chestRy, 0, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+      // Shell scute ridge pattern
+      ctx.strokeStyle = shadeCol(c2, -0.32)
+      ctx.lineWidth = 2.2
+      ctx.beginPath()
+      ctx.ellipse(cx, bodyCy - 2, chestRx * 0.55, chestRy * 0.55, 0, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.strokeStyle = HD_INK
+      ctx.lineWidth = 2.8
+    } else {
+      const bodyG = gradVert(ctx, cx, bodyCy - chestRy, bodyCy + chestRy, hi, isPanda ? '#e2e8f0' : c1)
+      ctx.fillStyle = bodyG
+      ctx.beginPath()
+      ctx.ellipse(cx, bodyCy, chestRx, chestRy, 0, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+
+      if (isPanda) {
+        // Iconic black panda shoulder harness band
+        ctx.fillStyle = c2
+        ctx.beginPath()
+        ctx.ellipse(cx, bodyCy - 7, chestRx - 2, 9, 0, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+      } else if (isDog || isCat || isWolf || isDragon) {
+        // Chest fluff / belly plate
+        ctx.fillStyle = isDragon ? acc : isWolf ? '#e2e8f0' : c2
+        ctx.beginPath()
+        ctx.ellipse(cx, bodyCy + 3, chestRx * 0.52, chestRy * 0.62, 0, 0, Math.PI * 2)
+        ctx.fill()
+      }
+    }
+
+    // --- SADDLE / ROYAL RUG ---
+    ctx.fillStyle = saddle
+    ctx.beginPath()
+    ctx.roundRect(cx - (isElephant ? 24 : 18), backY - 2, isElephant ? 48 : 36, isElephant ? 22 : 14, 5)
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = acc
+    ctx.fillRect(cx - (isElephant ? 18 : 13), backY + 1, isElephant ? 36 : 26, 3)
+
+    // --- REAR DETAILS (TAIL + DORSAL RIDGES when facing UP) ---
+    if (!isFront) {
+      if (isDragon) {
+        // Golden dorsal spikes + barbed dragon tail swinging down
+        ctx.fillStyle = acc
+        for (const dy of [6, 16]) {
+          ctx.beginPath()
+          ctx.moveTo(cx - 4, backY + dy)
+          ctx.lineTo(cx, backY + dy - 7)
+          ctx.lineTo(cx + 4, backY + dy)
+          ctx.closePath()
+          ctx.fill()
+          ctx.stroke()
+        }
+        ctx.fillStyle = c1
+        ctx.beginPath()
+        ctx.moveTo(cx - 6, bodyCy + 4)
+        ctx.quadraticCurveTo(cx + tailSwing * 1.4, bodyCy + 24, cx + tailSwing * 1.8, footY - 4)
+        ctx.lineTo(cx + 6, bodyCy + 4)
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+        ctx.fillStyle = acc
+        ctx.beginPath()
+        ctx.moveTo(cx + tailSwing * 1.8, footY + 1)
+        ctx.lineTo(cx + tailSwing * 1.8 - 6, footY - 8)
+        ctx.lineTo(cx + tailSwing * 1.8 + 6, footY - 8)
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+      } else if (isHorse) {
+        // Thick flowing dark tail hanging down hindquarters
+        ctx.fillStyle = c2
+        ctx.beginPath()
+        ctx.moveTo(cx - 5, bodyCy - 2)
+        ctx.quadraticCurveTo(cx - 9 + tailSwing, bodyCy + 16, cx - 3 + tailSwing * 1.3, footY - 5)
+        ctx.lineTo(cx + 6 + tailSwing * 1.3, footY - 7)
+        ctx.quadraticCurveTo(cx + 9 + tailSwing, bodyCy + 14, cx + 5, bodyCy - 2)
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+      } else if (isDog) {
+        // Curled cream/orange Shiba tail sitting high on rump
+        ctx.fillStyle = c1
+        ctx.beginPath()
+        ctx.arc(cx + tailSwing * 0.4, bodyCy - 4, 11, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+        ctx.fillStyle = c2
+        ctx.beginPath()
+        ctx.arc(cx + tailSwing * 0.4 + 2, bodyCy - 5, 5, 0, Math.PI * 2)
+        ctx.fill()
+      } else if (isCat) {
+        // Long curved cat tail sweeping up
+        ctx.strokeStyle = HD_INK
+        ctx.lineWidth = 10
+        ctx.beginPath()
+        ctx.moveTo(cx, bodyCy + 4)
+        ctx.quadraticCurveTo(cx + 16 + tailSwing, bodyCy - 6, cx + 12 + tailSwing, bodyCy - 22)
+        ctx.stroke()
+        ctx.strokeStyle = c1
+        ctx.lineWidth = 5.5
+        ctx.beginPath()
+        ctx.moveTo(cx, bodyCy + 4)
+        ctx.quadraticCurveTo(cx + 16 + tailSwing, bodyCy - 6, cx + 12 + tailSwing, bodyCy - 22)
+        ctx.stroke()
+        ctx.strokeStyle = HD_INK
+        ctx.lineWidth = 2.8
+      } else if (isWolf) {
+        // Bushy silver-slate tail
+        ctx.fillStyle = c1
+        ctx.beginPath()
+        ctx.ellipse(cx + tailSwing * 0.6, bodyCy + 8, 9, 15, tailSwing * 0.04, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+        ctx.fillStyle = '#f8fafc'
+        ctx.beginPath()
+        ctx.arc(cx + tailSwing * 0.8, bodyCy + 20, 5, 0, Math.PI * 2)
+        ctx.fill()
+      } else if (isPanda) {
+        // Cute round dark puff tail on white rump
+        ctx.fillStyle = c2
+        ctx.beginPath()
+        ctx.arc(cx, bodyCy + 4, 7.5, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+      } else if (isChocobo) {
+        // Golden tail feather fan
+        for (const [ang, col] of [
+          [-0.45, c2],
+          [0, '#fef08a'],
+          [0.45, c2],
+        ] as const) {
+          ctx.save()
+          ctx.translate(cx, bodyCy + 2)
+          ctx.rotate(ang + tailSwing * 0.02)
+          ctx.fillStyle = col
+          ctx.beginPath()
+          ctx.ellipse(0, 10, 6, 12, 0, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.stroke()
+          ctx.restore()
+        }
+      } else if (isElephant) {
+        // Thin elephant tail hanging down center of broad rump
+        ctx.strokeStyle = HD_INK
+        ctx.lineWidth = 5
+        ctx.beginPath()
+        ctx.moveTo(cx, bodyCy - 2)
+        ctx.quadraticCurveTo(cx + tailSwing * 0.6, bodyCy + 14, cx + tailSwing, bodyCy + 24)
+        ctx.stroke()
+        ctx.strokeStyle = c1
+        ctx.lineWidth = 2.6
+        ctx.stroke()
+        ctx.strokeStyle = HD_INK
+        ctx.lineWidth = 2.8
+        ctx.fillStyle = c2
+        ctx.beginPath()
+        ctx.ellipse(cx + tailSwing, bodyCy + 26, 4.5, 6, 0, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+      } else if (isTurtle) {
+        // Stubby green tail poking from bottom of shell
+        ctx.fillStyle = c1
+        ctx.beginPath()
+        ctx.moveTo(cx - 5, bodyCy + 16)
+        ctx.lineTo(cx + tailSwing * 0.4, bodyCy + 27)
+        ctx.lineTo(cx + 5, bodyCy + 16)
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+      }
+
+      ctx.restore()
+      drawMountLevelAndSkinFx(ctx, W, H, spec, dir, action, f, level, mountSkinId)
+      return c
+    }
+
+    // --- FRONT HEAD & EXPRESSIVE FEATURES (dir === 'down') ---
+    // Positioned slightly forward/lower than saddle top so rider's head & torso stay cleanly visible above!
+    const hy = Math.min(footY - 32, backY + 18)
+
+    if (isElephant) {
+      // Wide flapping ears
+      for (const sx of [-1, 1]) {
+        ctx.fillStyle = c1
+        ctx.beginPath()
+        ctx.ellipse(cx + sx * 31, hy + 2, 16, 20, sx * -0.18, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+        ctx.fillStyle = shadeCol(c2, 0.2)
+        ctx.beginPath()
+        ctx.ellipse(cx + sx * 30, hy + 3, 9, 13, sx * -0.18, 0, Math.PI * 2)
+        ctx.fill()
+      }
+      // Elephant Head
+      ctx.fillStyle = gradVert(ctx, cx, hy - 18, hy + 18, hi, c1)
+      ctx.beginPath()
+      ctx.ellipse(cx, hy, 22, 19, 0, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+      // Royal Gold Forehead Crown
+      ctx.fillStyle = acc
+      ctx.beginPath()
+      ctx.moveTo(cx, hy - 18)
+      ctx.lineTo(cx + 8, hy - 10)
+      ctx.lineTo(cx, hy - 4)
+      ctx.lineTo(cx - 8, hy - 10)
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+      // Ivory Tusks
+      ctx.fillStyle = '#ffffff'
+      for (const sx of [-1, 1]) {
+        ctx.beginPath()
+        ctx.moveTo(cx + sx * 10, hy + 9)
+        ctx.quadraticCurveTo(cx + sx * 18, hy + 20, cx + sx * 12, hy + 26)
+        ctx.quadraticCurveTo(cx + sx * 8, hy + 18, cx + sx * 6, hy + 10)
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+      }
+      // Long Trunk hanging center front
+      ctx.fillStyle = c1
+      ctx.beginPath()
+      ctx.roundRect(cx - 6, hy + 3, 12, 26, 6)
+      ctx.fill()
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.arc(cx + 3, hy + 28, 5, 0, Math.PI)
+      ctx.fill()
+      ctx.stroke()
+      // 2 Eyes
+      drawAnimeEye(ctx, cx - 10, hy - 2, 3.6, 4.4, eyeColor, false)
+      drawAnimeEye(ctx, cx + 10, hy - 2, 3.6, 4.4, eyeColor, false)
+    } else if (isTurtle) {
+      const tHy = Math.min(footY - 22, bodyCy + 10)
+      ctx.fillStyle = gradVert(ctx, cx, tHy - 12, tHy + 12, hi, c1)
+      ctx.beginPath()
+      ctx.ellipse(cx, tHy, 14, 12, 0, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+      drawAnimeEye(ctx, cx - 6, tHy - 2, 3.2, 3.8, eyeColor, false)
+      drawAnimeEye(ctx, cx + 6, tHy - 2, 3.2, 3.8, eyeColor, false)
+    } else if (isPanda) {
+      // Round black ears
+      ctx.fillStyle = c2
+      for (const sx of [-1, 1]) {
+        ctx.beginPath()
+        ctx.arc(cx + sx * 13, hy - 12, 7, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+      }
+      // White head
+      ctx.fillStyle = '#f8fafc'
+      ctx.beginPath()
+      ctx.ellipse(cx, hy, 18, 15, 0, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+      // Sprout leaf
+      ctx.strokeStyle = acc
+      ctx.lineWidth = 2.6
+      ctx.beginPath()
+      ctx.moveTo(cx, hy - 14)
+      ctx.lineTo(cx + 2, hy - 22)
+      ctx.stroke()
+      ctx.fillStyle = acc
+      ctx.beginPath()
+      ctx.ellipse(cx + 6, hy - 22, 5, 3, -0.35, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.strokeStyle = HD_INK
+      ctx.lineWidth = 2.8
+      // Black eye patches + shiny eyes + nose
+      ctx.fillStyle = c2
+      for (const sx of [-1, 1]) {
+        ctx.beginPath()
+        ctx.ellipse(cx + sx * 7, hy - 1, 5.5, 6.2, sx * -0.2, 0, Math.PI * 2)
+        ctx.fill()
+      }
+      drawAnimeEye(ctx, cx - 7, hy - 1, 2.8, 3.4, '#0f172a', false)
+      drawAnimeEye(ctx, cx + 7, hy - 1, 2.8, 3.4, '#0f172a', false)
+      ctx.fillStyle = c2
+      ctx.beginPath()
+      ctx.ellipse(cx, hy + 5, 3.2, 2.2, 0, 0, Math.PI * 2)
+      ctx.fill()
+    } else if (isChocobo) {
+      // Scarf around chest
+      ctx.fillStyle = acc
+      ctx.beginPath()
+      ctx.roundRect(cx - 12, hy + 8, 24, 6, 3)
+      ctx.fill()
+      ctx.stroke()
+      // Head Crest Plume
+      ctx.fillStyle = '#fef08a'
+      for (const sx of [-1, 0, 1]) {
+        ctx.beginPath()
+        ctx.moveTo(cx + sx * 4 - 3, hy - 12)
+        ctx.lineTo(cx + sx * 8, hy - 24 - (sx === 0 ? 4 : 0))
+        ctx.lineTo(cx + sx * 4 + 3, hy - 12)
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+      }
+      // Round Yellow Head
+      ctx.fillStyle = '#fef08a'
+      ctx.beginPath()
+      ctx.ellipse(cx, hy, 16, 14, 0, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+      // 2 Eyes + Orange Center Beak
+      drawAnimeEye(ctx, cx - 6, hy - 2, 3.2, 4.0, eyeColor, false)
+      drawAnimeEye(ctx, cx + 6, hy - 2, 3.2, 4.0, eyeColor, false)
+      ctx.fillStyle = '#f97316'
+      ctx.beginPath()
+      ctx.moveTo(cx - 5, hy + 2)
+      ctx.lineTo(cx + 5, hy + 2)
+      ctx.lineTo(cx, hy + 9)
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+    } else if (isDragon) {
+      // Twin swept dragon horns
+      ctx.fillStyle = acc
+      for (const sx of [-1, 1]) {
+        ctx.beginPath()
+        ctx.moveTo(cx + sx * 7, hy - 10)
+        ctx.lineTo(cx + sx * 19, hy - 28)
+        ctx.lineTo(cx + sx * 14, hy - 6)
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+      }
+      // Sculpted Dragon Head + Muzzle
+      ctx.fillStyle = gradVert(ctx, cx, hy - 15, hy + 15, hi, c1)
+      ctx.beginPath()
+      ctx.ellipse(cx, hy, 17, 14, 0, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+      ctx.fillStyle = hi
+      ctx.beginPath()
+      ctx.roundRect(cx - 9, hy + 2, 18, 10, 5)
+      ctx.fill()
+      ctx.stroke()
+      drawAnimeEye(ctx, cx - 7, hy - 3, 3.4, 4.2, eyeColor, false, true)
+      drawAnimeEye(ctx, cx + 7, hy - 3, 3.4, 4.2, eyeColor, false, true)
+      // Nostrils + Fangs
+      ctx.fillStyle = HD_INK
+      ctx.beginPath()
+      ctx.arc(cx - 3.5, hy + 6, 1.5, 0, Math.PI * 2)
+      ctx.arc(cx + 3.5, hy + 6, 1.5, 0, Math.PI * 2)
+      ctx.fill()
+    } else if (isHorse) {
+      // Tall Horse Ears + Central Dark Mane
+      ctx.fillStyle = c1
+      for (const sx of [-1, 1]) {
+        ctx.beginPath()
+        ctx.moveTo(cx + sx * 7, hy - 10)
+        ctx.lineTo(cx + sx * 13, hy - 24)
+        ctx.lineTo(cx + sx * 14, hy - 6)
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+      }
+      ctx.fillStyle = gradVert(ctx, cx, hy - 14, hy + 18, hi, c1)
+      ctx.beginPath()
+      ctx.roundRect(cx - 14, hy - 14, 28, 30, 12)
+      ctx.fill()
+      ctx.stroke()
+      // Mane tuft + Golden Bridle strap across muzzle
+      ctx.fillStyle = c2
+      ctx.beginPath()
+      ctx.ellipse(cx, hy - 13, 5, 6, 0, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+      ctx.fillStyle = hi
+      ctx.beginPath()
+      ctx.roundRect(cx - 8, hy + 4, 16, 11, 5)
+      ctx.fill()
+      ctx.stroke()
+      ctx.strokeStyle = acc
+      ctx.lineWidth = 2.4
+      ctx.beginPath()
+      ctx.moveTo(cx - 9, hy + 6)
+      ctx.lineTo(cx + 9, hy + 6)
+      ctx.stroke()
+      ctx.strokeStyle = HD_INK
+      ctx.lineWidth = 2.8
+      drawAnimeEye(ctx, cx - 7, hy - 3, 3.2, 4.0, eyeColor, false)
+      drawAnimeEye(ctx, cx + 7, hy - 3, 3.2, 4.0, eyeColor, false)
+    } else {
+      // Wolf / Dog / Cat front face
+      // Neck scarf
+      ctx.fillStyle = acc
+      ctx.beginPath()
+      ctx.roundRect(cx - 13, hy + 9, 26, 6, 3)
+      ctx.fill()
+      ctx.stroke()
+      // Pointed ears
+      ctx.fillStyle = isDog ? c1 : c2
+      for (const sx of [-1, 1]) {
+        ctx.beginPath()
+        ctx.moveTo(cx + sx * 6, hy - 9)
+        ctx.lineTo(cx + sx * 15, hy - 23)
+        ctx.lineTo(cx + sx * 16, hy - 5)
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+        if (isCat || isDog) {
+          ctx.fillStyle = isCat ? '#fda4af' : c2
+          ctx.beginPath()
+          ctx.moveTo(cx + sx * 9, hy - 9)
+          ctx.lineTo(cx + sx * 13.5, hy - 18)
+          ctx.lineTo(cx + sx * 14, hy - 7)
+          ctx.closePath()
+          ctx.fill()
+          ctx.fillStyle = isDog ? c1 : c2
+        }
+      }
+      // Head
+      ctx.fillStyle = gradVert(ctx, cx, hy - 14, hy + 14, hi, c1)
+      ctx.beginPath()
+      ctx.ellipse(cx, hy, 17, 14, 0, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+      // Cream/white snout patch
+      ctx.fillStyle = isDog ? c2 : isCat ? '#ffffff' : '#f1f5f9'
+      ctx.beginPath()
+      ctx.ellipse(cx, hy + 5, 9, 6, 0, 0, Math.PI * 2)
+      ctx.fill()
+      // 2 Eyes
+      drawAnimeEye(ctx, cx - 7, hy - 2, 3.2, 4.0, eyeColor, false, isWolf)
+      drawAnimeEye(ctx, cx + 7, hy - 2, 3.2, 4.0, eyeColor, false, isWolf)
+      // Nose
+      ctx.fillStyle = isCat ? '#fb7185' : '#0f172a'
+      ctx.beginPath()
+      ctx.ellipse(cx, hy + 4, 3, 2, 0, 0, Math.PI * 2)
+      ctx.fill()
+      if (isCat) {
+        ctx.strokeStyle = HD_INK
+        ctx.lineWidth = 1.6
+        for (const sx of [-1, 1]) {
+          ctx.beginPath()
+          ctx.moveTo(cx + sx * 10, hy + 3)
+          ctx.lineTo(cx + sx * 18, hy + 1)
+          ctx.moveTo(cx + sx * 10, hy + 6)
+          ctx.lineTo(cx + sx * 18, hy + 7)
+          ctx.stroke()
+        }
+        ctx.lineWidth = 2.8
+      }
+    }
+
+    ctx.restore()
+    drawMountLevelAndSkinFx(ctx, W, H, spec, dir, action, f, level, mountSkinId)
+    return c
+  }
+
+  // ============================================================================
+  // 2) SIDE PROFILE (dir === 'right'; horizontally flipped for dir === 'left')
+  // ============================================================================
   if (dir === 'left') {
     ctx.translate(W, 0)
     ctx.scale(-1, 1)
   }
-  ctx.strokeStyle = HD_INK
-  ctx.lineWidth = 3
 
-  if (spec.flying) {
-    const flap = isRun ? Math.sin((f / 6) * Math.PI * 2) * 8 : isWalk ? Math.sin((f / 6) * Math.PI * 2) * 5 : Math.sin((f / 4) * Math.PI * 2) * 3
-    ctx.fillStyle = spec.colors.accent
-    if (dir === 'right' || dir === 'left') {
+  const bodyRx = isElephant ? 46 : isTurtle ? 44 : isPanda ? 38 : isChocobo ? 32 : 42
+  const bodyRy = isElephant ? 28 : isTurtle ? 22 : isPanda ? 24 : 21
+  const bodyCy = Math.min(footY - 22, backY + bodyRy)
+  const saddleX = cx - (isElephant ? 10 : isPanda ? 10 : 8)
+  const legTopY = bodyCy + bodyRy * 0.45
+  const legH = Math.max(18, footY - legTopY + 3)
+  const legW = isElephant ? 14 : isPanda ? 12 : isChocobo ? 8 : 10
+
+  // --- TAIL (behind hindquarters on left side) ---
+  if (isDragon) {
+    ctx.fillStyle = c1
+    ctx.beginPath()
+    ctx.moveTo(cx - bodyRx + 6, bodyCy + 2)
+    ctx.quadraticCurveTo(cx - bodyRx - 22, bodyCy + tailSwing, cx - bodyRx - 34, bodyCy - 14 + tailSwing)
+    ctx.lineTo(cx - bodyRx - 26, bodyCy + 10 + tailSwing * 0.5)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = acc
+    ctx.beginPath()
+    ctx.moveTo(cx - bodyRx - 36, bodyCy - 16 + tailSwing)
+    ctx.lineTo(cx - bodyRx - 26, bodyCy - 18 + tailSwing)
+    ctx.lineTo(cx - bodyRx - 29, bodyCy - 7 + tailSwing)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+  } else if (isDog) {
+    // Curled Shiba tail up over rump
+    ctx.fillStyle = c1
+    ctx.beginPath()
+    ctx.arc(cx - bodyRx + 6, bodyCy - 10 + tailSwing * 0.3, 12, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = c2
+    ctx.beginPath()
+    ctx.arc(cx - bodyRx + 8, bodyCy - 11 + tailSwing * 0.3, 5.5, 0, Math.PI * 2)
+    ctx.fill()
+  } else if (isCat) {
+    ctx.strokeStyle = HD_INK
+    ctx.lineWidth = 10
+    ctx.beginPath()
+    ctx.moveTo(cx - bodyRx + 6, bodyCy)
+    ctx.quadraticCurveTo(cx - bodyRx - 16, bodyCy - 16 + tailSwing, cx - bodyRx - 8, bodyCy - 30 + tailSwing)
+    ctx.stroke()
+    ctx.strokeStyle = c1
+    ctx.lineWidth = 5.5
+    ctx.stroke()
+    ctx.strokeStyle = HD_INK
+    ctx.lineWidth = 2.8
+  } else if (isWolf) {
+    ctx.fillStyle = c1
+    ctx.beginPath()
+    ctx.ellipse(cx - bodyRx - 10, bodyCy + 2 + tailSwing * 0.5, 16, 8, -0.35, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = '#f8fafc'
+    ctx.beginPath()
+    ctx.arc(cx - bodyRx - 22, bodyCy - 2 + tailSwing * 0.5, 5, 0, Math.PI * 2)
+    ctx.fill()
+  } else if (isPanda) {
+    ctx.fillStyle = c2
+    ctx.beginPath()
+    ctx.arc(cx - bodyRx + 2, bodyCy + 2, 7.5, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+  } else if (isChocobo) {
+    for (const [dy, col] of [
+      [-8, '#fef08a'],
+      [0, c1],
+      [7, c2],
+    ] as const) {
+      ctx.fillStyle = col
       ctx.beginPath()
-      ctx.moveTo(cx - 10, footY - 56 + bob)
-      ctx.lineTo(cx - 58, footY - 94 + bob + flap)
-      ctx.lineTo(cx - 42, footY - 54 + bob + flap * 0.4)
-      ctx.closePath()
+      ctx.ellipse(cx - bodyRx - 8, bodyCy - 2 + dy + tailSwing * 0.3, 13, 5, -0.25, 0, Math.PI * 2)
       ctx.fill()
       ctx.stroke()
-    } else {
-      for (const sx of [-1, 1]) {
+    }
+  } else if (isElephant) {
+    ctx.strokeStyle = HD_INK
+    ctx.lineWidth = 5
+    ctx.beginPath()
+    ctx.moveTo(cx - bodyRx + 4, bodyCy)
+    ctx.quadraticCurveTo(cx - bodyRx - 8, bodyCy + 14, cx - bodyRx - 6 + tailSwing * 0.4, bodyCy + 24)
+    ctx.stroke()
+    ctx.strokeStyle = c1
+    ctx.lineWidth = 2.6
+    ctx.stroke()
+    ctx.strokeStyle = HD_INK
+    ctx.lineWidth = 2.8
+    ctx.fillStyle = c2
+    ctx.beginPath()
+    ctx.arc(cx - bodyRx - 6 + tailSwing * 0.4, bodyCy + 25, 4, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+  } else if (isTurtle) {
+    ctx.fillStyle = c1
+    ctx.beginPath()
+    ctx.moveTo(cx - bodyRx + 4, bodyCy + 8)
+    ctx.lineTo(cx - bodyRx - 11, bodyCy + 12 + tailSwing * 0.3)
+    ctx.lineTo(cx - bodyRx + 6, bodyCy + 16)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+  } else {
+    // Horse tail
+    ctx.fillStyle = c2
+    ctx.beginPath()
+    ctx.moveTo(cx - bodyRx + 4, bodyCy - 4)
+    ctx.quadraticCurveTo(cx - bodyRx - 18, bodyCy + 4 + tailSwing * 0.5, cx - bodyRx - 20, bodyCy + 24 + tailSwing)
+    ctx.lineTo(cx - bodyRx - 10, bodyCy + 22 + tailSwing)
+    ctx.quadraticCurveTo(cx - bodyRx - 8, bodyCy + 8, cx - bodyRx + 6, bodyCy + 4)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+  }
+
+  // --- FAR WING (dragon) ---
+  if (isDragon || spec.flying) {
+    ctx.fillStyle = c2
+    ctx.beginPath()
+    ctx.moveTo(cx - 6, backY + 8)
+    ctx.lineTo(cx - 56, backY - 32 + flap)
+    ctx.lineTo(cx - 42, backY + 4 + flap * 0.4)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+  }
+
+  // --- FAR LEGS ---
+  ctx.fillStyle = dark
+  if (isChocobo) {
+    ctx.beginPath()
+    ctx.roundRect(cx - 4 - stride * 0.5, footY - legH, legW, legH, 3)
+    ctx.fill()
+    ctx.stroke()
+  } else {
+    for (const [lx, st] of [
+      [cx - bodyRx * 0.62, -stride * 0.7],
+      [cx + bodyRx * 0.48, stride * 0.7],
+    ] as const) {
+      ctx.beginPath()
+      ctx.roundRect(lx - legW / 2 + st * 0.45, footY - legH, legW, legH, 4)
+      ctx.fill()
+      ctx.stroke()
+    }
+  }
+
+  // --- TORSO / SHELL ---
+  if (isTurtle) {
+    ctx.fillStyle = gradVert(ctx, cx, backY, bodyCy + bodyRy, '#854d0e', c2)
+    ctx.beginPath()
+    ctx.ellipse(cx - 4, bodyCy, bodyRx, bodyRy, 0, Math.PI, Math.PI * 2)
+    ctx.lineTo(cx + bodyRx - 4, bodyCy + 10)
+    ctx.lineTo(cx - bodyRx - 4, bodyCy + 10)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+  } else {
+    const bodyG = gradVert(ctx, cx, bodyCy - bodyRy, bodyCy + bodyRy, hi, isPanda ? '#e2e8f0' : c1)
+    ctx.fillStyle = bodyG
+    ctx.beginPath()
+    ctx.ellipse(cx, bodyCy, bodyRx, bodyRy, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+
+    if (isPanda) {
+      ctx.fillStyle = c2
+      ctx.beginPath()
+      ctx.ellipse(cx + 14, bodyCy - 4, 12, bodyRy - 3, 0, 0, Math.PI * 2)
+      ctx.fill()
+    } else if (isElephant) {
+      // Royal fringed carpet rug
+      ctx.fillStyle = saddle
+      ctx.beginPath()
+      ctx.roundRect(cx - 26, backY - 2, 46, 28, 6)
+      ctx.fill()
+      ctx.stroke()
+      ctx.fillStyle = acc
+      ctx.fillRect(cx - 22, backY + 20, 38, 4)
+    }
+  }
+
+  // --- SADDLE ---
+  ctx.fillStyle = saddle
+  ctx.beginPath()
+  ctx.roundRect(saddleX - 18, backY - 3, 36, 14, 5)
+  ctx.fill()
+  ctx.stroke()
+  ctx.fillStyle = acc
+  ctx.fillRect(saddleX - 12, backY - 1, 24, 3)
+
+  // --- NEAR LEGS ---
+  if (isChocobo) {
+    ctx.fillStyle = '#f97316'
+    const lx = cx + 2 + stride * 0.55
+    ctx.beginPath()
+    ctx.roundRect(lx - legW / 2, footY - legH, legW, legH, 3)
+    ctx.fill()
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.ellipse(lx + 4, footY - 1, 9, 3.5, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+  } else {
+    for (const [lx, st] of [
+      [cx - bodyRx * 0.52, stride],
+      [cx + bodyRx * 0.58, -stride],
+    ] as const) {
+      ctx.fillStyle = isPanda ? c2 : c1
+      ctx.beginPath()
+      ctx.roundRect(lx - legW / 2 + st * 0.5, footY - legH, legW, legH, 4)
+      ctx.fill()
+      ctx.stroke()
+      if (isHorse) {
+        ctx.fillStyle = '#334155'
         ctx.beginPath()
-        ctx.ellipse(cx + sx * 38, footY - 62 + bob + flap * 0.4, 28, 12, sx * -0.45, 0, Math.PI * 2)
+        ctx.roundRect(lx - legW / 2 + st * 0.5, footY - 8, legW, 8, 2)
         ctx.fill()
         ctx.stroke()
       }
     }
   }
 
-  // Legs
-  const stride = isRun ? Math.sin((f / 6) * Math.PI * 2) * 20 : isWalk ? Math.sin((f / 6) * Math.PI * 2) * 14 : 0
-  ctx.fillStyle = dark
-  for (const [lx, st] of [
-    [cx - 28, stride],
-    [cx + 18, -stride],
-  ] as const) {
+  // --- NECK & ARCHETYPE HEAD (facing RIGHT) ---
+  const hx = cx + bodyRx - (isElephant ? 2 : isTurtle ? -4 : 6)
+  const hy = isTurtle ? bodyCy + 2 : isElephant ? backY + 6 : backY - 10
+
+  // Neck bridge
+  if (!isTurtle) {
+    ctx.fillStyle = isChocobo ? '#fef08a' : isPanda ? '#f8fafc' : c1
     ctx.beginPath()
-    ctx.roundRect(lx + st * 0.4, footY - 34 + bob, 11, 34, 4)
-    ctx.fill()
-    ctx.stroke()
-  }
-
-  // Body + Saddle
-  const bodyG = ctx.createLinearGradient(cx, footY - 72 + bob, cx, footY - 24 + bob)
-  bodyG.addColorStop(0, hi)
-  bodyG.addColorStop(1, dark)
-  ctx.fillStyle = bodyG
-  ctx.beginPath()
-  ctx.ellipse(cx, footY - 46 + bob, dir === 'down' || dir === 'up' ? 28 : 44, 22, 0, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.stroke()
-
-  ctx.fillStyle = spec.colors.saddle
-  ctx.beginPath()
-  ctx.roundRect(cx - 18, footY - 68 + bob, 36, 14, 5)
-  ctx.fill()
-  ctx.stroke()
-
-  // Head + Horns/Ears
-  const hx = dir === 'right' || dir === 'left' ? cx + 38 : cx
-  const hy = footY - 68 + bob
-  ctx.fillStyle = spec.archetype === 'chocobo' ? '#fef08a' : hi
-  ctx.beginPath()
-  ctx.ellipse(hx, hy, 18, 15, 0, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.stroke()
-  if (spec.archetype === 'dragon') {
-    ctx.fillStyle = spec.colors.accent
-    ctx.beginPath()
-    ctx.moveTo(hx - 6, hy - 10)
-    ctx.lineTo(hx - 14, hy - 32)
-    ctx.lineTo(hx - 1, hy - 12)
+    ctx.moveTo(cx + bodyRx * 0.45, bodyCy - 8)
+    ctx.lineTo(hx, hy - 6)
+    ctx.lineTo(hx + 8, hy + 10)
+    ctx.lineTo(cx + bodyRx * 0.55, bodyCy + 10)
     ctx.closePath()
     ctx.fill()
     ctx.stroke()
   }
-  if (dir !== 'up') {
-    drawAnimeEye(ctx, hx + (dir === 'down' ? 0 : 6), hy - 2, 4.0, 5.0, spec.colors.accent, false)
+
+  if (isHorse) {
+    // Dark flowing mane along neck
+    ctx.fillStyle = c2
+    ctx.beginPath()
+    ctx.moveTo(cx + 16, bodyCy - 14)
+    ctx.lineTo(hx - 6, hy - 12)
+    ctx.lineTo(hx + 2, hy - 4)
+    ctx.lineTo(cx + 22, bodyCy - 6)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    // Horse head & muzzle
+    ctx.fillStyle = hi
+    ctx.beginPath()
+    ctx.ellipse(hx + 6, hy, 18, 12, 0.25, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+    // Ear
+    ctx.fillStyle = c1
+    ctx.beginPath()
+    ctx.moveTo(hx - 4, hy - 8)
+    ctx.lineTo(hx - 8, hy - 22)
+    ctx.lineTo(hx + 3, hy - 10)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    // Golden bridle
+    ctx.strokeStyle = acc
+    ctx.lineWidth = 2.4
+    ctx.beginPath()
+    ctx.moveTo(hx + 16, hy - 4)
+    ctx.lineTo(hx + 18, hy + 8)
+    ctx.stroke()
+    ctx.strokeStyle = HD_INK
+    ctx.lineWidth = 2.8
+    drawAnimeEye(ctx, hx + 6, hy - 3, 3.2, 4.0, eyeColor, false)
+  } else if (isElephant) {
+    // Head + Crown
+    ctx.fillStyle = hi
+    ctx.beginPath()
+    ctx.ellipse(hx + 4, hy + 2, 20, 18, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = acc
+    ctx.beginPath()
+    ctx.arc(hx + 10, hy - 11, 5, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+    // White ivory tusk
+    ctx.fillStyle = '#ffffff'
+    ctx.beginPath()
+    ctx.moveTo(hx + 16, hy + 10)
+    ctx.quadraticCurveTo(hx + 34, hy + 14, hx + 36, hy + 2)
+    ctx.quadraticCurveTo(hx + 26, hy + 8, hx + 14, hy + 6)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    // Long curved trunk
+    ctx.fillStyle = c1
+    ctx.beginPath()
+    ctx.moveTo(hx + 18, hy + 2)
+    ctx.quadraticCurveTo(hx + 34, hy + 8, hx + 28, hy + 32)
+    ctx.lineTo(hx + 20, hy + 29)
+    ctx.quadraticCurveTo(hx + 24, hy + 14, hx + 13, hy + 10)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    // Huge flapping ear
+    ctx.fillStyle = c2
+    ctx.beginPath()
+    ctx.ellipse(hx - 10, hy + 4, 13, 17, -0.2, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+    drawAnimeEye(ctx, hx + 8, hy - 2, 3.3, 4.0, eyeColor, false)
+  } else if (isPanda) {
+    ctx.fillStyle = '#f8fafc'
+    ctx.beginPath()
+    ctx.ellipse(hx + 4, hy + 2, 17, 15, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+    // Black ear + eye patch + sprout
+    ctx.fillStyle = c2
+    ctx.beginPath()
+    ctx.arc(hx - 2, hy - 11, 6.5, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.ellipse(hx + 9, hy + 1, 5, 6, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.beginPath()
+    ctx.arc(hx + 20, hy + 4, 2.8, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = acc
+    ctx.lineWidth = 2.5
+    ctx.beginPath()
+    ctx.moveTo(hx + 4, hy - 12)
+    ctx.lineTo(hx + 6, hy - 21)
+    ctx.stroke()
+    ctx.fillStyle = acc
+    ctx.beginPath()
+    ctx.ellipse(hx + 11, hy - 21, 5, 3, -0.35, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = HD_INK
+    ctx.lineWidth = 2.8
+    drawAnimeEye(ctx, hx + 10, hy, 2.8, 3.4, '#0f172a', false)
+  } else if (isChocobo) {
+    // Blue scarf at neck base
+    ctx.fillStyle = acc
+    ctx.beginPath()
+    ctx.roundRect(hx - 10, hy + 10, 18, 6, 3)
+    ctx.fill()
+    ctx.stroke()
+    // Yellow head + 3-feather crest
+    ctx.fillStyle = '#fef08a'
+    for (const dx of [-6, -2, 2]) {
+      ctx.beginPath()
+      ctx.moveTo(hx + dx, hy - 10)
+      ctx.lineTo(hx + dx - 8, hy - 22)
+      ctx.lineTo(hx + dx + 4, hy - 12)
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+    }
+    ctx.beginPath()
+    ctx.ellipse(hx + 4, hy, 15, 13, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+    // Sharp orange beak
+    ctx.fillStyle = '#f97316'
+    ctx.beginPath()
+    ctx.moveTo(hx + 16, hy - 2)
+    ctx.lineTo(hx + 29, hy + 3)
+    ctx.lineTo(hx + 16, hy + 7)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    drawAnimeEye(ctx, hx + 8, hy - 2, 3.2, 4.0, eyeColor, false)
+  } else if (isTurtle) {
+    ctx.fillStyle = hi
+    ctx.beginPath()
+    ctx.ellipse(hx + 4, hy, 14, 11, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+    drawAnimeEye(ctx, hx + 8, hy - 2, 3.0, 3.6, eyeColor, false)
+  } else if (isDragon) {
+    // Swept horns
+    ctx.fillStyle = acc
+    ctx.beginPath()
+    ctx.moveTo(hx - 2, hy - 10)
+    ctx.lineTo(hx - 18, hy - 28)
+    ctx.lineTo(hx + 4, hy - 12)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    // Dragon snout + fangs
+    ctx.fillStyle = hi
+    ctx.beginPath()
+    ctx.ellipse(hx + 6, hy, 19, 13, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = '#ffffff'
+    ctx.beginPath()
+    ctx.moveTo(hx + 18, hy + 7)
+    ctx.lineTo(hx + 21, hy + 13)
+    ctx.lineTo(hx + 24, hy + 7)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    drawAnimeEye(ctx, hx + 8, hy - 3, 3.4, 4.2, eyeColor, false, true)
+  } else {
+    // Wolf / Dog / Cat head
+    ctx.fillStyle = acc
+    ctx.beginPath()
+    ctx.roundRect(hx - 10, hy + 10, 20, 6, 3)
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = isDog ? c1 : c2
+    ctx.beginPath()
+    ctx.moveTo(hx - 4, hy - 9)
+    ctx.lineTo(hx - 8, hy - 23)
+    ctx.lineTo(hx + 5, hy - 10)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = hi
+    ctx.beginPath()
+    ctx.ellipse(hx + 5, hy, 16, 13, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = isDog ? c2 : isCat ? '#ffffff' : '#f1f5f9'
+    ctx.beginPath()
+    ctx.ellipse(hx + 14, hy + 4, 8, 5, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = isCat ? '#fb7185' : '#0f172a'
+    ctx.beginPath()
+    ctx.arc(hx + 20, hy + 3, 2.5, 0, Math.PI * 2)
+    ctx.fill()
+    drawAnimeEye(ctx, hx + 8, hy - 2, 3.2, 4.0, eyeColor, false, isWolf)
+  }
+
+  // --- NEAR WING (dragon) ---
+  if (isDragon || spec.flying) {
+    ctx.fillStyle = hi
+    ctx.beginPath()
+    ctx.moveTo(cx - 2, backY + 10)
+    ctx.lineTo(cx - 38, backY - 38 + flap)
+    ctx.lineTo(cx - 58, backY - 12 + flap)
+    ctx.lineTo(cx - 26, backY + 10 + flap * 0.35)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
   }
 
   ctx.restore()
-
   drawMountLevelAndSkinFx(ctx, W, H, spec, dir, action, f, level, mountSkinId)
   return c
 }

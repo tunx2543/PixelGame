@@ -10423,6 +10423,7 @@ export function update(dt: number) {
         const arrived = game.moveTarget
         game.moveTarget = null
         game.moveHoldT = 0
+        if (dist > 2) faceToward(arrived.x, arrived.y)
         if (arrived.kind === 'npc' && arrived.npcId) {
           const npc = map.npcs.find((n) => n.id === arrived.npcId)
           if (npc) interactWithNpc(npc, 64)
@@ -10439,6 +10440,7 @@ export function update(dt: number) {
         const prevY = p.y
         moveEntity(map, p, (dx / dist) * sp, (dy / dist) * sp)
         if (Math.hypot(p.x - prevX, p.y - prevY) < 0.08 && dt > 0) {
+          if (dist > 2) faceToward(game.moveTarget.x, game.moveTarget.y)
           game.moveTarget = null
           game.moveHoldT = 0
         } else {

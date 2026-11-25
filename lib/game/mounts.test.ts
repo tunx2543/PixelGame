@@ -291,3 +291,119 @@ test('getMountRiderSeatOffset places rider symmetrically on left/right and leans
     assert.equal(getMountAnimFrameBobY('run', 1), -2.0);
   }
 });
+
+test('renderHdMountSprite renders distinct 4-way facing for all 9 mounts (front eyes, rear no-eyes, left mirror, speed lines)', async () => {
+  const { renderHdMountSprite, getMountBackHeightHd } = await import('./hd-characters');
+  const { getMountModelSpec } = await import('./models-2d');
+
+  // Calibrated archetype back heights match mount scale hierarchy
+  assert.ok(getMountBackHeightHd('cat') < getMountBackHeightHd('dog'));
+  assert.ok(getMountBackHeightHd('dog') < getMountBackHeightHd('turtle'));
+  assert.ok(getMountBackHeightHd('horse') < getMountBackHeightHd('elephant'));
+
+  type RecordedOp = { op: string; args: unknown[]; fillStyle?: unknown };
+  const makeMockDocument = () => {
+    return {
+      createElement: () => {
+        const ops: RecordedOp[] = [];
+        let currentFillStyle: unknown = '';
+        let currentStrokeStyle: unknown = '';
+        const ctx = {
+          imageSmoothingEnabled: true,
+          imageSmoothingQuality: 'high',
+          lineJoin: 'round',
+          lineCap: 'round',
+          lineWidth: 1,
+          globalAlpha: 1,
+          get fillStyle() {
+            return currentFillStyle;
+          },
+          set fillStyle(v: unknown) {
+            currentFillStyle = v;
+          },
+          get strokeStyle() {
+            return currentStrokeStyle;
+          },
+          set strokeStyle(v: unknown) {
+            currentStrokeStyle = v;
+          },
+          createLinearGradient: () => ({ addColorStop: () => {} }),
+          createRadialGradient: () => ({ addColorStop: () => {} }),
+          save: () => ops.push({ op: 'save', args: [] }),
+          restore: () => ops.push({ op: 'restore', args: [] }),
+          translate: (x: number, y: number) => ops.push({ op: 'translate', args: [x, y] }),
+          scale: (x: number, y: number) => ops.push({ op: 'scale', args: [x, y] }),
+          rotate: (a: number) => ops.push({ op: 'rotate', args: [a] }),
+          beginPath: () => {},
+          closePath: () => {},
+          moveTo: (x: number, y: number) => ops.push({ op: 'moveTo', args: [Math.round(x), Math.round(y)] }),
+          lineTo: (x: number, y: number) => ops.push({ op: 'lineTo', args: [Math.round(x), Math.round(y)] }),
+          quadraticCurveTo: () => {},
+          ellipse: (x: number, y: number, rx: number, ry: number) =>
+            ops.push({ op: 'ellipse', args: [Math.round(x), Math.round(y), Math.round(rx), Math.round(ry)] }),
+          arc: (x: number, y: number, r: number) =>
+            ops.push({ op: 'arc', args: [Math.round(x), Math.round(y), Math.round(r)] }),
+          roundRect: (x: number, y: number, w: number, h: number) =>
+            ops.push({ op: 'roundRect', args: [Math.round(x), Math.round(y), Math.round(w), Math.round(h)] }),
+          fillRect: (x: number, y: number, w: number, h: number) =>
+            ops.push({ op: 'fillRect', args: [Math.round(x), Math.round(y), Math.round(w), Math.round(h)], fillStyle: currentFillStyle }),
+          fill: () => ops.push({ op: 'fill', args: [], fillStyle: currentFillStyle }),
+          stroke: () => ops.push({ op: 'stroke', args: [], fillStyle: currentStrokeStyle }),
+        };
+        return {
+          width: 0,
+          height: 0,
+          dataset: {} as Record<string, string>,
+          _ops: ops,
+          getContext: () => ctx,
+        };
+      },
+    };
+  };
+
+  const prevDoc = (globalThis as { document?: unknown }).document;
+  (globalThis as { document?: unknown }).document = makeMockDocument();
+  try {
+    for (const def of MOUNT_DEFS) {
+      const spec = getMountModelSpec(def.id);
+      const downCanvas = renderHdMountSprite(spec, 'down', 'run', 1, 1) as unknown as { _ops: RecordedOp[] };
+      const upCanvas = renderHdMountSprite(spec, 'up', 'run', 1, 1) as unknown as { _ops: RecordedOp[] };
+      const rightCanvas = renderHdMountSprite(spec, 'right', 'run', 1, 1) as unknown as { _ops: RecordedOp[] };
+      const leftCanvas = renderHdMountSprite(spec, 'left', 'run', 1, 1) as unknown as { _ops: RecordedOp[] };
+
+      // 1) Front view draws 2 expressive eyes; rear view draws 0 eyes
+      const downEyes = downCanvas._ops.filter((o) => o.op === 'fill' && o.fillStyle === '#fff9f5');
+      const upEyes = upCanvas._ops.filter((o) => o.op === 'fill' && o.fillStyle === '#fff9f5');
+      assert.equal(downEyes.length, 2, `${def.id} down should draw 2 eyes`);
+      assert.equal(upEyes.length, 0, `${def.id} up should draw 0 eyes`);
+
+      // 2) Down and Up traces must clearly differ
+      assert.notDeepEqual(
+        downCanvas._ops.map((o) => [o.op, ...o.args]),
+        upCanvas._ops.map((o) => [o.op, ...o.args]),
+        `${def.id} up and down geometry must differ`,
+      );
+
+      // 3) Left mirrors horizontally while Right does not
+      const leftScale = leftCanvas._ops.find((o) => o.op === 'scale');
+      const rightScale = rightCanvas._ops.find((o) => o.op === 'scale');
+      assert.deepEqual(leftScale?.args, [-1, 1], `${def.id} left should scale(-1, 1)`);
+      assert.equal(rightScale, undefined, `${def.id} right should not mirror`);
+
+      // 4) Run action emits speed lines in all 4 directions
+      for (const [dName, cvs] of [
+        ['down', downCanvas],
+        ['up', upCanvas],
+        ['right', rightCanvas],
+        ['left', leftCanvas],
+      ] as const) {
+        const speedStrokes = cvs._ops.filter(
+          (o) => o.op === 'stroke' && o.fillStyle === 'rgba(255,255,255,0.9)',
+        );
+        assert.ok(speedStrokes.length >= 2, `${def.id} ${dName} run should draw speed lines`);
+      }
+    }
+  } finally {
+    (globalThis as { document?: unknown }).document = prevDoc;
+  }
+});

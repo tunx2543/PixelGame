@@ -67,6 +67,7 @@ export function PetsPanel() {
   const [rarityFilter, setRarityFilter] = useState<RarityFilter>('all')
   const [previewAction, setPreviewAction] = useState<PreviewAction>('auto')
   const [previewDir, setPreviewDir] = useState<Dir>('right')
+  const [showMountRider, setShowMountRider] = useState<boolean>(false)
   const [notice, setNotice] = useState<string | null>(null)
   if (!p) return null
 
@@ -437,9 +438,11 @@ export function PetsPanel() {
                         mode="mount"
                         id={activeMountBonus.mountId}
                         action={activeMountBonus.mounted ? 'run' : 'idle'}
-                        dir="right"
+                        dir={previewDir}
                         mountLevel={activeMountBonus.level}
                         mountSkinId={resolvePlayerFashionLoadout(p).mountAppearance}
+                        showRider={showMountRider || activeMountBonus.mounted}
+                        riderJobId={p.jobId}
                         size={60}
                         label={`พรีวิว ${activeMountBonus.def.name}`}
                       />
@@ -488,6 +491,45 @@ export function PetsPanel() {
               )}
             </div>
 
+            {/* 4-Way Mount Facing & Rider Preview Toolbar */}
+            <div className="flex flex-wrap items-center justify-between gap-2 border border-border/70 bg-muted/40 p-2">
+              <div className="flex flex-wrap items-center gap-1" role="group" aria-label="หมุนทิศพรีวิวสัตว์ขี่">
+                <span className="mr-1 text-[11px] font-semibold text-muted-foreground">หันทิศสัตว์ขี่:</span>
+                {(
+                  [
+                    ['down', 'หน้า'],
+                    ['right', 'ขวา'],
+                    ['up', 'หลัง'],
+                    ['left', 'ซ้าย'],
+                  ] as const
+                ).map(([d, label]) => (
+                  <button
+                    key={d}
+                    type="button"
+                    aria-pressed={previewDir === d}
+                    onClick={() => setPreviewDir(d)}
+                    className={`pixel-btn px-2 py-0.5 text-[10px] font-semibold ${
+                      previewDir === d
+                        ? 'bg-amber-500 text-slate-950'
+                        : 'bg-secondary text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                aria-pressed={showMountRider}
+                onClick={() => setShowMountRider((v) => !v)}
+                className={`pixel-btn px-2 py-0.5 text-[10px] font-semibold ${
+                  showMountRider ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {showMountRider ? 'แสดงคนขี่: เปิด' : 'แสดงคนขี่: ปิด'}
+              </button>
+            </div>
+
             {/* Mount Roster */}
             <div className="grid gap-3 sm:grid-cols-2">
               {MOUNT_DEFS.map((mount) => {
@@ -517,9 +559,11 @@ export function PetsPanel() {
                           mode="mount"
                           id={mount.id}
                           action={isRiding ? 'run' : isSelected ? 'walk' : 'idle'}
-                          dir="right"
+                          dir={previewDir}
                           mountLevel={lv}
                           mountSkinId={activeMountSkin}
+                          showRider={showMountRider}
+                          riderJobId={p.jobId}
                           size={62}
                           label={`โมเดลสัตว์ขี่ ${mount.name}`}
                         />
