@@ -76,7 +76,7 @@ import { SettingsPanel } from './panels/settings-panel'
 import { PWAInstallButton } from './pwa-controls'
 import { SpriteModelCanvas, type PreviewAction } from './sprite-model-canvas'
 
-const KEY_ART_SRC = '/assets/aistudio/image_yg9cp6h4ce4pk1tzkon54gs2_720eff80.png'
+const KEY_ART_SRC = '/assets/aistudio/file_00000000bb9c82119bd394ecb0bb0ae8_68fc9e57.png'
 
 function WindChimeSelectionAura() {
   return (
@@ -436,20 +436,20 @@ export function TitleScreen() {
 
   return (
     <div className="relative flex h-full w-full flex-col justify-between overflow-x-hidden overflow-y-auto bg-[#071122] select-none">
-      {/* Full-bleed Key Art Backdrop */}
-      <div aria-hidden className="pointer-events-none fixed inset-0 overflow-hidden">
-        <img
-          src={KEY_ART_SRC}
-          alt="Pixel Quest 2D Key Art"
-          referrerPolicy="no-referrer"
-          className="h-full w-full object-cover object-[20%_25%] sm:object-[24%_center] lg:object-center"
-        />
-        {/* Right directional atmospheric veil cleanly masking baked right-side illustration text/buttons */}
-        <div className="hidden lg:block lg:absolute lg:inset-y-0 lg:right-0 lg:w-[43%] lg:bg-gradient-to-l lg:from-[#060f1f]/98 lg:via-[#091831]/90 lg:via-65% lg:to-transparent" />
-        {/* Mobile/tablet lower veil keeping heroes visible up top while keeping buttons sharp below */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#050c18]/98 via-[#071326]/78 via-48% to-[#071326]/15 lg:hidden" />
-        {/* Bottom corner veil cleanly masking baked corner version & tagline */}
-        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-[#050b16]/98 via-[#050b16]/82 to-transparent" />
+      {/* Full-bleed Key Art Backdrop (full-width uncropped top showcase on portrait mobile, full-viewport cover on sm+/desktop) */}
+      <div aria-hidden className="pointer-events-none fixed inset-0 overflow-hidden bg-gradient-to-b from-[#0b2b74] via-[#07152e] to-[#050d1c]">
+        <div className="relative w-full aspect-[16/9] sm:h-full sm:w-full sm:aspect-auto">
+          <img
+            src={KEY_ART_SRC}
+            alt="Pixel Quest Key Art"
+            referrerPolicy="no-referrer"
+            className="h-full w-full object-cover object-center"
+          />
+          {/* Mobile seamless blend from artwork bottom edge into dark navy dock background */}
+          <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#07152e] via-[#07152e]/65 to-transparent sm:hidden" />
+        </div>
+        {/* Subtle bottom-edge vignette keeping footer legibility crisp while leaving heroes, crest & castle bright */}
+        <div className="hidden sm:block sm:absolute sm:inset-x-0 sm:bottom-0 sm:h-32 sm:bg-gradient-to-t sm:from-[#040a16]/85 sm:via-[#040a16]/40 sm:to-transparent" />
       </div>
 
       {/* Floating Kicked / Cloud Error Notice (only rendered when active) */}
@@ -492,57 +492,34 @@ export function TitleScreen() {
         </div>
       )}
 
-      {/* Main Entry Layout: Left side left open for Key Art heroes/castle; Right column holds Title + Action Stack */}
-      <main className="relative z-10 flex flex-1 items-end justify-center px-4 pt-6 pb-16 sm:px-8 lg:items-center lg:justify-end lg:py-8 lg:pr-10 xl:pr-14">
+      {/* Main Entry Layout: Centered lower dock underneath the artwork's Pixel Quest crest so left heroes & right castle/village stay clear */}
+      <main className="relative z-10 flex flex-1 items-end justify-center px-4 pt-48 pb-3 sm:px-6 sm:pt-[42vh] md:pb-3">
+        <h1 className="sr-only">Pixel Quest 2D</h1>
         <motion.section
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.28, ease: 'easeOut' }}
           aria-label="เมนูหลักเข้าสู่เกม Pixel Quest 2D"
-          className="flex w-full max-w-[23.5rem] flex-col items-center gap-3.5"
+          className="flex w-full max-w-[22.5rem] flex-col items-center gap-2 rounded-xl border border-sky-200/20 bg-[#061124]/82 p-3 shadow-[0_18px_40px_rgba(2,6,23,0.75)]"
         >
-          {/* Game Title Lockup (replaces baked PUXEL typo with crisp Pixel Quest 2D crest) */}
-          <header className="relative flex flex-col items-center text-center select-none">
-            <div className="relative inline-block">
-              <Crown
-                aria-hidden
-                className="absolute -top-6 -left-5 size-9 -rotate-12 fill-amber-400 text-amber-200 drop-shadow-[0_3px_0_#451a03]"
-              />
-              <h1 className="font-[family-name:var(--font-display)] text-5xl font-black tracking-wider text-amber-300 drop-shadow-[0_4px_0_#1e1b4b] sm:text-[3.4rem] leading-none">
-                <span className="bg-gradient-to-b from-amber-200 via-amber-400 to-orange-500 bg-clip-text text-transparent">
-                  PIXEL
-                </span>
-              </h1>
-            </div>
-            <p className="mt-0.5 font-[family-name:var(--font-display)] text-4xl font-black tracking-wide drop-shadow-[0_4px_0_#0c1a38] sm:text-[2.75rem] leading-none">
-              <span className="bg-gradient-to-b from-sky-100 via-sky-300 to-blue-500 bg-clip-text text-transparent">
-                QUEST
-              </span>
-            </p>
-            <p className="mt-0.5 font-[family-name:var(--font-display)] text-3xl font-black tracking-widest drop-shadow-[0_4px_0_#0b1529] leading-none">
-              <span className="bg-gradient-to-b from-cyan-100 via-sky-300 to-indigo-400 bg-clip-text text-transparent">
-                2D
-              </span>
-            </p>
-            <p className="mt-2 text-xs font-medium text-sky-100/90 drop-shadow">
-              {isLoadingSave
-                ? 'กำลังโหลดข้อมูลตัวละคร...'
-                : activeSave
-                  ? `พร้อมผจญภัย · ${activeSave.name} (Lv.${activeSave.level})`
-                  : 'ผู้เล่นใหม่ · กดเริ่มเกมใหม่เพื่อสร้างตัวละคร'}
-            </p>
-          </header>
+          <p className="w-full truncate rounded border border-[#2a4d82]/70 bg-[#0b1933]/90 px-2.5 py-1 text-center text-[11.5px] font-semibold text-sky-100">
+            {isLoadingSave
+              ? 'กำลังโหลดข้อมูลตัวละคร...'
+              : activeSave
+                ? `พร้อมผจญภัย · ${activeSave.name} (Lv.${activeSave.level})`
+                : 'ผู้เล่นใหม่ · กดเริ่มเกมใหม่เพื่อสร้างตัวละคร'}
+          </p>
 
           {/* 3-Button Command Stack + Login Frame */}
-          <div className="flex w-full flex-col gap-2.5">
+          <div className="flex w-full flex-col gap-2">
             {/* Button 1: เริ่มเกมใหม่ (Gold Pixel Bevel) */}
             <button
               type="button"
               disabled={isLoadingSave}
               onClick={openNewCharacterFlow}
-              className="group relative flex w-full items-center justify-center gap-3 rounded-lg border-2 border-[#3f2003] bg-gradient-to-b from-[#fde047] via-[#f59e0b] to-[#b45309] px-5 py-3 text-lg font-extrabold text-white shadow-[inset_0_2px_0_rgba(255,255,255,0.55),inset_0_-3px_0_rgba(120,53,15,0.75),0_8px_18px_rgba(0,0,0,0.5)] transition-all hover:brightness-110 active:translate-y-[1px] disabled:opacity-60"
+              className="group relative flex w-full items-center justify-center gap-2.5 rounded-lg border-2 border-[#3f2003] bg-gradient-to-b from-[#fde047] via-[#f59e0b] to-[#b45309] px-4 py-2 text-base font-extrabold text-white shadow-[inset_0_2px_0_rgba(255,255,255,0.55),inset_0_-3px_0_rgba(120,53,15,0.75),0_6px_14px_rgba(0,0,0,0.45)] transition-all hover:brightness-110 active:translate-y-[1px] disabled:opacity-60"
             >
-              <Play className="size-6 shrink-0 fill-white text-white drop-shadow-[0_2px_0_rgba(120,53,15,0.85)]" aria-hidden />
+              <Play className="size-5 shrink-0 fill-white text-white drop-shadow-[0_2px_0_rgba(120,53,15,0.85)]" aria-hidden />
               <span className="drop-shadow-[0_2px_0_rgba(92,38,7,0.9)]">เริ่มเกมใหม่</span>
             </button>
 
@@ -551,9 +528,9 @@ export function TitleScreen() {
               type="button"
               disabled={isLoadingSave}
               onClick={() => setContinueOpen(true)}
-              className="group relative flex w-full items-center justify-center gap-3 rounded-lg border-2 border-[#0b1f48] bg-gradient-to-b from-[#60a5fa] via-[#2563eb] to-[#1e40af] px-5 py-3 text-lg font-extrabold text-white shadow-[inset_0_2px_0_rgba(219,234,254,0.45),inset_0_-3px_0_rgba(15,23,42,0.7),0_8px_18px_rgba(0,0,0,0.5)] transition-all hover:brightness-110 active:translate-y-[1px] disabled:opacity-60"
+              className="group relative flex w-full items-center justify-center gap-2.5 rounded-lg border-2 border-[#0b1f48] bg-gradient-to-b from-[#60a5fa] via-[#2563eb] to-[#1e40af] px-4 py-2 text-base font-extrabold text-white shadow-[inset_0_2px_0_rgba(219,234,254,0.45),inset_0_-3px_0_rgba(15,23,42,0.7),0_6px_14px_rgba(0,0,0,0.45)] transition-all hover:brightness-110 active:translate-y-[1px] disabled:opacity-60"
             >
-              <Users className="size-6 shrink-0 text-white drop-shadow-[0_2px_0_rgba(15,23,42,0.8)]" aria-hidden />
+              <Users className="size-5 shrink-0 text-white drop-shadow-[0_2px_0_rgba(15,23,42,0.8)]" aria-hidden />
               <span className="drop-shadow-[0_2px_0_rgba(15,23,42,0.85)]">เล่นต่อ</span>
               {activeSave && (
                 <span className="ml-1 truncate rounded bg-[#0c1a36]/55 px-2 py-0.5 text-[11px] font-semibold text-sky-100">
@@ -566,17 +543,17 @@ export function TitleScreen() {
             <button
               type="button"
               onClick={() => setSettingsOpen(true)}
-              className="group relative flex w-full items-center justify-center gap-3 rounded-lg border-2 border-[#261205] bg-gradient-to-b from-[#a56b43] via-[#7c4d2b] to-[#522f18] px-5 py-2.5 text-lg font-extrabold text-white shadow-[inset_0_2px_0_rgba(255,237,213,0.3),inset_0_-3px_0_rgba(28,12,4,0.75),0_8px_18px_rgba(0,0,0,0.48)] transition-all hover:brightness-110 active:translate-y-[1px]"
+              className="group relative flex w-full items-center justify-center gap-2.5 rounded-lg border-2 border-[#261205] bg-gradient-to-b from-[#a56b43] via-[#7c4d2b] to-[#522f18] px-4 py-1.5 text-base font-extrabold text-white shadow-[inset_0_2px_0_rgba(255,237,213,0.3),inset_0_-3px_0_rgba(28,12,4,0.75),0_6px_14px_rgba(0,0,0,0.42)] transition-all hover:brightness-110 active:translate-y-[1px]"
             >
-              <Settings className="size-6 shrink-0 text-white drop-shadow-[0_2px_0_rgba(28,12,4,0.85)]" aria-hidden />
+              <Settings className="size-5 shrink-0 text-white drop-shadow-[0_2px_0_rgba(28,12,4,0.85)]" aria-hidden />
               <span className="drop-shadow-[0_2px_0_rgba(28,12,4,0.85)]">ตั้งค่า</span>
             </button>
 
             {/* Box 4: Charcoal Metallic Login Card (matching screenshot frame & real Google Auth) */}
-            <div className="mt-0.5 rounded-lg border-2 border-[#161a22] bg-gradient-to-b from-[#4c5360]/96 via-[#373d47]/96 to-[#242830]/96 p-3 text-xs text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_10px_22px_rgba(0,0,0,0.55)]">
-              <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="rounded-lg border-2 border-[#161a22] bg-gradient-to-b from-[#4c5360]/96 via-[#373d47]/96 to-[#242830]/96 p-2.5 text-xs text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_10px_22px_rgba(0,0,0,0.5)]">
+              <div className="mb-1.5 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-base font-extrabold tracking-wide text-white drop-shadow">
+                  <span className="text-sm font-extrabold tracking-wide text-white drop-shadow">
                     Login
                   </span>
                   {user ? (
@@ -601,10 +578,10 @@ export function TitleScreen() {
               </div>
 
               {/* ID / Status Readout Rows echoing the charcoal box bars */}
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className="w-8 shrink-0 text-[11px] font-bold text-slate-200">ID</span>
-                  <div className="min-w-0 flex-1 truncate rounded border border-[#1a1e26] bg-[#1e232c] px-2.5 py-1 text-[11px] font-medium text-slate-100">
+                  <span className="w-11 shrink-0 whitespace-nowrap text-[10.5px] font-bold text-slate-200">ID</span>
+                  <div className="min-w-0 flex-1 truncate rounded border border-[#1a1e26] bg-[#1e232c] px-2 py-0.5 text-[11px] font-medium text-slate-100">
                     {user
                       ? user.displayName || user.email || 'ผู้เล่น Google'
                       : guestSave
@@ -613,23 +590,23 @@ export function TitleScreen() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="w-8 shrink-0 text-[11px] font-bold text-slate-200">ช่องเซฟ</span>
-                  <div className="min-w-0 flex-1 truncate rounded border border-[#1a1e26] bg-[#1e232c] px-2.5 py-1 text-[11px] text-slate-300 tabular-nums">
+                  <span className="w-11 shrink-0 whitespace-nowrap text-[10.5px] font-bold text-slate-200">ช่องเซฟ</span>
+                  <div className="min-w-0 flex-1 truncate rounded border border-[#1a1e26] bg-[#1e232c] px-2 py-0.5 text-[11px] text-slate-300 tabular-nums">
                     {user
                       ? `ตัวละครคลาวด์ ${cloudChars.length}/${CHARACTER_SLOTS.length} สล็อต`
-                      : 'ล็อกอิน Google เพื่อปลดล็อก 3 สล็อต & ซิงค์ข้ามเครื่อง'}
+                      : 'ล็อกอิน Google เพื่อใช้ 3 สล็อต & ซิงค์คลาวด์'}
                   </div>
                 </div>
               </div>
 
               {authError && (
-                <p className="mt-2 rounded border border-rose-400/50 bg-rose-950/70 px-2 py-1 text-[11px] text-rose-200">
+                <p className="mt-1.5 rounded border border-rose-400/50 bg-rose-950/70 px-2 py-1 text-[11px] text-rose-200">
                   {authError}
                 </p>
               )}
 
               {/* Auth Actions */}
-              <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-2">
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-1.5">
                 {user ? (
                   <>
                     <button
@@ -656,7 +633,7 @@ export function TitleScreen() {
                       type="button"
                       disabled={authBusy}
                       onClick={() => void handleQuickGoogleSignIn()}
-                      className="inline-flex flex-1 items-center justify-center gap-1.5 rounded border border-sky-400/70 bg-gradient-to-b from-[#2f6fe4] to-[#1e4bb0] px-3 py-1.5 text-[11px] font-bold text-white shadow hover:brightness-110 disabled:opacity-50"
+                      className="inline-flex flex-1 items-center justify-center gap-1.5 rounded border border-sky-400/70 bg-gradient-to-b from-[#2f6fe4] to-[#1e4bb0] px-3 py-1 text-[11px] font-bold text-white shadow hover:brightness-110 disabled:opacity-50"
                     >
                       {authBusy ? (
                         <Loader2 className="size-3.5 animate-spin" aria-hidden />
