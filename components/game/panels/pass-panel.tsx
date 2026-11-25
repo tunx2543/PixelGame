@@ -59,7 +59,7 @@ export function PassPanel() {
   return (
     <PanelFrame
       title={`${CURRENT_BP_SEASON_META.seasonName} (Lv.1–20)`}
-      subtitle="ล่ามอนสเตอร์ เก็บเกี่ยววัตถุดิบ และลงดันเจี้ยนเพื่อสะสม EXP ปลดล็อกปีกและเพชรฟรี"
+      subtitle="ล่ามอนสเตอร์ เก็บเกี่ยววัตถุดิบ และลงดันเจี้ยนเพื่อสะสม EXP ปลดล็อกสกินอาวุธและเพชรฟรี"
     >
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border border-primary/50 bg-primary/10 p-3">
         <div className="min-w-0 flex-1 space-y-1.5">

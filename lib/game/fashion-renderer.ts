@@ -27,6 +27,14 @@ export function preloadFashionLayers(loadout: FashionLoadout | null | undefined)
   }
 }
 
+function sanitizeResolvedWingId(candidate: string | null | undefined): string | null {
+  if (!candidate) return null
+  const def = getFashionItemDef(candidate)
+  if (!def || def.slot !== 'wings') return null
+  if (!def.wingAnimSheetAsset && !def.wingSpriteAsset) return null
+  return def.id
+}
+
 export function resolveFashionLoadoutFromSave(source: {
   premium?: Partial<PremiumState> | null
   equippedGemFashion?: string | null
@@ -38,10 +46,7 @@ export function resolveFashionLoadoutFromSave(source: {
 
   const hat = eq?.hat ?? (gem === 'aurora_cat_hood' ? 'aurora_cat_hood' : null)
   const aura = eq?.aura ?? (gem === 'sunfire_aura' ? 'sunfire_aura' : null)
-  const wings =
-    eq?.wings ??
-    ext?.equippedWing ??
-    (gem === 'nebula_dragon_wings' ? 'nebula_dragon_wings' : null)
+  const wings = sanitizeResolvedWingId(eq?.wings) ?? sanitizeResolvedWingId(ext?.equippedWing)
   const weaponSkin = eq?.weaponSkin ?? ext?.equippedWeaponSkin ?? null
 
   return {
@@ -75,10 +80,7 @@ export function resolveFashionLoadoutFromRemote(other: {
     costume: other.fashionCostume ?? null,
     pants: null,
     shoes: null,
-    wings:
-      other.fashionWings ??
-      other.cosmeticWing ??
-      (other.gemFashionId === 'nebula_dragon_wings' ? 'nebula_dragon_wings' : null),
+    wings: sanitizeResolvedWingId(other.fashionWings) ?? sanitizeResolvedWingId(other.cosmeticWing),
     back: null,
     accessory: null,
     aura: other.fashionAura ?? (other.gemFashionId === 'sunfire_aura' ? 'sunfire_aura' : null),

@@ -7145,7 +7145,7 @@ export function rollWingGachaAction(
     addItem('enhance_stone', result.totalDuplicateStones)
   }
 
-  const newRares = result.results.filter((r) => r.isNew && (r.rarity === 'ตำนาน' || r.rarity === 'มายา'))
+  const newRares = result.results.filter((r) => r.isNew && (r.rarity === 'ตำนาน' || r.rarity === 'มายา' || r.rarity === 'เทพ'))
   for (const rarePull of newRares) {
     void broadcastWorldNewsAction(
       'gacha',

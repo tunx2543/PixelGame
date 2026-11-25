@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { Droplets, Heart, RotateCcw, Shield, Sparkles, Swords } from 'lucide-react'
+import { MAX_LEVEL, expToNext } from '@/lib/game/data'
 import { formatNum } from './format'
 
 export interface CharacterStatusState {
@@ -25,8 +26,8 @@ const INITIAL_CHARACTER_STATE: CharacterStatusState = {
   maxHp: 320,
   mp: 95,
   maxMp: 140,
-  exp: 680,
-  maxExp: 1000,
+  exp: 1050,
+  maxExp: expToNext(12),
 }
 
 interface FloatingParticle {
@@ -136,9 +137,11 @@ function StatusBar({
 export function CharacterStatus({
   initialState = INITIAL_CHARACTER_STATE,
   showSimulator = true,
+  onStatusChange,
 }: {
   initialState?: CharacterStatusState
   showSimulator?: boolean
+  onStatusChange?: (state: CharacterStatusState) => void
 }) {
   const [status, setStatus] = useState<CharacterStatusState>(initialState)
   const [burst, setBurst] = useState<ProgressBurst | null>(null)
@@ -147,6 +150,12 @@ export function CharacterStatus({
   const prevRef = useRef({ level: initialState.level, exp: initialState.exp })
   const burstSeqRef = useRef(0)
   const skipNextFxRef = useRef(false)
+  const onStatusChangeRef = useRef(onStatusChange)
+  onStatusChangeRef.current = onStatusChange
+
+  useEffect(() => {
+    onStatusChangeRef.current?.(status)
+  }, [status])
 
   useEffect(() => {
     const prev = prevRef.current
@@ -209,6 +218,14 @@ export function CharacterStatus({
 
   const gainExp = (amount = 180) => {
     setStatus((prev) => {
+      if (prev.level >= MAX_LEVEL) {
+        return {
+          ...prev,
+          level: MAX_LEVEL,
+          exp: prev.maxExp,
+        }
+      }
+
       let nextLevel = prev.level
       let nextExp = prev.exp + amount
       let nextMaxExp = prev.maxExp
@@ -217,14 +234,19 @@ export function CharacterStatus({
       let nextHp = prev.hp
       let nextMp = prev.mp
 
-      while (nextExp >= nextMaxExp) {
+      while (nextLevel < MAX_LEVEL && nextExp >= nextMaxExp) {
         nextExp -= nextMaxExp
         nextLevel += 1
-        nextMaxExp = Math.round(nextMaxExp * 1.25)
+        nextMaxExp = nextLevel >= MAX_LEVEL ? nextMaxExp : expToNext(nextLevel)
         nextMaxHp += 30
         nextMaxMp += 15
         nextHp = nextMaxHp
         nextMp = nextMaxMp
+      }
+
+      if (nextLevel >= MAX_LEVEL) {
+        nextLevel = MAX_LEVEL
+        nextExp = nextMaxExp
       }
 
       return {

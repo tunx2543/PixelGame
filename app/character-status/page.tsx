@@ -1,22 +1,15 @@
-import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
-import { CharacterStatus } from '@/components/game/character-status'
+import type { Metadata } from 'next'
+import { CharacterStatusView } from '@/components/game/character-status-view'
+
+export const metadata: Metadata = {
+  title: 'สถานะตัวละคร & กราฟ EXP - Pixel Quest',
+  description: 'ดูสถานะตัวละคร พร้อมกราฟแสดงความก้าวหน้าของค่าประสบการณ์ (EXP) เทียบกับเลเวลตัวละคร',
+}
 
 export default function CharacterStatusPage() {
   return (
-    <main className="flex h-dvh w-full flex-col items-center justify-center gap-5 overflow-y-auto bg-background p-4">
-      <div className="flex w-full max-w-md items-center justify-between">
-        <h1 className="text-lg font-bold text-primary">ตัวอย่าง CharacterStatus</h1>
-        <Link
-          href="/"
-          className="pixel-btn flex items-center gap-1.5 bg-secondary px-3 py-1.5 text-xs text-foreground hover:brightness-110"
-        >
-          <ArrowLeft className="size-3.5" aria-hidden />
-          กลับหน้าเกม
-        </Link>
-      </div>
-
-      <CharacterStatus />
+    <main className="h-dvh w-full overflow-y-auto bg-background px-4 py-6 md:flex md:items-center md:justify-center md:px-6">
+      <CharacterStatusView />
     </main>
   )
 }

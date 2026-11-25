@@ -956,9 +956,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     const costumeFashion = getFashionItemDef(other.fashionCostume)
     const hairFashion = getFashionItemDef(other.fashionHair)
     const auraFashion = getFashionItemDef(other.fashionAura)
-    const wingsFashion = getFashionItemDef(other.fashionWings)
     const mountSkinFashion = getFashionItemDef(other.mountSkinId)
-    const equippedWing = getCosmeticDef(other.cosmeticWing)
     const equippedWeaponSkin = getCosmeticDef(other.weaponSkinId)
     const activeMountDef = other.mountId ? getMountDef(other.mountId) : null
     const activePetDef = other.petId ? getCombatPetDef(other.petId) : null
@@ -1100,53 +1098,6 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
               mDrawW,
               mDrawH,
             )
-          }
-        }
-
-        const remoteWingImg = getFashionLayerImage(remoteLoadout.wings)
-        const hasLoadedRemoteWing = Boolean(remoteWingImg && remoteWingImg.complete && remoteWingImg.naturalWidth > 0)
-        const activeWingColors = !hasLoadedRemoteWing
-          ? (equippedWing
-              ? { primary: equippedWing.primaryColor, secondary: equippedWing.secondaryColor }
-              : wingsFashion && !wingsFashion.linkedGemItemId
-                ? { primary: wingsFashion.primaryColor, secondary: wingsFashion.secondaryColor }
-                : null)
-          : null
-        if (activeWingColors) {
-          ctx.save()
-          ctx.globalAlpha = 0.9
-          const flap = Math.sin(t * 6) * 2.5
-          ctx.fillStyle = activeWingColors.primary
-          ctx.strokeStyle = activeWingColors.secondary
-          ctx.lineWidth = 1
-          ctx.beginPath()
-          ctx.moveTo(remoteX + riderSeatX - 2, remoteY + riderSeatY - 15)
-          ctx.lineTo(remoteX + riderSeatX - 14, remoteY + riderSeatY - 23 - flap)
-          ctx.lineTo(remoteX + riderSeatX - 10, remoteY + riderSeatY - 11 - flap * 0.4)
-          ctx.closePath()
-          ctx.fill()
-          ctx.stroke()
-          ctx.beginPath()
-          ctx.moveTo(remoteX + riderSeatX + 2, remoteY + riderSeatY - 15)
-          ctx.lineTo(remoteX + riderSeatX + 14, remoteY + riderSeatY - 23 - flap)
-          ctx.lineTo(remoteX + riderSeatX + 10, remoteY + riderSeatY - 11 - flap * 0.4)
-          ctx.closePath()
-          ctx.fill()
-          ctx.stroke()
-          ctx.restore()
-        }
-
-        if (!hasLoadedRemoteWing && (gemFashion?.id === 'nebula_dragon_wings' || wingsFashion?.id === 'nebula_dragon_wings')) {
-          const wingGem =
-            gemFashion?.id === 'nebula_dragon_wings'
-              ? gemFashion
-              : GEM_SHOP_ITEMS.find((g) => g.id === 'nebula_dragon_wings')
-          if (wingGem) {
-            ctx.save()
-            ctx.globalAlpha = 0.86
-            const wingBob = Math.sin(t * 5) * 0.7
-            drawGemItemPixels(ctx, wingGem, remoteX + riderSeatX - 8, remoteY + riderSeatY - remoteH + 5 + wingBob, 2)
-            ctx.restore()
           }
         }
 
@@ -1347,9 +1298,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   const costumeFashion = getFashionItemDef(localLoadout.costume)
   const hairFashion = getFashionItemDef(localLoadout.hair)
   const auraFashion = getFashionItemDef(localLoadout.aura)
-  const wingsFashion = getFashionItemDef(localLoadout.wings)
   const mountSkinFashion = getFashionItemDef(localLoadout.mountAppearance)
-  const equippedWing = getCosmeticDef(extV2.equippedWing)
   const equippedWeaponSkin = getCosmeticDef(localLoadout.weaponSkin ?? extV2.equippedWeaponSkin)
   const equippedFrame = getCosmeticDef(extV2.equippedFrame)
   ents.push({
@@ -1589,48 +1538,6 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
             mDrawW,
             mDrawH,
           )
-        }
-      }
-      const localWingImg = getFashionLayerImage(localLoadout.wings)
-      const hasLoadedLocalWing = Boolean(localWingImg && localWingImg.complete && localWingImg.naturalWidth > 0)
-      const activeWingColors = !hasLoadedLocalWing
-        ? (equippedWing
-            ? { primary: equippedWing.primaryColor, secondary: equippedWing.secondaryColor }
-            : wingsFashion && !wingsFashion.linkedGemItemId
-              ? { primary: wingsFashion.primaryColor, secondary: wingsFashion.secondaryColor }
-              : null)
-        : null
-      if (activeWingColors) {
-        ctx.save()
-        ctx.globalAlpha = p.invisible ? 0.15 : 0.9
-        const flap = Math.sin(t * 6) * 2.5
-        ctx.fillStyle = activeWingColors.primary
-        ctx.strokeStyle = activeWingColors.secondary
-        ctx.lineWidth = 1
-        ctx.beginPath()
-        ctx.moveTo(p.x + riderSeatX - 2, p.y + riderSeatY - 15)
-        ctx.lineTo(p.x + riderSeatX - 14, p.y + riderSeatY - 23 - flap)
-        ctx.lineTo(p.x + riderSeatX - 10, p.y + riderSeatY - 11 - flap * 0.4)
-        ctx.closePath()
-        ctx.fill()
-        ctx.stroke()
-        ctx.beginPath()
-        ctx.moveTo(p.x + riderSeatX + 2, p.y + riderSeatY - 15)
-        ctx.lineTo(p.x + riderSeatX + 14, p.y + riderSeatY - 23 - flap)
-        ctx.lineTo(p.x + riderSeatX + 10, p.y + riderSeatY - 11 - flap * 0.4)
-        ctx.closePath()
-        ctx.fill()
-        ctx.stroke()
-        ctx.restore()
-      }
-      if (!hasLoadedLocalWing && (gemFashion?.id === 'nebula_dragon_wings' || wingsFashion?.id === 'nebula_dragon_wings')) {
-        const wingGem = gemFashion?.id === 'nebula_dragon_wings' ? gemFashion : GEM_SHOP_ITEMS.find((g) => g.id === 'nebula_dragon_wings')
-        if (wingGem) {
-          ctx.save()
-          ctx.globalAlpha = p.invisible ? 0.14 : 0.86
-          const wingBob = Math.sin(t * 5) * 0.7
-          drawGemItemPixels(ctx, wingGem, p.x + riderSeatX - 8, p.y + riderSeatY - drawH + 5 + wingBob, 2)
-          ctx.restore()
         }
       }
       const localDx = Math.round(-drawW / 2)

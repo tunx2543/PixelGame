@@ -284,7 +284,7 @@ export const FESTIVAL_EVENTS: FestivalEventDef[] = [
     name: 'เทศกาลเหมันต์ & ปีใหม่สากล',
     subtitle: 'Winter Starlight & New Year',
     description:
-      'เฉลิมฉลองส่งท้ายปีเก่าต้อนรับปีใหม่ด้วยหิมะดาวพร่างพราว โบนัส EXP +75% และร้านค้าแลกปีกเหมันต์ระดับตำนาน',
+      'เฉลิมฉลองส่งท้ายปีเก่าต้อนรับปีใหม่ด้วยหิมะดาวพร่างพราว โบนัส EXP +75% และร้านค้าแลกกรอบชื่อและไอเทมเสริมพลังระดับตำนาน',
     scheduleLabel: 'ทุกปี 20 ธันวาคม – 10 มกราคม (เวลาไทย)',
     tokenName: 'ดาวหิมะมงคล',
     accentColor: '#38bdf8',
@@ -337,12 +337,12 @@ export const FESTIVAL_EVENTS: FestivalEventDef[] = [
     ],
     shopRewards: [
       {
-        id: 'ny_wing',
-        name: 'ปีกเหมันต์ดาวพร่างพราว',
-        description: 'ปลดล็อกปีกหิมะคริสตัลสุดอลังการ (สวมใส่ในหน้าแฟชั่น)',
+        id: 'ny_frame',
+        name: 'กรอบชื่อเกียรติยศมังกรปีใหม่',
+        description: 'ปลดล็อกกรอบชื่อสีครามเรืองแสง (สวมใส่ในหน้าแฟชั่น)',
         kind: 'cosmetic',
-        cosmeticId: 'wing_winter_star',
-        costTokens: 80,
+        cosmeticId: 'frame_dragon',
+        costTokens: 65,
         limitPerCycle: 1,
       },
       {
@@ -490,7 +490,7 @@ export const FESTIVAL_EVENTS: FestivalEventDef[] = [
     name: 'เทศกาลมหาสงกรานต์สาดน้ำ',
     subtitle: 'Songkran Water Blessing Festival',
     description:
-      'สวัสดีปีใหม่ไทย! สาดน้ำชุ่มฉ่ำทั่วแผ่นดิน Pixel Quest พร้อมโบนัส EXP/DROP/Gold +50% และปีกสายน้ำมหาสงกรานต์',
+      'สวัสดีปีใหม่ไทย! สาดน้ำชุ่มฉ่ำทั่วแผ่นดิน Pixel Quest พร้อมโบนัส EXP/DROP/Gold +50% และสกินอาวุธแสงดาราสงกรานต์',
     scheduleLabel: 'ทุกปี 10 – 18 เมษายน (เวลาไทย)',
     tokenName: 'ขันน้ำเงินศักดิ์สิทธิ์',
     accentColor: '#06b6d4',
@@ -543,12 +543,12 @@ export const FESTIVAL_EVENTS: FestivalEventDef[] = [
     ],
     shopRewards: [
       {
-        id: 'sk_wing',
-        name: 'ปีกสายน้ำมหาสงกรานต์',
-        description: 'ปลดล็อกปีกหยดน้ำสีฟ้าคริสตัลสุดเย็นฉ่ำ',
+        id: 'sk_wskin',
+        name: 'สกินอาวุธแสงดาราสงกรานต์',
+        description: 'ปลดล็อกสกินประกายแสงสีฟ้าคริสตัลสุดเย็นฉ่ำ (สวมใส่ในหน้าแฟชั่น)',
         kind: 'cosmetic',
-        cosmeticId: 'wing_songkran',
-        costTokens: 75,
+        cosmeticId: 'wskin_starlight',
+        costTokens: 65,
         limitPerCycle: 1,
       },
       {

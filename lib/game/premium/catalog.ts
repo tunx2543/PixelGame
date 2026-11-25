@@ -208,24 +208,6 @@ export const PREMIUM_CATALOG: PremiumProduct[] = [
     vipExpGrant: 720,
     payload: { fashionId: 'aura_celestial_gold' },
   },
-  {
-    productId: 'prod_nebula_dragon_wings',
-    itemId: 'nebula_dragon_wings',
-    name: 'ปีกมังกรเนบิวลา',
-    description: 'ปีกผลึกขนาดใหญ่ ไล่สีม่วงครามและมีดาวเคลื่อนในปีก',
-    icon: 'nebula_dragon_wings',
-    diamondPrice: 7999,
-    category: 'fashion',
-    rarity: 'ตำนาน',
-    stock: null,
-    purchaseLimit: 1,
-    enabled: true,
-    expiration: null,
-    rewardKind: 'gem_fashion',
-    vipExpGrant: 1600,
-    payload: { fashionId: 'nebula_dragon_wings' },
-  },
-
   // ---- 3. Costume ----
   {
     productId: 'prod_costume_royal_knight',

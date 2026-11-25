@@ -41,18 +41,6 @@ export const GEM_SHOP_ITEMS: GemShopItem[] = [
     pixels: ['...3....', '..232...', '.23232..', '2323232.', '32323232', '.232323.', '..2323..', '...3....'],
   },
   {
-    id: 'nebula_dragon_wings',
-    name: 'ปีกมังกรเนบิวลา',
-    category: 'fashion',
-    price: 7999,
-    rarity: 'ตำนาน',
-    description: 'ปีกผลึกขนาดใหญ่ ไล่สีม่วงครามและมีดาวเคลื่อนในปีก',
-    ability: 'สวมแล้วแสดงปีกพิกเซลด้านหลังตัวละคร พร้อมกระพือเบา ๆ',
-    motion: 'wings',
-    colors: { primary: '#a78bfa', secondary: '#4f46e5', accent: '#67e8f9' },
-    pixels: ['1....1..', '21..12..', '321123..', '.32123..', '..3232..', '..232...', '.12.21..', '1....1..'],
-  },
-  {
     id: 'moonlight_firefly',
     name: 'ภูตหิ่งห้อยมูนไลท์',
     category: 'companions',

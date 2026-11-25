@@ -175,6 +175,8 @@ const FASHION_SLOTS: FashionSlot[] = FASHION_CHARACTER_SLOTS
 
 function rarityBadgeClass(rarity: PremiumRarity): string {
   switch (rarity) {
+    case 'เทพ':
+      return 'border-amber-300 bg-gradient-to-r from-amber-500/35 via-rose-500/30 to-yellow-400/30 text-amber-100'
     case 'มายา':
       return 'border-fuchsia-400/60 bg-fuchsia-500/20 text-fuchsia-200'
     case 'ตำนาน':

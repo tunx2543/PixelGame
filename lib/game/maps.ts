@@ -508,12 +508,12 @@ function buildTown(): MapDef {
       {
         id: 'wing_gacha_machine',
         name: 'ตู้ไข่สุ่มปีก',
-        title: 'สุ่มปีก 23 แบบ',
+        title: 'สุ่มปีก 16 แบบ',
         role: 'wing_gacha',
         x: 23.5,
         y: 16.9,
         colors: { hair: '#67e8f9', body: '#0284c7', legs: '#1e293b', accent: '#fde047' },
-        greeting: 'ตู้ไข่สุ่มปีกแห่งน้ำพุเมือง! ลองเสี่ยงโชคสุ่มปีก 23 แบบเลยไหม?',
+        greeting: 'ตู้ไข่สุ่มปีกแห่งน้ำพุเมือง! ลองเสี่ยงโชคสุ่มปีก 16 แบบเลยไหม?',
       },
     ],
   }

@@ -40,7 +40,7 @@ export type PremiumCategory =
   | 'consumables'
   | 'special-collection'
 
-export type PremiumRarity = 'ทั่วไป' | 'หายาก' | 'อีปิก' | 'ตำนาน' | 'มายา'
+export type PremiumRarity = 'ทั่วไป' | 'หายาก' | 'อีปิก' | 'ตำนาน' | 'มายา' | 'เทพ'
 
 export type PremiumRewardKind =
   | 'item'

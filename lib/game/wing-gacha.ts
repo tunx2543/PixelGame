@@ -57,38 +57,33 @@ export function getWingGachaCost(currency: WingGachaCurrency, count: WingGachaCo
 }
 
 const WING_GACHA_RATES: ReadonlyArray<{ fashionId: string; rate: number }> = [
-  // Common (14%)
-  { fashionId: 'wing_drv_a7582c8d', rate: 14 },
+  // ทั่วไป (36.999%)
+  { fashionId: 'wing_drv_a7582c8d', rate: 19.999 },
+  { fashionId: 'wing_drv_1fae0274', rate: 17 },
 
-  // Rare (36%)
-  { fashionId: 'wing_drv_1fae0274', rate: 7.5 },
-  { fashionId: 'wing_drv_475754b9', rate: 7.5 },
-  { fashionId: 'wing_drv_93caf419', rate: 7 },
-  { fashionId: 'wing_drv_ea1b38fb', rate: 7 },
-  { fashionId: 'wing_fairy_emerald', rate: 7 },
+  // หายาก (30%)
+  { fashionId: 'wing_drv_475754b9', rate: 10 },
+  { fashionId: 'wing_drv_93caf419', rate: 10 },
+  { fashionId: 'wing_drv_ea1b38fb', rate: 10 },
 
-  // Epic (32%)
-  { fashionId: 'wing_drv_1f40660d', rate: 4.5 },
-  { fashionId: 'wing_drv_1f6ac9f4', rate: 4.5 },
-  { fashionId: 'wing_drv_335ad49b', rate: 4.5 },
-  { fashionId: 'wing_drv_3dca4370', rate: 4 },
-  { fashionId: 'wing_drv_ead9dfe5', rate: 4 },
-  { fashionId: 'wing_drv_f84dd36d', rate: 4 },
-  { fashionId: 'wing_seraph', rate: 3.5 },
-  { fashionId: 'wing_ember', rate: 3 },
+  // อีปิก (22%)
+  { fashionId: 'wing_drv_1f40660d', rate: 5.5 },
+  { fashionId: 'wing_drv_335ad49b', rate: 5.5 },
+  { fashionId: 'wing_drv_3dca4370', rate: 5.5 },
+  { fashionId: 'wing_drv_ead9dfe5', rate: 5.5 },
 
-  // Legendary (14%)
-  { fashionId: 'wing_drv_15fe84b6', rate: 2 },
-  { fashionId: 'wing_drv_45947e7e', rate: 2 },
-  { fashionId: 'wing_drv_9e601d3b', rate: 2 },
-  { fashionId: 'wing_drv_af7f9121', rate: 2 },
-  { fashionId: 'wing_drv_b1ab0813', rate: 2 },
-  { fashionId: 'wing_cosmos', rate: 2 },
-  { fashionId: 'nebula_dragon_wings', rate: 2 },
+  // ตำนาน (9%)
+  { fashionId: 'wing_drv_1f6ac9f4', rate: 3 },
+  { fashionId: 'wing_drv_45947e7e', rate: 3 },
+  { fashionId: 'wing_drv_9e601d3b', rate: 3 },
 
-  // Mythic (4%)
-  { fashionId: 'wing_vip_platinum', rate: 2 },
-  { fashionId: 'wing_anim_inferno_phoenix', rate: 2 },
+  // มายา (2%)
+  { fashionId: 'wing_drv_15fe84b6', rate: 0.5 },
+  { fashionId: 'wing_drv_af7f9121', rate: 0.75 },
+  { fashionId: 'wing_drv_b1ab0813', rate: 0.75 },
+
+  // เทพ (0.001% - Animated 16-Frame Wing)
+  { fashionId: 'wing_anim_inferno_phoenix', rate: 0.001 },
 ]
 
 export const WING_GACHA_POOL: WingGachaPoolEntry[] = WING_GACHA_RATES.map((entry) => {
@@ -110,6 +105,8 @@ export const WING_GACHA_ALL_WING_IDS: readonly string[] = PREMIUM_FASHION_ITEMS
 
 export function getWingDuplicateReward(rarity: PremiumRarity): { gold: number; enhanceStones: number } {
   switch (rarity) {
+    case 'เทพ':
+      return { gold: 25000, enhanceStones: 50 }
     case 'มายา':
       return { gold: 8000, enhanceStones: 15 }
     case 'ตำนาน':
@@ -124,12 +121,14 @@ export function getWingDuplicateReward(rarity: PremiumRarity): { gold: number; e
 }
 
 export function rollSingleWingGacha(rng: () => number = Math.random): WingGachaPoolEntry {
-  const totalRate = WING_GACHA_POOL.reduce((acc, entry) => acc + entry.rate, 0)
-  const clamped = Math.max(0, Math.min(0.9999999, rng()))
-  let cursor = clamped * totalRate
-  for (const entry of WING_GACHA_POOL) {
-    cursor -= entry.rate
-    if (cursor <= 0) return entry
+  const scaledWeights = WING_GACHA_POOL.map((entry) => Math.max(1, Math.round(entry.rate * 1000)))
+  const totalScaled = scaledWeights.reduce((acc, weight) => acc + weight, 0)
+  const clamped = Math.max(0, Math.min(1 - 1e-12, rng()))
+  let cursor = Math.floor(clamped * totalScaled)
+  for (let i = 0; i < WING_GACHA_POOL.length; i += 1) {
+    const weight = scaledWeights[i]
+    if (cursor < weight) return WING_GACHA_POOL[i]
+    cursor -= weight
   }
   return WING_GACHA_POOL[WING_GACHA_POOL.length - 1]
 }

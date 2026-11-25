@@ -27,15 +27,18 @@ import { formatNum } from '../format'
 import { PanelFrame, PxButton } from './panels'
 
 const RARITY_ORDER: Record<PremiumRarity, number> = {
-  มายา: 0,
-  ตำนาน: 1,
-  อีปิก: 2,
-  หายาก: 3,
-  ทั่วไป: 4,
+  เทพ: 0,
+  มายา: 1,
+  ตำนาน: 2,
+  อีปิก: 3,
+  หายาก: 4,
+  ทั่วไป: 5,
 }
 
 function rarityBadgeClass(rarity: PremiumRarity): string {
   switch (rarity) {
+    case 'เทพ':
+      return 'border-amber-300 bg-gradient-to-r from-amber-500/35 via-rose-500/30 to-yellow-400/30 text-amber-100'
     case 'มายา':
       return 'border-fuchsia-400/70 bg-fuchsia-500/20 text-fuchsia-200'
     case 'ตำนาน':
@@ -101,7 +104,7 @@ export function WingGachaPanel() {
         setNotice({ ok: false, text: res.error ?? 'ไม่สามารถสุ่มปีกได้' })
         return
       }
-      const hasRare = res.results.some((r) => r.rarity === 'ตำนาน' || r.rarity === 'มายา')
+      const hasRare = res.results.some((r) => r.rarity === 'ตำนาน' || r.rarity === 'มายา' || r.rarity === 'เทพ')
       playQuestClaimSfx(hasRare)
       setLastBatch(res)
       const newCount = res.results.filter((r) => r.isNew).length
@@ -131,7 +134,7 @@ export function WingGachaPanel() {
   return (
     <PanelFrame
       title="ตู้ไข่สุ่มปีกแห่งน้ำพุเมือง (Wing Gacha)"
-      subtitle="สุ่มสะสมปีกแฟชั่นครบทั้ง 23 แบบ รวมปีกเพลิงอนิเมชัน 16 เฟรม · อัตราดรอปเปิดเผยรวม 100%"
+      subtitle={`สุ่มสะสมปีกแฟชั่นครบทั้ง ${WING_GACHA_POOL.length} แบบ รวมปีกเพลิงอนิเมชัน 16 เฟรม · อัตราดรอปเปิดเผยรวม 100%`}
     >
       <div className="space-y-3 text-xs">
         {/* Top Currency & Collection Summary */}
@@ -217,7 +220,7 @@ export function WingGachaPanel() {
         </div>
 
         <p className="text-[11px] text-muted-foreground">
-          เมื่อสุ่มได้ปีกซ้ำ ระบบจะแปลงเป็น Gold (250–8,000 G) และหินตีบวก (1–15 ก้อน) ตามระดับความหายากให้อัตโนมัติ และปีกที่สุ่มได้สามารถสวมใส่ได้ทันทีแม้ไม่มี VIP
+          เมื่อสุ่มได้ปีกซ้ำ ระบบจะแปลงเป็น Gold (250–25,000 G) และหินตีบวก (1–50 ก้อน) ตามระดับความหายากให้อัตโนมัติ และปีกที่สุ่มได้สามารถสวมใส่ได้ทันทีแม้ไม่มี VIP
         </p>
 
         {notice && (
@@ -318,7 +321,7 @@ export function WingGachaPanel() {
                 : 'border-border bg-secondary/70 text-muted-foreground hover:text-foreground',
             )}
           >
-            {onlyUnowned ? 'แสดงเฉพาะปีกที่ยังไม่มี' : 'แสดงปีกทั้งหมด (23 แบบ)'}
+            {onlyUnowned ? 'แสดงเฉพาะปีกที่ยังไม่มี' : `แสดงปีกทั้งหมด (${WING_GACHA_POOL.length} แบบ)`}
           </button>
         </div>
 

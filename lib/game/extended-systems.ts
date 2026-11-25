@@ -474,11 +474,11 @@ export const BATTLE_PASS_TIERS: BattlePassTierDef[] = Array.from({ length: BP_MA
 
   const premReward =
     lv === 1
-      ? { label: 'ปีกแสงแห่งรุ่งอรุณ', cosmeticId: 'wing_seraph' }
+      ? { label: 'สกินอาวุธซากุระ + เพชร x25', cosmeticId: 'wskin_sakura', diamonds: 25 }
       : lv === 10
         ? { label: 'สกินดาบดารา + เพชร x35', cosmeticId: 'wskin_starlight', diamonds: 35 }
         : lv === 20
-          ? { label: 'ปีกจักรวาลราชันย์ + เพชร x80', cosmeticId: 'wing_cosmos', diamonds: 80 }
+          ? { label: 'สกินอาวุธห้วงอเวจี + เพชร x80', cosmeticId: 'wskin_void', diamonds: 80 }
           : lv % 4 === 0
             ? { label: `ผลึกคู่หู x${2 + Math.floor(lv / 5)} + เพชร x15`, itemId: 'pet_essence', qty: 2 + Math.floor(lv / 5), diamonds: 15 }
             : { label: `ทอง ${lv * 600} G + หิน x2`, gold: lv * 600, stones: 2 }
@@ -522,33 +522,6 @@ export interface CosmeticDef {
 }
 
 export const COSMETIC_DEFS: CosmeticDef[] = [
-  {
-    id: 'wing_seraph',
-    slot: 'wing',
-    name: 'ปีกนางฟ้าแสงอรุณ',
-    description: 'ปีกสีทองขาวเปล่งประกาย (ปลดล็อกจากร้านหรือ Battle Pass Lv.1)',
-    primaryColor: '#fef08a',
-    secondaryColor: '#f59e0b',
-    diamondCost: 45,
-  },
-  {
-    id: 'wing_ember',
-    slot: 'wing',
-    name: 'ปีกเพลิงมังกรแดง',
-    description: 'ปีกไฟร้อนแรงพร้อมละอองถ่าน',
-    primaryColor: '#fb7185',
-    secondaryColor: '#ea580c',
-    diamondCost: 60,
-  },
-  {
-    id: 'wing_cosmos',
-    slot: 'wing',
-    name: 'ปีกจักรวาลออโรรา',
-    description: 'ปีกดาราสีม่วงครามระดับตำนาน',
-    primaryColor: '#a78bfa',
-    secondaryColor: '#22d3ee',
-    diamondCost: 95,
-  },
   {
     id: 'wskin_starlight',
     slot: 'weaponSkin',
@@ -603,24 +576,6 @@ export const COSMETIC_DEFS: CosmeticDef[] = [
     primaryColor: '#fde047',
     secondaryColor: '#1d4ed8',
     diamondCost: 60,
-  },
-  {
-    id: 'wing_songkran',
-    slot: 'wing',
-    name: 'ปีกสายน้ำมหาสงกรานต์',
-    description: 'ปีกหยดน้ำสีฟ้าคริสตัลประจำเทศกาลสงกรานต์ (ปลดล็อกจากร้านเทศกาล)',
-    primaryColor: '#38bdf8',
-    secondaryColor: '#0284c7',
-    diamondCost: 75,
-  },
-  {
-    id: 'wing_winter_star',
-    slot: 'wing',
-    name: 'ปีกเหมันต์ดาวพร่างพราว',
-    description: 'ปีกคริสตัลหิมะแห่งเทศกาลปีใหม่ (ปลดล็อกจากร้านเทศกาล)',
-    primaryColor: '#e0f2fe',
-    secondaryColor: '#60a5fa',
-    diamondCost: 85,
   },
   {
     id: 'wskin_festival_crimson',

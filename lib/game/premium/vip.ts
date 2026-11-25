@@ -126,7 +126,6 @@ export const VIP_TIERS: VipTierDef[] = [
       'hair_bronze_crest',
       'aura_silver_mist',
       'costume_vip_gold_regalia',
-      'wing_vip_platinum',
     ],
     dailyReward: {
       gold: 3000,
@@ -139,15 +138,14 @@ export const VIP_TIERS: VipTierDef[] = [
       gold: 16000,
       diamonds: 450,
       enhanceStones: 18,
-      fashionId: 'wing_vip_platinum',
-      label: '16,000 G · 450 เพชร · หิน x18 · ปีกแพลทินัม',
+      label: '16,000 G · 450 เพชร · หิน x18',
     },
     benefits: [
       'บริการ VIP ระยะไกล: ร้านค้า, ตีบวกอุปกรณ์ และคลังเก็บของทุกแผนที่',
       'ตราสัญลักษณ์ VIP 4 Platinum เรืองแสงสีฟ้าคริสตัล',
       'โบนัส EXP ในเกม +20% (ภายในเพดานรวม +25%)',
       'เพิ่มช่องกระเป๋า +20 ช่อง และช่องคลังเก็บของ +45 ช่อง',
-      'ปลดล็อกปีก Platinum Wing เฉพาะสมาชิก',
+      'รางวัลเลื่อนขั้น 16,000 G · 450 เพชร · หินตีบวก x18 + รางวัลรายวันเพิ่มระดับ',
     ],
   },
   {
@@ -166,7 +164,6 @@ export const VIP_TIERS: VipTierDef[] = [
       'hair_bronze_crest',
       'aura_silver_mist',
       'costume_vip_gold_regalia',
-      'wing_vip_platinum',
       'mount_skin_diamond_royal',
     ],
     dailyReward: {
