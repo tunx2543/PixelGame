@@ -19,6 +19,7 @@ import { syncLatestMonsterAssetsAndFirestore } from '@/lib/firebase/monster-sync
 import { useUiLayout } from '@/lib/game/ui-layout'
 import { useGame } from '@/lib/game/use-game'
 import { CharacterBar } from './character-bar'
+import { ActivityHudOverlay } from './activity-hud-overlay'
 import { ChatBox } from './chat-box'
 import { CheckinModal } from './checkin-modal'
 import { GameCanvas } from './game-canvas'
@@ -200,6 +201,7 @@ export function Game() {
         {/* Top Announcement Ticker & Global World Boss HP Bar */}
         {!g.zenHud && <WorldBossHpBar />}
         {!g.zenHud && <TopAnnouncementTicker />}
+        {!g.zenHud && <ActivityHudOverlay />}
 
         {/* ZONE 1: มุมซ้ายบน — Unit Frame + Quest/Party Strip + Buff Timer Strip + PK/Auto/Mount Toggles */}
         <div className="pointer-events-none absolute left-1.5 top-1.5 z-20 flex items-start gap-2 sm:left-2 sm:top-2">

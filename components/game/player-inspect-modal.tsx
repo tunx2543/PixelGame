@@ -15,16 +15,19 @@ import { JOBS, normalizeJobId } from '@/lib/game/data'
 import {
   blockPlayerAction,
   game,
+  getBotInspectProfile,
   getStats,
   isPlayerBlocked,
   notify,
   openPanel,
   resolvePlayerFashionLoadout,
+  triggerBotSocialReaction,
   unblockPlayerAction,
 } from '@/lib/game/engine'
 import { resolveFashionLoadoutFromRemote } from '@/lib/game/fashion-renderer'
 import { MAPS } from '@/lib/game/maps'
 import { createDuelFighter, getJobRole, getJobRoleLabel } from '@/lib/game/mmo-systems'
+import { isBotPlayerId } from '@/lib/game/player-bots'
 import { TITLE_DEFS } from '@/lib/game/rpg-systems'
 import { createTrade, sendFriendRequest, sendWhisper } from '@/lib/game/social'
 import { useGame } from '@/lib/game/use-game'
@@ -58,9 +61,17 @@ export function PlayerInspectModal() {
       return
     }
     let active = true
-    setLoading(true)
     setFeedback(null)
     setReportOpen(false)
+    const botProfile = getBotInspectProfile(target.userId || target.gameUid || target.displayName)
+    if (botProfile) {
+      setProfile(botProfile)
+      setLoading(false)
+      return () => {
+        active = false
+      }
+    }
+    setLoading(true)
     void inspectPlayerProfile(target.userId || target.gameUid || target.displayName)
       .then((res) => {
         if (!active) return
@@ -124,6 +135,11 @@ export function PlayerInspectModal() {
 
   const handlePartyInvite = async () => {
     if (!profile || busy) return
+    if (isBotPlayerId(profile.userId) || isBotPlayerId(profile.gameUid)) {
+      const res = triggerBotSocialReaction(profile.userId, 'party')
+      setFeedback({ tone: res.ok ? 'ok' : 'err', text: res.message })
+      return
+    }
     setBusy(true)
     const s = getStats(p)
     const res = await invitePlayerToPartyAutoCreate({
@@ -147,6 +163,11 @@ export function PlayerInspectModal() {
 
   const handleDuel = async () => {
     if (!profile || busy) return
+    if (isBotPlayerId(profile.userId) || isBotPlayerId(profile.gameUid)) {
+      const res = triggerBotSocialReaction(profile.userId, 'duel')
+      setFeedback({ tone: res.ok ? 'ok' : 'err', text: res.message })
+      return
+    }
     setBusy(true)
     const s = getStats(p)
     const fighter = createDuelFighter({
@@ -200,6 +221,12 @@ export function PlayerInspectModal() {
   const handleReportSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!profile || busy) return
+    if (isBotPlayerId(profile.userId)) {
+      setFeedback({ tone: 'ok', text: `บันทึกข้อมูลการตรวจสอบ ${profile.name} เรียบร้อยแล้ว` })
+      setReportDetails('')
+      setReportOpen(false)
+      return
+    }
     setBusy(true)
     const res = await submitPlayerReport({
       targetUid: profile.userId,

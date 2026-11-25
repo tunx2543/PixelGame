@@ -37,6 +37,7 @@ import { GuidePanel } from './guide-panel'
 import { RedeemCodePanel } from './redeem-code-panel'
 import { TreasureChestPanel } from './treasure-chest-panel'
 import { EventsPanel } from './events-panel'
+import { ActivitiesPanel } from './activities-panel'
 import { ModelGalleryView } from '../model-gallery-view'
 import { AsuraCharacterHub } from './asura-character-hub'
 
@@ -114,6 +115,8 @@ export function renderPanelById(id: PanelId, g: ReturnType<typeof useGame>): Rea
       return <RedeemCodePanel />
     case 'events':
       return <EventsPanel />
+    case 'activities':
+      return <ActivitiesPanel />
     case 'models':
       return (
         <PanelFrame title="คลังโมเดล 2D & แอนิเมชั่น" subtitle="พรีวิวโมเดลครบทุกอาชีพ, 17 มอนสเตอร์, 5 สัตว์ขี่ และ 10 สัตว์เลี้ยง/ผอบ">

@@ -498,6 +498,13 @@ export function AsuraMenuModal({
       tone: 'border-amber-300/90 bg-[radial-gradient(circle_at_35%_28%,#9c5416_0%,#4f2708_65%,#261104_100%)]',
       onClick: () => openAndClose('events'),
     },
+    {
+      id: 'activities',
+      label: 'กิจกรรม',
+      iconId: 'gp-trophy',
+      tone: 'border-sky-300/90 bg-[radial-gradient(circle_at_35%_28%,#1c628c_0%,#0d324a_65%,#061826_100%)]',
+      onClick: () => openAndClose('activities'),
+    },
   ]
 
   const helperEntries: MenuGridEntry[] = [

@@ -13,6 +13,7 @@ import {
 } from '@/lib/firebase/mmo-online'
 import { getOptionalClient } from '@/lib/supabase/client'
 import type { InvItem, SaveData } from './engine'
+import { getBotDef, isBotPlayerId } from './player-bots'
 
 export type SocialResult = { ok: boolean; message: string }
 export type TradeOfferSnapshot = {
@@ -41,6 +42,10 @@ async function resolveTargetId(target: string): Promise<string | null> {
 }
 
 export async function sendFriendRequest(targetUserId: string): Promise<SocialResult> {
+  if (isBotPlayerId(targetUserId)) {
+    const { triggerBotSocialReaction } = await import('./engine')
+    return triggerBotSocialReaction(targetUserId, 'friend')
+  }
   if (firebaseAuth.currentUser) {
     try {
       const res = await sendFriendRequestByGameUid(targetUserId)
@@ -83,6 +88,14 @@ export async function sendWhisper(
   senderName = 'ผู้กล้า',
   senderGameUid = '1000',
 ): Promise<SocialResult> {
+  const bot = getBotDef(targetUserId)
+  if (bot) {
+    const text = body.trim().slice(0, 240)
+    if (!text) return { ok: false, message: 'พิมพ์ข้อความก่อนส่ง' }
+    const { triggerBotWhisperReply } = await import('./engine')
+    void triggerBotWhisperReply(bot.userId, text)
+    return { ok: true, message: `ส่งกระซิบถึง ${bot.displayName} แล้ว` }
+  }
   if (firebaseAuth.currentUser) {
     const res = await sendWhisperFirestore({
       targetUidOrGameUid: targetUserId,
@@ -109,6 +122,10 @@ export async function createTrade(
   senderName?: string,
   senderGameUid?: string,
 ): Promise<SocialResult & { tradeId?: string | number }> {
+  if (isBotPlayerId(targetUserId)) {
+    const { triggerBotSocialReaction } = await import('./engine')
+    return triggerBotSocialReaction(targetUserId, 'trade')
+  }
   if (firebaseAuth.currentUser) {
     const res = await createTradeFirestore({
       targetUidOrGameUid: targetUserId,

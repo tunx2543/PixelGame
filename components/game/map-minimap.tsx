@@ -101,13 +101,26 @@ function getBaseMinimapCanvas(map: MapDef): HTMLCanvasElement {
 
   for (const obj of map.objects) {
     ctx.fillStyle =
-      obj.kind === 'campfire' || obj.kind === 'magma_brazier' || obj.kind === 'torch'
+      obj.kind === 'campfire' ||
+      obj.kind === 'magma_brazier' ||
+      obj.kind === 'torch' ||
+      obj.kind === 'lantern_float' ||
+      obj.kind === 'treasure_altar'
         ? '#ffb703'
-        : obj.kind === 'crystal_spire' || obj.kind === 'ice_spire'
+        : obj.kind === 'crystal_spire' ||
+            obj.kind === 'ice_spire' ||
+            obj.kind === 'obelisk' ||
+            obj.kind === 'sword_monument'
           ? '#72efdd'
-          : obj.kind === 'sakura_tree' || obj.kind === 'dream_shrine'
+          : obj.kind === 'sakura_tree' || obj.kind === 'dream_shrine' || obj.kind === 'lotus_lily'
             ? '#ff8fab'
-            : '#d9c79e'
+            : obj.kind === 'palm_tree'
+              ? '#52b788'
+              : obj.kind === 'war_standard' || obj.kind === 'war_drum'
+                ? '#f87171'
+                : obj.kind === 'wooden_boat' || obj.kind === 'shipwreck'
+                  ? '#c8956b'
+                  : '#d9c79e'
     ctx.fillRect(obj.tx * MINIMAP_SCALE, obj.ty * MINIMAP_SCALE, MINIMAP_SCALE, MINIMAP_SCALE)
   }
 
@@ -178,6 +191,38 @@ export function MapMinimap() {
       ctx.fillRect(nx - 2, ny - 2, 4, 4)
       ctx.fillStyle = '#f2c94c'
       ctx.fillRect(nx - 1, ny - 1, 2, 2)
+    }
+
+    // Activity Objective Markers (Guild War flags, Fishing spots, Treasure chest)
+    const actSess = game.activitySession
+    if (actSess && actSess.mapId === cur.id) {
+      if (actSess.activityId === 'guild_war') {
+        for (const f of actSess.flags) {
+          const fx = Math.round((f.tx + 0.5) * MINIMAP_SCALE)
+          const fy = Math.round((f.ty + 0.5) * MINIMAP_SCALE)
+          ctx.fillStyle = '#0e0f1a'
+          ctx.fillRect(fx - 2, fy - 2, 5, 5)
+          ctx.fillStyle = f.owner === 'player' ? '#38bdf8' : '#f59e0b'
+          ctx.fillRect(fx - 1, fy - 1, 3, 3)
+        }
+      } else if (actSess.activityId === 'fishing') {
+        for (const s of actSess.fishingSpots) {
+          if (!s.active) continue
+          const sx = Math.round((s.tx + 0.5) * MINIMAP_SCALE)
+          const sy = Math.round((s.ty + 0.5) * MINIMAP_SCALE)
+          ctx.fillStyle = '#0e0f1a'
+          ctx.fillRect(sx - 2, sy - 2, 5, 5)
+          ctx.fillStyle = '#38bdf8'
+          ctx.fillRect(sx - 1, sy - 1, 3, 3)
+        }
+      } else if (actSess.activityId === 'treasure' && actSess.digSpot?.revealed) {
+        const tx = Math.round((actSess.digSpot.tx + 0.5) * MINIMAP_SCALE)
+        const ty = Math.round((actSess.digSpot.ty + 0.5) * MINIMAP_SCALE)
+        ctx.fillStyle = '#0e0f1a'
+        ctx.fillRect(tx - 2, ty - 2, 5, 5)
+        ctx.fillStyle = '#facc15'
+        ctx.fillRect(tx - 1, ty - 1, 3, 3)
+      }
     }
 
     // Active Monsters

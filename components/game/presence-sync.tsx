@@ -58,6 +58,7 @@ import {
   saveGame,
   say,
   setGameAccountIdentity,
+  setNetworkOnlinePlayers,
   subscribe,
   type SaveData,
 } from '@/lib/game/engine'
@@ -239,10 +240,8 @@ export function PresenceSync() {
     }
 
     const syncRemoteLists = (players: RemotePlayerSnapshot[]) => {
-      game.onlinePlayers = players
-      game.remotePlayers = filterPlayersForMap(players, game.p?.mapId)
+      setNetworkOnlinePlayers(players)
       refreshPartySynergy()
-      notify()
     }
 
     const stopFbParty = () => {
@@ -349,11 +348,7 @@ export function PresenceSync() {
       } else {
         hasPublishedFbPresence = false
       }
-      if (game.onlinePlayers.length > 0 || game.remotePlayers.length > 0) {
-        game.onlinePlayers = []
-        game.remotePlayers = []
-        notify()
-      }
+      setNetworkOnlinePlayers([])
     }
 
     const ensureFbWorldSubscription = (user: User) => {
@@ -365,9 +360,7 @@ export function PresenceSync() {
           unsubFbPresence = null
         }
         fbRemotePlayers.clear()
-        game.onlinePlayers = []
-        game.remotePlayers = []
-        notify()
+        setNetworkOnlinePlayers([])
 
         subscribedFbUid = user.uid
         subscribedMapId = activeMapId
@@ -705,9 +698,8 @@ export function PresenceSync() {
 
       if (lastKnownLocalMapId !== player.mapId) {
         lastKnownLocalMapId = player.mapId
-        game.remotePlayers = filterPlayersForMap([...fbRemotePlayers.values()], player.mapId)
+        setNetworkOnlinePlayers([...fbRemotePlayers.values()])
         refreshPartySynergy()
-        notify()
       }
 
       if (readyProfileUid === user.uid) {
@@ -812,9 +804,7 @@ export function PresenceSync() {
       const cutoff = Date.now() - 15_000
       for (const [userId, player] of remotePlayers) if (player.lastSeen < cutoff) remotePlayers.delete(userId)
       const all = [...remotePlayers.values()]
-      game.onlinePlayers = all
-      game.remotePlayers = all.filter((other) => !other.invisible && other.mapId === game.p?.mapId)
-      notify()
+      setNetworkOnlinePlayers(all)
     }
 
     const receiveSnapshot = (value: unknown) => {
@@ -849,8 +839,7 @@ export function PresenceSync() {
       if (channel && supabase) void supabase.removeChannel(channel)
       channel = null
       remotePlayers.clear()
-      game.onlinePlayers = []
-      game.remotePlayers = []
+      setNetworkOnlinePlayers([])
     }
 
     const startChannel = (userId: string) => {

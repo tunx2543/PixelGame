@@ -98,6 +98,34 @@ import {
   type WorldBossWarningState,
 } from './world-boss-fx'
 import {
+  botsToRemotePlayers,
+  buildBotInspectProfile,
+  createInitialBotStates,
+  getBotDef,
+  isBotPlayerId,
+  setBotSpeechBubble,
+  stepPlayerBots,
+  type BotEntityState,
+} from './player-bots'
+import {
+  BOSS_RUSH_STAGES,
+  FISHING_DERBY_SPOTS,
+  GUILD_WAR_FLAG_SPOTS,
+  INVASION_WAVES,
+  computeActivityRewards,
+  getActivityByMapId,
+  getActivityDef,
+  getActivityScheduleStatus,
+  getBountyTargetById,
+  isActivityMapId,
+  pickTreasureDigSpot,
+  recordActivityClearInState,
+  rollActivityWeaponChest,
+  rollFishingDerbyCatch,
+  type ActivityId,
+  type ActivityWeaponBoxId,
+} from './activities'
+import {
   applyLevelAndRewards,
   COMBAT_PETS,
   QUEST_DEFS,
@@ -690,6 +718,7 @@ export interface RemotePlayer {
   previousX?: number
   previousY?: number
   receivedAt?: number
+  bubble?: { text: string; until: number } | null
 }
 
 export interface Monster {
@@ -815,10 +844,52 @@ export type PanelId =
   | 'treasure-chest'
   | 'redeem'
   | 'events'
+  | 'activities'
   | 'wing-gacha'
+
+export interface ActivityFlagNodeState {
+  id: string
+  label: string
+  tx: number
+  ty: number
+  owner: 'neutral' | 'player'
+  progress: number
+}
+
+export interface ActivityFishingSpotState {
+  id: string
+  label: string
+  tx: number
+  ty: number
+  active: boolean
+}
+
+export interface ActivitySessionRuntime {
+  activityId: ActivityId
+  mapId: string
+  returnLocation: { mapId: string; tx: number; ty: number }
+  phase: 'active' | 'victory' | 'failed'
+  elapsedSec: number
+  remainingSec: number
+  wave: number
+  maxWaves: number
+  stage: number
+  maxStages: number
+  score: number
+  targetScore: number
+  bountyId: string
+  bountyName: string
+  flags: ActivityFlagNodeState[]
+  digSpot: { tx: number; ty: number; hintArea: string; revealed: boolean; guardianDefeated: boolean } | null
+  fishingSpots: ActivityFishingSpotState[]
+  lastCatchText: string | null
+  rewardsClaimed: boolean
+  summaryText: string | null
+}
 export type ChatType = 'system' | 'player' | 'gm' | 'loot' | 'error' | 'npc'
 export interface ChatMsg {
   id: number
+  createdAtMs?: number
   type: ChatType
   text: string
   author?: string
@@ -940,6 +1011,7 @@ export const game = {
   ultimateCharge: 0,
   offlineAfkReward: null as OfflineAfkSummary | null,
   invasion: null as null | { active: boolean; wave: number; maxWaves: number; rewardDiamonds: number },
+  activitySession: null as ActivitySessionRuntime | null,
   topupBadge: { approvedUnclaimed: 0, gmPending: 0 },
   pendingNameChangeUid: null as string | null,
   lastItemFeedback: null as null | { ok: boolean; message: string; at: number },
@@ -1780,8 +1852,16 @@ export function say(
   author?: string,
   meta?: { channel?: Exclude<ChatChannel, 'all'>; senderUid?: string; senderGameUid?: string },
 ) {
-  game.chat.push({ id: ++chatId, type, text, author, ...meta })
-  if (game.chat.length > 180) game.chat.splice(0, game.chat.length - 180)
+  const nextMsg: ChatMsg = {
+    id: ++chatId,
+    createdAtMs: Date.now(),
+    type,
+    text,
+    author,
+    ...meta,
+  }
+  game.chat = [...game.chat, nextMsg].slice(-180)
+  notify()
 }
 
 function addFloat(
@@ -2025,6 +2105,16 @@ export function getItemCooldownDuration(itemId: string): number {
   const def = ITEMS[itemId]
   if (!def || def.kind !== 'consumable') return 0
   if (itemId === 'return_scroll' || itemId === 'town_warp_tome') return 4
+  if (itemId === 'act_weapon_box_rare' || itemId === 'act_weapon_box_legend' || itemId === 'act_item_pirate_compass') return 0.5
+  if (
+    itemId === 'act_item_bastion_ration' ||
+    itemId === 'act_item_colosseum_elixir' ||
+    itemId === 'act_item_war_horn' ||
+    itemId === 'act_item_bounty_seal' ||
+    itemId === 'act_item_golden_bait'
+  ) {
+    return 2
+  }
   if (getFoodBuffForItem(itemId)) return 3
   if (itemId === 'starlight_loot_magnet') return 3
   if (def.heal || def.mana) return 1.5
@@ -2376,6 +2466,142 @@ export function consumeItem(id: string): boolean {
     return succeedConsume(`★ เปิดหีบมหาสมบัติกิจกรรมได้รับ: ${notes.join(' · ')}`, 'loot')
   }
 
+  if (def.id === 'act_weapon_box_rare' || def.id === 'act_weapon_box_legend') {
+    const projectedUsed = it.qty <= 1 ? p.inventory.length - 1 : p.inventory.length
+    if (projectedUsed >= getInventoryCapacity(p)) {
+      return failConsume('กระเป๋าเต็ม กรุณาเคลียร์ช่องว่างอย่างน้อย 1 ช่องก่อนเปิดกล่องสุ่มอาวุธ')
+    }
+    const rolled = rollActivityWeaponChest(def.id as ActivityWeaponBoxId, p.level, p.jobId)
+    const rolledDef = ITEMS[rolled.itemId]
+    const rolledAffixes = rollEquipmentAffixes(rolledDef?.tier ?? 1, rolled.rarity)
+    removeUid(p.inventory, id, 1)
+    const added = addItem(rolled.itemId, 1, rolled.plus, undefined, undefined, {
+      rarity: rolled.rarity,
+      affixes: rolledAffixes,
+    })
+    if (!added) {
+      return failConsume('ไม่สามารถเพิ่มอาวุธเข้ากระเป๋าได้ กรุณาตรวจสอบช่องว่าง')
+    }
+    if (cdDur > 0) game.itemCd[def.id] = cdDur
+    const rMeta = EQUIPMENT_RARITY_META[rolled.rarity]
+    addFloat(p.x, p.y - 34, `${rolled.name} +${rolled.plus}!`, rMeta.hexColor, 11)
+    return succeedConsume(
+      `★ เปิด ${def.name} ได้รับ "${rolled.name} +${rolled.plus}" [${rMeta.thaiLabel}] พร้อมออฟชันสุ่ม!`,
+      'loot',
+    )
+  }
+
+  if (def.id === 'act_item_bastion_ration' || def.id === 'act_item_colosseum_elixir') {
+    const s = getStats()
+    const extV2 = sanitizeExtV2(p.extV2)
+    const isElixir = def.id === 'act_item_colosseum_elixir'
+    extV2.activeFoodBuff = {
+      itemId: def.id,
+      name: def.name,
+      expiresAtMs: Date.now() + 15 * 60 * 1000,
+      atkPct: isElixir ? 28 : 15,
+      defPct: isElixir ? 22 : 25,
+      critBonus: isElixir ? 0.14 : 0.06,
+      expMul: isElixir ? 1.45 : 1.2,
+    }
+    p.extV2 = extV2
+    const healNotes: string[] = []
+    if (def.heal && p.hp < s.maxHp) {
+      const gained = Math.min(def.heal, s.maxHp - p.hp)
+      p.hp = Math.min(s.maxHp, p.hp + def.heal)
+      addFloat(p.x, p.y - 22, `+${gained} HP`, '#7ae582')
+      healNotes.push(`+${gained} HP`)
+    }
+    if (def.mana && p.mp < s.maxMp) {
+      const gainedMp = Math.min(def.mana, s.maxMp - p.mp)
+      p.mp = Math.min(s.maxMp, p.mp + def.mana)
+      addFloat(p.x, p.y - 18, `+${gainedMp} MP`, '#4cc9f0')
+      healNotes.push(`+${gainedMp} MP`)
+    }
+    removeUid(p.inventory, id, 1)
+    if (cdDur > 0) game.itemCd[def.id] = cdDur
+    addFloat(p.x, p.y - 30, isElixir ? 'ATK+28% · CRIT+14%!' : 'DEF+25% · ATK+15%!', def.color, 10)
+    const healSuffix = healNotes.length > 0 ? ` · ${healNotes.join(' ')}` : ''
+    return succeedConsume(
+      `★ ใช้ ${def.name} (ATK +${extV2.activeFoodBuff.atkPct}% · DEF +${extV2.activeFoodBuff.defPct}% นาน 15 นาที${healSuffix})`,
+      'loot',
+    )
+  }
+
+  if (def.id === 'act_item_war_horn' || def.id === 'act_item_bounty_seal' || def.id === 'act_item_golden_bait') {
+    const s = getStats()
+    const extV2 = sanitizeExtV2(p.extV2)
+    const now = Date.now()
+    const restoreNotes: string[] = []
+    if (def.heal && p.hp < s.maxHp) {
+      const gained = Math.min(def.heal, s.maxHp - p.hp)
+      p.hp = Math.min(s.maxHp, p.hp + def.heal)
+      addFloat(p.x, p.y - 22, `+${gained} HP`, '#7ae582')
+      restoreNotes.push(`+${gained} HP`)
+    }
+    if (def.mana && p.mp < s.maxMp) {
+      const gainedMp = Math.min(def.mana, s.maxMp - p.mp)
+      p.mp = Math.min(s.maxMp, p.mp + def.mana)
+      addFloat(p.x, p.y - 18, `+${gainedMp} MP`, '#4cc9f0')
+      restoreNotes.push(`+${gainedMp} MP`)
+    }
+
+    const boostEntries: ActiveBoostBuff[] =
+      def.id === 'act_item_war_horn'
+        ? [
+            { id: 'act_war_horn_stat', kind: 'stat', label: 'ปลุกขวัญกิลด์ +12% Stat', shortTag: 'WAR+', value: 12, expiresAtMs: now + 20 * 60 * 1000, color: '#60a5fa' },
+            { id: 'act_war_horn_spd', kind: 'speed', label: 'เคลื่อนที่กิลด์ +20% SPD', shortTag: 'SPD+', value: 20, expiresAtMs: now + 20 * 60 * 1000, color: '#38bdf8' },
+            { id: 'act_war_horn_jp', kind: 'jp', label: 'เกียรติยศกิลด์ +60% JP', shortTag: 'JP+60', value: 60, expiresAtMs: now + 20 * 60 * 1000, color: '#fb923c' },
+          ]
+        : def.id === 'act_item_bounty_seal'
+          ? [
+              { id: 'act_bounty_seal_exp', kind: 'exp', label: 'ตรานายพราน +75% EXP', shortTag: 'EXP+75', value: 75, expiresAtMs: now + 20 * 60 * 1000, color: '#f59e0b' },
+              { id: 'act_bounty_seal_stat', kind: 'stat', label: 'สมาธินักล่า +10% Stat', shortTag: 'HUNT+', value: 10, expiresAtMs: now + 20 * 60 * 1000, color: '#fbbf24' },
+            ]
+          : [
+              { id: 'act_golden_bait_life', kind: 'lifeskill', label: 'เหยื่อเทพวารี +100% ทักษะ', shortTag: 'LIFE×2', value: 100, expiresAtMs: now + 25 * 60 * 1000, color: '#38bdf8' },
+              { id: 'act_golden_bait_spd', kind: 'speed', label: 'สายน้ำคล่องตัว +20% SPD', shortTag: 'SPD+', value: 20, expiresAtMs: now + 25 * 60 * 1000, color: '#22d3ee' },
+            ]
+
+    const replaceIds = new Set(boostEntries.map((b) => b.id))
+    extV2.activeBoosts = [
+      ...extV2.activeBoosts.filter((b) => !replaceIds.has(b.id) && b.expiresAtMs > now),
+      ...boostEntries,
+    ]
+    p.extV2 = extV2
+    removeUid(p.inventory, id, 1)
+    clampVitals()
+    if (cdDur > 0) game.itemCd[def.id] = cdDur
+    addFloat(p.x, p.y - 30, boostEntries[0].label, def.color, 10)
+    const suffix = restoreNotes.length > 0 ? ` (${restoreNotes.join(' · ')})` : ''
+    return succeedConsume(`★ เปิดใช้ ${def.name} สำเร็จ!${suffix}`, 'loot')
+  }
+
+  if (def.id === 'act_item_pirate_compass') {
+    removeUid(p.inventory, id, 1)
+    const goldGain = randInt(3000, 7500)
+    const diamondGain = randInt(6, 16)
+    const stoneQty = randInt(4, 8)
+    p.gold += goldGain
+    commitDiamondDelta(p, diamondGain, {
+      source: 'act_item_pirate_compass',
+      note: 'เปิดเข็มทิศขุมทรัพย์โจรสลัด',
+    })
+    const notes = [`+${goldGain.toLocaleString()} G`, `+${diamondGain} เพชร`]
+    if (addItem('enhance_stone', stoneQty)) {
+      notes.push(`หินตีบวก x${stoneQty}`)
+    }
+    if (Math.random() < 0.35 && addItem('pet_essence', 2)) {
+      notes.push('ผลึกวิญญาณคู่หู x2')
+    } else {
+      p.gold += 1500
+      notes.push('+1,500 G โบนัส')
+    }
+    if (cdDur > 0) game.itemCd[def.id] = cdDur
+    addFloat(p.x, p.y - 32, `+${diamondGain} เพชร · +${goldGain.toLocaleString()} G!`, '#facc15', 11)
+    return succeedConsume(`★ ใช้เข็มทิศขุมทรัพย์โจรสลัด ขุดพบ: ${notes.join(' · ')}`, 'loot')
+  }
+
   const foodDef = getFoodBuffForItem(def.id)
   if (foodDef) {
     const s = getStats()
@@ -2676,6 +2902,10 @@ function populateMap() {
   const map = currentMap()
   preloadMapCatalogSprites(map.id)
   game.monsters = []
+  if (isActivityMapId(map.id)) {
+    initializeActivityMapRuntime(map.id)
+    return
+  }
   if (map.id === 'world') {
     const wbSpec = getActiveWorldBoss()
     if (wbSpec.isActive) {
@@ -2726,8 +2956,9 @@ export function changeMap(rawMapId: string, tx: number, ty: number) {
   game.panel = null
   game.blockingUi = false
   windowBridge?.closeAll()
-  game.remotePlayers = game.onlinePlayers.filter((other) => !other.invisible && other.mapId === mapId)
+  syncCombinedOnlinePlayers(Date.now(), false)
   if (mapId !== 'town') game.invasion = null
+  if (!isActivityMapId(mapId)) game.activitySession = null
   populateMap()
   syncBgmForMap(mapId, game.monsters.some((m) => !m.dead && Boolean(MONSTERS[m.defId]?.boss)))
   say('system', `เข้าสู่ ${map.name} (${map.levelLabel})`)
@@ -3449,7 +3680,10 @@ function killMonster(m: Monster) {
   m.dead = true
   m.dyingT = 0.55
   m.hp = 0
-  m.respawnAt = m.isWorldBoss || (game.invasion?.active && p.mapId === 'town') ? Infinity : game.time + (def.boss ? 90 : 10)
+  m.respawnAt =
+    m.isWorldBoss || (game.invasion?.active && p.mapId === 'town') || isActivityMapId(p.mapId)
+      ? Infinity
+      : game.time + (def.boss ? 90 : 10)
   p.kills++
   p.questState = recordQuestProgress(p.questState, { kills: 1, bossKills: def.boss || m.isWorldBoss ? 1 : 0 }, p.kills)
   p.rpgExt = recordBestiaryKillInState(p.rpgExt, m.defId, p)
@@ -3615,6 +3849,7 @@ function killMonster(m: Monster) {
       exp: expGain,
     })
   }
+  onActivityMonsterKilled(m)
 }
 
 export function gainExp(n: number) {
@@ -4114,6 +4349,9 @@ export function interact() {
   if (node) {
     const res = gatherNearbyNodeAction(node.id)
     if (!res.ok) warn(res.message)
+    return true
+  }
+  if (interactActivityObjective()) {
     return true
   }
   return false
@@ -6412,6 +6650,559 @@ export function startTownInvasionAction(): { ok: boolean; message: string } {
   return { ok: true, message: 'เริ่มภารกิจป้องกันเมือง Wave 1/3 แล้ว!' }
 }
 
+/* ---------------- Dedicated Non-Festival Activity Runtime ---------------- */
+
+let pendingActivityEntry: {
+  activityId: ActivityId
+  bountyId?: string
+  returnLocation: { mapId: string; tx: number; ty: number }
+} | null = null
+
+function spawnActivityMonstersAt(
+  spawns: Array<{ monsterId: string; count: number }>,
+  centerTx = 26,
+  centerTy = 14,
+  spreadTiles = 6,
+) {
+  const map = currentMap()
+  for (const s of spawns) {
+    for (let i = 0; i < s.count; i++) {
+      let placed: { x: number; y: number } | null = null
+      for (let attempt = 0; attempt < 24; attempt++) {
+        const angle = ((i + attempt * 0.7) / Math.max(1, s.count)) * Math.PI * 2
+        const dist = 1.5 + (attempt % 4) * (spreadTiles / 4)
+        const tx = Math.max(4, Math.min(map.width - 5, Math.round(centerTx + Math.cos(angle) * dist)))
+        const ty = Math.max(4, Math.min(map.height - 5, Math.round(centerTy + Math.sin(angle) * dist)))
+        const wx = (tx + 0.5) * TILE
+        const wy = (ty + 0.5) * TILE
+        if (!boxBlocked(map, wx, wy)) {
+          placed = { x: wx, y: wy }
+          break
+        }
+      }
+      const pt = placed ?? randomSpawnPoint(map)
+      const m = makeMonster(s.monsterId, pt.x, pt.y)
+      m.respawnAt = Infinity
+      m.provoked = true
+      game.monsters.push(m)
+    }
+  }
+}
+
+function initializeActivityMapRuntime(mapId: string) {
+  const actDef = getActivityByMapId(mapId)
+  if (!actDef || !game.p) {
+    game.activitySession = null
+    return
+  }
+  const p = game.p
+  const extV2 = sanitizeExtV2(p.extV2)
+  const actState = extV2.activities
+  const pending = pendingActivityEntry && pendingActivityEntry.activityId === actDef.id ? pendingActivityEntry : null
+  pendingActivityEntry = null
+
+  const returnLocation =
+    pending?.returnLocation ??
+    (game.activitySession && !isActivityMapId(game.activitySession.returnLocation.mapId)
+      ? game.activitySession.returnLocation
+      : { mapId: 'town', tx: MAPS.town.spawn.x, ty: MAPS.town.spawn.y })
+
+  const chosenBountyId = pending?.bountyId ?? actState?.selectedBountyId
+  const bounty = getBountyTargetById(chosenBountyId)
+
+  const session: ActivitySessionRuntime = {
+    activityId: actDef.id,
+    mapId,
+    returnLocation,
+    phase: 'active',
+    elapsedSec: 0,
+    remainingSec: actDef.durationSec,
+    wave: 1,
+    maxWaves: actDef.id === 'invasion' ? INVASION_WAVES.length : 1,
+    stage: 1,
+    maxStages: actDef.id === 'boss_rush' ? BOSS_RUSH_STAGES.length : 1,
+    score: 0,
+    targetScore: actDef.id === 'guild_war' ? 100 : actDef.id === 'fishing' ? 120 : 1,
+    bountyId: bounty.id,
+    bountyName: bounty.name,
+    flags: [],
+    digSpot: null,
+    fishingSpots: [],
+    lastCatchText: null,
+    rewardsClaimed: false,
+    summaryText: null,
+  }
+
+  game.monsters = []
+
+  if (actDef.id === 'invasion') {
+    const waveDef = INVASION_WAVES[0]
+    spawnActivityMonstersAt(waveDef.spawns, 26, 13, 8)
+    say('gm', `★ [กิจกรรม] ${actDef.name} เริ่มต้นแล้ว — Wave 1/${INVASION_WAVES.length}: ${waveDef.title}!`)
+  } else if (actDef.id === 'guild_war') {
+    session.flags = GUILD_WAR_FLAG_SPOTS.map((f) => ({
+      id: f.id,
+      label: f.label,
+      tx: f.tx,
+      ty: f.ty,
+      owner: 'neutral',
+      progress: 0,
+    }))
+    // Spawn fortress defenders near West, Center, and East flags
+    spawnActivityMonstersAt([{ monsterId: 'forest_tusk_warrior', count: 2 }], 13, 18, 4)
+    spawnActivityMonstersAt([{ monsterId: 'forest_tusk_champion', count: 1 }], 26, 15, 3)
+    spawnActivityMonstersAt([{ monsterId: 'coast_drowned_captain', count: 1 }], 39, 18, 4)
+    say('system', '★ สงครามกิลด์เริ่มแล้ว! เดินไปที่เสาธงแล้วกด [E] เพื่อยึดธง หรือปราบผู้พิทักษ์ (+15 แต้ม/ตัว)')
+  } else if (actDef.id === 'bounty') {
+    spawnActivityMonstersAt([{ monsterId: bounty.bossId, count: 1 }], 26, 15, 2)
+    if (bounty.escorts.length > 0) {
+      spawnActivityMonstersAt(bounty.escorts, 26, 16, 6)
+    }
+    say('system', `★ ล่าค่าหัว: ${bounty.name} ปรากฏตัวกลางหุบเขาแล้ว!`)
+  } else if (actDef.id === 'treasure') {
+    const spot = pickTreasureDigSpot()
+    session.digSpot = {
+      tx: spot.tx,
+      ty: spot.ty,
+      hintArea: spot.hintArea,
+      revealed: false,
+      guardianDefeated: false,
+    }
+    say('system', `★ เกาะลายแทงขุมทรัพย์: ใช้เข็มทิศด้านบนค้นหาจุดซ่อนสมบัติแล้วกด [E] เพื่อขุด!`)
+  } else if (actDef.id === 'boss_rush') {
+    const st = BOSS_RUSH_STAGES[0]
+    spawnActivityMonstersAt([{ monsterId: st.bossId, count: 1 }], 26, 15, 2)
+    say('gm', `★ สังเวียนบอสรัช: ${st.title} ออกศึกแล้ว!`)
+  } else if (actDef.id === 'fishing') {
+    session.fishingSpots = FISHING_DERBY_SPOTS.map((s, idx) => ({
+      id: s.id,
+      label: s.label,
+      tx: s.tx,
+      ty: s.ty,
+      active: idx % 2 === 0 || idx === 1,
+    }))
+    say('system', '★ บึงแข่งขันตกปลายักษ์: เดินไปที่วงคลื่นน้ำเรืองแสงบนสะพานไม้แล้วกด [E] ตกปลาให้ครบ 120 แต้ม!')
+  }
+
+  game.activitySession = session
+}
+
+export function setSelectedActivityBountyAction(bountyId: string): { ok: boolean; message: string } {
+  const p = game.p
+  if (!p) return { ok: false, message: 'ยังไม่ได้เข้าสู่ระบบตัวละคร' }
+  const target = getBountyTargetById(bountyId)
+  const extV2 = sanitizeExtV2(p.extV2)
+  extV2.activities = {
+    ...(extV2.activities ?? sanitizeExtV2(undefined).activities!),
+    selectedBountyId: target.id,
+  }
+  p.extV2 = extV2
+  saveGame()
+  notify()
+  return { ok: true, message: `เลือกเป้าหมายค่าหัว: ${target.name}` }
+}
+
+export function enterActivityAction(
+  activityId: ActivityId,
+  options?: { bountyId?: string },
+): { ok: boolean; message: string } {
+  const p = game.p
+  if (!p) return { ok: false, message: 'กรุณาเข้าสู่เกมก่อนเข้าร่วมกิจกรรม' }
+  const def = getActivityDef(activityId)
+  const targetMap = MAPS[def.mapId]
+  if (!targetMap) return { ok: false, message: 'ไม่พบแผนที่กิจกรรมนี้' }
+
+  if (options?.bountyId) {
+    const bounty = getBountyTargetById(options.bountyId)
+    const extV2 = sanitizeExtV2(p.extV2)
+    extV2.activities = {
+      ...(extV2.activities ?? sanitizeExtV2(undefined).activities!),
+      selectedBountyId: bounty.id,
+    }
+    p.extV2 = extV2
+  }
+
+  const returnLocation = !isActivityMapId(p.mapId)
+    ? { mapId: p.mapId, tx: Math.floor(p.x / TILE), ty: Math.floor(p.y / TILE) }
+    : game.activitySession?.returnLocation ?? { mapId: 'town', tx: MAPS.town.spawn.x, ty: MAPS.town.spawn.y }
+
+  pendingActivityEntry = {
+    activityId,
+    bountyId: options?.bountyId,
+    returnLocation,
+  }
+
+  game.keys.clear()
+  game.attackHeld = false
+  game.moveTarget = null
+  changeMap(targetMap.id, targetMap.spawn.x, targetMap.spawn.y)
+  return { ok: true, message: `วาร์ปเข้าสู่ ${def.name} เรียบร้อยแล้ว` }
+}
+
+export function exitActivityAction(): { ok: boolean; message: string } {
+  const p = game.p
+  if (!p) return { ok: false, message: 'ไม่พบตัวละคร' }
+  const ret = game.activitySession?.returnLocation
+  const candidateMap = ret && !isActivityMapId(ret.mapId) && MAPS[ret.mapId] ? MAPS[ret.mapId] : MAPS.town
+  const safeTile = (() => {
+    if (ret && candidateMap.id === ret.mapId) {
+      const found = findWalkableTileNear(candidateMap, (ret.tx + 0.5) * TILE, (ret.ty + 0.5) * TILE)
+      return { x: found.tx, y: found.ty }
+    }
+    return candidateMap.spawn
+  })()
+  game.keys.clear()
+  game.attackHeld = false
+  game.moveTarget = null
+  game.activitySession = null
+  changeMap(candidateMap.id, safeTile.x, safeTile.y)
+  return { ok: true, message: `วาร์ปออกจากกิจกรรมกลับสู่ ${candidateMap.name}` }
+}
+
+export function restartCurrentActivityAction(): { ok: boolean; message: string } {
+  const p = game.p
+  if (!p) return { ok: false, message: 'ไม่พบตัวละคร' }
+  const actDef = getActivityByMapId(p.mapId)
+  if (!actDef) return { ok: false, message: 'คุณไม่ได้อยู่ในแผนที่กิจกรรม' }
+  const map = MAPS[actDef.mapId]
+  const stats = getStats(p)
+  p.hp = stats.maxHp
+  p.mp = stats.maxMp
+  p.x = (map.spawn.x + 0.5) * TILE
+  p.y = (map.spawn.y + 0.5) * TILE
+  syncPetFollowToPlayer(true)
+  pendingActivityEntry = {
+    activityId: actDef.id,
+    bountyId: game.activitySession?.bountyId,
+    returnLocation: game.activitySession?.returnLocation ?? {
+      mapId: 'town',
+      tx: MAPS.town.spawn.x,
+      ty: MAPS.town.spawn.y,
+    },
+  }
+  initializeActivityMapRuntime(map.id)
+  notify()
+  return { ok: true, message: `เริ่มรอบใหม่ใน ${actDef.name} แล้ว!` }
+}
+
+function completeActivityVictory(session: ActivitySessionRuntime) {
+  if (session.rewardsClaimed || !game.p) return
+  const p = game.p
+  session.phase = 'victory'
+  session.rewardsClaimed = true
+  game.monsters = []
+
+  const extV2 = sanitizeExtV2(p.extV2)
+  const actProgBefore = extV2.activities ?? sanitizeExtV2(undefined).activities!
+  const dailyClearsBefore = actProgBefore.dailyClears[session.activityId] ?? 0
+  const schedule = getActivityScheduleStatus(session.activityId, Date.now())
+  const rewards = computeActivityRewards(session.activityId, p.level, dailyClearsBefore, {
+    bountyId: session.bountyId,
+    isPeakBonus: schedule.isPeakBonus,
+  })
+
+  p.gold += rewards.gold
+  if (rewards.diamonds > 0) {
+    commitDiamondDelta(p, rewards.diamonds, {
+      source: `activity_${session.activityId}`,
+      note: `รางวัลกิจกรรม ${getActivityDef(session.activityId).name}`,
+    })
+  }
+  if (rewards.stones > 0) addItem('enhance_stone', rewards.stones)
+  if (rewards.tokens > 0) addItem('event_token', rewards.tokens)
+  for (const extra of rewards.items) {
+    addItem(extra.itemId, extra.qty)
+  }
+
+  const recordRes = recordActivityClearInState(actProgBefore, session.activityId, {
+    clearTimeSec: session.elapsedSec,
+    score: session.score,
+    guildPoints: session.activityId === 'guild_war' ? Math.max(100, Math.round(session.score)) : 0,
+  })
+  extV2.activities = recordRes.next
+  if (session.activityId === 'invasion') {
+    extV2.invasionWavesCleared += 1
+  }
+  extV2.battlePass = grantBattlePassExpToState(extV2.battlePass, 45).next
+  p.extV2 = extV2
+  gainExp(rewards.exp)
+
+  const extraNames = rewards.items.map((it) => `${ITEMS[it.itemId]?.name ?? it.itemId} x${it.qty}`)
+  const summaryParts = [
+    `+${rewards.gold.toLocaleString()} G`,
+    `+${rewards.diamonds} เพชร`,
+    `+${rewards.exp.toLocaleString()} EXP`,
+    `+${rewards.stones} หินตีบวก`,
+    `+${rewards.tokens} โทเคนกิจกรรม`,
+    ...extraNames,
+  ]
+  session.summaryText = summaryParts.join(' · ')
+  const recordNote = recordRes.newRecord ? ' (ทำลายสถิติใหม่!)' : ''
+  const capNote = rewards.dailyReduced ? ' [เกินโควต้าประจำวัน รับรางวัลพื้นฐาน 30%]' : ''
+  const def = getActivityDef(session.activityId)
+
+  addEffect({ type: 'levelup', x: p.x, y: p.y, r: 34, color: def.accentColor, max: 1.5 })
+  addFloat(p.x, p.y - 36, `CLEAR! +${rewards.diamonds} 💎`, '#facc15', 13)
+  say('loot', `★ เคลียร์กิจกรรม "${def.name}" สำเร็จ!${recordNote} รับ ${session.summaryText}${capNote}`)
+  saveGame()
+  notify()
+}
+
+export function getNearbyActivityPrompt(): {
+  label: string
+  actionKind: 'flag' | 'dig' | 'fish'
+} | null {
+  const p = game.p
+  const session = game.activitySession
+  if (!p || !session || session.mapId !== p.mapId || session.phase !== 'active') return null
+
+  if (session.activityId === 'guild_war') {
+    for (const flag of session.flags) {
+      if (flag.owner === 'player') continue
+      const d = Math.hypot((flag.tx + 0.5) * TILE - p.x, (flag.ty + 0.5) * TILE - p.y)
+      if (d <= 44) {
+        return { label: `ยึด${flag.label} (${Math.round(flag.progress)}%)`, actionKind: 'flag' }
+      }
+    }
+  } else if (session.activityId === 'treasure' && session.digSpot && !session.digSpot.revealed) {
+    const d = Math.hypot((session.digSpot.tx + 0.5) * TILE - p.x, (session.digSpot.ty + 0.5) * TILE - p.y)
+    if (d <= 48) {
+      return { label: 'ขุดจุดซ่อนสมบัติ!', actionKind: 'dig' }
+    }
+  } else if (session.activityId === 'fishing') {
+    for (const spot of session.fishingSpots) {
+      if (!spot.active) continue
+      const d = Math.hypot((spot.tx + 0.5) * TILE - p.x, (spot.ty + 0.5) * TILE - p.y)
+      if (d <= 44) {
+        return { label: 'เหวี่ยงเบ็ดตกปลา', actionKind: 'fish' }
+      }
+    }
+  }
+  return null
+}
+
+export function interactActivityObjective(): boolean {
+  const p = game.p
+  const session = game.activitySession
+  if (!p || !session || session.mapId !== p.mapId || session.phase !== 'active') return false
+
+  if (session.activityId === 'guild_war') {
+    for (const flag of session.flags) {
+      if (flag.owner === 'player') continue
+      const fx = (flag.tx + 0.5) * TILE
+      const fy = (flag.ty + 0.5) * TILE
+      if (Math.hypot(fx - p.x, fy - p.y) <= 44) {
+        flag.progress = Math.min(100, flag.progress + 55)
+        addEffect({ type: 'ring', x: fx, y: fy, r: 22, color: '#60a5fa', max: 0.45 })
+        if (flag.progress >= 100) {
+          flag.owner = 'player'
+          session.score = Math.min(session.targetScore, session.score + 20)
+          addFloat(fx, fy - 24, `ยึด${flag.label}! +20`, '#60a5fa', 11)
+          say('loot', `★ ยึด ${flag.label} สำเร็จ (+20 แต้มสงครามกิลด์)!`)
+          if (session.score >= session.targetScore) {
+            completeActivityVictory(session)
+          }
+        } else {
+          addFloat(fx, fy - 20, `กำลังยึดธง ${Math.round(flag.progress)}%`, '#93c5fd', 9.5)
+        }
+        notify()
+        return true
+      }
+    }
+    return false
+  }
+
+  if (session.activityId === 'treasure' && session.digSpot) {
+    const spot = session.digSpot
+    const sx = (spot.tx + 0.5) * TILE
+    const sy = (spot.ty + 0.5) * TILE
+    if (spot.revealed) return false
+    if (Math.hypot(sx - p.x, sy - p.y) <= 48) {
+      spot.revealed = true
+      const guardianId = p.level >= 35 ? 'coast_shellguard_warlord' : p.level >= 18 ? 'forest_tusk_champion' : 'vale_tiger'
+      spawnActivityMonstersAt([{ monsterId: guardianId, count: 1 }], spot.tx, spot.ty, 2)
+      addEffect({ type: 'burst', x: sx, y: sy, r: 26, color: '#facc15', max: 0.55 })
+      addFloat(sx, sy - 24, 'พบหีบสมบัติ! ปราบผู้พิทักษ์!', '#facc15', 11)
+      say('gm', '★ ขุดพบจุดซ่อนสมบัติโบราณ! ผู้พิทักษ์ขุมทรัพย์ปรากฏตัว — ปราบเพื่อเปิดหีบ!')
+      notify()
+      return true
+    } else {
+      say('system', 'ยังอยู่ห่างจากจุดซ่อนสมบัติ — เดินตามคำใบ้เข็มทิศด้านบนแล้วกด [E]')
+      return true
+    }
+  }
+
+  if (session.activityId === 'fishing') {
+    if (game.gatherCd > 0) {
+      addFloat(p.x, p.y - 24, `รอสักครู่ (${game.gatherCd.toFixed(1)}s)`, '#94a3b8', 8.5)
+      return true
+    }
+    const activeSpots = session.fishingSpots.filter((s) => s.active)
+    const hit = activeSpots.find((s) => Math.hypot((s.tx + 0.5) * TILE - p.x, (s.ty + 0.5) * TILE - p.y) <= 44)
+    if (!hit) {
+      say('system', 'เดินไปที่วงคลื่นน้ำเรืองแสงบนสะพานไม้แล้วกด [E] เพื่อเหวี่ยงเบ็ด!')
+      return true
+    }
+
+    const extV2 = sanitizeExtV2(p.extV2)
+    const fishSkill = extV2.lifeSkills.fishing
+    const catchRes = rollFishingDerbyCatch(fishSkill.level)
+    addItem(catchRes.itemId, catchRes.qty)
+    if (catchRes.bonusStone) addItem('enhance_stone', 1)
+    const bonusAdded = catchRes.bonusItemId ? addItem(catchRes.bonusItemId, 1) : false
+
+    fishSkill.exp += catchRes.fishingExp
+    while (fishSkill.level < 50 && fishSkill.exp >= lifeSkillExpToNext(fishSkill.level)) {
+      fishSkill.exp -= lifeSkillExpToNext(fishSkill.level)
+      fishSkill.level += 1
+    }
+    extV2.gatherCount += 1
+    p.extV2 = extV2
+
+    game.gatherCd = 1.25
+    session.score += catchRes.points
+    session.lastCatchText = `${catchRes.label} (+${catchRes.points} แต้ม)`
+    // Rotate ripple to an inactive pier spot for dynamic movement
+    hit.active = false
+    const inactive = session.fishingSpots.filter((s) => !s.active && s.id !== hit.id)
+    if (inactive.length > 0) {
+      const nextSpot = inactive[Math.floor(Math.random() * inactive.length)]
+      if (nextSpot) nextSpot.active = true
+    } else {
+      hit.active = true
+    }
+
+    const hx = (hit.tx + 0.5) * TILE
+    const hy = (hit.ty + 0.5) * TILE
+    addEffect({ type: 'ring', x: hx, y: hy, r: 22, color: catchRes.color, max: 0.45 })
+    addFloat(p.x, p.y - 26, `+${catchRes.points} แต้ม (${catchRes.label})`, catchRes.color, 10)
+    const bonusItemNote =
+      bonusAdded && catchRes.bonusItemId
+        ? ` · รับของเฉพาะกิจกรรม: ${ITEMS[catchRes.bonusItemId]?.name ?? catchRes.bonusItemId} x1!`
+        : ''
+    say('loot', `🎣 ตกได้ ${catchRes.label} (+${catchRes.points} แต้ม · รวม ${session.score}/${session.targetScore})${bonusItemNote}`)
+
+    if (session.score >= session.targetScore) {
+      completeActivityVictory(session)
+    } else {
+      notify()
+    }
+    return true
+  }
+
+  return false
+}
+
+function onActivityMonsterKilled(m: Monster) {
+  const session = game.activitySession
+  const p = game.p
+  if (!session || !p || session.mapId !== p.mapId || session.phase !== 'active') return
+
+  if (session.activityId === 'guild_war') {
+    session.score = Math.min(session.targetScore, session.score + 15)
+    addFloat(m.x, m.y - 28, '+15 แต้มกิลด์', '#60a5fa', 10)
+    if (session.score >= session.targetScore) {
+      completeActivityVictory(session)
+    } else {
+      notify()
+    }
+    return
+  }
+
+  const allDead = game.monsters.every((mon) => mon.dead)
+  if (!allDead) return
+
+  if (session.activityId === 'invasion') {
+    if (session.wave < session.maxWaves) {
+      session.wave += 1
+      const nextWave = INVASION_WAVES[session.wave - 1]
+      game.monsters = []
+      spawnActivityMonstersAt(nextWave.spawns, 26, 13, 8)
+      say('gm', `★ กองทัพบุกเมือง Wave ${session.wave}/${session.maxWaves}: ${nextWave.title}!`)
+      notify()
+    } else {
+      completeActivityVictory(session)
+    }
+  } else if (session.activityId === 'bounty') {
+    completeActivityVictory(session)
+  } else if (session.activityId === 'treasure' && session.digSpot?.revealed) {
+    session.digSpot.guardianDefeated = true
+    completeActivityVictory(session)
+  } else if (session.activityId === 'boss_rush') {
+    if (session.stage < session.maxStages) {
+      session.stage += 1
+      const nextStage = BOSS_RUSH_STAGES[session.stage - 1]
+      game.monsters = []
+      spawnActivityMonstersAt([{ monsterId: nextStage.bossId, count: 1 }], 26, 15, 2)
+      say('gm', `★ สังเวียนบอสรัช: ${nextStage.title} ปรากฏตัวแล้ว!`)
+      notify()
+    } else {
+      completeActivityVictory(session)
+    }
+  }
+}
+
+function updateActivitySession(dt: number): boolean {
+  const p = game.p
+  const session = game.activitySession
+  if (!p || !session || session.mapId !== p.mapId || session.phase !== 'active') return false
+
+  const prevRemainingInt = Math.floor(session.remainingSec)
+  const prevScoreInt = Math.floor(session.score)
+  let changed = false
+
+  session.elapsedSec += dt
+  session.remainingSec = Math.max(0, session.remainingSec - dt)
+
+  if (session.activityId === 'guild_war') {
+    let ownedCount = 0
+    for (const flag of session.flags) {
+      if (flag.owner === 'player') {
+        ownedCount += 1
+        continue
+      }
+      const d = Math.hypot((flag.tx + 0.5) * TILE - p.x, (flag.ty + 0.5) * TILE - p.y)
+      if (d <= 36) {
+        flag.progress = Math.min(100, flag.progress + 18 * dt)
+        if (flag.progress >= 100) {
+          flag.owner = 'player'
+          session.score = Math.min(session.targetScore, session.score + 20)
+          addFloat((flag.tx + 0.5) * TILE, (flag.ty + 0.5) * TILE - 22, `ยึด${flag.label}! +20`, '#60a5fa', 11)
+          say('loot', `★ ยึด ${flag.label} สำเร็จ!`)
+          changed = true
+        }
+      }
+    }
+    if (ownedCount > 0 && session.phase === 'active') {
+      session.score = Math.min(session.targetScore, session.score + ownedCount * 3.5 * dt)
+      if (session.score >= session.targetScore) {
+        completeActivityVictory(session)
+        return true
+      }
+    }
+  }
+
+  if (session.remainingSec <= 0 && session.phase === 'active') {
+    if (session.activityId === 'fishing' && session.score >= 60) {
+      completeActivityVictory(session)
+      return true
+    }
+    session.phase = 'failed'
+    game.monsters = []
+    say('error', `หมดเวลากิจกรรม ${getActivityDef(session.activityId).name} — กดเริ่มรอบใหม่หรือวาร์ปออกจากกิจกรรมได้ทันที`)
+    return true
+  }
+
+  if (
+    Math.floor(session.remainingSec) !== prevRemainingInt ||
+    Math.floor(session.score) !== prevScoreInt
+  ) {
+    changed = true
+  }
+
+  return changed
+}
+
 export function listInventoryItemForMarketAction(
   itemUid: string,
   qty: number,
@@ -8243,10 +9034,323 @@ export function submitChat(raw: string, channelOverride?: ChatChannel) {
       return
     }
     const ch = channelOverride && channelOverride !== 'all' ? channelOverride : game.chatChannel === 'all' ? 'world' : game.chatChannel
-    say('player', text, p.name, { channel: ch, senderUid: firebaseAuth.currentUser?.uid, senderGameUid: p.gameUid })
+    say('player', text, p.name, {
+      channel: ch,
+      senderUid: firebaseAuth.currentUser?.uid ?? 'guest_player',
+      senderGameUid: p.gameUid,
+    })
     game.bubble = { text, until: game.time + 4 }
+    void triggerBotChatReply(text, ch)
   }
   notify()
+}
+
+let botStates: BotEntityState[] = createInitialBotStates()
+let networkOnlinePlayers: RemotePlayer[] = []
+let lastBotPresenceSyncMs = 0
+let botReplyTimers: number[] = []
+
+function clearBotReplyTimers() {
+  if (typeof window === 'undefined') {
+    botReplyTimers = []
+    return
+  }
+  for (const id of botReplyTimers) {
+    window.clearTimeout(id)
+  }
+  botReplyTimers = []
+}
+
+function buildCombinedOnlinePlayers(nowMs = Date.now()): RemotePlayer[] {
+  const botRemotes: RemotePlayer[] = botsToRemotePlayers(botStates, nowMs).map((b) => ({
+    ...b,
+    facing: b.facing as Dir,
+  }))
+  const filteredNetwork = networkOnlinePlayers.filter((other) => !isBotPlayerId(other.userId))
+  return [...filteredNetwork, ...botRemotes]
+}
+
+function syncCombinedOnlinePlayers(nowMs = Date.now(), shouldNotify = false) {
+  const combined = buildCombinedOnlinePlayers(nowMs)
+  const mapId = game.p?.mapId ?? 'town'
+  game.onlinePlayers = combined
+  game.remotePlayers = combined.filter((other) => !other.invisible && other.mapId === mapId)
+  if (shouldNotify) notify()
+}
+
+export function setNetworkOnlinePlayers(players: RemotePlayer[]) {
+  networkOnlinePlayers = players.filter((other) => !isBotPlayerId(other.userId))
+  syncCombinedOnlinePlayers(Date.now(), true)
+}
+
+export function getLiveBotStates(): readonly BotEntityState[] {
+  return botStates
+}
+
+export function getBotInspectProfile(targetUidOrGameUid: string) {
+  return buildBotInspectProfile(targetUidOrGameUid, botStates)
+}
+
+export function triggerBotSocialReaction(
+  botUidOrGameUid: string,
+  action: 'friend' | 'party' | 'duel' | 'trade',
+): { ok: boolean; message: string } {
+  const def = getBotDef(botUidOrGameUid)
+  if (!def) {
+    return { ok: false, message: 'ไม่พบผู้เล่นนี้' }
+  }
+  const reactions: Record<'friend' | 'party' | 'duel' | 'trade', { ok: boolean; reply: string; result: string }> = {
+    friend: {
+      ok: true,
+      reply: `ยินดีที่ได้เป็นเพื่อนกันนะ! ทักชวนฟาร์มได้ตลอดเลย ✨`,
+      result: `เพิ่ม ${def.displayName} (UID ${def.gameUid}) เป็นเพื่อนแล้ว!`,
+    },
+    party: {
+      ok: true,
+      reply: `รับทราบ! เดี๋ยวช่วยเคลียร์มอนแมพนี้ให้แป๊บนะ ⚔️`,
+      result: `ส่งคำชวนปาร์ตี้ให้ ${def.displayName} (UID ${def.gameUid}) แล้ว`,
+    },
+    duel: {
+      ok: false,
+      reply: `ไว้รอจังหวะว่างในเมืองก่อนนะ ตอนนี้กำลังวอร์มมืออยู่! 💪`,
+      result: `${def.displayName}: ไว้ดวลกันรอบหน้านะ ตอนนี้กำลังฟาร์มอยู่!`,
+    },
+    trade: {
+      ok: false,
+      reply: `ยังไม่มีของจะแลกเลยจ้า เดี๋ยวฟาร์มได้ของแรร์แล้วบอกนะ`,
+      result: `${def.displayName}: ตอนนี้ยังไม่มีไอเทมสำหรับแลกเปลี่ยน`,
+    },
+  }
+  const picked = reactions[action]
+  setBotSpeechBubble(botStates, def.userId, picked.reply, game.time + 4.5)
+  syncCombinedOnlinePlayers(Date.now(), false)
+  say('player', picked.reply, def.displayName, {
+    channel: 'map',
+    senderUid: def.userId,
+    senderGameUid: def.gameUid,
+  })
+  return { ok: picked.ok, message: picked.result }
+}
+
+async function requestBotReplies(payload: {
+  mode: 'chat' | 'whisper'
+  channel: Exclude<ChatChannel, 'all'>
+  message: string
+  targetBotUserId?: string
+}): Promise<Array<{ botUserId: string; text: string }>> {
+  if (typeof window === 'undefined' || !game.p) return []
+  const p = game.p
+  const job = JOBS[normalizeJobId(p.jobId)]
+  const botMaps: Record<string, string> = {}
+  for (const b of botStates) {
+    botMaps[b.def.userId] = MAPS[b.mapId]?.name ?? b.mapId
+  }
+  const recentMessages = game.chat
+    .slice(-6)
+    .map((m) => ({ author: m.author || 'ระบบ', text: m.text }))
+
+  const res = await fetch('/api/bots/reply', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      playerName: p.name,
+      playerLevel: p.level,
+      playerJobName: job?.name ?? 'Wayfarer',
+      mapName: currentMap().name,
+      channel: payload.channel,
+      message: payload.message,
+      mode: payload.mode,
+      targetBotUserId: payload.targetBotUserId,
+      recentMessages,
+      botMaps,
+    }),
+  })
+  if (!res.ok) return []
+  const data = (await res.json()) as { replies?: Array<{ botUserId: string; text: string }> }
+  return Array.isArray(data.replies) ? data.replies : []
+}
+
+export async function triggerBotChatReply(playerText: string, channel: Exclude<ChatChannel, 'all'>) {
+  try {
+    const replies = await requestBotReplies({ mode: 'chat', channel, message: playerText })
+    if (!replies.length || typeof window === 'undefined') return
+    replies.forEach((reply, idx) => {
+      const delayMs = 950 + idx * 1250
+      const timerId = window.setTimeout(() => {
+        if (!game.p) return
+        const def = getBotDef(reply.botUserId)
+        if (!def) return
+        setBotSpeechBubble(botStates, def.userId, reply.text, game.time + 5)
+        syncCombinedOnlinePlayers(Date.now(), false)
+        say('player', reply.text, def.displayName, {
+          channel,
+          senderUid: def.userId,
+          senderGameUid: def.gameUid,
+        })
+      }, delayMs)
+      botReplyTimers.push(timerId)
+    })
+  } catch {
+    // Silent non-blocking fallback if network is unavailable.
+  }
+}
+
+export async function triggerBotWhisperReply(targetBotId: string, playerText: string) {
+  const def = getBotDef(targetBotId)
+  if (!def || typeof window === 'undefined') return
+  try {
+    const replies = await requestBotReplies({
+      mode: 'whisper',
+      channel: 'world',
+      message: playerText,
+      targetBotUserId: def.userId,
+    })
+    const first = replies[0]
+    if (!first) return
+    const timerId = window.setTimeout(() => {
+      if (!game.p) return
+      setBotSpeechBubble(botStates, def.userId, first.text, game.time + 5)
+      syncCombinedOnlinePlayers(Date.now(), false)
+      say('player', `[กระซิบ] ${first.text}`, `จาก ${def.displayName}`, {
+        channel: 'world',
+        senderUid: def.userId,
+        senderGameUid: def.gameUid,
+      })
+    }, 900)
+    botReplyTimers.push(timerId)
+  } catch {
+    // Non-blocking whisper response.
+  }
+}
+
+function damageMonsterByBot(bot: BotEntityState, m: Monster, dmg: number, isCrit: boolean) {
+  if (m.dead) return
+  const def = MONSTERS[m.defId]
+  if (!def) return
+  m.hp = Math.max(0, m.hp - dmg)
+  m.hitFlash = isCrit ? 0.2 : 0.13
+  addFloat(
+    m.x,
+    m.y - 22,
+    isCrit ? `${formatExactDamage(dmg)}!` : formatExactDamage(dmg),
+    isCrit ? '#fbbf24' : '#e2e8f0',
+    isCrit ? 14.5 : 11.5,
+    {
+      kind: isCrit ? 'crit' : 'damage',
+      badge: isCrit ? 'CRIT!' : undefined,
+      duration: 0.85,
+    },
+  )
+  if (m.hp <= 0) {
+    m.dead = true
+    m.dyingT = 0.5
+    m.hp = 0
+    m.respawnAt = game.time + (def.boss ? 90 : 8)
+    addEffect({ type: 'burst', x: m.x, y: m.y - 6, r: 14, color: def.color, max: 0.4 })
+    if (!bot.bubble && Math.random() < 0.22) {
+      const line = bot.def.ambientLines.kill[Math.floor(Math.random() * bot.def.ambientLines.kill.length)]
+      if (line) setBotSpeechBubble(botStates, bot.def.userId, line, game.time + 3.8)
+    }
+  }
+}
+
+function updateBotRuntime(dt: number, map: MapDef, playerX: number, playerY: number): boolean {
+  const nowMs = Date.now()
+  const prevSig = botStates.map((b) => `${b.mapId}:${b.status}:${b.bubble?.text ?? ''}`).join('|')
+
+  stepPlayerBots(botStates, {
+    dt,
+    nowMs,
+    timeSec: game.time,
+    currentMapId: map.id,
+    mapSafe: map.safe,
+    mapWidthPx: map.width * TILE,
+    mapHeightPx: map.height * TILE,
+    tileSize: TILE,
+    playerX,
+    playerY,
+    monsters: game.monsters.map((m) => ({
+      uid: m.uid,
+      defId: m.defId,
+      name: MONSTERS[m.defId]?.name ?? m.defId,
+      x: m.x,
+      y: m.y,
+      hp: m.hp,
+      maxHp: m.maxHp,
+      dead: m.dead,
+      boss: Boolean(MONSTERS[m.defId]?.boss || m.isWorldBoss),
+    })),
+    isBlocked: (x, y) => boxBlocked(map, x, y, 4, 3),
+    onAttackMonster: (bot, target, dmg, isCrit) => {
+      const liveMonster = game.monsters.find((m) => m.uid === target.uid)
+      if (liveMonster) damageMonsterByBot(bot, liveMonster, dmg, isCrit)
+    },
+    onSpawnVisualEffect: (effect) => {
+      if (effect.kind === 'slash') {
+        addEffect({
+          type: 'slash',
+          x: effect.toX,
+          y: effect.toY,
+          r: 14,
+          color: effect.color,
+          max: 0.24,
+          angle: Math.atan2(effect.toY - effect.fromY, effect.toX - effect.fromX),
+        })
+      } else if (effect.kind === 'magic') {
+        addEffect({
+          type: 'ring',
+          x: effect.toX,
+          y: effect.toY,
+          r: 13,
+          color: effect.color,
+          max: 0.3,
+          sourceX: effect.fromX,
+          sourceY: effect.fromY,
+        })
+        addEffect({ type: 'spark', x: effect.toX, y: effect.toY, r: 8, color: effect.color, max: 0.22 })
+      } else {
+        addEffect({
+          type: 'spark',
+          x: effect.toX,
+          y: effect.toY,
+          r: 8,
+          color: effect.color,
+          max: 0.22,
+          sourceX: effect.fromX,
+          sourceY: effect.fromY,
+        })
+      }
+    },
+    onBotChat: (bot, msg, channel) => {
+      say('player', msg, bot.def.displayName, {
+        channel,
+        senderUid: bot.def.userId,
+        senderGameUid: bot.def.gameUid,
+      })
+    },
+  })
+
+  const nextSig = botStates.map((b) => `${b.mapId}:${b.status}:${b.bubble?.text ?? ''}`).join('|')
+  if (nextSig !== prevSig || nowMs - lastBotPresenceSyncMs >= 1200) {
+    lastBotPresenceSyncMs = nowMs
+    syncCombinedOnlinePlayers(nowMs, false)
+    return true
+  }
+
+  for (const bot of botStates) {
+    const existing = game.remotePlayers.find((r) => r.userId === bot.def.userId)
+    if (existing) {
+      existing.x = bot.x
+      existing.y = bot.y
+      existing.facing = bot.facing
+      existing.moving = bot.moving
+      existing.status = bot.status
+      existing.attackAnim = bot.attackAnim
+      existing.bubble = bot.bubble
+      existing.lastSeen = nowMs
+    }
+  }
+  return false
 }
 
 const PUBLIC_HELP = ['/help - ดูคำสั่ง', '/save - บันทึกเกม', '/pos - ดูตำแหน่ง', '/friend <UID> - เพิ่มเพื่อน', '/trade <UID> - ขอแลกเปลี่ยน', '/whisper <UID> <ข้อความ> - กระซิบ', '/clear - ล้างแชท']
@@ -8970,6 +10074,12 @@ function resetRuntime() {
   game.ultimateCharge = 0
   game.offlineAfkReward = null
   game.invasion = null
+  game.activitySession = null
+  pendingActivityEntry = null
+  clearBotReplyTimers()
+  botStates = createInitialBotStates()
+  lastBotPresenceSyncMs = 0
+  syncCombinedOnlinePlayers(Date.now(), false)
 }
 
 function startSession(p: SaveData, welcome: string, persist = false) {
@@ -9495,6 +10605,9 @@ export function update(dt: number) {
   collectGroundDrops()
 
   updateMonsters(dt, map)
+  if (updateBotRuntime(dt, map, p.x, p.y)) {
+    uiDirty = true
+  }
   updateProjectiles(dt)
 
   for (const f of game.floats) {
@@ -9531,6 +10644,8 @@ export function update(dt: number) {
       if (p.hp !== prevHp || p.mp !== prevMp) uiDirty = true
     }
   }
+
+  if (updateActivitySession(dt)) uiDirty = true
 
   if (uiDirty) notify()
 

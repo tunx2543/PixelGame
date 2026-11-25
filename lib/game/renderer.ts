@@ -419,7 +419,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
   // Town fountain is now rendered via Y-sorted HD structures below.
 
   const visibleObjects = map.objects.filter(
-    (obj) => obj.tx >= minTx - 1 && obj.tx <= maxTx + 1 && obj.ty >= minTy - 1 && obj.ty <= maxTy + 2,
+    (obj) => obj.tx >= minTx - 2 && obj.tx <= maxTx + 2 && obj.ty >= minTy - 2 && obj.ty <= maxTy + 3,
   )
 
   // Ground glow halos for light-emitting RPG objects
@@ -447,6 +447,26 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         ctx.fillStyle = `rgba(255, 179, 198, ${0.16 * flicker})`
         ctx.beginPath()
         ctx.ellipse(ox, oy, 20, 13, 0, 0, Math.PI * 2)
+        ctx.fill()
+      } else if (obj.kind === 'lantern_float') {
+        ctx.fillStyle = `rgba(253, 224, 71, ${0.18 * flicker})`
+        ctx.beginPath()
+        ctx.ellipse(ox, oy + 2, 16 * flicker, 10 * flicker, 0, 0, Math.PI * 2)
+        ctx.fill()
+      } else if (obj.kind === 'obelisk') {
+        ctx.fillStyle = obj.variant === 1 ? `rgba(232, 121, 249, ${0.15 * flicker})` : `rgba(56, 189, 248, ${0.15 * flicker})`
+        ctx.beginPath()
+        ctx.ellipse(ox, oy, 17, 11, 0, 0, Math.PI * 2)
+        ctx.fill()
+      } else if (obj.kind === 'sword_monument') {
+        ctx.fillStyle = `rgba(125, 211, 252, ${0.16 * flicker})`
+        ctx.beginPath()
+        ctx.ellipse(ox, oy, 19, 12, 0, 0, Math.PI * 2)
+        ctx.fill()
+      } else if (obj.kind === 'treasure_altar') {
+        ctx.fillStyle = `rgba(250, 204, 21, ${0.2 * flicker})`
+        ctx.beginPath()
+        ctx.ellipse(ox, oy, 21, 13, 0, 0, Math.PI * 2)
         ctx.fill()
       }
     }
@@ -613,6 +633,102 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     ctx.restore()
   }
 
+  const actSession = game.activitySession
+  if (actSession && actSession.mapId === map.id) {
+    if (actSession.activityId === 'guild_war') {
+      for (const flag of actSession.flags) {
+        const fx = (flag.tx + 0.5) * TILE
+        const fy = (flag.ty + 0.5) * TILE
+        const owned = flag.owner === 'player'
+        const flagColor = owned ? '#38bdf8' : '#f59e0b'
+        const pulse = 0.72 + Math.sin(t * 4.5 + flag.tx) * 0.25
+        ctx.save()
+        ctx.strokeStyle = flagColor
+        ctx.lineWidth = 1.6
+        ctx.globalAlpha = 0.75 * pulse
+        ctx.beginPath()
+        ctx.ellipse(fx, fy + 2, 18, 10, 0, 0, Math.PI * 2)
+        ctx.stroke()
+
+        // Flag pole & waving banner
+        ctx.globalAlpha = 1
+        ctx.fillStyle = '#e2e8f0'
+        ctx.fillRect(Math.round(fx - 1), Math.round(fy - 18), 2, 20)
+        const waveShift = Math.sin(t * 6 + flag.tx) * 1.2
+        ctx.fillStyle = flagColor
+        ctx.beginPath()
+        ctx.moveTo(fx + 1, fy - 18)
+        ctx.lineTo(fx + 11, fy - 14 + waveShift)
+        ctx.lineTo(fx + 1, fy - 10)
+        ctx.closePath()
+        ctx.fill()
+
+        if (!owned && flag.progress > 0) {
+          ctx.fillStyle = 'rgba(15,23,42,0.85)'
+          ctx.fillRect(Math.round(fx - 12), Math.round(fy - 25), 24, 3)
+          ctx.fillStyle = '#38bdf8'
+          ctx.fillRect(Math.round(fx - 12), Math.round(fy - 25), Math.round((flag.progress / 100) * 24), 3)
+        }
+        ctx.restore()
+      }
+    } else if (actSession.activityId === 'treasure' && actSession.digSpot) {
+      const ds = actSession.digSpot
+      const sx = (ds.tx + 0.5) * TILE
+      const sy = (ds.ty + 0.5) * TILE
+      const dist = Math.hypot(sx - p.x, sy - p.y)
+      if (ds.revealed || dist <= 96) {
+        const pulse = 0.7 + Math.sin(t * 6) * 0.3
+        ctx.save()
+        ctx.strokeStyle = '#facc15'
+        ctx.lineWidth = 1.8
+        ctx.globalAlpha = 0.85 * pulse
+        ctx.beginPath()
+        ctx.ellipse(sx, sy + 1, 12, 7, 0, 0, Math.PI * 2)
+        ctx.stroke()
+        if (!ds.revealed) {
+          ctx.beginPath()
+          ctx.moveTo(sx - 5, sy - 4)
+          ctx.lineTo(sx + 5, sy + 4)
+          ctx.moveTo(sx + 5, sy - 4)
+          ctx.lineTo(sx - 5, sy + 4)
+          ctx.stroke()
+        } else {
+          ctx.fillStyle = '#f59e0b'
+          ctx.fillRect(Math.round(sx - 6), Math.round(sy - 8), 12, 8)
+          ctx.fillStyle = '#fde047'
+          ctx.fillRect(Math.round(sx - 6), Math.round(sy - 8), 12, 3)
+        }
+        ctx.restore()
+      }
+    } else if (actSession.activityId === 'fishing') {
+      for (const spot of actSession.fishingSpots) {
+        if (!spot.active) continue
+        const fx = (spot.tx + 0.5) * TILE
+        const fy = (spot.ty + 0.5) * TILE
+        const ringPhase = (t * 1.4 + spot.tx * 0.2) % 1
+        ctx.save()
+        ctx.strokeStyle = '#38bdf8'
+        ctx.lineWidth = 1.4
+        ctx.globalAlpha = (1 - ringPhase) * 0.88
+        ctx.beginPath()
+        ctx.ellipse(fx, fy + 2, 6 + ringPhase * 11, 3 + ringPhase * 5.5, 0, 0, Math.PI * 2)
+        ctx.stroke()
+
+        const bob = Math.sin(t * 5 + spot.ty) * 1.8
+        ctx.globalAlpha = 0.95
+        ctx.fillStyle = '#fde047'
+        ctx.beginPath()
+        ctx.moveTo(fx, fy - 9 + bob)
+        ctx.lineTo(fx + 3.5, fy - 4 + bob)
+        ctx.lineTo(fx, fy + 1 + bob)
+        ctx.lineTo(fx - 3.5, fy - 4 + bob)
+        ctx.closePath()
+        ctx.fill()
+        ctx.restore()
+      }
+    }
+  }
+
   const ents: HdDepthDrawable[] = []
   const overheads: HdDepthDrawable[] = []
 
@@ -642,8 +758,12 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     const oy = (visibleObj.ty + 0.88) * TILE
     const objFrame = Math.floor(t * 5 + visibleObj.tx * 0.7 + visibleObj.ty) % 3
     const img = mapObjectSprite(visibleObj.kind, objFrame, visibleObj.variant ?? 0)
+    const sortY =
+      visibleObj.kind === 'lotus_lily' || visibleObj.kind === 'lantern_float'
+        ? oy - 10
+        : oy
     ents.push({
-      y: oy,
+      y: sortY,
       draw: () => {
         drawHdMapObject(ctx, visibleObj, ox, oy, t, img)
       },
@@ -2364,6 +2484,21 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       9.2,
     )
     text(guildLine, footCx, nameOffsetY + 9.5 * dpr, other.guildTag ? '#fde68a' : '#cbd5e1', 7.8)
+
+    if (other.bubble && other.bubble.until > game.time) {
+      const [rHeadX, rHeadY] = toS(remoteX, remoteY - (isRemoteMounted ? 48 : 42))
+      ctx.font = `${Math.round(10.5 * dpr * (zoom / 3) * 1.15)}px ${font}`
+      const tw = Math.min(ctx.measureText(other.bubble.text).width, 240 * dpr)
+      const by = rHeadY - 10 * dpr
+      ctx.fillStyle = 'rgba(255,250,235,0.95)'
+      ctx.fillRect(rHeadX - tw / 2 - 6 * dpr, by - 10 * dpr, tw + 12 * dpr, 20 * dpr)
+      ctx.fillStyle = 'rgba(10,8,20,0.9)'
+      ctx.fillRect(rHeadX - 2 * dpr, by + 10 * dpr, 4 * dpr, 3 * dpr)
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillStyle = '#1a1423'
+      ctx.fillText(other.bubble.text, rHeadX, by, 240 * dpr)
+    }
   }
 
   {

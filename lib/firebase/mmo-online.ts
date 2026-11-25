@@ -1,5 +1,6 @@
 'use client'
 
+import { onAuthStateChanged } from 'firebase/auth'
 import {
   collection,
   doc,
@@ -142,6 +143,13 @@ export interface WorldChatMessageRecord {
 }
 
 const LOCAL_WORLD_CHAT_KEY = 'pixel-rpg-local-world-chat-v1'
+const LOCAL_WORLD_CHAT_EVENT = 'pixelquest:world-chat-local'
+
+function emitLocalWorldChatUpdate() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(LOCAL_WORLD_CHAT_EVENT))
+  }
+}
 
 export async function sendWorldChatMessage(input: {
   channel: Exclude<ChatChannel, 'all'>
@@ -185,36 +193,106 @@ export async function sendWorldChatMessage(input: {
 
   const local = readLocalJson<WorldChatMessageRecord[]>(LOCAL_WORLD_CHAT_KEY, [])
   writeLocalJson(LOCAL_WORLD_CHAT_KEY, [...local, record].slice(-50))
+  emitLocalWorldChatUpdate()
   return { ok: true, message: record }
 }
 
 export function subscribeWorldChatMessages(
   onChange: (messages: WorldChatMessageRecord[]) => void,
 ): () => void {
-  const local = readLocalJson<WorldChatMessageRecord[]>(LOCAL_WORLD_CHAT_KEY, [])
-  if (!isSignedInVerified()) {
-    onChange(local)
-    return () => {}
+  let disposed = false
+  let unsubSnapshot: (() => void) | null = null
+  let retryTimer: number | null = null
+  let retryAttempt = 0
+
+  const emitLocal = () => {
+    if (disposed) return
+    const local = readLocalJson<WorldChatMessageRecord[]>(LOCAL_WORLD_CHAT_KEY, [])
+    onChange([...local].sort((a, b) => a.createdAtMs - b.createdAtMs))
   }
 
-  const q = query(
-    collection(db, 'worldChat'),
-    where('createdAtMs', '>=', 0),
-    orderBy('createdAtMs', 'desc'),
-    limit(50),
-  )
-  return onSnapshot(
-    q,
-    (snap) => {
-      const items = snap.docs
-        .map((d) => d.data() as WorldChatMessageRecord)
-        .sort((a, b) => a.createdAtMs - b.createdAtMs)
-      onChange(items)
-    },
-    () => {
-      onChange(readLocalJson<WorldChatMessageRecord[]>(LOCAL_WORLD_CHAT_KEY, []))
-    },
-  )
+  const clearSnapshot = () => {
+    if (retryTimer !== null && typeof window !== 'undefined') {
+      window.clearTimeout(retryTimer)
+      retryTimer = null
+    }
+    if (unsubSnapshot) {
+      unsubSnapshot()
+      unsubSnapshot = null
+    }
+  }
+
+  const attachSnapshot = () => {
+    clearSnapshot()
+    if (disposed) return
+    if (!isSignedInVerified()) {
+      emitLocal()
+      return
+    }
+
+    const q = query(
+      collection(db, 'worldChat'),
+      where('createdAtMs', '>=', 0),
+      orderBy('createdAtMs', 'desc'),
+      limit(50),
+    )
+
+    unsubSnapshot = onSnapshot(
+      q,
+      (snap) => {
+        if (disposed) return
+        retryAttempt = 0
+        const items = snap.docs
+          .map((d) => d.data() as WorldChatMessageRecord)
+          .sort((a, b) => a.createdAtMs - b.createdAtMs)
+        onChange(items)
+      },
+      () => {
+        if (disposed) return
+        emitLocal()
+        if (typeof window !== 'undefined' && isSignedInVerified()) {
+          const delayMs = Math.min(15_000, 2_000 * 2 ** retryAttempt)
+          retryAttempt = Math.min(3, retryAttempt + 1)
+          retryTimer = window.setTimeout(() => {
+            if (!disposed) attachSnapshot()
+          }, delayMs)
+        }
+      },
+    )
+  }
+
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === LOCAL_WORLD_CHAT_KEY && !isSignedInVerified()) {
+      emitLocal()
+    }
+  }
+  const onLocalEvent = () => {
+    if (!isSignedInVerified()) {
+      emitLocal()
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', onStorage)
+    window.addEventListener(LOCAL_WORLD_CHAT_EVENT, onLocalEvent)
+  }
+
+  const unsubAuth = onAuthStateChanged(auth, () => {
+    retryAttempt = 0
+    attachSnapshot()
+  })
+
+  attachSnapshot()
+
+  return () => {
+    disposed = true
+    clearSnapshot()
+    unsubAuth()
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('storage', onStorage)
+      window.removeEventListener(LOCAL_WORLD_CHAT_EVENT, onLocalEvent)
+    }
+  }
 }
 
 /* ========================================================================== */

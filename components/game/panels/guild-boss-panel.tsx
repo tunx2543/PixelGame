@@ -1,7 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
-import { Clock, Coins, Crown, Flame, Gift, MapPin, MessageSquare, Send, Shield, Sparkles, Swords, Trophy, Users } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Clock, Coins, Crown, Flame, Gift, MapPin, MessageSquare, Send, Shield, Smile, Sparkles, Swords, Trophy, Users } from 'lucide-react'
+import { motion } from 'motion/react'
+import { ChatEmojiPicker } from '@/components/game/chat-emoji-picker'
+import { detectNewlyArrivedKeys, insertEmojiAtCursor } from '@/lib/game/chat-emojis'
 import { computeLevelGapModifiers } from '@/lib/game/combat-balance'
 import { JOBS, normalizeJobId } from '@/lib/game/data'
 import {
@@ -96,6 +99,14 @@ export function GuildBossPanel() {
   const [guildTagInput, setGuildTagInput] = useState('')
   const [guildChatMessages, setGuildChatMessages] = useState<GuildChatMessage[]>([])
   const [guildChatInput, setGuildChatInput] = useState('')
+  const [guildEmojiOpen, setGuildEmojiOpen] = useState(false)
+  const [guildFreshKeys, setGuildFreshKeys] = useState<Record<string, true>>({})
+  const guildChatListRef = useRef<HTMLDivElement>(null)
+  const guildChatInputRef = useRef<HTMLInputElement>(null)
+  const guildCursorPosRef = useRef<{ start: number; end: number } | null>(null)
+  const guildSeenKeysRef = useRef<Set<string>>(new Set())
+  const guildHydratedRef = useRef(false)
+  const guildFreshTimersRef = useRef<number[]>([])
   const [guildRaid, setGuildRaid] = useState<GuildRaidState | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [attackCdMs, setAttackCdMs] = useState(0)
@@ -134,6 +145,9 @@ export function GuildBossPanel() {
   }, [selectedFieldMap])
 
   useEffect(() => {
+    guildSeenKeysRef.current.clear()
+    guildHydratedRef.current = false
+    setGuildFreshKeys({})
     if (!currentGuildId) {
       setGuildChatMessages([])
       return
@@ -141,6 +155,46 @@ export function GuildBossPanel() {
     const unsub = subscribeGuildMessages(currentGuildId, setGuildChatMessages)
     return () => unsub()
   }, [currentGuildId])
+
+  useEffect(() => {
+    return () => {
+      guildFreshTimersRef.current.forEach((id) => window.clearTimeout(id))
+      guildFreshTimersRef.current = []
+    }
+  }, [])
+
+  const guildMsgSignature = guildChatMessages.map((m) => m.messageId).join('\n')
+  useEffect(() => {
+    const keys = guildMsgSignature ? guildMsgSignature.split('\n') : []
+    const newlyArrived = detectNewlyArrivedKeys({
+      seenKeys: guildSeenKeysRef.current,
+      visibleKeys: keys,
+      isHydrated: guildHydratedRef.current,
+      channelSwitched: false,
+    })
+    if (!guildHydratedRef.current) {
+      if (keys.length > 0 || currentGuildId) {
+        guildHydratedRef.current = true
+      }
+    } else if (newlyArrived.length > 0) {
+      setGuildFreshKeys((prev) => {
+        const next = { ...prev }
+        for (const k of newlyArrived) next[k] = true
+        return next
+      })
+      const timer = window.setTimeout(() => {
+        setGuildFreshKeys((prev) => {
+          const next = { ...prev }
+          for (const k of newlyArrived) delete next[k]
+          return next
+        })
+      }, 1500)
+      guildFreshTimersRef.current.push(timer)
+    }
+
+    const el = guildChatListRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [guildMsgSignature, currentGuildId])
 
   useEffect(() => {
     if (attackCdMs <= 0 && skillCdMs <= 0 && fieldCdMs <= 0) return
@@ -1096,39 +1150,101 @@ export function GuildBossPanel() {
                   <h4 className="flex items-center gap-1.5 font-bold text-primary">
                     <MessageSquare className="size-3.5" aria-hidden /> แชทกิลด์แบบเรียลไทม์
                   </h4>
-                  <div className="max-h-28 min-h-[4.5rem] space-y-1 overflow-y-auto border border-border/50 bg-background/60 p-2 text-[11px]">
+                  <div
+                    ref={guildChatListRef}
+                    className="max-h-28 min-h-[4.5rem] space-y-1 overflow-y-auto border border-border/50 bg-background/60 p-2 text-[11px]"
+                  >
                     {guildChatMessages.length === 0 ? (
                       <p className="text-muted-foreground">ยังไม่มีข้อความในกิลด์ — ทักทายเพื่อนร่วมกิลด์เลย!</p>
                     ) : (
-                      guildChatMessages.map((msg) => (
-                        <p key={msg.messageId} className="leading-snug">
-                          <strong className="text-amber-300">{msg.senderName}</strong>:{' '}
-                          <span className="text-foreground">{msg.text}</span>
-                        </p>
-                      ))
+                      guildChatMessages.map((msg) => {
+                        const isFresh = Boolean(guildFreshKeys[msg.messageId])
+                        return (
+                          <motion.p
+                            key={msg.messageId}
+                            initial={isFresh ? { opacity: 0, x: -8, y: 4 } : false}
+                            animate={{ opacity: 1, x: 0, y: 0 }}
+                            transition={{ duration: 0.22, ease: 'easeOut' }}
+                            className={`rounded px-1 -mx-1 leading-snug transition-colors duration-700 ${
+                              isFresh ? 'bg-sky-400/18' : ''
+                            }`}
+                          >
+                            <strong className="text-amber-300">{msg.senderName}</strong>:{' '}
+                            <span className="text-foreground">{msg.text}</span>
+                          </motion.p>
+                        )
+                      })
                     )}
                   </div>
+                  <ChatEmojiPicker
+                    open={guildEmojiOpen}
+                    onSelect={(emoji) => {
+                      let nextCursorPos: number | null = null
+                      setGuildChatInput((prev) => {
+                        const input = guildChatInputRef.current
+                        const domStart = input && document.activeElement === input ? input.selectionStart : null
+                        const domEnd = input && document.activeElement === input ? input.selectionEnd : null
+                        const start = domStart ?? guildCursorPosRef.current?.start ?? prev.length
+                        const end = domEnd ?? guildCursorPosRef.current?.end ?? start
+                        const res = insertEmojiAtCursor(prev, emoji, start, end, 140)
+                        if (!res.inserted) return prev
+                        nextCursorPos = res.nextCursor
+                        guildCursorPosRef.current = { start: res.nextCursor, end: res.nextCursor }
+                        return res.text
+                      })
+                      window.requestAnimationFrame(() => {
+                        const target = guildChatInputRef.current
+                        if (!target) return
+                        target.focus()
+                        if (nextCursorPos !== null) {
+                          target.setSelectionRange(nextCursorPos, nextCursorPos)
+                        }
+                      })
+                    }}
+                    onClose={() => setGuildEmojiOpen(false)}
+                    className="rounded border border-border/60"
+                  />
                   <form
                     onSubmit={async (e) => {
                       e.preventDefault()
                       if (!ext.guildId || !guildChatInput.trim()) return
                       const text = guildChatInput.trim()
                       setGuildChatInput('')
-                      const res = await sendGuildMessage(ext.guildId, {
+                      guildCursorPosRef.current = null
+                      setGuildEmojiOpen(false)
+                      await sendGuildMessage(ext.guildId, {
                         senderName: p.name,
                         senderGameUid: p.gameUid ?? '1000',
                         jobId: p.jobId,
                         text,
                       })
-                      if (res.ok && res.message && ext.guildId.startsWith('guild_')) {
-                        setGuildChatMessages((prev) => [...prev, res.message!].slice(-40))
-                      }
                     }}
                     className="flex gap-1.5"
                   >
+                    <button
+                      type="button"
+                      onClick={() => setGuildEmojiOpen((open) => !open)}
+                      aria-expanded={guildEmojiOpen}
+                      aria-label={guildEmojiOpen ? 'ปิดคลังอิโมจิแชทกิลด์' : 'เปิดคลังอิโมจิแชทกิลด์'}
+                      className="grid shrink-0 cursor-pointer place-items-center rounded border border-border/70 bg-background/80 px-2 text-slate-300 transition-colors hover:bg-white/10 hover:text-amber-300"
+                    >
+                      <Smile className="size-3.5" aria-hidden />
+                    </button>
                     <input
+                      ref={guildChatInputRef}
                       value={guildChatInput}
-                      onChange={(e) => setGuildChatInput(e.target.value)}
+                      onChange={(e) => {
+                        setGuildChatInput(e.target.value)
+                        if (typeof e.target.selectionStart === 'number' && typeof e.target.selectionEnd === 'number') {
+                          guildCursorPosRef.current = { start: e.target.selectionStart, end: e.target.selectionEnd }
+                        }
+                      }}
+                      onSelect={() => {
+                        const input = guildChatInputRef.current
+                        if (input && typeof input.selectionStart === 'number' && typeof input.selectionEnd === 'number') {
+                          guildCursorPosRef.current = { start: input.selectionStart, end: input.selectionEnd }
+                        }
+                      }}
                       maxLength={140}
                       placeholder="พิมพ์ข้อความคุยกับกิลด์..."
                       className="pixel-input min-w-0 flex-1 px-2 py-1 text-xs"

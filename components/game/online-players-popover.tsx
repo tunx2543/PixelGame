@@ -7,9 +7,21 @@ import { sendFriendRequestByGameUid } from '@/lib/firebase/friends'
 import { invitePlayerToPartyAutoCreate } from '@/lib/firebase/parties'
 import { formatPresenceStatusLabel, type PresenceStatus } from '@/lib/firebase/presence-helpers'
 import { JOBS, normalizeJobId } from '@/lib/game/data'
-import { currentMap, game, getStats, gmKickPlayer, gmMutePlayer, gmSummonPlayer, gmWarpToPlayer, isCurrentAccountGm, notify } from '@/lib/game/engine'
+import {
+  currentMap,
+  game,
+  getStats,
+  gmKickPlayer,
+  gmMutePlayer,
+  gmSummonPlayer,
+  gmWarpToPlayer,
+  isCurrentAccountGm,
+  notify,
+  triggerBotSocialReaction,
+} from '@/lib/game/engine'
 import { MAPS, TILE } from '@/lib/game/maps'
 import { formatGameUid } from '@/lib/game/permissions'
+import { isBotPlayerId } from '@/lib/game/player-bots'
 import { useGame } from '@/lib/game/use-game'
 
 function statusTone(status: PresenceStatus | undefined) {
@@ -53,6 +65,11 @@ export function OnlinePlayersPopover() {
     setBusyUid(targetGameUid)
     setFeedback(null)
     try {
+      if (isBotPlayerId(targetGameUid)) {
+        const result = triggerBotSocialReaction(targetGameUid, 'friend')
+        setFeedback({ type: result.ok ? 'ok' : 'error', text: result.message })
+        return
+      }
       const result = await sendFriendRequestByGameUid(targetGameUid, game.p?.name)
       setFeedback({ type: result.ok ? 'ok' : 'error', text: result.message })
     } catch {
@@ -68,6 +85,11 @@ export function OnlinePlayersPopover() {
     setBusyUid(`party:${targetGameUid}`)
     setFeedback(null)
     try {
+      if (isBotPlayerId(targetGameUid)) {
+        const result = triggerBotSocialReaction(targetGameUid, 'party')
+        setFeedback({ type: result.ok ? 'ok' : 'error', text: result.message })
+        return
+      }
       const s = getStats(p)
       const result = await invitePlayerToPartyAutoCreate({
         currentParty: game.party,
@@ -185,19 +207,18 @@ export function OnlinePlayersPopover() {
       </div>
 
       <div className="mt-2 max-h-[min(24rem,62vh)] space-y-2 overflow-y-auto px-0.5">
-        {!isSignedIn ? (
-          <div className="rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-center">
-            <p className="text-xs font-semibold text-amber-200">โหมด Guest เล่นแบบออฟไลน์</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              เข้าสู่ระบบ Google ในหน้าต่างเพื่อนหรือหน้าแรก เพื่อซิงค์ตำแหน่งกับผู้เล่นออนไลน์คนอื่น
-            </p>
+        {!isSignedIn && (
+          <div className="rounded-lg border border-amber-400/35 bg-amber-400/10 px-2.5 py-1.5 text-[10px] text-amber-100/90">
+            โหมด Guest — กำลังแสดงนักผจญภัยในเซิร์ฟเวอร์ (เข้าสู่ระบบ Google เพื่อเล่นร่วมกับเพื่อนจริง)
           </div>
-        ) : game.presenceError ? (
-          <div className="rounded-xl border border-rose-400/40 bg-rose-500/10 p-3 text-center">
+        )}
+        {game.presenceError && (
+          <div className="rounded-xl border border-rose-400/40 bg-rose-500/10 p-2.5 text-center">
             <p className="text-xs font-semibold text-rose-200">พบปัญหาการซิงค์ออนไลน์</p>
             <p className="mt-1 text-[11px] text-muted-foreground">{game.presenceError}</p>
           </div>
-        ) : sortedPlayers.length === 0 ? (
+        )}
+        {sortedPlayers.length === 0 ? (
           <div className="rounded-xl border border-border bg-secondary/40 p-3 text-center">
             <Users className="mx-auto mb-1.5 size-5 text-muted-foreground" aria-hidden />
             <p className="text-xs font-semibold text-foreground">ยังไม่มีผู้เล่นคนอื่นออนไลน์ตอนนี้</p>

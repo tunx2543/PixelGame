@@ -9,6 +9,11 @@ import {
   sanitizeSpiritAwakeningState,
   type SpiritAwakeningState,
 } from './spirit-system'
+import {
+  createDefaultActivitiesState,
+  sanitizeActivitiesState,
+  type ActivityProgressState,
+} from './activities'
 
 /* ========================================================================== */
 /* 1. LIFE SKILLS, GATHERING NODES & COOKING                                  */
@@ -789,6 +794,7 @@ export interface PlayerExtensionV2 {
   quickSlots: Array<string | null>
   spiritAwakening?: SpiritAwakeningState
   festival?: FestivalPlayerState
+  activities?: ActivityProgressState
 }
 
 export function createDefaultExtV2(): PlayerExtensionV2 {
@@ -831,6 +837,7 @@ export function createDefaultExtV2(): PlayerExtensionV2 {
     quickSlots: [...DEFAULT_QUICK_SLOTS],
     spiritAwakening: createDefaultSpiritAwakeningState(),
     festival: createDefaultFestivalPlayerState(),
+    activities: createDefaultActivitiesState(),
   }
 }
 
@@ -1013,6 +1020,7 @@ export function sanitizeExtV2(raw: unknown): PlayerExtensionV2 {
     quickSlots: sanitizeQuickSlots(obj.quickSlots),
     spiritAwakening: sanitizeSpiritAwakeningState(obj.spiritAwakening),
     festival: sanitizeFestivalPlayerState(obj.festival),
+    activities: sanitizeActivitiesState(obj.activities),
   }
 }
 

@@ -237,6 +237,16 @@ export function EventsPanel() {
               <p className="text-[10.5px] text-slate-400">
                 ช่วงเวลา: {active.def.scheduleLabel} · หา{active.def.tokenName}และ{EVENT_TOKEN_NAME}ได้จากมอนสเตอร์ บอส และภารกิจ
               </p>
+              <div className="pt-1">
+                <PxButton
+                  variant="secondary"
+                  onClick={() => openPanel('activities')}
+                  className="inline-flex items-center gap-1.5 border border-sky-400/60 bg-sky-950/60 text-sky-200 hover:bg-sky-900/70"
+                >
+                  <Swords className="size-3.5 text-sky-300" aria-hidden />
+                  เปิดหน้ากิจกรรมพิเศษ (6 แมพวาร์ปเข้า-ออก)
+                </PxButton>
+              </div>
             </div>
 
             <div className="flex shrink-0 flex-col gap-2 border border-white/15 bg-black/45 p-2.5 md:w-64">

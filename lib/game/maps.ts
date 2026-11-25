@@ -125,6 +125,21 @@ export type MapObjectKind =
   | 'wagon'
   | 'flower_cart'
   | 'sign_arrow'
+  | 'ballista_turret'
+  | 'palisade'
+  | 'weapon_rack'
+  | 'war_drum'
+  | 'war_standard'
+  | 'sword_monument'
+  | 'obelisk'
+  | 'palm_tree'
+  | 'shipwreck'
+  | 'anchor_post'
+  | 'treasure_altar'
+  | 'wooden_boat'
+  | 'lantern_float'
+  | 'lotus_lily'
+  | 'fish_rack'
 
 export interface MapObject {
   id: string
@@ -1334,6 +1349,580 @@ function buildWorldBossSanctum(): MapDef {
   })
 }
 
+function finalizeActivityMap(
+  g: Grid,
+  id: string,
+  name: string,
+  levelLabel: string,
+  theme: Theme,
+  base: number,
+  wall: number,
+  spawn: { x: number; y: number },
+  safe = false,
+): MapDef {
+  g.border(wall, 2)
+  // Guarantee spawn area (3x3) is walkable and free of solid props
+  g.rect(spawn.x - 1, spawn.y - 1, 3, 3, base)
+  g.objects = g.objects.filter(
+    (o) => Math.abs(o.tx - spawn.x) > 1 || Math.abs(o.ty - spawn.y) > 1,
+  )
+  return {
+    id,
+    name,
+    levelLabel,
+    safe,
+    theme,
+    width: WW,
+    height: WH,
+    base,
+    tiles: g.tiles,
+    objects: g.objects,
+    objSolid: g.buildObjSolid(),
+    portals: [],
+    spawns: [],
+    npcs: [],
+    spawn,
+  }
+}
+
+// กิจกรรม 1: สมรภูมิป้องกันเมือง (act_invasion) — ไม่มีประตูวาร์ป
+function buildActivityInvasion(): MapDef {
+  const g = new Grid(WW, WH, T.COBBLESTONE)
+  g.rect(5, 4, WW - 10, WH - 8, T.PLAZA)
+  g.rect(4, MIDY - 2, WW - 8, 4, T.PATH)
+  g.rect(MIDX - 2, 4, 4, WH - 8, T.CARPET)
+  // Decorative outer herb gardens & courtyard paving
+  g.rect(3, 3, 3, 12, T.GRASS)
+  g.rect(WW - 6, 3, 3, 12, T.GRASS)
+  g.rect(3, 21, 3, 12, T.GRASS)
+  g.rect(WW - 6, 21, 3, 12, T.GRASS)
+  for (const fy of [5, 9, 23, 28]) {
+    g.set(4, fy, T.FLOWER)
+    g.set(WW - 5, fy, T.FLOWER)
+  }
+
+  // Fortified gatehouse battlements along upper edge & flank ramparts
+  g.rect(8, 7, 12, 2, T.CASTLE_WALL)
+  g.rect(32, 7, 12, 2, T.CASTLE_WALL)
+  g.rect(8, 28, 10, 1, T.FENCE)
+  g.rect(34, 28, 10, 1, T.FENCE)
+  g.set(MIDX, MIDY - 3, T.MAGIC_CIRCLE)
+
+  // Rampart Ballista Turrets & Fortified Palisades
+  for (const [bx, by, v] of [
+    [10, 6, 0],
+    [17, 6, 0],
+    [35, 6, 1],
+    [42, 6, 1],
+  ] as const) {
+    g.obj('ballista_turret', bx, by, true, v, 'ป้อมหน้าไม้ป้องกันเมือง')
+  }
+  for (const [px, py] of [
+    [9, 12],
+    [11, 12],
+    [41, 12],
+    [43, 12],
+    [9, 22],
+    [11, 22],
+    [41, 22],
+    [43, 22],
+  ] as const) {
+    g.obj('palisade', px, py, true)
+  }
+
+  // Streetlamps & War Standards lining the defense avenue
+  for (const [lx, ly] of [
+    [16, 11],
+    [36, 11],
+    [16, 24],
+    [36, 24],
+    [22, 9],
+    [30, 9],
+    [22, 24],
+    [30, 24],
+  ] as const) {
+    g.obj('lamp_post', lx, ly, true)
+  }
+  // Mid-arena heroic battle standards & defensive palisades flanking the royal avenue
+  g.obj('war_standard', 21, 18, true, 0)
+  g.obj('war_standard', 31, 18, true, 0)
+  g.obj('torch', 18, 16, true)
+  g.obj('torch', 34, 16, true)
+  g.obj('palisade', 17, 20, true)
+  g.obj('palisade', 35, 20, true)
+  g.obj('war_standard', 21, 6, true, 0, 'ธงกองทัพปราการ')
+  g.obj('war_standard', 31, 6, true, 0)
+  g.obj('guild_banner', 21, 9, true, 0, 'แนวป้องกันปราการ')
+  g.obj('guild_banner', 31, 9, true)
+  g.obj('war_drum', 21, 26, true, 0, 'กลองศึกปลุกขวัญ')
+  g.obj('war_drum', 31, 26, true, 0)
+
+  // Left & Right Supply Depots + Blacksmith Support Station
+  g.obj('barrel_cluster', 9, 10, true)
+  g.obj('barrel_cluster', 43, 10, true)
+  g.obj('weapon_rack', 13, 10, true, 0, 'ชั้นอาวุธกองปราการ')
+  g.obj('weapon_rack', 39, 10, true, 1)
+  g.obj('wagon', 10, 25, true, 0, 'เกวียนเสบียงศึก')
+  g.obj('tent', 7, 25, true, 0, 'กระโจมบัญชาการ')
+  g.obj('campfire', 13, 26, true)
+  g.obj('anvil_forge', 41, 25, true, 0, 'เตาตีเหล็กซ่อมเกราะ')
+  g.obj('weapon_rack', 38, 26, true, 0)
+  g.obj('flower_cart', 19, 29, true)
+  g.obj('flower_cart', 33, 29, true)
+  g.obj('bench', 20, 27, true)
+  g.obj('bench', 32, 27, true)
+  g.obj('sakura_tree', 4, 15, true)
+  g.obj('sakura_tree', 47, 15, true)
+
+  return finalizeActivityMap(
+    g,
+    'act_invasion',
+    'ลานป้องกันเมือง',
+    'กิจกรรมป้องกันเมือง',
+    'town',
+    T.PLAZA,
+    T.CASTLE_WALL,
+    { x: MIDX, y: 26 },
+    false,
+  )
+}
+
+// กิจกรรม 2: สมรภูมิสงครามกิลด์ (act_guild_war) — ไม่มีประตูวาร์ป
+function buildActivityGuildWar(): MapDef {
+  const g = new Grid(WW, WH, T.COBBLESTONE)
+  g.rect(5, 5, WW - 10, WH - 10, T.RUINS_FLOOR)
+  g.rect(6, MIDY - 2, WW - 12, 4, T.CARPET)
+  g.rect(MIDX - 2, 6, 4, WH - 12, T.CARPET)
+  // Three Capture Flag Plazas: West (13,18), Center (26,16), East (39,18)
+  g.disc(13, 18, 4, T.GOLD_PAVING)
+  g.disc(26, 16, 5, T.GOLD_PAVING)
+  g.disc(39, 18, 4, T.GOLD_PAVING)
+  g.set(13, 18, T.MAGIC_CIRCLE)
+  g.set(26, 16, T.MAGIC_CIRCLE)
+  g.set(39, 18, T.MAGIC_CIRCLE)
+
+  // Fortress flank walls with wide lanes
+  g.rect(19, 10, 1, 6, T.CASTLE_WALL)
+  g.rect(19, 21, 1, 6, T.CASTLE_WALL)
+  g.rect(33, 10, 1, 6, T.CASTLE_WALL)
+  g.rect(33, 21, 1, 6, T.CASTLE_WALL)
+
+  // Grand Colosseum Colonade framing all 3 capture rings
+  for (const [px, py] of [
+    [9, 13],
+    [9, 23],
+    [17, 13],
+    [17, 23],
+    [43, 13],
+    [43, 23],
+    [35, 13],
+    [35, 23],
+    [21, 11],
+    [31, 11],
+    [21, 22],
+    [31, 22],
+  ] as const) {
+    g.obj('colosseum_pillar', px, py, true)
+  }
+
+  // Twin Guild War Standards (West Azure vs East Crimson vs Center Royal)
+  g.obj('war_standard', 10, 15, true, 0, 'ธงศึกปราการตะวันตก')
+  g.obj('war_standard', 10, 21, true, 0)
+  g.obj('war_standard', 42, 15, true, 1, 'ธงศึกปราการตะวันออก')
+  g.obj('war_standard', 42, 21, true, 1)
+  g.obj('war_standard', 23, 8, true, 2)
+  g.obj('war_standard', 29, 8, true, 2)
+
+  // Heroic Sword Monuments & Roaring War Braziers
+  g.obj('sword_monument', 26, 8, true, 0, 'ศิลาดาบเกียรติยศกิลด์')
+  g.obj('magma_brazier', 22, 14, true)
+  g.obj('magma_brazier', 30, 14, true)
+  g.obj('magma_brazier', 13, 12, true)
+  g.obj('magma_brazier', 39, 12, true)
+
+  // Flank Palisades, Siege Tents, Armory Racks & War Drums
+  g.obj('palisade', 18, 9, true)
+  g.obj('palisade', 20, 9, true)
+  g.obj('palisade', 32, 9, true)
+  g.obj('palisade', 34, 9, true)
+  g.obj('tent', 7, 7, true, 2, 'ค่ายบัญชาการตะวันตก')
+  g.obj('weapon_rack', 10, 8, true, 0)
+  g.obj('campfire', 8, 10, true)
+  g.obj('tent', 44, 7, true, 2, 'ค่ายบัญชาการตะวันออก')
+  g.obj('weapon_rack', 41, 8, true, 1)
+  g.obj('campfire', 43, 10, true)
+
+  // South Allied Rally Base
+  g.obj('guild_banner', 23, 25, true, 0, 'ค่ายพันธมิตร')
+  g.obj('guild_banner', 29, 25, true, 1)
+  g.obj('war_drum', 21, 28, true)
+  g.obj('war_drum', 31, 28, true)
+  g.obj('barrel_cluster', 17, 29, true)
+  g.obj('wagon', 35, 29, true)
+  g.obj('torch', 13, 25, true)
+  g.obj('torch', 39, 25, true)
+
+  return finalizeActivityMap(
+    g,
+    'act_guild_war',
+    'ปราการสงครามกิลด์',
+    'กิจกรรมยึดธงกิลด์',
+    'colosseum',
+    T.RUINS_FLOOR,
+    T.CASTLE_WALL,
+    { x: MIDX, y: 27 },
+    false,
+  )
+}
+
+// กิจกรรม 3: ลานล่าค่าหัวมอนสเตอร์แรร์ (act_bounty) — ไม่มีประตูวาร์ป
+function buildActivityBounty(): MapDef {
+  const g = new Grid(WW, WH, T.CAVEFLOOR)
+  g.rect(6, 5, WW - 12, WH - 10, T.RUINS_FLOOR)
+  g.disc(MIDX, 16, 8, T.CAVEFLOOR)
+  g.ring(MIDX, 16, 9, T.COBBLESTONE)
+  g.set(MIDX, 16, T.MAGIC_CIRCLE)
+  g.rect(MIDX - 1, 16, 3, 14, T.PATH)
+
+  // Outer wild crags, dark pines & glowing abyss crystals around edges
+  for (const [px, py] of [
+    [4, 6], [5, 13], [4, 22], [5, 29],
+    [47, 6], [46, 13], [47, 22], [46, 29],
+  ] as const) {
+    g.set(px, py, T.PINE)
+  }
+  for (const [cx, cy] of [
+    [8, 6], [43, 6], [8, 29], [43, 29],
+  ] as const) {
+    g.set(cx, cy, T.CRYSTAL)
+  }
+
+  // Ring of Runed Obelisks, Ruin Pillars & Torches framing the hunting ground
+  for (const [ox, oy, v] of [
+    [16, 10, 0],
+    [36, 10, 0],
+    [15, 21, 1],
+    [37, 21, 1],
+  ] as const) {
+    g.obj('obelisk', ox, oy, true, v, 'เสาอักขระผนึกค่าหัว')
+  }
+  for (const [rx, ry] of [
+    [19, 8],
+    [33, 8],
+    [18, 23],
+    [34, 23],
+    [11, 16],
+    [41, 16],
+  ] as const) {
+    g.obj('ruin_pillar', rx, ry, true)
+  }
+  for (const [tx, ty] of [
+    [12, 10],
+    [40, 10],
+    [12, 24],
+    [40, 24],
+    [22, 6],
+    [30, 6],
+  ] as const) {
+    g.obj('torch', tx, ty, true)
+  }
+
+  // Monster Lair Totems & Skull Cairns
+  g.obj('totem', 14, 14, true, 0, 'เสาคำสาปนักล่า')
+  g.obj('totem', 38, 14, true, 0)
+  g.obj('skull_pile', 16, 12, true, 1)
+  g.obj('skull_pile', 36, 12, true, 1)
+  g.obj('skull_pile', 26, 7, true, 0)
+  g.obj('magma_brazier', 21, 11, true)
+  g.obj('magma_brazier', 31, 11, true)
+  g.obj('chest_decor', 26, 5, true, 0, 'คลังรางวัลค่าหัว')
+
+  // Hunter Guild Outpost at South Spawn Flanks
+  g.obj('notice_board', 22, 27, true, 0, 'ป้ายประกาศค่าหัว')
+  g.obj('weapon_rack', 20, 29, true, 1)
+  g.obj('bench', 23, 30, true)
+  g.obj('campfire', 30, 27, true)
+  g.obj('tent', 33, 26, true, 1, 'กระโจมนายพรานค่าหัว')
+  g.obj('barrel_cluster', 31, 29, true)
+  g.obj('wagon', 37, 29, true)
+  g.obj('lamp_post', 24, 25, true)
+  g.obj('lamp_post', 28, 25, true)
+
+  return finalizeActivityMap(
+    g,
+    'act_bounty',
+    'หุบเขาล่าค่าหัว',
+    'กิจกรรมล่าค่าหัวแรร์',
+    'abyss',
+    T.RUINS_FLOOR,
+    T.CAVEWALL,
+    { x: MIDX, y: 28 },
+    false,
+  )
+}
+
+// กิจกรรม 4: เกาะลายแทงขุมทรัพย์ (act_treasure) — ไม่มีประตูวาร์ป
+function buildActivityTreasure(): MapDef {
+  const g = new Grid(WW, WH, T.WATER)
+  g.rect(7, 6, 38, 24, T.SAND)
+  g.rect(5, 9, 42, 18, T.SAND)
+  g.rect(21, 14, 11, 8, T.RUINS_FLOOR)
+  g.disc(26, 18, 2, T.PLAZA)
+  // Scenic inner tide pool north-west & south-east (keeping dig spots completely clear)
+  g.rect(19, 9, 3, 3, T.WATER)
+  g.rect(31, 24, 3, 3, T.WATER)
+
+  // Tropical flowers & sandy foliage patches (non-blocking)
+  for (const [fx, fy] of [
+    [10, 9], [41, 9], [11, 27], [41, 27], [17, 15], [35, 15],
+  ] as const) {
+    g.set(fx, fy, T.FLOWER)
+  }
+
+  // Swaying Palm Trees & Sakura Trees framing the island coast (clear of all 6 dig candidates)
+  for (const [px, py, v] of [
+    [9, 8, 0],
+    [43, 8, 1],
+    [8, 25, 1],
+    [44, 25, 0],
+    [16, 7, 0],
+    [35, 7, 1],
+    [20, 28, 0],
+    [32, 28, 1],
+  ] as const) {
+    g.obj('palm_tree', px, py, true, v)
+  }
+  for (const [sx, sy] of [
+    [11, 15],
+    [41, 15],
+    [11, 21],
+    [41, 21],
+  ] as const) {
+    g.obj('sakura_tree', sx, sy, true)
+  }
+
+  // Pirate Shipwreck, Ship Anchor & Moored Rowboats + Aquatic Lotus/Lanterns
+  g.obj('shipwreck', 7, 17, true, 0, 'ซากเรือโจรสลัดโบราณ')
+  g.obj('anchor_post', 44, 17, true, 0, 'สมอเรือโบราณ')
+  g.obj('wooden_boat', 4, 13, false, 0)
+  g.obj('wooden_boat', 48, 21, false, 1)
+  for (const [lx, ly, v] of [
+    [4, 8, 0], [47, 7, 1], [4, 27, 1], [47, 28, 0],
+    [20, 10, 0], [32, 25, 1], [15, 4, 0], [37, 31, 1],
+  ] as const) {
+    g.obj('lotus_lily', lx, ly, false, v)
+  }
+  for (const [fx, fy] of [
+    [3, 19], [48, 12], [26, 4], [26, 31],
+  ] as const) {
+    g.obj('lantern_float', fx, fy, false)
+  }
+
+  // Central Sun-Gold Ruin Altar & Explorer Camp (avoiding spawn 26,20 and dig spots 26,12 / 26,25)
+  g.obj('treasure_altar', 26, 15, true, 0, 'แท่นบูชาสุริยันขุมทรัพย์')
+  g.obj('ruin_pillar', 22, 15, true)
+  g.obj('ruin_pillar', 30, 15, true)
+  g.obj('ruin_pillar', 22, 21, true)
+  g.obj('ruin_pillar', 30, 21, true)
+  g.obj('campfire', 23, 19, true)
+  g.obj('barrel_cluster', 29, 19, true)
+  g.obj('chest_decor', 24, 16, true)
+  g.obj('chest_decor', 28, 16, true)
+  g.obj('torch', 19, 17, true)
+  g.obj('torch', 33, 17, true)
+  g.obj('tent', 17, 19, true, 0, 'ค่ายนักล่าสมบัติ')
+  g.obj('sign_arrow', 29, 22, true)
+  g.obj('chest_decor', 8, 12, true)
+  g.obj('chest_decor', 43, 24, true)
+
+  return finalizeActivityMap(
+    g,
+    'act_treasure',
+    'เกาะขุมทรัพย์ลึกลับ',
+    'กิจกรรมตามหาสมบัติ',
+    'isles',
+    T.SAND,
+    T.WATER,
+    { x: MIDX, y: 20 },
+    false,
+  )
+}
+
+// กิจกรรม 5: สังเวียนบอสรัช (act_boss_rush) — ไม่มีประตูวาร์ป
+function buildActivityBossRush(): MapDef {
+  const g = new Grid(WW, WH, T.COBBLESTONE)
+  g.disc(MIDX, MIDY, 13, T.RUINS_FLOOR)
+  g.disc(MIDX, MIDY, 9, T.GOLD_PAVING)
+  g.ring(MIDX, MIDY, 14, T.CASTLE_WALL)
+  g.rect(MIDX - 2, 25, 4, 7, T.CARPET)
+  g.rect(MIDX - 2, 5, 4, 7, T.CARPET)
+  g.set(MIDX, 16, T.MAGIC_CIRCLE)
+
+  // Grand Colosseum Pillars Ring
+  for (const [px, py, v] of [
+    [18, 11, 0],
+    [34, 11, 0],
+    [15, 15, 0],
+    [37, 15, 0],
+    [15, 21, 0],
+    [37, 21, 0],
+    [18, 25, 0],
+    [34, 25, 0],
+    [10, 9, 1],
+    [42, 9, 1],
+    [10, 27, 1],
+    [42, 27, 1],
+  ] as const) {
+    g.obj('colosseum_pillar', px, py, true, v)
+  }
+
+  // Roaring Magma Braziers & Rune Obelisks
+  for (const [bx, by] of [
+    [21, 13],
+    [31, 13],
+    [21, 23],
+    [31, 23],
+    [17, 18],
+    [35, 18],
+  ] as const) {
+    g.obj('magma_brazier', bx, by, true)
+  }
+  g.obj('obelisk', 19, 8, true, 0, 'เสาจารึกเวลาแชมเปี้ยน')
+  g.obj('obelisk', 33, 8, true, 0)
+
+  // Royal Northern Sanctum: Champion Statue, Sword Monuments & Guild Standards
+  g.obj('statue', 26, 7, true, 0, 'อนุสาวรีย์แชมเปี้ยน')
+  g.obj('sword_monument', 22, 8, true, 0)
+  g.obj('sword_monument', 30, 8, true, 0)
+  g.obj('war_standard', 23, 10, true, 1)
+  g.obj('war_standard', 29, 10, true, 1)
+
+  // Southern Gladiator Warm-up Promenade
+  g.obj('war_drum', 22, 26, true, 0, 'กลองเปิดสังเวียน')
+  g.obj('war_drum', 30, 26, true, 0)
+  g.obj('weapon_rack', 20, 28, true, 0)
+  g.obj('weapon_rack', 32, 28, true, 1)
+  g.obj('guild_banner', 23, 29, true, 0)
+  g.obj('guild_banner', 29, 29, true, 1)
+  g.obj('lamp_post', 22, 24, true)
+  g.obj('lamp_post', 30, 24, true)
+  g.obj('chest_decor', 11, 18, true)
+  g.obj('chest_decor', 41, 18, true)
+
+  return finalizeActivityMap(
+    g,
+    'act_boss_rush',
+    'สังเวียนบอสรัช',
+    'กิจกรรมบอสรัชจับเวลา',
+    'colosseum',
+    T.GOLD_PAVING,
+    T.CASTLE_WALL,
+    { x: MIDX, y: 26 },
+    false,
+  )
+}
+
+// กิจกรรม 6: บึงแข่งขันตกปลายักษ์ (act_fishing) — เขตปลอดภัย ไม่มีประตูวาร์ป
+function buildActivityFishing(): MapDef {
+  const g = new Grid(WW, WH, T.GRASS)
+  g.rect(7, 6, 38, 24, T.WATER)
+  // Central Wooden Pavilion & 6 Pier Platforms matching FISHING_DERBY_SPOTS
+  g.rect(23, 15, 7, 7, T.WOOD_FLOOR)
+  g.rect(25, 4, 3, 12, T.BRIDGE_V)
+  g.rect(24, 9, 5, 3, T.WOOD_FLOOR) // North spot (26, 10)
+  g.rect(25, 21, 3, 11, T.BRIDGE_V)
+  g.rect(24, 25, 5, 3, T.WOOD_FLOOR) // South spot (26, 26)
+  g.rect(5, 17, 19, 3, T.BRIDGE_H)
+  g.rect(13, 13, 3, 11, T.WOOD_FLOOR) // West spots (14,14) & (14,22)
+  g.rect(29, 17, 18, 3, T.BRIDGE_H)
+  g.rect(37, 13, 3, 11, T.WOOD_FLOOR) // East spots (38,14) & (38,22)
+
+  // Blooming lakeside gardens along the outer grassy shore
+  for (let x = 4; x <= 47; x += 3) {
+    g.set(x, 4, T.FLOWER)
+    g.set(x, 31, T.FLOWER)
+  }
+  for (const [fx, fy] of [
+    [4, 8], [4, 15], [4, 23], [4, 29],
+    [47, 8], [47, 15], [47, 23], [47, 29],
+  ] as const) {
+    g.set(fx, fy, T.FLOWER)
+  }
+
+  // Aquatic Water Props (non-solid lotus lilies, glowing floating lanterns & moored boats!)
+  for (const [lx, ly, v] of [
+    [10, 9, 0], [18, 8, 1], [34, 8, 0], [42, 9, 1],
+    [9, 14, 1], [19, 14, 0], [33, 14, 1], [43, 14, 0],
+    [9, 22, 0], [19, 22, 1], [33, 22, 0], [43, 22, 1],
+    [11, 27, 1], [18, 28, 0], [34, 28, 1], [41, 27, 0],
+  ] as const) {
+    g.obj('lotus_lily', lx, ly, false, v)
+  }
+  for (const [fx, fy] of [
+    [17, 11], [35, 11], [17, 25], [35, 25],
+    [21, 8], [31, 8], [21, 28], [31, 28],
+    [10, 12], [42, 12], [10, 24], [42, 24],
+  ] as const) {
+    g.obj('lantern_float', fx, fy, false)
+  }
+  // Moored wooden rowboats floating beside the fishing piers
+  g.obj('wooden_boat', 11, 16, false, 0)
+  g.obj('wooden_boat', 41, 20, false, 1)
+  g.obj('wooden_boat', 22, 12, false, 0)
+  g.obj('wooden_boat', 30, 24, false, 1)
+
+  // Central Pavilion Warm Lanterns, Benches, Tackle & Flower Planters
+  g.obj('lamp_post', 23, 15, true)
+  g.obj('lamp_post', 29, 15, true)
+  g.obj('bench', 23, 21, true)
+  g.obj('barrel_cluster', 29, 21, true)
+  g.obj('flower_cart', 24, 15, true)
+  g.obj('flower_cart', 28, 15, true)
+  g.obj('fish_rack', 23, 16, true, 0, 'ราวตากปลานักตกปลา')
+  g.obj('fish_rack', 29, 20, true, 1)
+
+  // Angler Equipment on Pier Corners (preserving 3x3 around all 6 FISHING_DERBY_SPOTS)
+  g.obj('lamp_post', 13, 16, true)
+  g.obj('lamp_post', 39, 16, true)
+  g.obj('anchor_post', 15, 20, true)
+  g.obj('anchor_post', 37, 20, true)
+
+  // Cozy Lakeside Shoreline Trees, Camps, Shrine & Benches
+  for (const [sx, sy] of [
+    [5, 5], [15, 4], [37, 4], [47, 5],
+    [5, 30], [15, 31], [37, 31], [47, 30],
+  ] as const) {
+    g.obj('sakura_tree', sx, sy, true)
+  }
+  for (const [px, py, v] of [
+    [10, 4, 0], [42, 4, 1], [10, 31, 1], [42, 31, 0],
+  ] as const) {
+    g.obj('palm_tree', px, py, true, v)
+  }
+  g.obj('tent', 4, 10, true, 0, 'ซุ้มนักตกปลา')
+  g.obj('campfire', 4, 13, true)
+  g.obj('fish_rack', 5, 20, true, 0)
+  g.obj('tent', 47, 25, true, 1, 'กระโจมชั่งน้ำหนักปลา')
+  g.obj('campfire', 47, 22, true)
+  g.obj('well', 4, 26, true)
+  g.obj('dream_shrine', 21, 4, true, 0, 'ศาลเจ้าเทพเจ้าวารี')
+  g.obj('bench', 31, 4, true)
+  g.obj('bench', 21, 31, true)
+  g.obj('notice_board', 31, 31, true, 0, 'ตารางสถิตินักตกปลา')
+
+  return finalizeActivityMap(
+    g,
+    'act_fishing',
+    'บึงแข่งขันตกปลายักษ์',
+    'กิจกรรมตกปลา (ปลอดภัย)',
+    'coast',
+    T.WOOD_FLOOR,
+    T.TREE,
+    { x: MIDX, y: MIDY },
+    true,
+  )
+}
+
 export const MAPS: Record<string, MapDef> = {
   town: buildTown(),
   meadow: buildMeadow(),
@@ -1351,6 +1940,12 @@ export const MAPS: Record<string, MapDef> = {
   sky: buildSky(),
   abyss: buildAbyss(),
   world: buildWorldBossSanctum(),
+  act_invasion: buildActivityInvasion(),
+  act_guild_war: buildActivityGuildWar(),
+  act_bounty: buildActivityBounty(),
+  act_treasure: buildActivityTreasure(),
+  act_boss_rush: buildActivityBossRush(),
+  act_fishing: buildActivityFishing(),
 }
 
 export const MAP_ORDER = [

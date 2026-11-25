@@ -1,5 +1,6 @@
 'use client'
 
+import { onAuthStateChanged } from 'firebase/auth'
 import {
   collection,
   deleteDoc,
@@ -730,24 +731,93 @@ export async function fetchGuildMessages(guildId: string): Promise<GuildChatMess
   }
 }
 
+const LOCAL_GUILD_CHAT_EVENT = 'pixelquest:guild-chat-local'
+
 export function subscribeGuildMessages(
   guildId: string,
   onUpdate: (messages: GuildChatMessage[]) => void,
 ): () => void {
-  if (!isSignedInVerified() || guildId.startsWith('guild_')) {
-    onUpdate(readLocalJson<Record<string, GuildChatMessage[]>>(LOCAL_GUILD_CHAT_KEY, {})[guildId] ?? [])
-    return () => {}
+  let disposed = false
+  let unsubSnapshot: (() => void) | null = null
+  let retryTimer: number | null = null
+  let retryAttempt = 0
+
+  const emitLocal = () => {
+    if (disposed) return
+    const list = readLocalJson<Record<string, GuildChatMessage[]>>(LOCAL_GUILD_CHAT_KEY, {})[guildId] ?? []
+    onUpdate([...list].sort((a, b) => a.createdAtMs - b.createdAtMs))
   }
-  const q = query(collection(db, 'guilds', guildId, 'messages'), orderBy('createdAtMs', 'asc'), limit(40))
-  return onSnapshot(
-    q,
-    (snap) => {
-      onUpdate(snap.docs.map((d) => d.data() as GuildChatMessage))
-    },
-    () => {
-      onUpdate(readLocalJson<Record<string, GuildChatMessage[]>>(LOCAL_GUILD_CHAT_KEY, {})[guildId] ?? [])
-    },
-  )
+
+  const clearSnapshot = () => {
+    if (retryTimer !== null && typeof window !== 'undefined') {
+      window.clearTimeout(retryTimer)
+      retryTimer = null
+    }
+    if (unsubSnapshot) {
+      unsubSnapshot()
+      unsubSnapshot = null
+    }
+  }
+
+  const attachSnapshot = () => {
+    clearSnapshot()
+    if (disposed) return
+    if (!isSignedInVerified() || guildId.startsWith('guild_')) {
+      emitLocal()
+      return
+    }
+    const q = query(collection(db, 'guilds', guildId, 'messages'), orderBy('createdAtMs', 'desc'), limit(40))
+    unsubSnapshot = onSnapshot(
+      q,
+      (snap) => {
+        if (disposed) return
+        retryAttempt = 0
+        const rows = snap.docs
+          .map((d) => d.data() as GuildChatMessage)
+          .sort((a, b) => a.createdAtMs - b.createdAtMs)
+        onUpdate(rows)
+      },
+      () => {
+        if (disposed) return
+        emitLocal()
+        if (typeof window !== 'undefined' && isSignedInVerified() && !guildId.startsWith('guild_')) {
+          const delayMs = Math.min(15_000, 2_000 * 2 ** retryAttempt)
+          retryAttempt = Math.min(3, retryAttempt + 1)
+          retryTimer = window.setTimeout(() => {
+            if (!disposed) attachSnapshot()
+          }, delayMs)
+        }
+      },
+    )
+  }
+
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === LOCAL_GUILD_CHAT_KEY) emitLocal()
+  }
+  const onLocalEvent = () => {
+    emitLocal()
+  }
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', onStorage)
+    window.addEventListener(LOCAL_GUILD_CHAT_EVENT, onLocalEvent)
+  }
+
+  const unsubAuth = onAuthStateChanged(auth, () => {
+    retryAttempt = 0
+    attachSnapshot()
+  })
+
+  attachSnapshot()
+
+  return () => {
+    disposed = true
+    clearSnapshot()
+    unsubAuth()
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('storage', onStorage)
+      window.removeEventListener(LOCAL_GUILD_CHAT_EVENT, onLocalEvent)
+    }
+  }
 }
 
 export async function sendGuildMessage(
@@ -784,6 +854,9 @@ export async function sendGuildMessage(
   const nextList = [...(localMap[guildId] ?? []), entry].slice(-40)
   localMap[guildId] = nextList
   writeLocalJson(LOCAL_GUILD_CHAT_KEY, localMap)
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(LOCAL_GUILD_CHAT_EVENT))
+  }
   return { ok: true, message: entry }
 }
 

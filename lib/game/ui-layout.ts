@@ -141,6 +141,7 @@ export const WINDOW_META: Record<PanelId, { title: string; defaultW: number; def
   'treasure-chest': { title: 'หีบสมบัติ & สุ่มไอเทม', defaultW: 820, defaultH: 560 },
   redeem: { title: 'แลกไอเทมโค้ด (Redeem Code)', defaultW: 540, defaultH: 480 },
   events: { title: 'เทศกาล & กิจกรรมเซิร์ฟเวอร์', defaultW: 780, defaultH: 560 },
+  activities: { title: 'กิจกรรมพิเศษ (วาร์ปเข้า-ออก)', defaultW: 820, defaultH: 560 },
   'wing-gacha': { title: 'ตู้ไข่สุ่มปีกแห่งน้ำพุเมือง', defaultW: 740, defaultH: 560 },
 }
 

@@ -9,6 +9,7 @@ import { formatPresenceStatusLabel } from '@/lib/firebase/presence-helpers'
 import { MAPS, TILE } from '@/lib/game/maps'
 import { createDuelFighter } from '@/lib/game/mmo-systems'
 import { formatGameUid } from '@/lib/game/permissions'
+import { isBotPlayerId } from '@/lib/game/player-bots'
 import { createTrade, sendFriendRequest, sendWhisper } from '@/lib/game/social'
 import {
   blockPlayerAction,
@@ -22,6 +23,7 @@ import {
   isPlayerBlocked,
   notify,
   openPanel,
+  triggerBotSocialReaction,
   unblockPlayerAction,
 } from '@/lib/game/engine'
 
@@ -54,6 +56,11 @@ export function PlayerActionMenu() {
 
   const handleSendReport = async (targetUid: string, targetGameUid: string, targetName: string) => {
     if (reporting) return
+    if (isBotPlayerId(targetUid)) {
+      game.chat.push({ id: Date.now(), type: 'system', text: `ส่งบันทึกตรวจสอบพฤติกรรม ${targetName} เรียบร้อยแล้ว` })
+      closeMenu()
+      return
+    }
     setReporting(true)
     try {
       const res = await submitPlayerReport({
@@ -87,6 +94,10 @@ export function PlayerActionMenu() {
   }
 
   const invitePartyByGameUid = (targetUid: string) => {
+    if (isBotPlayerId(targetUid)) {
+      run(Promise.resolve(triggerBotSocialReaction(targetUid, 'party')))
+      return
+    }
     const p = game.p
     if (!p) return
     const s = getStats(p)
@@ -115,6 +126,12 @@ export function PlayerActionMenu() {
   }
 
   const challengeDuel = (userId: string, displayName: string) => {
+    if (isBotPlayerId(userId)) {
+      const res = triggerBotSocialReaction(userId, 'duel')
+      game.chat.push({ id: Date.now(), type: 'system', text: res.message })
+      closeMenu()
+      return
+    }
     const p = game.p
     if (!p) return
     const s = getStats(p)

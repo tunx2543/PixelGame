@@ -3097,6 +3097,135 @@ export function mapObjectSprite(kind: MapObjectKind, frame = 0, variant = 0): HT
         s.rect(13, 14, 3, 3, '#495057')
         return s.toCanvas(true)
       }
+      case 'ballista_turret': {
+        const s = new PixelSurface(24, 22)
+        s.rect(5, 13, 14, 6, '#7f5539')
+        s.rect(9, 8, 6, 7, '#5c3d2e')
+        s.rect(4, 5, 16, 3, '#b07d4f')
+        s.rect(10, 3, 4, 9, '#adb5bd')
+        s.px(11, 2, '#e9ecef')
+        return s.toCanvas(true)
+      }
+      case 'palisade': {
+        const s = new PixelSurface(20, 22)
+        for (const px of [2, 6, 10, 14]) {
+          s.rect(px, 6, 3, 14, '#7f5539')
+          s.px(px + 1, 5, '#c8956b')
+        }
+        s.rect(1, 12, 18, 2, '#5c3d2e')
+        return s.toCanvas(true)
+      }
+      case 'weapon_rack': {
+        const s = new PixelSurface(22, 22)
+        s.rect(4, 17, 14, 3, '#6b4226')
+        s.rect(4, 5, 2, 13, '#7f5539')
+        s.rect(16, 5, 2, 13, '#7f5539')
+        s.rect(3, 4, 16, 2, '#9c6644')
+        s.line(8, 6, 8, 16, '#ced4da', 1)
+        s.line(11, 5, 11, 16, '#ffd166', 1)
+        s.line(14, 6, 14, 16, '#94d2bd', 1)
+        return s.toCanvas(true)
+      }
+      case 'war_drum': {
+        const s = new PixelSurface(18, 20)
+        s.rect(4, 14, 10, 4, '#5c3d2e')
+        s.rect(4, 6, 10, 8, '#c1121f')
+        s.rect(5, 4, 8, 3, '#f4efe6')
+        s.rect(3, 8, 12, 2, '#ffd166')
+        return s.toCanvas(true)
+      }
+      case 'war_standard': {
+        const s = new PixelSurface(16, 28)
+        const flagCol = variant === 1 ? '#d62828' : variant === 2 ? '#7209b7' : '#2563eb'
+        s.rect(7, 2, 2, 24, '#cbd5e1')
+        s.rect(4, 5, 8, 1, '#ffd166')
+        s.rect(8 + (f === 1 ? 1 : 0), 6, 6, 11, flagCol)
+        s.rect(10, 9, 2, 4, '#ffd60a')
+        return s.toCanvas(true)
+      }
+      case 'sword_monument': {
+        const s = new PixelSurface(20, 28)
+        s.rect(4, 20, 12, 6, '#6c757d')
+        s.rect(6, 17, 8, 3, '#adb5bd')
+        s.rect(9, 4, 2, 14, '#e0fbfc')
+        s.rect(6, 8, 8, 2, '#ffd166')
+        s.px(9, 2, '#90e0ef')
+        return s.toCanvas(true)
+      }
+      case 'obelisk': {
+        const s = new PixelSurface(18, 30)
+        s.rect(4, 22, 10, 6, '#334155')
+        s.rect(6, 9, 6, 14, '#475569')
+        s.rect(7, 5, 4, 4, '#64748b')
+        s.px(8, 12, variant === 1 ? '#e879f9' : '#38bdf8')
+        s.px(9, 16, variant === 1 ? '#e879f9' : '#38bdf8')
+        return s.toCanvas(true)
+      }
+      case 'palm_tree': {
+        const s = new PixelSurface(24, 30)
+        s.rect(10, 12, 4, 15, '#8a5a3b')
+        s.rect(4, 7, 16, 4, '#2d9d4e')
+        s.rect(6, 4, 12, 5, '#52b788')
+        s.px(10, 11, '#5c3d2e')
+        s.px(13, 11, '#5c3d2e')
+        return s.toCanvas(true)
+      }
+      case 'shipwreck': {
+        const s = new PixelSurface(28, 22)
+        s.rect(3, 12, 22, 7, '#6b4226')
+        s.rect(5, 10, 16, 3, '#9c6644')
+        s.line(13, 2, 13, 13, '#5c3d2e', 2)
+        s.rect(14, 4, 7, 6, '#e5e5e5')
+        return s.toCanvas(true)
+      }
+      case 'anchor_post': {
+        const s = new PixelSurface(18, 20)
+        s.rect(7, 5, 4, 12, '#475569')
+        s.rect(4, 8, 10, 2, '#64748b')
+        s.rect(5, 14, 8, 3, '#334155')
+        s.px(8, 4, '#ffd166')
+        return s.toCanvas(true)
+      }
+      case 'treasure_altar': {
+        const s = new PixelSurface(24, 26)
+        s.rect(4, 18, 16, 6, '#8d99ae')
+        s.rect(6, 12, 12, 6, '#e9c46a')
+        s.rect(9, 6, 6, 6, '#ffd60a')
+        s.px(11, 8, '#ef233c')
+        return s.toCanvas(true)
+      }
+      case 'wooden_boat': {
+        const s = new PixelSurface(26, 16)
+        s.rect(3, 7 + (f % 2), 20, 6, '#8a5a3b')
+        s.rect(6, 8 + (f % 2), 14, 3, '#b07d4f')
+        s.rect(10, 5 + (f % 2), 6, 2, '#e9c46a')
+        return s.toCanvas(true)
+      }
+      case 'lantern_float': {
+        const s = new PixelSurface(16, 16)
+        s.rect(4, 10, 8, 3, '#7f5539')
+        s.rect(5, 5, 6, 5, '#ffd166')
+        s.rect(6, 6, 4, 3, f === 1 ? '#fff3b0' : '#ffb703')
+        s.rect(4, 4, 8, 1, '#b23a48')
+        return s.toCanvas(true)
+      }
+      case 'lotus_lily': {
+        const s = new PixelSurface(18, 14)
+        s.rect(3, 7, 12, 4, '#2d9d4e')
+        s.rect(6, 4, 6, 4, variant % 2 === 0 ? '#ff8fab' : '#ffd166')
+        s.px(8, 5, '#fff0f3')
+        return s.toCanvas(true)
+      }
+      case 'fish_rack': {
+        const s = new PixelSurface(22, 22)
+        s.rect(4, 5, 2, 15, '#8a5a3b')
+        s.rect(16, 5, 2, 15, '#8a5a3b')
+        s.rect(3, 6, 16, 2, '#c8956b')
+        s.rect(7, 9, 2, 6, '#90e0ef')
+        s.rect(11, 9, 2, 7, '#ffd166')
+        s.rect(14, 10, 2, 5, '#48cae4')
+        return s.toCanvas(true)
+      }
       case 'sign_arrow':
       default: {
         const s = new PixelSurface(16, 20)
@@ -3231,6 +3360,86 @@ export function itemIconUrl(icon: string, color: string) {
     ctx.lineTo(17, 16)
     ctx.closePath()
     ctx.fill()
+  } else if (icon === 'bag') {
+    // 2.5D Treasure Chest / Random Box with gold trim & gem lock
+    ctx.fillStyle = grad
+    ctx.beginPath()
+    ctx.roundRect(8, 12, 32, 26, 5)
+    ctx.fill()
+    ctx.stroke()
+
+    ctx.fillStyle = '#facc15'
+    ctx.beginPath()
+    ctx.roundRect(8, 21, 32, 4.5, 1)
+    ctx.fill()
+    ctx.stroke()
+
+    ctx.fillStyle = '#fde047'
+    ctx.beginPath()
+    ctx.roundRect(20, 19, 8, 9, 2)
+    ctx.fill()
+    ctx.stroke()
+
+    ctx.fillStyle = 'rgba(255,255,255,0.45)'
+    ctx.fillRect(12, 14, 24, 3)
+  } else if (icon === 'ticket') {
+    // Ornate Guild / Bounty Seal Medallion
+    ctx.fillStyle = grad
+    ctx.beginPath()
+    ctx.arc(24, 24, 15, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+
+    ctx.strokeStyle = '#fef08a'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.arc(24, 24, 10, 0, Math.PI * 2)
+    ctx.stroke()
+
+    ctx.fillStyle = '#fef9c3'
+    ctx.beginPath()
+    ctx.moveTo(24, 15)
+    ctx.lineTo(29, 24)
+    ctx.lineTo(24, 33)
+    ctx.lineTo(19, 24)
+    ctx.closePath()
+    ctx.fill()
+  } else if (icon === 'scroll') {
+    // Rolled Parchment Scroll
+    ctx.fillStyle = grad
+    ctx.beginPath()
+    ctx.roundRect(12, 9, 24, 30, 4)
+    ctx.fill()
+    ctx.stroke()
+
+    ctx.fillStyle = '#facc15'
+    ctx.beginPath()
+    ctx.roundRect(9, 8, 30, 6, 3)
+    ctx.roundRect(9, 34, 30, 6, 3)
+    ctx.fill()
+    ctx.stroke()
+  } else if (icon === 'core') {
+    // Luminous Orb / Compass Core
+    ctx.fillStyle = grad
+    ctx.beginPath()
+    ctx.arc(24, 24, 14, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+
+    ctx.fillStyle = 'rgba(255,255,255,0.6)'
+    ctx.beginPath()
+    ctx.arc(19, 19, 4.5, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.strokeStyle = '#fef08a'
+    ctx.lineWidth = 1.8
+    ctx.beginPath()
+    ctx.moveTo(24, 13)
+    ctx.lineTo(27, 24)
+    ctx.lineTo(24, 35)
+    ctx.lineTo(21, 24)
+    ctx.closePath()
+    ctx.stroke()
   } else {
     ctx.fillStyle = grad
     ctx.beginPath()

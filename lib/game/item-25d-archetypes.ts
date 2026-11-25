@@ -175,6 +175,13 @@ export function classifyItem25dArchetype(
   }
 
   // Consumables / Materials / Special
+  if (id === 'act_weapon_box_rare' || id === 'act_weapon_box_legend') return 'chest_box'
+  if (id === 'act_item_bastion_ration') return 'food_platter'
+  if (id === 'act_item_war_horn') return 'emblem'
+  if (id === 'act_item_bounty_seal') return 'ticket'
+  if (id === 'act_item_pirate_compass') return 'orb'
+  if (id === 'act_item_colosseum_elixir') return 'potion'
+  if (id === 'act_item_golden_bait') return 'fish'
   if (id === 'event_token') return 'ticket'
   if (id === 'event_lucky_box' || id === 'event_mythic_chest') return 'chest_box'
   if (id === 'event_festival_feast') return 'food_platter'
