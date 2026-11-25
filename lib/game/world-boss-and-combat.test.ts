@@ -19,10 +19,18 @@ import {
 import { getWorldBossScheduleList } from './mmo-systems'
 import {
   getActiveWorldBoss,
+  getClosedWorldBossCycles,
   getScheduledWorldBossOccurrences,
+  isWorldBossCycleClosed,
+  markWorldBossCycleClosed,
+  reopenWorldBossCycle,
+  resetClosedWorldBossCyclesForTests,
   setWorldBossTestOverride,
+  syncClosedWorldBossCycles,
 } from './rpg-systems'
 import {
+  closeStoredWorldBossEvent,
+  getEffectiveClosedWorldBossCycles,
   getEffectiveStoredWorldBossTest,
   getPublicWorldEvents,
   resetGmEventsMemoryCacheForTests,
@@ -59,10 +67,12 @@ for (const filePath of GM_EVENTS_FILES) {
 
 afterEach(() => {
   setWorldBossTestOverride(null)
+  resetClosedWorldBossCyclesForTests()
 })
 
 after(() => {
   setWorldBossTestOverride(null)
+  resetClosedWorldBossCyclesForTests()
   for (const [filePath, prev] of snapshots.entries()) {
     try {
       if (prev === null) {
@@ -183,6 +193,77 @@ describe('Event World Boss Mon/Wed/Fri 20:00 ICT schedule & GM Test mode', () =>
     setStoredWorldBossTest(null, nowMs)
     assert.equal(getEffectiveStoredWorldBossTest(nowMs), null)
     assert.equal(getPublicWorldEvents(0).worldBossTest, null)
+  })
+
+  it('closes scheduled and GM test World Boss events immediately when the boss is killed', () => {
+    const mon2015 = Date.UTC(2026, 10, 23, 13, 15, 0) // Monday 20:15 ICT (during 20:00-21:00 window)
+    const activeMon = getActiveWorldBoss(mon2015)
+    assert.equal(activeMon.isActive, true)
+    assert.equal(activeMon.cycleKey, 'event_wb_20261123_2000')
+
+    // Killing the scheduled boss marks its cycle closed -> event closes immediately and advances to Wednesday
+    assert.equal(markWorldBossCycleClosed(activeMon.cycleKey), true)
+    assert.equal(isWorldBossCycleClosed('event_wb_20261123_2000'), true)
+
+    const afterKill = getActiveWorldBoss(mon2015)
+    assert.equal(afterKill.isActive, false)
+    assert.equal(afterKill.cycleKey, 'event_wb_20261125_2000')
+    assert.ok(afterKill.startsAtMs > mon2015)
+
+    // HP bar also hides immediately once active event is closed
+    assert.equal(
+      resolveGlobalWorldBossHpBar({
+        liveMapBoss: null,
+        activeEventSpec: afterKill,
+        currentMapId: 'town',
+      }),
+      null,
+    )
+
+    // GM Test boss also closes immediately upon kill & server store prevents stale re-open
+    const nowMs = Date.now()
+    const gmTest = {
+      active: true,
+      cycleKey: 'test_wb_kill_now',
+      bossId: 'wb_world_golem',
+      name: 'โกเลมจักรกลโลกา',
+      monsterId: 'world_golem',
+      level: 95,
+      element: 'earth' as const,
+      maxHp: 1_500_000,
+      atk: 320,
+      def: 120,
+      startedAtMs: nowMs - 2_000,
+      expiresAtMs: nowMs + 20 * 60_000,
+      triggeredByName: 'GMTUNX',
+    }
+    for (const filePath of GM_EVENTS_FILES) {
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
+    }
+    resetGmEventsMemoryCacheForTests()
+    setStoredWorldBossTest(gmTest, nowMs)
+    setWorldBossTestOverride(gmTest)
+    assert.equal(getActiveWorldBoss(nowMs).isActive, true)
+    assert.equal(getActiveWorldBoss(nowMs).cycleKey, 'test_wb_kill_now')
+
+    const closedRes = closeStoredWorldBossEvent('test_wb_kill_now', nowMs)
+    assert.equal(closedRes.worldBossTest, null)
+    assert.ok(closedRes.closedWorldBossCycles.includes('test_wb_kill_now'))
+    assert.ok(getEffectiveClosedWorldBossCycles().includes('test_wb_kill_now'))
+
+    syncClosedWorldBossCycles(closedRes.closedWorldBossCycles)
+    assert.equal(getActiveWorldBoss(nowMs).isTestMode, false)
+    // Re-applying stale test override for the same killed cycleKey must stay inactive
+    assert.equal(setWorldBossTestOverride(gmTest), null)
+    assert.ok(getClosedWorldBossCycles().includes('test_wb_kill_now'))
+
+    // Summoning a new GM test boss with a new cycleKey works cleanly
+    reopenWorldBossCycle('event_wb_20261123_2000')
+    const freshTest = { ...gmTest, cycleKey: 'test_wb_fresh_2' }
+    assert.ok(setStoredWorldBossTest(freshTest, nowMs))
+    assert.ok(setWorldBossTestOverride(freshTest))
+    assert.equal(getActiveWorldBoss(nowMs).isActive, true)
+    assert.equal(getActiveWorldBoss(nowMs).cycleKey, 'test_wb_fresh_2')
   })
 })
 

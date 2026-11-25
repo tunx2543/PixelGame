@@ -87,6 +87,9 @@ import {
   rollStatusInfliction,
   type StatusEffectType,
 } from '@/lib/game/rpg-systems'
+import { syncBgmContext } from '@/lib/game/bgm'
+import { isSfxMuted, setSfxMuted, subscribeSfx } from '@/lib/game/sfx'
+import { BgmQuickControl } from './bgm-quick-control'
 
 type ArenaPhase = 'LOADING' | 'READY' | 'FIGHTING' | 'VICTORY' | 'DEFEAT'
 
@@ -209,6 +212,21 @@ export function MonsterEncounterArena() {
   }, [])
 
   const popupTimersRef = useRef<number[]>([])
+
+  useEffect(() => {
+    setMuted(isSfxMuted())
+    return subscribeSfx(() => setMuted(isSfxMuted()))
+  }, [])
+
+  useEffect(() => {
+    if (phase === 'LOADING' || !enemy) return
+    syncBgmContext({
+      screen: 'encounter',
+      mapId: enemy.biome,
+      bossActive: enemy.rarity === 'boss' && (phase === 'READY' || phase === 'FIGHTING'),
+      inCombat: phase === 'FIGHTING',
+    })
+  }, [enemy, phase])
 
   useEffect(() => {
     return () => {
@@ -1086,14 +1104,23 @@ export function MonsterEncounterArena() {
 
         <div className="flex shrink-0 items-center gap-2">
           <AccountPanel compact />
+          <BgmQuickControl
+            variant="arena"
+            context={{
+              screen: 'encounter',
+              mapId: enemy?.biome ?? 'meadow',
+              bossActive: Boolean(enemy?.rarity === 'boss' && (phase === 'READY' || phase === 'FIGHTING')),
+              inCombat: phase === 'FIGHTING',
+            }}
+          />
           <button
             type="button"
-            onClick={() => setMuted((m) => !m)}
+            onClick={() => setSfxMuted(!muted)}
             aria-label={muted ? 'เปิดเสียงเอฟเฟกต์' : 'ปิดเสียงเอฟเฟกต์'}
             className="pixel-btn flex min-h-10 shrink-0 items-center gap-1.5 whitespace-nowrap bg-secondary px-2.5 py-2 text-xs text-foreground hover:brightness-110 sm:px-3"
           >
             {muted ? <VolumeX className="size-4" aria-hidden /> : <Volume2 className="size-4" aria-hidden />}
-            <span className="hidden sm:inline">{muted ? 'ปิดเสียง' : 'เสียง 8-bit'}</span>
+            <span className="hidden sm:inline">{muted ? 'ปิด SFX' : 'SFX'}</span>
           </button>
         </div>
       </header>

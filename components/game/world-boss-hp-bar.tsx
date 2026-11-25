@@ -5,8 +5,8 @@ import { AnimatePresence, motion, useAnimationControls, useReducedMotion } from 
 import { AlertTriangle, Crown, Flame, Swords, Zap } from 'lucide-react'
 import { subscribeWorldBossState, type WorldBossRaidState } from '@/lib/firebase/rpg-online'
 import { MONSTERS } from '@/lib/game/data'
-import { openPanel } from '@/lib/game/engine'
-import { ELEMENT_META, getActiveWorldBoss, getMonsterElement } from '@/lib/game/rpg-systems'
+import { closeWorldBossEventAction, openPanel } from '@/lib/game/engine'
+import { ELEMENT_META, getActiveWorldBoss, getMonsterElement, isWorldBossCycleClosed } from '@/lib/game/rpg-systems'
 import { useGame } from '@/lib/game/use-game'
 import {
   WORLD_BOSS_CRIT_SHAKE_MS,
@@ -61,6 +61,36 @@ export function WorldBossHpBar() {
     }, 1000)
     return () => window.clearInterval(timer)
   }, [playerPresent, activeSpec.isActive, liveMapBoss])
+
+  useEffect(() => {
+    if (
+      !playerPresent ||
+      !activeSpec.isActive ||
+      liveMapBoss ||
+      !raidState ||
+      raidState.cycleKey !== activeSpec.cycleKey ||
+      raidState.currentHp > 0 ||
+      isWorldBossCycleClosed(activeSpec.cycleKey)
+    ) {
+      return
+    }
+    closeWorldBossEventAction({
+      cycleKey: activeSpec.cycleKey,
+      bossId: activeSpec.bossId,
+      bossName: activeSpec.name,
+      maxHp: activeSpec.maxHp,
+    })
+  }, [
+    playerPresent,
+    activeSpec.isActive,
+    activeSpec.cycleKey,
+    activeSpec.bossId,
+    activeSpec.name,
+    activeSpec.maxHp,
+    liveMapBoss,
+    raidState?.cycleKey,
+    raidState?.currentHp,
+  ])
 
   const liveDef = liveMapBoss ? MONSTERS[liveMapBoss.defId] : undefined
   const view =

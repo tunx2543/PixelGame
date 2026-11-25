@@ -12,6 +12,7 @@ import {
   applyFieldBossRewardAction,
   claimWorldBossMilestoneAction,
   closePanel,
+  closeWorldBossEventAction,
   getStats,
   gmEndEventWorldBossTestAction,
   gmSummonEventWorldBossTestAction,
@@ -350,11 +351,19 @@ export function GuildBossPanel() {
         diamonds: 15,
         exp: 0,
       })
+      closeWorldBossEventAction({
+        cycleKey: bossSpec.cycleKey,
+        bossId: bossSpec.bossId,
+        bossName: bossSpec.name,
+        maxHp: bossSpec.maxHp,
+      })
     }
     setAttackCdMs(3000)
     setBusy(false)
     setNotice(
-      `โจมตี ${bossSpec.name} ทำดาเมจ ${formatNum(damage)}${crit ? ' (คริติคอล!)' : ''}${elem.effectiveness === 'super' ? ' [ชนะธาตุ!]' : ''}`,
+      prevHp > 0 && updatedWb.currentHp <= 0
+        ? `สังหาร ${bossSpec.name} สำเร็จ! กิจกรรมบอสเวิลด์ปิดลงทันที`
+        : `โจมตี ${bossSpec.name} ทำดาเมจ ${formatNum(damage)}${crit ? ' (คริติคอล!)' : ''}${elem.effectiveness === 'super' ? ' [ชนะธาตุ!]' : ''}`,
     )
   }
 
@@ -409,11 +418,19 @@ export function GuildBossPanel() {
         diamonds: 15,
         exp: 0,
       })
+      closeWorldBossEventAction({
+        cycleKey: bossSpec.cycleKey,
+        bossId: bossSpec.bossId,
+        bossName: bossSpec.name,
+        maxHp: bossSpec.maxHp,
+      })
     }
     setSkillCdMs(5000)
     setBusy(false)
     setNotice(
-      `ใช้สกิล "${skillLabel}" ใส่ ${bossSpec.name} ทำดาเมจ ${formatNum(damage)}!${crit ? ' (คริติคอล!)' : ''}${elem.effectiveness === 'super' ? ' [ชนะธาตุ!]' : ''}`,
+      prevHp > 0 && updatedWb.currentHp <= 0
+        ? `ใช้สกิล "${skillLabel}" ปิดฉาก ${bossSpec.name} สำเร็จ! กิจกรรมบอสเวิลด์ปิดลงทันที`
+        : `ใช้สกิล "${skillLabel}" ใส่ ${bossSpec.name} ทำดาเมจ ${formatNum(damage)}!${crit ? ' (คริติคอล!)' : ''}${elem.effectiveness === 'super' ? ' [ชนะธาตุ!]' : ''}`,
     )
   }
 

@@ -18,6 +18,7 @@ import {
   isActivityMapId,
   pickTreasureDigSpot,
   recordActivityClearInState,
+  resolveActivityClearOutcome,
   rollActivityDailyReset,
   rollActivityWeaponChest,
   rollFishingDerbyCatch,
@@ -232,5 +233,71 @@ describe('Non-Festival Activities Core Module', () => {
         }
       }
     }
+  })
+
+  it('completes activity and warps to town immediately when all activity monsters/bosses are defeated', () => {
+    // Invasion: waves 1 -> 2 -> 3, then complete & warp town
+    assert.deepEqual(
+      resolveActivityClearOutcome({ activityId: 'invasion', aliveMonsterCount: 2, wave: 1, maxWaves: 3 }),
+      { action: 'continue' },
+    )
+    assert.deepEqual(
+      resolveActivityClearOutcome({ activityId: 'invasion', aliveMonsterCount: 0, wave: 1, maxWaves: 3 }),
+      { action: 'advance_wave', nextWave: 2 },
+    )
+    assert.deepEqual(
+      resolveActivityClearOutcome({ activityId: 'invasion', aliveMonsterCount: 0, wave: 3, maxWaves: 3 }),
+      { action: 'complete_and_warp_town', warpTargetMapId: 'town' },
+    )
+
+    // Boss Rush: stages 1..4, then complete & warp town
+    assert.deepEqual(
+      resolveActivityClearOutcome({ activityId: 'boss_rush', aliveMonsterCount: 0, stage: 2, maxStages: 4 }),
+      { action: 'advance_stage', nextStage: 3 },
+    )
+    assert.deepEqual(
+      resolveActivityClearOutcome({ activityId: 'boss_rush', aliveMonsterCount: 0, stage: 4, maxStages: 4 }),
+      { action: 'complete_and_warp_town', warpTargetMapId: 'town' },
+    )
+
+    // Bounty: completes & warps town once boss + escorts are dead
+    assert.deepEqual(
+      resolveActivityClearOutcome({ activityId: 'bounty', aliveMonsterCount: 1 }),
+      { action: 'continue' },
+    )
+    assert.deepEqual(
+      resolveActivityClearOutcome({ activityId: 'bounty', aliveMonsterCount: 0 }),
+      { action: 'complete_and_warp_town', warpTargetMapId: 'town' },
+    )
+
+    // Treasure: waits until dig spot revealed, then completes & warps town once guardian dies
+    assert.deepEqual(
+      resolveActivityClearOutcome({ activityId: 'treasure', aliveMonsterCount: 0, digRevealed: false }),
+      { action: 'continue' },
+    )
+    assert.deepEqual(
+      resolveActivityClearOutcome({ activityId: 'treasure', aliveMonsterCount: 0, digRevealed: true }),
+      { action: 'complete_and_warp_town', warpTargetMapId: 'town', markGuardianDefeated: true },
+    )
+
+    // Guild War: completes & warps town immediately either when all defenders die OR target score reached
+    assert.deepEqual(
+      resolveActivityClearOutcome({ activityId: 'guild_war', aliveMonsterCount: 2, score: 30, targetScore: 100 }),
+      { action: 'continue' },
+    )
+    assert.deepEqual(
+      resolveActivityClearOutcome({ activityId: 'guild_war', aliveMonsterCount: 0, score: 60, targetScore: 100 }),
+      { action: 'complete_and_warp_town', warpTargetMapId: 'town' },
+    )
+    assert.deepEqual(
+      resolveActivityClearOutcome({ activityId: 'guild_war', aliveMonsterCount: 2, score: 100, targetScore: 100 }),
+      { action: 'complete_and_warp_town', warpTargetMapId: 'town' },
+    )
+
+    // Fishing: completes & warps town when target score reached
+    assert.deepEqual(
+      resolveActivityClearOutcome({ activityId: 'fishing', aliveMonsterCount: 0, score: 120, targetScore: 120 }),
+      { action: 'complete_and_warp_town', warpTargetMapId: 'town' },
+    )
   })
 })

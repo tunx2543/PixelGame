@@ -7,6 +7,7 @@ import {
   type ServerRatesConfig,
 } from '@/lib/game/server-rates'
 import {
+  isValidWorldBossCycleKey,
   sanitizeWorldBossTestState,
   type WorldBossTestState,
 } from '@/lib/game/rpg-systems'
@@ -72,6 +73,7 @@ interface GmEventsStoreData {
   giftDrops: ServerGiftDropEvent[]
   serverRates: ServerRatesConfig
   worldBossTest: WorldBossTestState | null
+  closedWorldBossCycles: string[]
   festivalOverride: FestivalOverrideState | null
 }
 
@@ -81,6 +83,17 @@ const FALLBACK_FILE = '/tmp/pixelquest-gm-events.json'
 
 let memoryStore: GmEventsStoreData | null = null
 const worldNewsRateLimits = new Map<string, number>()
+
+function sanitizeClosedCycles(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  const seen = new Set<string>()
+  for (const item of raw) {
+    if (isValidWorldBossCycleKey(item)) {
+      seen.add(item.trim())
+    }
+  }
+  return [...seen].slice(-24)
+}
 
 function resolveStorePath(): string {
   try {
@@ -96,6 +109,10 @@ function pruneStore(data: GmEventsStoreData, nowMs = Date.now()): GmEventsStoreD
   const annCutoff = nowMs - 2 * 60_000
   const dirCutoff = nowMs - 5 * 60_000
   const dropCutoff = nowMs - 14 * 24 * 60 * 60_000
+  const closedWorldBossCycles = sanitizeClosedCycles(data.closedWorldBossCycles)
+  const rawTest = sanitizeWorldBossTestState(data.worldBossTest, nowMs)
+  const worldBossTest =
+    rawTest && closedWorldBossCycles.includes(rawTest.cycleKey) ? null : rawTest
   return {
     announcements: data.announcements
       .filter((a) => a.createdAtMs >= annCutoff)
@@ -107,7 +124,8 @@ function pruneStore(data: GmEventsStoreData, nowMs = Date.now()): GmEventsStoreD
       .filter((g) => g.expiresAtMs > nowMs && g.createdAtMs >= dropCutoff)
       .slice(-50),
     serverRates: getEffectiveServerRates(data.serverRates, nowMs),
-    worldBossTest: sanitizeWorldBossTestState(data.worldBossTest, nowMs),
+    worldBossTest,
+    closedWorldBossCycles,
     festivalOverride: sanitizeFestivalOverrideState(data.festivalOverride, nowMs),
   }
 }
@@ -129,6 +147,7 @@ function readStore(): GmEventsStoreData {
           giftDrops: Array.isArray(parsed.giftDrops) ? parsed.giftDrops : [],
           serverRates: sanitizeServerRates(parsed.serverRates),
           worldBossTest: sanitizeWorldBossTestState(parsed.worldBossTest),
+          closedWorldBossCycles: sanitizeClosedCycles(parsed.closedWorldBossCycles),
           festivalOverride: sanitizeFestivalOverrideState(parsed.festivalOverride),
         })
         return memoryStore
@@ -143,6 +162,7 @@ function readStore(): GmEventsStoreData {
     giftDrops: [],
     serverRates: { ...DEFAULT_SERVER_RATES },
     worldBossTest: null,
+    closedWorldBossCycles: [],
     festivalOverride: null,
   }
   return memoryStore
@@ -201,9 +221,13 @@ export function setStoredWorldBossTest(
 ): WorldBossTestState | null {
   const store = readStore()
   const sanitized = sanitizeWorldBossTestState(nextState, nowMs)
+  const closedWorldBossCycles = sanitized
+    ? store.closedWorldBossCycles.filter((k) => k !== sanitized.cycleKey)
+    : store.closedWorldBossCycles
   writeStore({
     ...store,
     worldBossTest: sanitized,
+    closedWorldBossCycles,
   })
   return sanitized
 }
@@ -211,6 +235,33 @@ export function setStoredWorldBossTest(
 export function getEffectiveStoredWorldBossTest(nowMs = Date.now()): WorldBossTestState | null {
   const store = readStore()
   return sanitizeWorldBossTestState(store.worldBossTest, nowMs)
+}
+
+export function closeStoredWorldBossEvent(
+  cycleKey: string,
+  nowMs = Date.now(),
+): { closedWorldBossCycles: string[]; worldBossTest: WorldBossTestState | null } {
+  const store = readStore()
+  const cleanKey = isValidWorldBossCycleKey(cycleKey) ? cycleKey.trim() : ''
+  const nextClosed = cleanKey
+    ? [...new Set([...store.closedWorldBossCycles, cleanKey])].slice(-24)
+    : store.closedWorldBossCycles
+  const currentTest = sanitizeWorldBossTestState(store.worldBossTest, nowMs)
+  const shouldClearTest = Boolean(currentTest && (!cleanKey || currentTest.cycleKey === cleanKey))
+  const nextTest = shouldClearTest ? null : currentTest
+  writeStore({
+    ...store,
+    worldBossTest: nextTest,
+    closedWorldBossCycles: nextClosed,
+  })
+  return {
+    closedWorldBossCycles: nextClosed,
+    worldBossTest: nextTest,
+  }
+}
+
+export function getEffectiveClosedWorldBossCycles(): string[] {
+  return readStore().closedWorldBossCycles
 }
 
 export function setStoredFestivalOverride(
@@ -288,6 +339,7 @@ export function getPublicWorldEvents(sinceMs = 0): {
   announcements: ServerAnnouncementEvent[]
   serverRates: ServerRatesConfig
   worldBossTest: WorldBossTestState | null
+  closedWorldBossCycles: string[]
   festivalOverride: FestivalOverrideState | null
   serverTimeMs: number
 } {
@@ -300,6 +352,7 @@ export function getPublicWorldEvents(sinceMs = 0): {
     announcements,
     serverRates: getEffectiveServerRates(store.serverRates, nowMs),
     worldBossTest: sanitizeWorldBossTestState(store.worldBossTest, nowMs),
+    closedWorldBossCycles: store.closedWorldBossCycles,
     festivalOverride: sanitizeFestivalOverrideState(store.festivalOverride, nowMs),
     serverTimeMs: nowMs,
   }
@@ -311,6 +364,7 @@ export function getEventsForUser(userId: string, sinceMs = 0): {
   giftDrops: ServerGiftDropEvent[]
   serverRates: ServerRatesConfig
   worldBossTest: WorldBossTestState | null
+  closedWorldBossCycles: string[]
   festivalOverride: FestivalOverrideState | null
 } {
   const nowMs = Date.now()
@@ -334,6 +388,7 @@ export function getEventsForUser(userId: string, sinceMs = 0): {
     giftDrops,
     serverRates: getEffectiveServerRates(store.serverRates, nowMs),
     worldBossTest: sanitizeWorldBossTestState(store.worldBossTest, nowMs),
+    closedWorldBossCycles: store.closedWorldBossCycles,
     festivalOverride: sanitizeFestivalOverrideState(store.festivalOverride, nowMs),
   }
 }

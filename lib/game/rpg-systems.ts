@@ -1052,6 +1052,66 @@ export function getWorldBossTemplate(bossId?: string | null): WorldBossTemplateS
 }
 
 let activeWorldBossTestOverride: WorldBossTestState | null = null
+const closedWorldBossCycles = new Set<string>()
+const MAX_CLOSED_WB_CYCLES = 24
+
+export function isValidWorldBossCycleKey(cycleKey?: string | null): cycleKey is string {
+  return typeof cycleKey === 'string' && /^[a-zA-Z0-9_-]{4,64}$/.test(cycleKey.trim())
+}
+
+function pruneClosedWorldBossCycles(): void {
+  while (closedWorldBossCycles.size > MAX_CLOSED_WB_CYCLES) {
+    const oldest = closedWorldBossCycles.values().next().value
+    if (!oldest) break
+    closedWorldBossCycles.delete(oldest)
+  }
+}
+
+export function markWorldBossCycleClosed(cycleKey?: string | null): boolean {
+  if (!isValidWorldBossCycleKey(cycleKey)) return false
+  const clean = cycleKey.trim()
+  if (closedWorldBossCycles.has(clean)) return false
+  closedWorldBossCycles.add(clean)
+  pruneClosedWorldBossCycles()
+  if (activeWorldBossTestOverride?.cycleKey === clean) {
+    activeWorldBossTestOverride = null
+  }
+  return true
+}
+
+export function reopenWorldBossCycle(cycleKey?: string | null): void {
+  if (!isValidWorldBossCycleKey(cycleKey)) return
+  closedWorldBossCycles.delete(cycleKey.trim())
+}
+
+export function isWorldBossCycleClosed(cycleKey?: string | null): boolean {
+  if (!isValidWorldBossCycleKey(cycleKey)) return false
+  return closedWorldBossCycles.has(cycleKey.trim())
+}
+
+export function syncClosedWorldBossCycles(cycleKeys: readonly string[] | null | undefined): string[] {
+  if (Array.isArray(cycleKeys)) {
+    for (const raw of cycleKeys) {
+      if (isValidWorldBossCycleKey(raw)) {
+        const clean = raw.trim()
+        closedWorldBossCycles.add(clean)
+        if (activeWorldBossTestOverride?.cycleKey === clean) {
+          activeWorldBossTestOverride = null
+        }
+      }
+    }
+    pruneClosedWorldBossCycles()
+  }
+  return [...closedWorldBossCycles]
+}
+
+export function getClosedWorldBossCycles(): string[] {
+  return [...closedWorldBossCycles]
+}
+
+export function resetClosedWorldBossCyclesForTests(): void {
+  closedWorldBossCycles.clear()
+}
 
 export function sanitizeWorldBossTestState(
   raw: unknown,
@@ -1093,12 +1153,17 @@ export function sanitizeWorldBossTestState(
 }
 
 export function setWorldBossTestOverride(next: WorldBossTestState | null): WorldBossTestState | null {
-  activeWorldBossTestOverride = sanitizeWorldBossTestState(next)
+  const clean = sanitizeWorldBossTestState(next)
+  activeWorldBossTestOverride = clean && isWorldBossCycleClosed(clean.cycleKey) ? null : clean
   return activeWorldBossTestOverride
 }
 
 export function getWorldBossTestOverride(nowMs = Date.now()): WorldBossTestState | null {
-  if (!activeWorldBossTestOverride || activeWorldBossTestOverride.expiresAtMs <= nowMs) {
+  if (
+    !activeWorldBossTestOverride ||
+    activeWorldBossTestOverride.expiresAtMs <= nowMs ||
+    isWorldBossCycleClosed(activeWorldBossTestOverride.cycleKey)
+  ) {
     activeWorldBossTestOverride = null
     return null
   }
@@ -1147,8 +1212,12 @@ export function getScheduledWorldBossOccurrences(nowMs = Date.now(), count = 4):
     const y = ictStart.getUTCFullYear()
     const m = String(ictStart.getUTCMonth() + 1).padStart(2, '0')
     const d = String(ictStart.getUTCDate()).padStart(2, '0')
+    const cycleKey = `event_wb_${y}${m}${d}_2000`
+    if (isWorldBossCycleClosed(cycleKey)) {
+      continue
+    }
     occurrences.push({
-      cycleKey: `event_wb_${y}${m}${d}_2000`,
+      cycleKey,
       boss: primaryBoss,
       startsAtMs,
       endsAtMs,

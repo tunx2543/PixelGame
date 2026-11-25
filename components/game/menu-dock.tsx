@@ -1,17 +1,15 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   EyeOff,
   Gamepad2,
   RotateCcw,
-  Volume2,
-  VolumeX,
 } from 'lucide-react'
-import { isBgmMuted, toggleBgmMute } from '@/lib/game/bgm'
 import { useDailyMissions } from '@/lib/game/daily-missions'
 import {
   ensurePremiumState,
+  getEngineBgmContext,
   isCurrentAccountGm,
   openPanel,
   toggleZenHud,
@@ -23,6 +21,7 @@ import { resetUiLayout } from '@/lib/game/ui-layout'
 import { useGame } from '@/lib/game/use-game'
 import { cn } from '@/lib/utils'
 import { AsuraDailyHelperModal, AsuraMenuModal } from './asura-menu-modal'
+import { BgmQuickControl } from './bgm-quick-control'
 import { GameBadgeMedallion } from './game-badge-icon'
 
 export function MenuDock({
@@ -39,11 +38,6 @@ export function MenuDock({
   const dailyMissions = useDailyMissions()
   const [menuOpen, setMenuOpen] = useState(false)
   const [helperOpen, setHelperOpen] = useState(false)
-  const [bgmMuted, setBgmMutedState] = useState(true)
-
-  useEffect(() => {
-    setBgmMutedState(isBgmMuted())
-  }, [])
 
   if (!p) return null
 
@@ -59,18 +53,14 @@ export function MenuDock({
   const claimableQuests =
     countClaimableQuests(p.questState, p.towerState, p.petState, p.kills) + dailyMissions.claimableCount
   const menuBadgeCount = partyInvites.length + (p.statPoints ?? 0) + (p.skillPoints ?? 0)
-
-  const toggleBgm = () => {
-    const nextMuted = toggleBgmMute(p.mapId)
-    setBgmMutedState(nextMuted)
-  }
+  const bgmContext = getEngineBgmContext()
 
   return (
     <>
       <nav
         aria-label="แถบเมนูหลัก Pixel Quest"
         data-testid="menu-dock"
-        className="pointer-events-auto relative flex items-start gap-1.5 sm:gap-2"
+        className="pointer-events-auto relative flex flex-col items-end gap-1 sm:flex-row sm:items-start sm:gap-2"
       >
         {/* 3 Glossy Circular Asura Buttons: ตัวช่วย, ร้าน, เมนู */}
         <div className="flex items-start gap-1.5 sm:gap-2.5">
@@ -126,30 +116,16 @@ export function MenuDock({
           </button>
         </div>
 
-        {/* Subtle Utility Micro Buttons */}
-        <div className="hidden grid-cols-2 gap-1 pt-0.5 sm:grid">
-          <button
-            type="button"
-            onClick={toggleBgm}
-            aria-pressed={!bgmMuted}
-            aria-label={bgmMuted ? 'เปิดเพลงประกอบ (BGM)' : 'ปิดเพลงประกอบ (BGM)'}
-            title={bgmMuted ? 'เปิดเพลงประกอบ (BGM)' : 'ปิดเพลงประกอบ (BGM)'}
-            className={cn(
-              'grid size-5 place-items-center rounded-full border shadow transition-colors',
-              !bgmMuted
-                ? 'border-emerald-300/70 bg-emerald-900/80 text-emerald-200'
-                : 'border-white/25 bg-slate-950/70 text-slate-300 hover:border-amber-300/60 hover:text-white',
-            )}
-          >
-            {bgmMuted ? <VolumeX className="size-3" aria-hidden /> : <Volume2 className="size-3" aria-hidden />}
-          </button>
+        {/* Utility Micro Buttons — visible on both Android mobile and desktop */}
+        <div className="flex items-center gap-1 sm:grid sm:grid-cols-2 sm:gap-1 sm:pt-0.5">
+          <BgmQuickControl variant="dock" context={bgmContext} />
 
           <button
             type="button"
             onClick={() => toggleZenHud(true)}
             aria-label="ซ่อน UI รอบจอ (กด H)"
             title="ซ่อน UI รอบจอ (กด H)"
-            className="grid size-5 place-items-center rounded-full border border-white/25 bg-slate-950/70 text-slate-300 shadow transition-colors hover:border-amber-300/60 hover:text-white"
+            className="hidden size-5 place-items-center rounded-full border border-white/25 bg-slate-950/70 text-slate-300 shadow transition-colors hover:border-amber-300/60 hover:text-white sm:grid"
           >
             <EyeOff className="size-3" aria-hidden />
           </button>
@@ -162,13 +138,13 @@ export function MenuDock({
               aria-label={showTouch ? 'ซ่อนปุ่มควบคุมบนจอ' : 'แสดงปุ่มควบคุมบนจอ'}
               title={showTouch ? 'ซ่อนปุ่มสัมผัส' : 'แสดงปุ่มสัมผัส'}
               className={cn(
-                'grid size-5 place-items-center rounded-full border shadow transition-colors',
+                'grid size-6 place-items-center rounded-full border shadow transition-colors sm:size-5',
                 showTouch
                   ? 'border-amber-300/75 bg-amber-900/80 text-amber-200'
                   : 'border-white/25 bg-slate-950/70 text-slate-300 hover:border-amber-300/60 hover:text-white',
               )}
             >
-              <Gamepad2 className="size-3" aria-hidden />
+              <Gamepad2 className="size-3.5 sm:size-3" aria-hidden />
             </button>
           )}
 
@@ -177,7 +153,7 @@ export function MenuDock({
             onClick={() => resetUiLayout()}
             aria-label="Reset UI Layout"
             title="จัดเรียงหน้าต่างและ HUD ใหม่"
-            className="grid size-5 place-items-center rounded-full border border-white/25 bg-slate-950/70 text-slate-300 shadow transition-colors hover:border-amber-300/60 hover:text-white"
+            className="hidden size-5 place-items-center rounded-full border border-white/25 bg-slate-950/70 text-slate-300 shadow transition-colors hover:border-amber-300/60 hover:text-white sm:grid"
           >
             <RotateCcw className="size-3" aria-hidden />
           </button>

@@ -1,10 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { Gauge, Keyboard, Layout, PackageCheck, RefreshCw, RotateCcw, Sliders, Sparkles, Volume2, VolumeX } from 'lucide-react'
-import { getBgmVolume, isBgmMuted, setBgmVolume, toggleBgmMute } from '@/lib/game/bgm'
-import { toggleZenHud } from '@/lib/game/engine'
-import { isSfxMuted, playQuestClaimSfx, setSfxMuted } from '@/lib/game/sfx'
+import { Gauge, Keyboard, Layout, Music, PackageCheck, RefreshCw, RotateCcw, Sliders, Sparkles, Volume2, VolumeX } from 'lucide-react'
+import { BGM_TRACK_CATALOG, setBgmMuted, setBgmVolume } from '@/lib/game/bgm'
+import { getEngineBgmContext, toggleZenHud } from '@/lib/game/engine'
+import { playQuestClaimSfx, setSfxMuted, setSfxVolume } from '@/lib/game/sfx'
 import {
   resetUiLayout,
   setDockMode,
@@ -24,6 +24,7 @@ import {
   openChangelogModal,
   useVersionUpdate,
 } from '@/lib/game/use-version-update'
+import { useBgmState, useSfxState } from '../bgm-quick-control'
 import { PanelFrame, PxButton } from './panels'
 
 const HOTKEY_GUIDE: Array<{ key: string; action: string }> = [
@@ -43,25 +44,29 @@ export function SettingsPanel({ onClose }: { onClose?: () => void } = {}) {
   const { p, zenHud } = useGame()
   const layout = useUiLayout()
   const versionInfo = useVersionUpdate()
-  const [bgmMuted, setBgmMutedState] = useState(() => isBgmMuted())
-  const [bgmVol, setBgmVolState] = useState(() => Math.round(getBgmVolume() * 100))
-  const [sfxMuted, setSfxMutedState] = useState(() => isSfxMuted())
+  const bgm = useBgmState()
+  const sfx = useSfxState()
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
 
+  const bgmVol = Math.round(bgm.volume * 100)
+  const sfxVol = Math.round(sfx.volume * 100)
+  const currentTrack = BGM_TRACK_CATALOG[bgm.desiredTheme]
+
   const handleToggleBgm = () => {
-    const next = toggleBgmMute(p?.mapId ?? 'town')
-    setBgmMutedState(next)
+    setBgmMuted(!bgm.muted, p ? getEngineBgmContext() : { screen: 'login' })
   }
 
   const handleVolumeChange = (nextPct: number) => {
-    setBgmVolState(nextPct)
     setBgmVolume(nextPct / 100)
   }
 
   const handleToggleSfx = () => {
-    const next = setSfxMuted(!sfxMuted)
-    setSfxMutedState(next)
+    const next = setSfxMuted(!sfx.muted)
     if (!next) playQuestClaimSfx(false)
+  }
+
+  const handleSfxVolumeChange = (nextPct: number) => {
+    setSfxVolume(nextPct / 100)
   }
 
   const handleResetLayout = () => {
@@ -83,49 +88,78 @@ export function SettingsPanel({ onClose }: { onClose?: () => void } = {}) {
           </p>
         )}
 
-        {/* Audio Section */}
-        <section className="space-y-2.5 rounded border border-border bg-secondary/35 p-3">
-          <h3 className="flex items-center gap-1.5 text-sm font-bold text-primary">
-            <Volume2 className="size-4" aria-hidden />
-            เสียงเพลง & เอฟเฟกต์ (Audio)
-          </h3>
-
+        {/* Audio Section: Separated BGM and SFX */}
+        <section className="space-y-3 rounded border border-border bg-secondary/35 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="font-semibold text-foreground">เพลงประกอบพื้นหลัง (BGM)</p>
-              <p className="text-[11px] text-muted-foreground">ปรับเปลี่ยนอัตโนมัติตามแผนที่และบอส</p>
-            </div>
-            <PxButton variant={bgmMuted ? 'secondary' : 'accent'} onClick={handleToggleBgm}>
-              <span className="inline-flex items-center gap-1.5">
-                {bgmMuted ? <VolumeX className="size-3.5" aria-hidden /> : <Volume2 className="size-3.5" aria-hidden />}
-                {bgmMuted ? 'ปิดเสียง BGM' : 'เปิดเสียง BGM'}
-              </span>
-            </PxButton>
+            <h3 className="flex items-center gap-1.5 text-sm font-bold text-primary">
+              <Music className="size-4" aria-hidden />
+              เสียงเพลงประกอบ & เอฟเฟกต์ (Audio)
+            </h3>
+            <span className="rounded border border-amber-400/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-200">
+              {currentTrack.labelTh} · {bgm.muted ? 'ปิดอยู่' : bgm.source === 'file' ? 'MP3/OGG Loop' : '8-bit Synth Loop'}
+            </span>
           </div>
 
-          <div className="flex items-center gap-3">
-            <label htmlFor="bgm-volume-range" className="w-24 shrink-0 text-[11px] text-muted-foreground">
-              ความดังเพลง ({bgmVol}%)
-            </label>
-            <input
-              id="bgm-volume-range"
-              type="range"
-              min={0}
-              max={100}
-              value={bgmVol}
-              onChange={(e) => handleVolumeChange(Number(e.target.value))}
-              className="flex-1 accent-amber-400"
-            />
+          <div className="space-y-2 rounded border border-border/60 bg-background/45 p-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="font-semibold text-foreground">เพลงประกอบพื้นหลัง (BGM)</p>
+                <p className="text-[11px] text-muted-foreground">
+                  เปลี่ยนอัตโนมัติ 7 สถานการณ์ (Login · เมือง · ฟาร์ม · ดันเจี้ยน · สู้มอน · สู้บอส · กิจกรรม)
+                </p>
+              </div>
+              <PxButton variant={bgm.muted ? 'secondary' : 'accent'} onClick={handleToggleBgm}>
+                <span className="inline-flex items-center gap-1.5">
+                  {bgm.muted ? <VolumeX className="size-3.5" aria-hidden /> : <Volume2 className="size-3.5" aria-hidden />}
+                  {bgm.muted ? 'ปิดเสียง BGM' : 'เปิดเสียง BGM'}
+                </span>
+              </PxButton>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <label htmlFor="bgm-volume-range" className="w-28 shrink-0 text-[11px] text-muted-foreground tabular-nums">
+                ความดังเพลง ({bgmVol}%)
+              </label>
+              <input
+                id="bgm-volume-range"
+                type="range"
+                min={0}
+                max={100}
+                value={bgmVol}
+                onChange={(e) => handleVolumeChange(Number(e.target.value))}
+                className="flex-1 cursor-pointer accent-amber-400"
+              />
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-2">
-            <div>
-              <p className="font-semibold text-foreground">เสียงเอฟเฟกต์ต่อสู้ & ปุ่มกด (SFX)</p>
-              <p className="text-[11px] text-muted-foreground">เสียงตีมอนสเตอร์ สกิล ตีบวก และรับรางวัล</p>
+          <div className="space-y-2 rounded border border-border/60 bg-background/45 p-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="font-semibold text-foreground">เสียงเอฟเฟกต์ต่อสู้ & ปุ่มกด (SFX)</p>
+                <p className="text-[11px] text-muted-foreground">แยกอิสระจากเสียงเพลง · ตีมอนสเตอร์ สกิล ตีบวก และรับรางวัล</p>
+              </div>
+              <PxButton variant={sfx.muted ? 'secondary' : 'accent'} onClick={handleToggleSfx}>
+                <span className="inline-flex items-center gap-1.5">
+                  {sfx.muted ? <VolumeX className="size-3.5" aria-hidden /> : <Volume2 className="size-3.5" aria-hidden />}
+                  {sfx.muted ? 'ปิดเสียง SFX' : 'เปิดเสียง SFX'}
+                </span>
+              </PxButton>
             </div>
-            <PxButton variant={sfxMuted ? 'secondary' : 'accent'} onClick={handleToggleSfx}>
-              {sfxMuted ? 'ปิดเสียง SFX' : 'เปิดเสียง SFX'}
-            </PxButton>
+
+            <div className="flex items-center gap-3">
+              <label htmlFor="sfx-volume-range" className="w-28 shrink-0 text-[11px] text-muted-foreground tabular-nums">
+                ความดัง SFX ({sfxVol}%)
+              </label>
+              <input
+                id="sfx-volume-range"
+                type="range"
+                min={0}
+                max={100}
+                value={sfxVol}
+                onChange={(e) => handleSfxVolumeChange(Number(e.target.value))}
+                className="flex-1 cursor-pointer accent-sky-400"
+              />
+            </div>
           </div>
         </section>
 

@@ -1,5 +1,7 @@
 'use client'
 
+import { clampBgmVolume } from './bgm-tracks'
+
 let sharedAudioCtx: AudioContext | null = null
 
 function getCtx(): AudioContext | null {
@@ -16,18 +18,44 @@ function getCtx(): AudioContext | null {
 }
 
 const SFX_MUTED_KEY = 'pixel-quest-sfx-muted'
+const SFX_VOLUME_KEY = 'pixel-quest-sfx-volume'
+const DEFAULT_SFX_VOLUME = 0.8
+
 let globalSfxMuted = false
+let globalSfxVolume = DEFAULT_SFX_VOLUME
+const sfxListeners = new Set<() => void>()
 
 if (typeof window !== 'undefined') {
   try {
     globalSfxMuted = window.localStorage.getItem(SFX_MUTED_KEY) === '1'
+    const rawVol = window.localStorage.getItem(SFX_VOLUME_KEY)
+    if (rawVol !== null) {
+      const parsed = Number(rawVol)
+      if (Number.isFinite(parsed)) {
+        globalSfxVolume = clampBgmVolume(parsed)
+      }
+    }
   } catch {
     // Ignore storage errors cleanly.
   }
 }
 
+function emitSfxChange() {
+  for (const listener of sfxListeners) {
+    try {
+      listener()
+    } catch {
+      // Never break SFX on listener errors.
+    }
+  }
+}
+
 export function isSfxMuted(): boolean {
   return globalSfxMuted
+}
+
+export function getSfxVolume(): number {
+  return globalSfxVolume
 }
 
 export function setSfxMuted(muted: boolean): boolean {
@@ -39,7 +67,28 @@ export function setSfxMuted(muted: boolean): boolean {
       // Ignore storage errors cleanly.
     }
   }
+  emitSfxChange()
   return globalSfxMuted
+}
+
+export function setSfxVolume(vol: number): number {
+  globalSfxVolume = clampBgmVolume(vol)
+  if (typeof window !== 'undefined') {
+    try {
+      window.localStorage.setItem(SFX_VOLUME_KEY, String(globalSfxVolume))
+    } catch {
+      // Ignore storage errors cleanly.
+    }
+  }
+  emitSfxChange()
+  return globalSfxVolume
+}
+
+export function subscribeSfx(listener: () => void): () => void {
+  sfxListeners.add(listener)
+  return () => {
+    sfxListeners.delete(listener)
+  }
 }
 
 function playTone(
@@ -50,17 +99,18 @@ function playTone(
   gainValue = 0.06,
   delay = 0,
 ) {
-  if (globalSfxMuted) return
+  if (globalSfxMuted || globalSfxVolume <= 0) return
   const ctx = getCtx()
   if (!ctx) return
   try {
     const startAt = ctx.currentTime + delay
     const osc = ctx.createOscillator()
     const gain = ctx.createGain()
+    const scaledGain = Math.max(0.0002, gainValue * globalSfxVolume)
     osc.type = type
     osc.frequency.setValueAtTime(freqStart, startAt)
     osc.frequency.exponentialRampToValueAtTime(Math.max(40, freqEnd), startAt + duration)
-    gain.gain.setValueAtTime(gainValue, startAt)
+    gain.gain.setValueAtTime(scaledGain, startAt)
     gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration)
     osc.connect(gain)
     gain.connect(ctx.destination)

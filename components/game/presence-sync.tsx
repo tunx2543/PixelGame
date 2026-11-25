@@ -43,6 +43,7 @@ import { getEffectiveVipBonuses } from '@/lib/game/premium/vip'
 import { sanitizePremiumState } from '@/lib/game/premium/wallet'
 import { getActivePetBonuses } from '@/lib/game/systems'
 import {
+  applyClosedWorldBossCyclesUpdate,
   applyFestivalOverrideUpdate,
   applyGmKickDirective,
   applyGmMuteDirective,
@@ -719,6 +720,7 @@ export function PresenceSync() {
           .then((res) => {
             if (!res || stopped || !game.p) return
             applyServerRatesUpdate(res.serverRates)
+            applyClosedWorldBossCyclesUpdate(res.closedWorldBossCycles)
             applyWorldBossTestUpdate(res.worldBossTest)
             applyFestivalOverrideUpdate(res.festivalOverride)
             for (const ann of res.announcements) handleIncomingAnnouncement(ann)
@@ -764,6 +766,7 @@ export function PresenceSync() {
       void pollPublicWorldEvents(lastGmRelaySinceMs).then((res) => {
         if (!res || stopped || !game.p) return
         applyServerRatesUpdate(res.serverRates)
+        applyClosedWorldBossCyclesUpdate(res.closedWorldBossCycles)
         applyWorldBossTestUpdate(res.worldBossTest)
         applyFestivalOverrideUpdate(res.festivalOverride)
         for (const ann of res.announcements) handleIncomingAnnouncement(ann)

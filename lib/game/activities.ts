@@ -766,3 +766,84 @@ export function computeActivityRewards(
     dailyReduced,
   }
 }
+
+export interface ResolveActivityClearInput {
+  activityId: ActivityId
+  aliveMonsterCount: number
+  wave?: number
+  maxWaves?: number
+  stage?: number
+  maxStages?: number
+  score?: number
+  targetScore?: number
+  digRevealed?: boolean
+}
+
+export type ActivityClearOutcome =
+  | { action: 'continue' }
+  | { action: 'advance_wave'; nextWave: number }
+  | { action: 'advance_stage'; nextStage: number }
+  | { action: 'complete_and_warp_town'; warpTargetMapId: 'town'; markGuardianDefeated?: boolean }
+
+export function resolveActivityClearOutcome(
+  input: ResolveActivityClearInput,
+): ActivityClearOutcome {
+  const alive = Math.max(0, Math.floor(input.aliveMonsterCount))
+
+  if (input.activityId === 'fishing') {
+    const score = input.score ?? 0
+    const targetScore = input.targetScore ?? 120
+    return score >= targetScore
+      ? { action: 'complete_and_warp_town', warpTargetMapId: 'town' }
+      : { action: 'continue' }
+  }
+
+  if (input.activityId === 'guild_war') {
+    const score = input.score ?? 0
+    const targetScore = input.targetScore ?? 100
+    if (score >= targetScore || alive <= 0) {
+      return { action: 'complete_and_warp_town', warpTargetMapId: 'town' }
+    }
+    return { action: 'continue' }
+  }
+
+  if (alive > 0) {
+    return { action: 'continue' }
+  }
+
+  if (input.activityId === 'invasion') {
+    const wave = Math.max(1, Math.floor(input.wave ?? 1))
+    const maxWaves = Math.max(1, Math.floor(input.maxWaves ?? INVASION_WAVES.length))
+    if (wave < maxWaves) {
+      return { action: 'advance_wave', nextWave: wave + 1 }
+    }
+    return { action: 'complete_and_warp_town', warpTargetMapId: 'town' }
+  }
+
+  if (input.activityId === 'boss_rush') {
+    const stage = Math.max(1, Math.floor(input.stage ?? 1))
+    const maxStages = Math.max(1, Math.floor(input.maxStages ?? BOSS_RUSH_STAGES.length))
+    if (stage < maxStages) {
+      return { action: 'advance_stage', nextStage: stage + 1 }
+    }
+    return { action: 'complete_and_warp_town', warpTargetMapId: 'town' }
+  }
+
+  if (input.activityId === 'treasure') {
+    if (!input.digRevealed) {
+      return { action: 'continue' }
+    }
+    return {
+      action: 'complete_and_warp_town',
+      warpTargetMapId: 'town',
+      markGuardianDefeated: true,
+    }
+  }
+
+  if (input.activityId === 'bounty') {
+    return { action: 'complete_and_warp_town', warpTargetMapId: 'town' }
+  }
+
+  return { action: 'continue' }
+}
+

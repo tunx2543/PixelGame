@@ -67,9 +67,11 @@ import {
 import { useGame } from '@/lib/game/use-game'
 import { openChangelogModal, useVersionUpdate } from '@/lib/game/use-version-update'
 import { resolveFashionLoadoutFromSave } from '@/lib/game/fashion-renderer'
+import { syncBgmContext } from '@/lib/game/bgm'
 import { MAPS } from '@/lib/game/maps'
 import { cn } from '@/lib/utils'
 import { AccountPanel } from './account-panel'
+import { BgmQuickControl } from './bgm-quick-control'
 import { formatNum } from './format'
 import { GameArtIcon } from './game-badge-icon'
 import { SettingsPanel } from './panels/settings-panel'
@@ -232,6 +234,13 @@ export function TitleScreen() {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [accountModalOpen, continueOpen, createOpen, settingsOpen])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('autostart') === '1') return
+    syncBgmContext({ screen: 'login' })
+  }, [])
 
   const hasAutoStartedRef = useRef(false)
 
@@ -450,6 +459,11 @@ export function TitleScreen() {
         </div>
         {/* Subtle bottom-edge vignette keeping footer legibility crisp while leaving heroes, crest & castle bright */}
         <div className="hidden sm:block sm:absolute sm:inset-x-0 sm:bottom-0 sm:h-32 sm:bg-gradient-to-t sm:from-[#040a16]/85 sm:via-[#040a16]/40 sm:to-transparent" />
+      </div>
+
+      {/* Top-Right Quick BGM Control on Login Screen (Android & Desktop) */}
+      <div className="absolute right-3 top-3 z-30 sm:right-5 sm:top-4">
+        <BgmQuickControl context={{ screen: 'login' }} variant="title" />
       </div>
 
       {/* Floating Kicked / Cloud Error Notice (only rendered when active) */}

@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server'
+import { isValidWorldBossCycleKey } from '@/lib/game/rpg-systems'
 import { resolveActorFromRequest } from '@/lib/server/premium-security'
 import {
   addServerAnnouncement,
   canPublishWorldNews,
+  closeStoredWorldBossEvent,
   getPublicWorldEvents,
   type WorldNewsCategory,
 } from '@/lib/server/gm-events-store'
@@ -42,6 +44,19 @@ export async function POST(req: Request) {
   }
 
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null
+  if (body && body.action === 'close_world_boss') {
+    const cycleKey = typeof body.cycleKey === 'string' ? body.cycleKey.trim() : ''
+    if (!isValidWorldBossCycleKey(cycleKey)) {
+      return NextResponse.json({ ok: false, message: 'รหัสรอบเวิลด์บอสไม่ถูกต้อง' }, { status: 400 })
+    }
+    const closed = closeStoredWorldBossEvent(cycleKey)
+    return NextResponse.json({
+      ok: true,
+      closedWorldBossCycles: closed.closedWorldBossCycles,
+      worldBossTest: closed.worldBossTest,
+    })
+  }
+
   if (!body || typeof body.category !== 'string' || typeof body.body !== 'string') {
     return NextResponse.json({ ok: false, message: 'ข้อมูลข่าวเซิร์ฟเวอร์ไม่ถูกต้อง' }, { status: 400 })
   }

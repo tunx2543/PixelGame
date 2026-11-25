@@ -41,6 +41,7 @@ import {
 } from '@/lib/firebase/characters'
 import type { PartyInviteRecord, PartyRecord } from '@/lib/firebase/party-helpers'
 import {
+  notifyServerWorldBossClosed,
   publishFestivalEventConfig,
   publishServerGiftDrop,
   publishServerRatesConfig,
@@ -83,7 +84,7 @@ import {
   sanitizeServerRates,
   type ServerRatesConfig,
 } from './server-rates'
-import { gmSendMailGiftToTarget } from '@/lib/firebase/rpg-online'
+import { gmSendMailGiftToTarget, markWorldBossDefeatedOnline } from '@/lib/firebase/rpg-online'
 import { cancelTradeRequest, createBan, createTrade, publishAnnouncement, sendFriendRequest, sendWhisper } from './social'
 import { isGmAccountUser, PERMANENT_GM_GAME_UID, PERMANENT_GM_UID } from './permissions'
 import {
@@ -120,6 +121,7 @@ import {
   isActivityMapId,
   pickTreasureDigSpot,
   recordActivityClearInState,
+  resolveActivityClearOutcome,
   rollActivityWeaponChest,
   rollFishingDerbyCatch,
   type ActivityId,
@@ -196,10 +198,13 @@ import {
   getGuildBuffs,
   getMonsterElement,
   getWorldBossTestOverride,
+  isWorldBossCycleClosed,
+  markWorldBossCycleClosed,
   recordBestiaryKillInState,
   sanitizeRpgExt,
   sanitizeWorldBossTestState,
   setWorldBossTestOverride,
+  syncClosedWorldBossCycles,
   todayIsoDate,
   type DailyDungeonId,
   type RpgExtensionState,
@@ -255,7 +260,14 @@ import {
   POPUP_PALETTE,
   type FloatingPopupKind,
 } from './floating-damage'
-import { stopBgm, syncBgmForMap } from './bgm'
+import {
+  BGM_BATTLE_HOLD_SEC,
+  isSpecialEventBgmMapId,
+  resolveBgmTheme,
+  syncBgmContext,
+  type BgmResolveContext,
+  type BgmTheme,
+} from './bgm'
 import {
   EQUIPMENT_RARITY_META,
   aggregateEquipmentAffixes,
@@ -1109,11 +1121,115 @@ export function dismissWorldBossVictory() {
   notify()
 }
 
+function closeWorldBossEventOnDefeat(options?: {
+  cycleKey?: string
+  bossId?: string
+  bossName?: string
+  maxHp?: number
+  removeAliveEntities?: boolean
+  announce?: boolean
+  syncServer?: boolean
+}): boolean {
+  const activeBefore = getActiveWorldBoss()
+  const targetCycleKey =
+    options?.cycleKey?.trim() || (activeBefore.isActive ? activeBefore.cycleKey : '')
+  if (!targetCycleKey) return false
+
+  const wasAlreadyClosed = isWorldBossCycleClosed(targetCycleKey)
+  const wasActiveMatching = activeBefore.isActive && activeBefore.cycleKey === targetCycleKey
+
+  markWorldBossCycleClosed(targetCycleKey)
+  if (game.worldBossTest && game.worldBossTest.cycleKey === targetCycleKey) {
+    game.worldBossTest = null
+  }
+
+  game.worldBossWarning = null
+  game.worldBossMapFx = null
+  game.worldBossEntrance = null
+  game.worldBossCritHit = null
+
+  if (options?.removeAliveEntities && !getActiveWorldBoss().isActive) {
+    game.monsters = game.monsters.filter((m) => !(m.isWorldBoss || m.defId === 'world_golem') || m.dead)
+  }
+
+  syncEngineBgm()
+
+  if (!wasAlreadyClosed || wasActiveMatching) {
+    if (options?.syncServer !== false) {
+      void notifyServerWorldBossClosed(targetCycleKey)
+      void markWorldBossDefeatedOnline({
+        cycleKey: targetCycleKey,
+        bossId: options?.bossId ?? activeBefore.bossId,
+        name: options?.bossName ?? activeBefore.name,
+        maxHp: options?.maxHp ?? activeBefore.maxHp,
+      })
+    }
+    if (options?.announce !== false && game.p) {
+      say(
+        'system',
+        '★ บอสเวิลด์ถูกกำจัดแล้ว — กิจกรรมบอสเวิลด์ปิดลงทันที!',
+        undefined,
+        { channel: 'world' },
+      )
+    }
+  }
+
+  notify()
+  return true
+}
+
+export function closeWorldBossEventAction(options?: {
+  cycleKey?: string
+  bossId?: string
+  bossName?: string
+  maxHp?: number
+  announce?: boolean
+}): boolean {
+  return closeWorldBossEventOnDefeat({
+    ...options,
+    removeAliveEntities: true,
+    syncServer: true,
+  })
+}
+
+export function applyClosedWorldBossCyclesUpdate(cycleKeys: readonly string[] | null | undefined) {
+  if (!Array.isArray(cycleKeys) || cycleKeys.length === 0) return
+  const hasNewClosed = cycleKeys.some((key) => !isWorldBossCycleClosed(key))
+  if (!hasNewClosed) return
+
+  syncClosedWorldBossCycles(cycleKeys)
+
+  let stateChanged = false
+  if (game.worldBossTest && isWorldBossCycleClosed(game.worldBossTest.cycleKey)) {
+    game.worldBossTest = null
+    stateChanged = true
+  }
+
+  const afterSpec = getActiveWorldBoss()
+  if (!afterSpec.isActive) {
+    const hadAliveWb = game.monsters.some((m) => (m.isWorldBoss || m.defId === 'world_golem') && !m.dead)
+    if (hadAliveWb) {
+      game.monsters = game.monsters.filter((m) => !(m.isWorldBoss || m.defId === 'world_golem') || m.dead)
+      stateChanged = true
+    }
+    game.worldBossWarning = null
+    game.worldBossMapFx = null
+    game.worldBossEntrance = null
+    game.worldBossCritHit = null
+    syncEngineBgm()
+  }
+
+  if (stateChanged || hasNewClosed) {
+    notify()
+  }
+}
+
 export function applyWorldBossTestUpdate(
   nextState: WorldBossTestState | null,
   options?: { silent?: boolean },
 ) {
-  const clean = sanitizeWorldBossTestState(nextState)
+  const cleanRaw = sanitizeWorldBossTestState(nextState)
+  const clean = cleanRaw && isWorldBossCycleClosed(cleanRaw.cycleKey) ? null : cleanRaw
   const prev = getWorldBossTestOverride()
   const changed =
     Boolean(prev) !== Boolean(clean) ||
@@ -1140,19 +1256,19 @@ export function applyWorldBossTestUpdate(
         element: spec.element,
         isTestMode: true,
       })
-      syncBgmForMap('world', true)
+      syncEngineBgm()
     }
   } else if (!clean && prev) {
     // Clean up test-only summoned world boss entities when test ends (unless scheduled event is active)
     const afterSpec = getActiveWorldBoss()
     if (!afterSpec.isActive) {
-      game.monsters = game.monsters.filter((m) => !m.isWorldBoss)
+      game.monsters = game.monsters.filter((m) => !m.isWorldBoss || m.dead)
       game.worldBossMapFx = null
       game.worldBossWarning = null
       game.worldBossEntrance = null
       game.worldBossCritHit = null
       if (game.p?.mapId === 'world') {
-        syncBgmForMap('world', false)
+        syncEngineBgm()
       }
     }
   }
@@ -2960,7 +3076,7 @@ export function changeMap(rawMapId: string, tx: number, ty: number) {
   if (mapId !== 'town') game.invasion = null
   if (!isActivityMapId(mapId)) game.activitySession = null
   populateMap()
-  syncBgmForMap(mapId, game.monsters.some((m) => !m.dead && Boolean(MONSTERS[m.defId]?.boss)))
+  syncEngineBgm()
   say('system', `เข้าสู่ ${map.name} (${map.levelLabel})`)
   if (mapId === 'world' && !getActiveWorldBoss().isActive) {
     say(
@@ -3847,6 +3963,11 @@ function killMonster(m: Monster) {
       gold,
       diamonds: m.isWorldBoss ? 15 : 0,
       exp: expGain,
+    })
+    closeWorldBossEventOnDefeat({
+      bossName: m.worldBossName ?? def.name,
+      announce: true,
+      syncServer: true,
     })
   }
   onActivityMonsterKilled(m)
@@ -4958,6 +5079,7 @@ export function openPanel(id: PanelId, options?: { fromNpc?: boolean }) {
   if (windowBridge) {
     windowBridge.open(id)
   }
+  syncEngineBgm()
   notify()
 }
 
@@ -4982,6 +5104,7 @@ export function closePanel(targetId?: PanelId | unknown) {
   } else {
     game.panel = null
   }
+  syncEngineBgm()
   saveGame()
   notify()
 }
@@ -6000,7 +6123,7 @@ export function summonWorldBossInField(): { ok: boolean; message: string } {
       isTestMode: spec.isTestMode,
     })
   }
-  syncBgmForMap(p.mapId, true)
+  syncEngineBgm()
   const msg = `★ อัญเชิญบอสกิจกรรมเวิลด์บอส "${spec.name}" ลงสู่แมพ ${map.name} แล้ว! ★`
   say('system', msg)
   notify()
@@ -6011,7 +6134,7 @@ export function claimWorldBossMilestoneAction(milestoneId: string): { ok: boolea
   const p = player()
   const ext = sanitizeRpgExt(p.rpgExt)
   const spec = getActiveWorldBoss()
-  if (ext.worldBossCycleKey !== spec.cycleKey) {
+  if (ext.worldBossCycleKey !== spec.cycleKey && !isWorldBossCycleClosed(ext.worldBossCycleKey)) {
     return { ok: false, message: 'รอบเวิลด์บอสเปลี่ยนแล้ว' }
   }
   const ms = spec.milestones.find((m) => m.id === milestoneId)
@@ -6645,6 +6768,7 @@ export function startTownInvasionAction(): { ok: boolean; message: string } {
   spawnTownInvasionWave(1)
   game.panel = null
   windowBridge?.closeAll()
+  syncEngineBgm()
   say('gm', '★ สัญญาณเตือนภัย! กองทัพมอนสเตอร์บุกเมือง Wave 1/3 — ช่วยกันปราบให้หมด!')
   notify()
   return { ok: true, message: 'เริ่มภารกิจป้องกันเมือง Wave 1/3 แล้ว!' }
@@ -6892,6 +7016,16 @@ function completeActivityVictory(session: ActivitySessionRuntime) {
   session.rewardsClaimed = true
   game.monsters = []
 
+  // Auto-collect any remaining owned drops in the activity map before warping back to town
+  const ownerId = String(p.uid ?? p.name)
+  for (let i = game.groundDrops.length - 1; i >= 0; i--) {
+    const drop = game.groundDrops[i]
+    if (drop && drop.ownerId === ownerId) {
+      finalizeGroundDropPickup(i)
+    }
+  }
+  game.groundDrops = []
+
   const extV2 = sanitizeExtV2(p.extV2)
   const actProgBefore = extV2.activities ?? sanitizeExtV2(undefined).activities!
   const dailyClearsBefore = actProgBefore.dailyClears[session.activityId] ?? 0
@@ -6941,9 +7075,25 @@ function completeActivityVictory(session: ActivitySessionRuntime) {
   const capNote = rewards.dailyReduced ? ' [เกินโควต้าประจำวัน รับรางวัลพื้นฐาน 30%]' : ''
   const def = getActivityDef(session.activityId)
 
+  // End the activity session immediately and warp the player back to main town
+  game.keys.clear()
+  game.attackHeld = false
+  game.moveTarget = null
+  game.activitySession = null
+  changeMap('town', MAPS.town.spawn.x, MAPS.town.spawn.y)
+
   addEffect({ type: 'levelup', x: p.x, y: p.y, r: 34, color: def.accentColor, max: 1.5 })
   addFloat(p.x, p.y - 36, `CLEAR! +${rewards.diamonds} 💎`, '#facc15', 13)
-  say('loot', `★ เคลียร์กิจกรรม "${def.name}" สำเร็จ!${recordNote} รับ ${session.summaryText}${capNote}`)
+  pushKillToast({
+    kind: 'kill',
+    monsterName: `เคลียร์ ${def.name} สำเร็จ!`,
+    isBoss: true,
+    gold: rewards.gold,
+    exp: rewards.exp,
+    items: rewards.items,
+    duration: 4.5,
+  })
+  say('loot', `★ เคลียร์กิจกรรม "${def.name}" สำเร็จ!${recordNote} วาร์ปกลับเมืองหลักแล้ว · รับ ${session.summaryText}${capNote}`)
   saveGame()
   notify()
 }
@@ -7101,44 +7251,51 @@ function onActivityMonsterKilled(m: Monster) {
   if (session.activityId === 'guild_war') {
     session.score = Math.min(session.targetScore, session.score + 15)
     addFloat(m.x, m.y - 28, '+15 แต้มกิลด์', '#60a5fa', 10)
-    if (session.score >= session.targetScore) {
-      completeActivityVictory(session)
-    } else {
-      notify()
-    }
+  }
+
+  const aliveMonsterCount = game.monsters.filter((mon) => !mon.dead).length
+  const outcome = resolveActivityClearOutcome({
+    activityId: session.activityId,
+    aliveMonsterCount,
+    wave: session.wave,
+    maxWaves: session.maxWaves,
+    stage: session.stage,
+    maxStages: session.maxStages,
+    score: session.score,
+    targetScore: session.targetScore,
+    digRevealed: Boolean(session.digSpot?.revealed),
+  })
+
+  if (outcome.action === 'advance_wave') {
+    session.wave = outcome.nextWave
+    const nextWave = INVASION_WAVES[session.wave - 1]
+    game.monsters = []
+    spawnActivityMonstersAt(nextWave.spawns, 26, 13, 8)
+    say('gm', `★ กองทัพบุกเมือง Wave ${session.wave}/${session.maxWaves}: ${nextWave.title}!`)
+    notify()
     return
   }
 
-  const allDead = game.monsters.every((mon) => mon.dead)
-  if (!allDead) return
+  if (outcome.action === 'advance_stage') {
+    session.stage = outcome.nextStage
+    const nextStage = BOSS_RUSH_STAGES[session.stage - 1]
+    game.monsters = []
+    spawnActivityMonstersAt([{ monsterId: nextStage.bossId, count: 1 }], 26, 15, 2)
+    say('gm', `★ สังเวียนบอสรัช: ${nextStage.title} ปรากฏตัวแล้ว!`)
+    notify()
+    return
+  }
 
-  if (session.activityId === 'invasion') {
-    if (session.wave < session.maxWaves) {
-      session.wave += 1
-      const nextWave = INVASION_WAVES[session.wave - 1]
-      game.monsters = []
-      spawnActivityMonstersAt(nextWave.spawns, 26, 13, 8)
-      say('gm', `★ กองทัพบุกเมือง Wave ${session.wave}/${session.maxWaves}: ${nextWave.title}!`)
-      notify()
-    } else {
-      completeActivityVictory(session)
+  if (outcome.action === 'complete_and_warp_town') {
+    if (outcome.markGuardianDefeated && session.digSpot) {
+      session.digSpot.guardianDefeated = true
     }
-  } else if (session.activityId === 'bounty') {
     completeActivityVictory(session)
-  } else if (session.activityId === 'treasure' && session.digSpot?.revealed) {
-    session.digSpot.guardianDefeated = true
-    completeActivityVictory(session)
-  } else if (session.activityId === 'boss_rush') {
-    if (session.stage < session.maxStages) {
-      session.stage += 1
-      const nextStage = BOSS_RUSH_STAGES[session.stage - 1]
-      game.monsters = []
-      spawnActivityMonstersAt([{ monsterId: nextStage.bossId, count: 1 }], 26, 15, 2)
-      say('gm', `★ สังเวียนบอสรัช: ${nextStage.title} ปรากฏตัวแล้ว!`)
-      notify()
-    } else {
-      completeActivityVictory(session)
-    }
+    return
+  }
+
+  if (session.activityId === 'guild_war') {
+    notify()
   }
 }
 
@@ -10094,7 +10251,7 @@ function startSession(p: SaveData, welcome: string, persist = false) {
   syncPetFollowToPlayer(true)
   populateMap()
   clampVitals()
-  syncBgmForMap(map.id, game.monsters.some((m) => !m.dead && Boolean(MONSTERS[m.defId]?.boss)))
+  syncEngineBgm()
   say('system', welcome)
   say('system', 'WASD/ลูกศร เดิน • Space โจมตี • 1-3 สกิล • X แดชหลบ • U ท่าไม้ตาย • E คุย/เก็บเกี่ยว • H ซ่อนUI')
   saveGame()
@@ -10290,11 +10447,44 @@ export function newGame(name: string, starterJobId = 'novice') {
   startSession(p, `ยินดีต้อนรับสู่โลกพิกเซล ${p.name}! ออกไปทางตะวันออกของเมืองเพื่อล่ามอนสเตอร์`, true)
 }
 
+export function getEngineBgmContext(): BgmResolveContext {
+  const p = game.p
+  if (!p) return { screen: 'login' }
+  const map = currentMap()
+  const bossActive = game.monsters.some(
+    (m) =>
+      !m.dead &&
+      (Boolean(m.isWorldBoss) ||
+        (Boolean(MONSTERS[m.defId]?.boss) && (m.provoked || Math.hypot(m.x - p.x, m.y - p.y) < 320))),
+  )
+  const eventActive = Boolean((game.invasion?.active && map.id === 'town') || isSpecialEventBgmMapId(map.id))
+  const inCombat = Boolean((!map.safe || eventActive) && game.combatT < BGM_BATTLE_HOLD_SEC)
+  const dungeonActive = game.panel === 'dungeon'
+  return {
+    screen: 'game',
+    mapId: map.id,
+    bossActive,
+    inCombat,
+    combatElapsedSec: game.combatT,
+    eventActive,
+    dungeonActive,
+  }
+}
+
+let lastEngineBgmTheme: BgmTheme | null = null
+
+export function syncEngineBgm(force = false) {
+  const ctx = getEngineBgmContext()
+  lastEngineBgmTheme = resolveBgmTheme(ctx)
+  syncBgmContext(ctx, force)
+}
+
 export function quitToTitle() {
   saveGame()
-  stopBgm()
   game.p = null
   resetRuntime()
+  lastEngineBgmTheme = 'login'
+  syncBgmContext({ screen: 'login' })
   notify()
 }
 
@@ -10681,6 +10871,11 @@ export function update(dt: number) {
 
   game.saveT += dt
   if (game.saveT >= 10) saveGame()
+
+  const nextTheme = resolveBgmTheme(getEngineBgmContext())
+  if (nextTheme !== lastEngineBgmTheme) {
+    syncEngineBgm()
+  }
 }
 
 function updateMonsters(dt: number, map: MapDef) {

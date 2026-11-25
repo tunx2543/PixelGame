@@ -159,7 +159,7 @@ export function EventsPanel() {
   const isGmDev = Boolean(p.gm && isCurrentAccountGm())
 
   const claimableMissionsCount = active.def.missions.filter((m) => {
-    const claimed = fest.claimedMissionKeys.includes(getFestivalMissionClaimKey(active.cycleKey, m.id))
+    const claimed = Boolean(fest?.claimedMissionKeys.includes(getFestivalMissionClaimKey(active.cycleKey, m.id)))
     const val = getFestivalMissionMetricValue(cycleProgress, m.metric)
     return !claimed && val >= m.target
   }).length
@@ -401,7 +401,7 @@ export function EventsPanel() {
             <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
               {active.def.missions.map((mission) => {
                 const claimKey = getFestivalMissionClaimKey(active.cycleKey, mission.id)
-                const claimed = fest.claimedMissionKeys.includes(claimKey)
+                const claimed = Boolean(fest?.claimedMissionKeys.includes(claimKey))
                 const rawProgress = getFestivalMissionMetricValue(cycleProgress, mission.metric)
                 const current = Math.min(mission.target, rawProgress)
                 const pct = Math.min(100, Math.round((current / Math.max(1, mission.target)) * 100))
@@ -493,7 +493,7 @@ export function EventsPanel() {
             <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
               {active.def.shopRewards.map((reward) => {
                 const purchaseKey = getFestivalShopPurchaseKey(active.cycleKey, reward.id)
-                const boughtCount = fest.shopPurchases[purchaseKey] ?? 0
+                const boughtCount = fest?.shopPurchases[purchaseKey] ?? 0
                 const limitReached = boughtCount >= reward.limitPerCycle
                 const itemDef = reward.itemId ? ITEMS[reward.itemId] : null
                 const cosDef = reward.cosmeticId ? getCosmeticDef(reward.cosmeticId) : null
@@ -611,7 +611,7 @@ export function EventsPanel() {
               {EVENT_TOKEN_SHOP_REWARDS.map((reward) => {
                 const cycleKey = getEventTokenShopCycleKey(reward, nowMs)
                 const purchaseKey = getFestivalShopPurchaseKey(cycleKey, reward.id)
-                const boughtCount = fest.shopPurchases[purchaseKey] ?? 0
+                const boughtCount = fest?.shopPurchases[purchaseKey] ?? 0
                 const limitReached = boughtCount >= reward.limitPerCycle
                 const itemDef = reward.itemId ? ITEMS[reward.itemId] : null
                 const cosDef = reward.cosmeticId ? getCosmeticDef(reward.cosmeticId) : null

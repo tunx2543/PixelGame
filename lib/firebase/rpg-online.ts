@@ -645,6 +645,65 @@ export async function attackWorldBossOnline(input: {
   return nextState
 }
 
+export async function markWorldBossDefeatedOnline(meta: {
+  cycleKey: string
+  bossId: string
+  name: string
+  maxHp: number
+}): Promise<void> {
+  if (!meta.cycleKey || !/^[a-zA-Z0-9_-]{4,64}$/.test(meta.cycleKey)) return
+  const safeMaxHp = Math.max(1000, Math.round(meta.maxHp))
+  const localCurrent = readLocalJson<WorldBossRaidState>(LOCAL_WB_KEY, {
+    cycleKey: meta.cycleKey,
+    bossId: meta.bossId,
+    name: meta.name.slice(0, 64),
+    maxHp: safeMaxHp,
+    currentHp: 0,
+    totalDamageDealt: safeMaxHp,
+    contributions: [],
+  })
+  if (localCurrent.cycleKey === meta.cycleKey) {
+    writeLocalJson(LOCAL_WB_KEY, {
+      ...localCurrent,
+      currentHp: 0,
+    })
+  } else {
+    writeLocalJson(LOCAL_WB_KEY, {
+      cycleKey: meta.cycleKey,
+      bossId: meta.bossId,
+      name: meta.name.slice(0, 64),
+      maxHp: safeMaxHp,
+      currentHp: 0,
+      totalDamageDealt: safeMaxHp,
+      contributions: [],
+    })
+  }
+
+  if (!isSignedInVerified() || !auth.currentUser) return
+  try {
+    const raidRef = doc(db, 'worldBoss', meta.cycleKey)
+    const raidSnap = await getDoc(raidRef)
+    if (raidSnap.exists()) {
+      await updateDoc(raidRef, {
+        currentHp: 0,
+        updatedAt: serverTimestamp(),
+      })
+    } else {
+      await setDoc(raidRef, {
+        cycleKey: meta.cycleKey,
+        bossId: meta.bossId,
+        name: meta.name.slice(0, 64),
+        maxHp: safeMaxHp,
+        currentHp: 0,
+        totalDamageDealt: safeMaxHp,
+        updatedAt: serverTimestamp(),
+      })
+    }
+  } catch {
+    // Non-blocking; local state and server store handle immediate closure gracefully.
+  }
+}
+
 export function subscribeWorldBossState(
   onUpdate: (state: WorldBossRaidState) => void,
 ): () => void {

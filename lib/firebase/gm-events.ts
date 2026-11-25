@@ -1093,10 +1093,29 @@ export async function publishFestivalEventConfig(input: {
   }
 }
 
+export async function notifyServerWorldBossClosed(cycleKey: string): Promise<boolean> {
+  if (!isSignedInVerified() || !auth.currentUser || !cycleKey) return false
+  try {
+    const headers = await getBearerHeaders()
+    const res = await fetch('/api/world/events', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        action: 'close_world_boss',
+        cycleKey,
+      }),
+    })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
 export async function pollPublicWorldEvents(sinceMs: number): Promise<{
   announcements: WorldAnnouncementRecord[]
   serverRates: ServerRatesConfig
   worldBossTest: WorldBossTestState | null
+  closedWorldBossCycles: string[]
   festivalOverride: FestivalOverrideState | null
   serverTimeMs: number
 } | null> {
@@ -1110,6 +1129,7 @@ export async function pollPublicWorldEvents(sinceMs: number): Promise<{
       announcements?: WorldAnnouncementRecord[]
       serverRates?: ServerRatesConfig
       worldBossTest?: WorldBossTestState | null
+      closedWorldBossCycles?: string[]
       festivalOverride?: FestivalOverrideState | null
       serverTimeMs?: number
     }
@@ -1118,6 +1138,7 @@ export async function pollPublicWorldEvents(sinceMs: number): Promise<{
       announcements: Array.isArray(data.announcements) ? data.announcements : [],
       serverRates: data.serverRates ? sanitizeServerRates(data.serverRates) : { ...DEFAULT_SERVER_RATES },
       worldBossTest: sanitizeWorldBossTestState(data.worldBossTest ?? null),
+      closedWorldBossCycles: Array.isArray(data.closedWorldBossCycles) ? data.closedWorldBossCycles : [],
       festivalOverride: sanitizeFestivalOverrideState(data.festivalOverride ?? null),
       serverTimeMs: typeof data.serverTimeMs === 'number' ? data.serverTimeMs : Date.now(),
     }
@@ -1132,6 +1153,7 @@ export async function pollServerGmEvents(sinceMs: number): Promise<{
   giftDrops: ServerGiftDropRecord[]
   serverRates: ServerRatesConfig
   worldBossTest: WorldBossTestState | null
+  closedWorldBossCycles: string[]
   festivalOverride: FestivalOverrideState | null
   serverTimeMs: number
 } | null> {
@@ -1151,6 +1173,7 @@ export async function pollServerGmEvents(sinceMs: number): Promise<{
       giftDrops?: ServerGiftDropRecord[]
       serverRates?: ServerRatesConfig
       worldBossTest?: WorldBossTestState | null
+      closedWorldBossCycles?: string[]
       festivalOverride?: FestivalOverrideState | null
       serverTimeMs?: number
     }
@@ -1161,6 +1184,7 @@ export async function pollServerGmEvents(sinceMs: number): Promise<{
       giftDrops: Array.isArray(data.giftDrops) ? data.giftDrops : [],
       serverRates: data.serverRates ? sanitizeServerRates(data.serverRates) : { ...DEFAULT_SERVER_RATES },
       worldBossTest: sanitizeWorldBossTestState(data.worldBossTest ?? null),
+      closedWorldBossCycles: Array.isArray(data.closedWorldBossCycles) ? data.closedWorldBossCycles : [],
       festivalOverride: sanitizeFestivalOverrideState(data.festivalOverride ?? null),
       serverTimeMs: typeof data.serverTimeMs === 'number' ? data.serverTimeMs : Date.now(),
     }

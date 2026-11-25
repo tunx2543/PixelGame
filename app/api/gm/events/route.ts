@@ -13,6 +13,7 @@ import {
   addServerAnnouncement,
   addServerGiftDrop,
   addServerGmDirective,
+  getEffectiveClosedWorldBossCycles,
   getEffectiveStoredFestivalOverride,
   getEffectiveStoredServerRates,
   getEffectiveStoredWorldBossTest,
@@ -47,13 +48,21 @@ export async function GET(req: Request) {
       giftDrops: [],
       serverRates: getEffectiveStoredServerRates(),
       worldBossTest: getEffectiveStoredWorldBossTest(),
+      closedWorldBossCycles: getEffectiveClosedWorldBossCycles(),
       festivalOverride: getEffectiveStoredFestivalOverride(),
       serverTimeMs: Date.now(),
     })
   }
 
-  const { announcements, directives, giftDrops, serverRates, worldBossTest, festivalOverride } =
-    getEventsForUser(auth.actor.uid, sinceMs)
+  const {
+    announcements,
+    directives,
+    giftDrops,
+    serverRates,
+    worldBossTest,
+    closedWorldBossCycles,
+    festivalOverride,
+  } = getEventsForUser(auth.actor.uid, sinceMs)
 
   return NextResponse.json({
     ok: true,
@@ -62,6 +71,7 @@ export async function GET(req: Request) {
     giftDrops,
     serverRates,
     worldBossTest,
+    closedWorldBossCycles,
     festivalOverride,
     serverTimeMs: Date.now(),
   })
