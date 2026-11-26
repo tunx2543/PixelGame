@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { Flame, Lock, RefreshCw, ShieldCheck, Sparkles } from 'lucide-react'
+import { AlertTriangle, Flame, Lock, RefreshCw, ShieldCheck, Sparkles } from 'lucide-react'
 import { ITEMS, MAX_PLUS, enhanceCost, enhanceRate } from '@/lib/game/data'
+import { doesProtectScrollApply } from '@/lib/game/enhance-logic'
 import {
   countItem,
   enhance,
@@ -35,8 +36,8 @@ const CHANCE_SCROLL_OPTIONS: Array<{ id: string; label: string; bonusPct: number
 ]
 
 const PROTECT_SCROLL_OPTIONS: Array<{ id: string; label: string; desc: string }> = [
-  { id: 'enhance_protect_scroll_1', label: 'ใบประกันความเสียหาย', desc: 'กันระดับลด' },
-  { id: 'enhance_protect_scroll_2', label: 'ใบประกันชั้นดี', desc: 'กันลด + คืนหิน 50%' },
+  { id: 'enhance_protect_scroll_1', label: 'ใบกันแตก', desc: 'กันอาวุธหาย · กันเกราะลด' },
+  { id: 'enhance_protect_scroll_2', label: 'ใบกันแตกชั้นดี', desc: 'กันแตก + คืนหิน 50%' },
 ]
 
 export function EnhancePanel() {
@@ -74,6 +75,8 @@ export function EnhancePanel() {
   const rarity = item && def ? resolveEffectiveRarity(item, def) : 'common'
   const rarityMeta = EQUIPMENT_RARITY_META[rarity]
   const rfCost = item && def ? reforgeCost(def.tier ?? 1, rarity) : null
+  const isWeapon = def?.kind === 'weapon'
+  const protectApplies = Boolean(item && def && doesProtectScrollApply(def.kind, item.plus, rate))
   const isRemoteVip = hasVipRemoteAccess(p) && !isNearTownNpcRole('enhance')
 
   return (
@@ -82,7 +85,7 @@ export function EnhancePanel() {
       subtitle={
         isRemoteVip
           ? 'สิทธิ์ VIP ระยะไกล — ตีบวกอุปกรณ์ (+15) และ Reforge ออปชันได้จากทุกแผนที่'
-          : 'ตีบวกเพิ่มพลัง (สูงสุด +15) ใช้ใบเพิ่มโอกาส / ใบประกันความเสียหาย หรือ Reforge ออปชันใหม่'
+          : 'ตีบวกเพิ่มพลัง (สูงสุด +15) หากอาวุธตีบวกล้มเหลวจะแตกหาย ต้องใช้ "ใบกันแตก" เพื่อป้องกัน'
       }
     >
       <div className="grid gap-4 md:grid-cols-[1fr_1.25fr]">
@@ -213,7 +216,7 @@ export function EnhancePanel() {
 
                   <div>
                     <p className="mb-1 flex items-center gap-1 font-bold text-cyan-300">
-                      <ShieldCheck className="size-3.5" aria-hidden /> ใบประกันความเสียหาย (+6 ขึ้นไป)
+                      <ShieldCheck className="size-3.5" aria-hidden /> ใบกันแตก (กันอาวุธหาย / เกราะ +6+)
                     </p>
                     <div className="flex flex-wrap gap-1">
                       {PROTECT_SCROLL_OPTIONS.map((opt) => {
@@ -223,16 +226,20 @@ export function EnhancePanel() {
                           <button
                             key={opt.id}
                             type="button"
+                            data-testid={`enhance-${opt.id}`}
                             disabled={qty <= 0}
                             onClick={() => setProtectScrollId(active ? null : opt.id)}
                             className={cn(
-                              'rounded border px-2 py-1 text-[10px] font-semibold transition-colors disabled:opacity-35',
+                              'inline-flex items-center gap-1.5 rounded border px-2 py-1 text-[10px] font-semibold transition-colors disabled:opacity-35',
                               active
                                 ? 'border-cyan-300 bg-cyan-500/20 text-cyan-200'
                                 : 'border-border bg-secondary/70 text-slate-200 hover:border-sky-400',
                             )}
                           >
-                            {opt.label} · {opt.desc} ({qty})
+                            <ItemIcon itemId={opt.id} size={16} />
+                            <span>
+                              {opt.label} · {opt.desc} ({qty})
+                            </span>
                           </button>
                         )
                       })}
@@ -242,26 +249,50 @@ export function EnhancePanel() {
               </>
             )}
 
-            {!maxed && item.plus >= 6 && !activeProtectOpt && (
-              <p className="border-2 border-destructive/60 bg-destructive/10 p-2 text-[11px] text-destructive">
-                คำเตือน: ตั้งแต่ +6 ขึ้นไป หากล้มเหลวระดับจะลดลง 1 (สามารถเลือกใช้ใบประกันความเสียหายได้)
+            {!maxed && isWeapon && rate < 1 && !activeProtectOpt && (
+              <p className="flex items-start gap-1.5 border-2 border-destructive/75 bg-destructive/15 p-2 text-[11px] font-semibold text-destructive">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+                <span>
+                  คำเตือน: อาวุธนี้มีโอกาสล้มเหลว {Math.round((1 - rate) * 100)}% — หากตีบวกล้มเหลวโดยไม่ใช้ใบกันแตก อาวุธจะแตกสลายและหายไปถาวร!
+                </span>
               </p>
             )}
 
-            {!maxed && item.plus >= 6 && activeProtectOpt && (
+            {!maxed && !isWeapon && item.plus >= 6 && !activeProtectOpt && (
+              <p className="border-2 border-destructive/60 bg-destructive/10 p-2 text-[11px] text-destructive">
+                คำเตือน: เกราะตั้งแต่ +6 ขึ้นไป หากล้มเหลวระดับจะลดลง 1 (สามารถเลือกใช้ใบกันแตกป้องกันได้)
+              </p>
+            )}
+
+            {!maxed && protectApplies && activeProtectOpt && (
               <p className="flex items-center gap-1.5 border border-cyan-400/50 bg-cyan-950/40 p-2 text-[11px] text-cyan-200">
                 <Flame className="size-3.5 shrink-0 text-cyan-300" aria-hidden />
-                <span>เปิดใช้ {activeProtectOpt.label}: ป้องกันระดับลดลงเมื่อตีบวกล้มเหลว ({activeProtectOpt.desc})</span>
+                <span>
+                  เปิดใช้ {activeProtectOpt.label}:{' '}
+                  {isWeapon
+                    ? `ป้องกันไม่ให้อาวุธแตกหาย (+${item.plus} คงเดิม) เมื่อตีบวกล้มเหลว (${activeProtectOpt.desc})`
+                    : `ป้องกันระดับเกราะลดลงเมื่อตีบวกล้มเหลว (${activeProtectOpt.desc})`}
+                </span>
+              </p>
+            )}
+
+            {!maxed && rate >= 1 && (
+              <p className="border border-emerald-500/40 bg-emerald-950/30 p-2 text-[11px] text-emerald-300">
+                โอกาสสำเร็จ 100% — ตีบวกปลอดภัย ไม่แตกหาย{activeProtectOpt ? ' (ไม่เสียใบกันแตก)' : ''}
               </p>
             )}
 
             <PxButton
+              data-testid="enhance-submit-btn"
               onClick={() => {
                 const res = enhance(item.uid, {
                   chanceScrollId: activeChanceOpt?.id ?? null,
                   protectScrollId: activeProtectOpt?.id ?? null,
                 })
                 setResult(res)
+                if (res.result === 'destroyed') {
+                  setSelected(null)
+                }
                 if (activeChanceOpt && countItem(activeChanceOpt.id) <= 0) setChanceScrollId(null)
                 if (activeProtectOpt && countItem(activeProtectOpt.id) <= 0) setProtectScrollId(null)
               }}
@@ -274,11 +305,13 @@ export function EnhancePanel() {
             {result && (
               <p
                 role="status"
+                data-testid="enhance-result-status"
                 className={cn(
                   'border-2 p-2 text-center text-sm',
                   result.result === 'success' && 'border-accent bg-accent/15 text-accent',
                   result.result === 'fail' && 'border-border bg-background text-muted-foreground',
-                  (result.result === 'down' || result.result === 'error') && 'border-destructive bg-destructive/15 text-destructive',
+                  (result.result === 'down' || result.result === 'error' || result.result === 'destroyed') &&
+                    'border-destructive bg-destructive/15 font-bold text-destructive',
                 )}
               >
                 {result.message}
@@ -321,7 +354,23 @@ export function EnhancePanel() {
             </div>
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">เลือกอุปกรณ์ทางซ้ายเพื่อตีบวก</p>
+          <div className="space-y-3">
+            {result && (
+              <p
+                role="status"
+                data-testid="enhance-result-status"
+                className={cn(
+                  'border-2 p-3 text-center text-sm',
+                  result.result === 'destroyed' || result.result === 'error'
+                    ? 'border-destructive bg-destructive/15 font-bold text-destructive'
+                    : 'border-border bg-muted text-foreground',
+                )}
+              >
+                {result.message}
+              </p>
+            )}
+            <p className="text-sm text-muted-foreground">เลือกอุปกรณ์ทางซ้ายเพื่อตีบวก</p>
+          </div>
         )}
       </div>
     </PanelFrame>

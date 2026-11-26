@@ -144,10 +144,9 @@ import {
 import { useGame } from '@/lib/game/use-game'
 import { cn } from '@/lib/utils'
 import { formatNum } from '../format'
-import { ChestArtworkSprite } from '../chest-artwork'
 import { ItemIcon } from '../item-icon'
 import { SpriteModelCanvas } from '../sprite-model-canvas'
-import { getShopCustomArtworkCrop } from '@/lib/game/treasure-chest'
+import { getShopCustomArtworkCrop, getShopCustomArtworkPath } from '@/lib/game/treasure-chest'
 import { PanelFrame, PxButton } from './panels'
 
 type PremiumTabId =
@@ -222,18 +221,32 @@ function formatDateTime(ms: number): string {
 }
 
 function ProductThumb({ product }: { product: PremiumProduct }) {
-  const shopCustomCrop = getShopCustomArtworkCrop(product.itemId) ?? getShopCustomArtworkCrop(product.productId)
-  if (shopCustomCrop) {
+  const shopCustomSrc = getShopCustomArtworkPath(product.itemId) ?? getShopCustomArtworkPath(product.productId)
+  if (shopCustomSrc) {
+    const glowHex = getShopCustomArtworkCrop(product.itemId)?.glowHex ?? '#38bdf8'
     return (
-      <ChestArtworkSprite
-        crop={shopCustomCrop}
-        alt={product.name}
-        size={38}
-        squareFit
-        maskMode="wide"
-        showGlow
-        testId={`shop-art-${product.itemId}`}
-      />
+      <span
+        data-testid={`shop-art-${product.itemId}`}
+        className="relative inline-flex size-9 shrink-0 items-center justify-center"
+      >
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0.5 rounded-full opacity-45 blur-sm"
+          style={{ background: `radial-gradient(circle, ${glowHex}88 0%, transparent 72%)` }}
+        />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={shopCustomSrc}
+          alt={product.name}
+          title={product.name}
+          width={36}
+          height={36}
+          referrerPolicy="no-referrer"
+          style={{ imageRendering: 'pixelated' }}
+          className="relative z-10 size-9 shrink-0 object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.75)]"
+          draggable={false}
+        />
+      </span>
     )
   }
   if (ITEMS[product.itemId]) {
@@ -262,6 +275,23 @@ function ProductThumb({ product }: { product: PremiumProduct }) {
         size={36}
         showShadow={false}
         showAura={false}
+      />
+    )
+  }
+  const fashionDef = getFashionItemDef(product.payload?.fashionId ?? product.itemId)
+  if (fashionDef?.iconAsset) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={fashionDef.iconAsset}
+        alt={product.name}
+        title={product.name}
+        width={34}
+        height={34}
+        referrerPolicy="no-referrer"
+        style={{ imageRendering: 'pixelated' }}
+        className="size-[34px] shrink-0 object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.75)]"
+        draggable={false}
       />
     )
   }

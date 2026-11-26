@@ -2,15 +2,13 @@ import {
   ITEMS,
   JOBS,
   MAX_LEVEL,
-  MAX_PLUS,
   MONSTERS,
-  enhanceCost,
-  enhanceRate,
   expToNext,
   normalizeJobId,
   type ItemDef,
   type MonsterDef,
 } from './data'
+import { executeEnhanceOnSave, type EnhanceOutcome } from './enhance-logic'
 import {
   INV_SIZE,
   SAVE_KEY,
@@ -104,7 +102,7 @@ export interface EncounterVictoryResult {
 
 export interface WeaponEnhanceAttemptResult {
   nextSave: SaveData
-  outcome: 'success' | 'fail' | 'down' | 'error'
+  outcome: EnhanceOutcome
   message: string
   newPlus: number
 }
@@ -588,83 +586,29 @@ export function useRecoveryPotion(
   return { nextSave, restored, itemName: chosen.def.name, error: null }
 }
 
-export function enhanceEquippedWeapon(save: SaveData): WeaponEnhanceAttemptResult {
+export function enhanceEquippedWeapon(
+  save: SaveData,
+  options?: { protectScrollId?: string | null; rng?: () => number },
+): WeaponEnhanceAttemptResult {
   const nextSave: SaveData = structuredClone(save)
   const weapon = nextSave.equipment.weapon
   if (!weapon) {
     return { nextSave: save, outcome: 'error', message: 'กรุณาสวมใส่อาวุธก่อนตีบวก', newPlus: 0 }
   }
-  const def = ITEMS[weapon.itemId]
-  if (!def) {
-    return { nextSave: save, outcome: 'error', message: 'ไม่พบข้อมูลอาวุธ', newPlus: weapon.plus }
-  }
-  if (weapon.plus >= MAX_PLUS) {
-    return {
-      nextSave: save,
-      outcome: 'error',
-      message: `ตีบวกถึงระดับสูงสุด (+${MAX_PLUS}) แล้ว`,
-      newPlus: weapon.plus,
-    }
+
+  const res = executeEnhanceOnSave(nextSave, weapon.uid, {
+    protectScrollId: options?.protectScrollId,
+    rng: options?.rng,
+  })
+  if (res.result === 'error') {
+    return { nextSave: save, outcome: 'error', message: res.message, newPlus: weapon.plus }
   }
 
-  const cost = enhanceCost(weapon.plus, def.tier ?? 1)
-  const stoneCount = nextSave.inventory
-    .filter((i) => i.itemId === 'enhance_stone')
-    .reduce((sum, i) => sum + i.qty, 0)
-
-  if (nextSave.gold < cost.gold) {
-    return {
-      nextSave: save,
-      outcome: 'error',
-      message: `ทองไม่พอ (ต้องการ ${cost.gold} G)`,
-      newPlus: weapon.plus,
-    }
-  }
-  if (stoneCount < cost.stones) {
-    return {
-      nextSave: save,
-      outcome: 'error',
-      message: `หินตีบวกไม่พอ (ต้องการ ${cost.stones} ก้อน)`,
-      newPlus: weapon.plus,
-    }
-  }
-
-  nextSave.gold -= cost.gold
   nextSave.questState = recordQuestProgress(nextSave.questState, { enhances: 1 }, nextSave.kills)
-  let stonesLeft = cost.stones
-  for (let i = nextSave.inventory.length - 1; i >= 0 && stonesLeft > 0; i--) {
-    if (nextSave.inventory[i].itemId !== 'enhance_stone') continue
-    const take = Math.min(stonesLeft, nextSave.inventory[i].qty)
-    nextSave.inventory[i].qty -= take
-    stonesLeft -= take
-    if (nextSave.inventory[i].qty <= 0) nextSave.inventory.splice(i, 1)
-  }
-
-  const rate = enhanceRate(weapon.plus)
-  if (Math.random() < rate) {
-    weapon.plus += 1
-    return {
-      nextSave,
-      outcome: 'success',
-      message: `ตีบวกสำเร็จ! ${def.name} +${weapon.plus}`,
-      newPlus: weapon.plus,
-    }
-  }
-
-  if (weapon.plus >= 6) {
-    weapon.plus -= 1
-    return {
-      nextSave,
-      outcome: 'down',
-      message: `ตีบวกล้มเหลว! ระดับลดลงเหลือ +${weapon.plus}`,
-      newPlus: weapon.plus,
-    }
-  }
-
   return {
     nextSave,
-    outcome: 'fail',
-    message: `ตีบวกล้มเหลว (ระดับ +${weapon.plus} คงเดิม)`,
-    newPlus: weapon.plus,
+    outcome: res.result,
+    message: res.message,
+    newPlus: res.newPlus ?? 0,
   }
 }

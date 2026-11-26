@@ -6,8 +6,6 @@ import {
   MAX_PLUS,
   MONSTERS,
   STARTER_JOB_IDS,
-  enhanceCost,
-  enhanceRate,
   expToNext,
   getJobSlug,
   normalizeJobId,
@@ -18,6 +16,7 @@ import {
   type SkillDef,
   type EquipmentSlot,
 } from './data'
+import { executeEnhanceOnSave, type EnhanceOutcome } from './enhance-logic'
 import { LEGACY_MAP_ALIASES, MAPS, MAP_ORDER, TILE, boxBlocked, isSolidPx, normalizeMapId, type MapDef, type NpcDef, type NpcRole } from './maps'
 import { normalizeMonsterId } from './biome-monsters'
 import { GEM_SHOP_ITEMS } from './gem-shop'
@@ -5312,95 +5311,44 @@ export function findEquipment(id: string): InvItem | null {
   return p.inventory.find((i) => i.uid === id) ?? null
 }
 
-export type EnhanceResult = { result: 'success' | 'fail' | 'down' | 'error'; message: string }
-
-const ENHANCE_CHANCE_BONUS_MAP: Record<string, number> = {
-  enhance_chance_scroll_1: 0.1,
-  enhance_chance_scroll_2: 0.2,
-  enhance_chance_scroll_3: 0.35,
-  enhance_chance_scroll_4: 0.5,
-}
+export type EnhanceResult = { result: EnhanceOutcome; message: string }
 
 export function enhance(
   id: string,
   options?: { chanceScrollId?: string | null; protectScrollId?: string | null },
 ): EnhanceResult {
   const p = player()
-  const it = findEquipment(id)
-  if (!it) return { result: 'error', message: 'ไม่พบไอเทม' }
-  const def = ITEMS[it.itemId]
-  if (!def) return { result: 'error', message: 'ไม่พบข้อมูลไอเทม' }
-  if (def.kind !== 'weapon' && def.kind !== 'armor') return { result: 'error', message: 'ตีบวกได้เฉพาะอาวุธและชุดเกราะ' }
-  if (it.plus >= MAX_PLUS) return { result: 'error', message: `ตีบวกสูงสุดแล้ว (+${MAX_PLUS})` }
-  const cost = enhanceCost(it.plus, def.tier ?? 1)
-  if (p.gold < cost.gold) return { result: 'error', message: 'เงินไม่พอ' }
-  if (countItem('enhance_stone') < cost.stones) return { result: 'error', message: `หินตีบวกไม่พอ (ต้องการ ${cost.stones})` }
-
-  const chanceScrollId = options?.chanceScrollId && ENHANCE_CHANCE_BONUS_MAP[options.chanceScrollId] ? options.chanceScrollId : null
-  const protectScrollId =
-    options?.protectScrollId === 'enhance_protect_scroll_1' || options?.protectScrollId === 'enhance_protect_scroll_2'
-      ? options.protectScrollId
-      : null
-
-  if (chanceScrollId && countItem(chanceScrollId) < 1) {
-    return { result: 'error', message: `ไม่มี ${ITEMS[chanceScrollId]?.name ?? chanceScrollId} ในกระเป๋า` }
-  }
-  if (protectScrollId && countItem(protectScrollId) < 1) {
-    return { result: 'error', message: `ไม่มี ${ITEMS[protectScrollId]?.name ?? protectScrollId} ในกระเป๋า` }
+  const res = executeEnhanceOnSave(p, id, options)
+  if (res.result === 'error') {
+    return { result: 'error', message: res.message }
   }
 
-  p.gold -= cost.gold
-  removeItemId('enhance_stone', cost.stones)
-  let chanceBonus = 0
-  if (chanceScrollId) {
-    removeItemId(chanceScrollId, 1)
-    chanceBonus = ENHANCE_CHANCE_BONUS_MAP[chanceScrollId] ?? 0
-  }
-  let usedProtect = false
-  if (protectScrollId && it.plus >= 6) {
-    removeItemId(protectScrollId, 1)
-    usedProtect = true
-  }
-
+  pruneDepletedQuickSlots(p)
   p.questState = recordQuestProgress(p.questState, { enhances: 1 }, p.kills)
   recordDailyMissionProgress({ enhances: 1 })
-  const rate = Math.min(1, enhanceRate(it.plus) + chanceBonus)
-  let res: EnhanceResult
-  if (Math.random() < rate) {
-    it.plus++
-    res = { result: 'success', message: `ตีบวกสำเร็จ! ${def.name} +${it.plus}` }
+
+  const itemName = res.itemName ?? 'อุปกรณ์'
+  const nextPlus = res.newPlus ?? 0
+  if (res.result === 'success') {
     say('system', res.message)
-    if (it.plus >= 7) say('gm', `ประกาศ: ${p.name} ตีบวก ${def.name} ได้ +${it.plus}!`)
-    if (it.plus >= 10) {
-      void broadcastWorldNewsAction('enhance', `${p.name} ตีบวก ${def.name} สำเร็จระดับ +${it.plus}!`)
+    if (nextPlus >= 7) say('gm', `ประกาศ: ${p.name} ตีบวก ${itemName} ได้ +${nextPlus}!`)
+    if (nextPlus >= 10) {
+      void broadcastWorldNewsAction('enhance', `${p.name} ตีบวก ${itemName} สำเร็จระดับ +${nextPlus}!`)
     }
-  } else if (it.plus >= 6 && !usedProtect) {
-    it.plus--
-    res = { result: 'down', message: `ตีบวกล้มเหลว! ระดับลดลงเป็น +${it.plus}` }
+  } else if (res.result === 'destroyed') {
     say('error', res.message)
-  } else if (it.plus >= 6 && usedProtect) {
-    if (protectScrollId === 'enhance_protect_scroll_2') {
-      const refundedStones = Math.max(1, Math.floor(cost.stones * 0.5))
-      addItem('enhance_stone', refundedStones)
-      res = {
-        result: 'fail',
-        message: `ตีบวกล้มเหลว! ใบประกันชั้นดีป้องกันระดับไม่ให้ลด และคืนหินตีบวก ${refundedStones} ก้อน`,
-      }
-    } else {
-      res = {
-        result: 'fail',
-        message: 'ตีบวกล้มเหลว! ใบประกันความเสียหายป้องกันไม่ให้ระดับลดลง (+คงเดิม)',
-      }
-    }
+  } else if (res.result === 'down') {
+    say('error', res.message)
+  } else if (res.usedProtect) {
     say('system', res.message)
   } else {
-    res = { result: 'fail', message: 'ตีบวกล้มเหลว! ระดับคงเดิม' }
     say('error', res.message)
   }
+
   clampVitals()
   saveGame()
   notify()
-  return res
+  return { result: res.result, message: res.message }
 }
 
 export function unlockCombatPet(petId: string): { ok: boolean; message: string } {

@@ -1,7 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import path from 'node:path'
 import { ITEMS } from './data'
+import { resolveItemImagePath } from './items'
 import { EQUIPMENT_RARITY_ORDER } from './mmo-systems'
+import { PREMIUM_CATALOG } from './premium/catalog'
+import { getFashionItemDef } from './premium/fashion-pet'
 import {
   BOX_EXCHANGE_ARTWORK_HEIGHT,
   BOX_EXCHANGE_ARTWORK_SRC,
@@ -19,6 +24,7 @@ import {
   SHOP_VIP_BUNDLE_ARTWORK_HEIGHT,
   SHOP_VIP_BUNDLE_ARTWORK_SRC,
   SHOP_VIP_BUNDLE_ARTWORK_WIDTH,
+  SHOP_VIP_BUNDLE_IMAGE_PATHS,
   SHOP_VIP_BUNDLE_SPRITE_CROPS,
   calculateChestRarityProbabilities,
   canClaimDailyFreeChest,
@@ -26,6 +32,7 @@ import {
   formatCooldownDuration,
   getDailyFreeChestStatus,
   getShopCustomArtworkCrop,
+  getShopCustomArtworkPath,
   openMultipleTreasureChests,
   openTreasureChest,
   rollChestRarity,
@@ -359,6 +366,14 @@ test('shop VIP and bundle artwork crops slice all 6 items cleanly from 179567264
     assert.ok(byItem.sx >= 0 && byItem.sx + byItem.sw <= SHOP_VIP_BUNDLE_ARTWORK_WIDTH)
     assert.ok(byItem.sy >= 0 && byItem.sy + byItem.sh <= SHOP_VIP_BUNDLE_ARTWORK_HEIGHT)
     assert.ok(byItem.sw >= 90 && byItem.sh >= 120)
+
+    const pngByItem = getShopCustomArtworkPath(itemId)
+    const pngByProd = getShopCustomArtworkPath(productId)
+    assert.equal(pngByItem, `/assets/items/special/${itemId}.png`)
+    assert.equal(pngByProd, pngByItem)
+    assert.equal(SHOP_VIP_BUNDLE_IMAGE_PATHS[itemId as keyof typeof SHOP_VIP_BUNDLE_IMAGE_PATHS], pngByItem)
+    const diskPath = path.join(process.cwd(), 'public', pngByItem.replace(/^\//, ''))
+    assert.equal(fs.existsSync(diskPath), true, `Missing transparent PNG on disk: ${diskPath}`)
   }
 
   // Row 1 items sit above Row 2 items with no vertical overlap
@@ -374,4 +389,61 @@ test('shop VIP and bundle artwork crops slice all 6 items cleanly from 179567264
   )
   assert.ok(topMaxY < botMinY)
   assert.equal(getShopCustomArtworkCrop('nonexistent_item'), null)
+  assert.equal(getShopCustomArtworkPath('nonexistent_item'), null)
+})
+
+test('every Soul Shop product in PREMIUM_CATALOG and rainbow_name_potion has a dedicated 2D pixel art asset or sprite renderer', () => {
+  const missing: string[] = []
+  for (const prod of PREMIUM_CATALOG) {
+    const customPng = getShopCustomArtworkPath(prod.itemId) ?? getShopCustomArtworkPath(prod.productId)
+    if (customPng) {
+      const diskPath = path.join(process.cwd(), 'public', customPng.replace(/^\//, ''))
+      if (!fs.existsSync(diskPath)) missing.push(`${prod.productId}:missing:${customPng}`)
+      continue
+    }
+    if (prod.itemId === 'companion_gacha_box') {
+      continue
+    }
+    if (prod.payload?.petId || prod.payload?.mountId) {
+      continue
+    }
+    const fashionDef = getFashionItemDef(prod.payload?.fashionId ?? prod.itemId)
+    if (fashionDef?.iconAsset) {
+      const diskPath = path.join(process.cwd(), 'public', fashionDef.iconAsset.replace(/^\//, ''))
+      if (!fs.existsSync(diskPath)) missing.push(`${prod.productId}:missing:${fashionDef.iconAsset}`)
+      continue
+    }
+    const itemDef = ITEMS[prod.itemId]
+    if (!itemDef) {
+      missing.push(`${prod.productId}:no_item_or_fashion_def`)
+      continue
+    }
+    const relPath = resolveItemImagePath(itemDef)
+    const diskPath = path.join(process.cwd(), 'public', relPath.replace(/^\//, ''))
+    if (!fs.existsSync(diskPath)) {
+      missing.push(`${prod.productId}:missing:${relPath}`)
+    }
+  }
+
+  const rainbowDef = ITEMS.rainbow_name_potion
+  assert.ok(rainbowDef, 'Expected rainbow_name_potion in ITEMS')
+  const rainbowDiskPath = path.join(process.cwd(), 'public', resolveItemImagePath(rainbowDef).replace(/^\//, ''))
+  assert.equal(fs.existsSync(rainbowDiskPath), true, `Missing rainbow_name_potion PNG: ${rainbowDiskPath}`)
+
+  assert.deepEqual(missing, [], `Soul Shop products missing 2D pixel art assets: ${missing.join(', ')}`)
+})
+
+test('all Group 1 non-equipment ITEMS (potions, foods, monster drops, lifeskill, events, special cores) have PNGs on disk', () => {
+  const cropHandled = new Set(['companion_gacha_box', 'event_lucky_box', 'event_mythic_chest'])
+  const missing: string[] = []
+  for (const def of Object.values(ITEMS)) {
+    if (def.kind === 'weapon' || def.kind === 'armor') continue
+    if (cropHandled.has(def.id)) continue
+    const relPath = resolveItemImagePath(def)
+    const diskPath = path.join(process.cwd(), 'public', relPath.replace(/^\//, ''))
+    if (!fs.existsSync(diskPath)) {
+      missing.push(`${def.id}:${relPath}`)
+    }
+  }
+  assert.deepEqual(missing, [], `Group 1 items missing PNGs: ${missing.join(', ')}`)
 })

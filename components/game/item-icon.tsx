@@ -9,7 +9,7 @@ import {
   COMPANION_BOX_SPRITE_CROP,
   EVENT_CHEST_SPRITE_CROP,
   EVENT_LUCKY_BOX_SPRITE_CROP,
-  getShopCustomArtworkCrop,
+  getShopCustomArtworkPath,
 } from '@/lib/game/treasure-chest'
 import { cn } from '@/lib/utils'
 import { ChestArtworkSprite } from './chest-artwork'
@@ -19,18 +19,25 @@ export function ItemIcon({ itemId, size = 32, className }: { itemId: string; siz
   const def = ITEMS[itemId]
   if (!def) return null
 
-  const shopCustomCrop = getShopCustomArtworkCrop(itemId)
-  if (shopCustomCrop) {
+  const shopCustomSrc = getShopCustomArtworkPath(itemId)
+  if (shopCustomSrc) {
     return (
-      <ChestArtworkSprite
-        crop={shopCustomCrop}
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={shopCustomSrc}
+        onError={(event) => {
+          event.currentTarget.onerror = null
+          event.currentTarget.src = itemIconUrl(def.icon, def.color)
+        }}
+        data-testid={`shop-art-${itemId}`}
         alt={def.name}
-        size={size}
-        squareFit
-        maskMode="wide"
-        showGlow={size >= 24}
-        testId={`shop-art-${itemId}`}
-        className={className}
+        title={def.name}
+        width={size}
+        height={size}
+        referrerPolicy="no-referrer"
+        style={{ imageRendering: 'pixelated' }}
+        className={cn('shrink-0 object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.75)]', className)}
+        draggable={false}
       />
     )
   }
@@ -80,6 +87,7 @@ export function ItemIcon({ itemId, size = 32, className }: { itemId: string; siz
   const primarySrc = resolveItemImagePath(def)
 
   return (
+    // eslint-disable-next-line @next/next/no-img-element
     <img
       src={primarySrc}
       onError={(event) => {
@@ -91,6 +99,7 @@ export function ItemIcon({ itemId, size = 32, className }: { itemId: string; siz
       width={size}
       height={size}
       referrerPolicy="no-referrer"
+      style={{ imageRendering: 'pixelated' }}
       className={cn('shrink-0 object-contain drop-shadow-[0_2px_3px_rgba(0,0,0,0.58)]', className)}
       draggable={false}
     />

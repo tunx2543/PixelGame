@@ -153,12 +153,29 @@ const SHOP_VIP_PRODUCT_TO_ITEM: Record<string, ShopVipBundleItemId> = {
   prod_asura_fast_learn_7d: 'bundle_fast_learn_7d',
 }
 
+export const SHOP_VIP_BUNDLE_IMAGE_PATHS: Record<ShopVipBundleItemId, string> = {
+  vip_card_7d: '/assets/items/special/vip_card_7d.png',
+  vip_card_30d: '/assets/items/special/vip_card_30d.png',
+  vip_exp_crystal: '/assets/items/special/vip_exp_crystal.png',
+  bundle_aurora_starter: '/assets/items/special/bundle_aurora_starter.png',
+  bundle_celestial_vault: '/assets/items/special/bundle_celestial_vault.png',
+  bundle_fast_learn_7d: '/assets/items/special/bundle_fast_learn_7d.png',
+}
+
 export function getShopCustomArtworkCrop(itemOrProductId: string): ChestSpriteCropSpec | null {
   if (itemOrProductId in SHOP_VIP_BUNDLE_SPRITE_CROPS) {
     return SHOP_VIP_BUNDLE_SPRITE_CROPS[itemOrProductId as ShopVipBundleItemId]
   }
   const mapped = SHOP_VIP_PRODUCT_TO_ITEM[itemOrProductId]
   return mapped ? SHOP_VIP_BUNDLE_SPRITE_CROPS[mapped] : null
+}
+
+export function getShopCustomArtworkPath(itemOrProductId: string): string | null {
+  if (itemOrProductId in SHOP_VIP_BUNDLE_IMAGE_PATHS) {
+    return SHOP_VIP_BUNDLE_IMAGE_PATHS[itemOrProductId as ShopVipBundleItemId]
+  }
+  const mapped = SHOP_VIP_PRODUCT_TO_ITEM[itemOrProductId]
+  return mapped ? SHOP_VIP_BUNDLE_IMAGE_PATHS[mapped] : null
 }
 
 export interface ChestTierDef {

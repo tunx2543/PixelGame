@@ -1973,8 +1973,8 @@ const BASE_ITEMS: Record<string, ItemDef> = {
   enhance_chance_scroll_2: { id: 'enhance_chance_scroll_2', name: 'ใบเพิ่มโอกาสชั้นดี (+20%)', kind: 'material', itemCategory: 'special', price: 900, defaultRarity: 'rare', icon: 'scroll', color: '#818cf8', description: 'ใช้ในหน้าต่างตีบวกเพื่อเพิ่มโอกาสสำเร็จ +20%', effect: true },
   enhance_chance_scroll_3: { id: 'enhance_chance_scroll_3', name: 'ใบเพิ่มโอกาสชั้นเยี่ยม (+35%)', kind: 'material', itemCategory: 'special', price: 1800, defaultRarity: 'epic', icon: 'scroll', color: '#c084fc', description: 'ใช้ในหน้าต่างตีบวกเพื่อเพิ่มโอกาสสำเร็จ +35%', effect: true },
   enhance_chance_scroll_4: { id: 'enhance_chance_scroll_4', name: 'ใบเพิ่มโอกาสของคหบดี (+50%)', kind: 'material', itemCategory: 'special', price: 3200, defaultRarity: 'legendary', icon: 'scroll', color: '#fbbf24', description: 'ใบอัพเกรดระดับตำนาน เพิ่มโอกาสตีบวกสำเร็จ +50%', effect: true },
-  enhance_protect_scroll_1: { id: 'enhance_protect_scroll_1', name: 'ใบประกันความเสียหาย', kind: 'material', itemCategory: 'special', price: 800, defaultRarity: 'rare', icon: 'scroll', color: '#4ade80', description: 'ใช้ในหน้าต่างตีบวก ป้องกันระดับไอเทมลดลงเมื่อตีบวกล้มเหลว (+6 ขึ้นไป)', effect: true },
-  enhance_protect_scroll_2: { id: 'enhance_protect_scroll_2', name: 'ใบประกันความเสียหายชั้นดี', kind: 'material', itemCategory: 'special', price: 1600, defaultRarity: 'epic', icon: 'scroll', color: '#f43f5e', description: 'ป้องกันระดับไอเทมลดลงเมื่อตีบวกล้มเหลว พร้อมคืนหินตีบวกครึ่งหนึ่ง', effect: true },
+  enhance_protect_scroll_1: { id: 'enhance_protect_scroll_1', name: 'ใบกันแตก', kind: 'material', itemCategory: 'special', price: 800, defaultRarity: 'rare', icon: 'scroll', color: '#4ade80', description: 'ใบกันแตก: ใช้ในหน้าต่างตีบวก เพื่อป้องกันไม่ให้อาวุธแตกหาย (และกันเกราะ +6 ขึ้นไปลดระดับ) เมื่อตีบวกล้มเหลว', effect: true },
+  enhance_protect_scroll_2: { id: 'enhance_protect_scroll_2', name: 'ใบกันแตกชั้นดี', kind: 'material', itemCategory: 'special', price: 1600, defaultRarity: 'epic', icon: 'scroll', color: '#f43f5e', description: 'ใบกันแตกชั้นดี: ป้องกันไม่ให้อาวุธแตกหาย ป้องกันระดับลดลง และคืนหินตีบวก 50% เมื่อตีบวกล้มเหลว', effect: true },
 
   stat_reset_potion: { id: 'stat_reset_potion', name: 'น้ำยาหวนกลับ', kind: 'consumable', itemCategory: 'special', price: 600, defaultRarity: 'rare', icon: 'potion', color: '#fb7185', description: 'ใช้ล้างแต้มสเตตัส (STR/VIT/DEX/AGI/INT/LUK) ทั้งหมดคืนฟรี 1 ครั้ง', effect: true },
   skill_reset_potion: { id: 'skill_reset_potion', name: 'น้ำยาลืมทักษะ', kind: 'consumable', itemCategory: 'special', price: 600, defaultRarity: 'rare', icon: 'potion', color: '#c084fc', description: 'ใช้ล้างแต้มทักษะ (SP) ทั้งหมดคืนฟรี 1 ครั้ง', effect: true },
@@ -2187,6 +2187,7 @@ export const SHOP_STOCK: string[] = [
   'return_scroll',
   'name_color_potion',
   'enhance_stone',
+  'enhance_protect_scroll_1',
   'wooden_stick',
   'short_sword',
   'wood_staff',

@@ -13,6 +13,7 @@ import {
   Heart,
   RefreshCw,
   Shield,
+  ShieldCheck,
   Sparkles,
   Swords,
   Volume2,
@@ -170,7 +171,8 @@ export function MonsterEncounterArena() {
   const [victoryResult, setVictoryResult] = useState<EncounterVictoryResult | null>(null)
   const [streak, setStreak] = useState(0)
   const [logs, setLogs] = useState<CombatLogEntry[]>([])
-  const [enhanceNotice, setEnhanceNotice] = useState<string | null>(null)
+  const [enhanceNotice, setEnhanceNotice] = useState<{ outcome: 'success' | 'fail' | 'down' | 'destroyed' | 'error'; text: string } | null>(null)
+  const [encounterProtectScrollId, setEncounterProtectScrollId] = useState<string | null>(null)
 
   const [playerAttackPulse, setPlayerAttackPulse] = useState(0)
   const [playerSkillColor, setPlayerSkillColor] = useState<string | null>(null)
@@ -787,12 +789,15 @@ export function MonsterEncounterArena() {
       if (!currentSave) return
       const res = equipWeaponFromInventory(currentSave, itemUid)
       if (res.error) {
-        setEnhanceNotice(res.error)
+        setEnhanceNotice({ outcome: 'error', text: res.error })
         return
       }
       setSave(res.nextSave)
       const equippedWeaponId = res.nextSave.equipment.weapon?.itemId
-      setEnhanceNotice(`สวมใส่ ${equippedWeaponId ? (ITEMS[equippedWeaponId]?.name ?? 'อาวุธ') : 'อาวุธ'} แล้ว`)
+      setEnhanceNotice({
+        outcome: 'success',
+        text: `สวมใส่ ${equippedWeaponId ? (ITEMS[equippedWeaponId]?.name ?? 'อาวุธ') : 'อาวุธ'} แล้ว`,
+      })
       void syncSaveToStorageAndCloud(res.nextSave, userRef.current, slotRef.current)
     },
     [syncSaveToStorageAndCloud],
@@ -801,15 +806,26 @@ export function MonsterEncounterArena() {
   const handleEnhanceWeapon = useCallback(() => {
     const currentSave = saveRef.current
     if (!currentSave) return
-    const res = enhanceEquippedWeapon(currentSave)
-    setEnhanceNotice(res.message)
+    const selectedProtect =
+      encounterProtectScrollId &&
+      currentSave.inventory.some((i) => i.itemId === encounterProtectScrollId && i.qty > 0)
+        ? encounterProtectScrollId
+        : null
+    const res = enhanceEquippedWeapon(currentSave, { protectScrollId: selectedProtect })
+    setEnhanceNotice({ outcome: res.outcome, text: res.message })
     if (res.outcome === 'error') return
     setSave(res.nextSave)
+    if (
+      selectedProtect &&
+      !res.nextSave.inventory.some((i) => i.itemId === selectedProtect && i.qty > 0)
+    ) {
+      setEncounterProtectScrollId(null)
+    }
     recordDailyMissionProgress({ enhances: 1 })
     triggerEnhanceSound(res.outcome === 'success', { muted: mutedRef.current, source: 'encounter' })
     appendLog(res.message, res.outcome === 'success' ? 'crit' : 'system')
     void syncSaveToStorageAndCloud(res.nextSave, userRef.current, slotRef.current)
-  }, [appendLog, syncSaveToStorageAndCloud])
+  }, [appendLog, encounterProtectScrollId, syncSaveToStorageAndCloud])
 
   // Real-time Action Combat loop (cooldowns, enemy counter-attacks, passive MP regen)
   useEffect(() => {
@@ -1054,6 +1070,20 @@ export function MonsterEncounterArena() {
       .reduce((sum, i) => sum + i.qty, 0)
   }, [save])
 
+  const protectScroll1Qty = useMemo(() => {
+    if (!save) return 0
+    return save.inventory
+      .filter((i) => i.itemId === 'enhance_protect_scroll_1')
+      .reduce((sum, i) => sum + i.qty, 0)
+  }, [save])
+
+  const protectScroll2Qty = useMemo(() => {
+    if (!save) return 0
+    return save.inventory
+      .filter((i) => i.itemId === 'enhance_protect_scroll_2')
+      .reduce((sum, i) => sum + i.qty, 0)
+  }, [save])
+
   if (phase === 'LOADING' || !save || !heroStats || !weaponInfo) {
     return (
       <main className="flex min-h-dvh w-full items-center justify-center bg-background p-6">
@@ -1071,6 +1101,11 @@ export function MonsterEncounterArena() {
     ? enhanceCost(weaponInfo.weaponPlus, weaponInfo.weaponDef.tier ?? 1)
     : null
   const nextEnhanceRate = enhanceRate(weaponInfo.weaponPlus)
+  const activeEncounterProtect =
+    (encounterProtectScrollId === 'enhance_protect_scroll_1' && protectScroll1Qty > 0) ||
+    (encounterProtectScrollId === 'enhance_protect_scroll_2' && protectScroll2Qty > 0)
+      ? encounterProtectScrollId
+      : null
 
   return (
     <main className="h-dvh w-full overflow-y-auto bg-background text-foreground">
@@ -1543,6 +1578,62 @@ export function MonsterEncounterArena() {
                     ? 'อาวุธตีบวกถึงระดับสูงสุดแล้ว'
                     : `อัปเกรดเป็น +${weaponInfo.weaponPlus + 1} · อัตราสำเร็จ ${Math.round(nextEnhanceRate * 100)}% · ใช้ ${formatNum(nextEnhanceCost.gold)} G และหิน ${nextEnhanceCost.stones} ก้อน`}
                 </p>
+
+                {weaponInfo.weaponPlus < MAX_PLUS && nextEnhanceRate < 1 && (
+                  <div className="mt-2 space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-1">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-cyan-300">
+                        <ShieldCheck className="size-3" aria-hidden /> ใบกันแตก:
+                      </span>
+                      <button
+                        type="button"
+                        disabled={protectScroll1Qty <= 0}
+                        onClick={() =>
+                          setEncounterProtectScrollId(
+                            activeEncounterProtect === 'enhance_protect_scroll_1'
+                              ? null
+                              : 'enhance_protect_scroll_1',
+                          )
+                        }
+                        className={`rounded border px-2 py-0.5 text-[10px] font-semibold transition-colors disabled:opacity-40 ${
+                          activeEncounterProtect === 'enhance_protect_scroll_1'
+                            ? 'border-cyan-300 bg-cyan-500/20 text-cyan-200'
+                            : 'border-border bg-secondary/70 text-slate-200'
+                        }`}
+                      >
+                        ใบกันแตก ({protectScroll1Qty})
+                      </button>
+                      <button
+                        type="button"
+                        disabled={protectScroll2Qty <= 0}
+                        onClick={() =>
+                          setEncounterProtectScrollId(
+                            activeEncounterProtect === 'enhance_protect_scroll_2'
+                              ? null
+                              : 'enhance_protect_scroll_2',
+                          )
+                        }
+                        className={`rounded border px-2 py-0.5 text-[10px] font-semibold transition-colors disabled:opacity-40 ${
+                          activeEncounterProtect === 'enhance_protect_scroll_2'
+                            ? 'border-cyan-300 bg-cyan-500/20 text-cyan-200'
+                            : 'border-border bg-secondary/70 text-slate-200'
+                        }`}
+                      >
+                        ใบกันแตกชั้นดี ({protectScroll2Qty})
+                      </button>
+                    </div>
+                    {!activeEncounterProtect ? (
+                      <p className="text-[10.5px] font-semibold text-destructive">
+                        คำเตือน: หากตีบวกล้มเหลว ({Math.round((1 - nextEnhanceRate) * 100)}%) อาวุธจะแตกหายถาวร (เลือกใช้ใบกันแตกเพื่อป้องกัน)
+                      </p>
+                    ) : (
+                      <p className="text-[10.5px] text-cyan-300">
+                        เปิดใช้ใบกันแตกแล้ว — หากล้มเหลวอาวุธจะไม่แตกหาย
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <button
                   type="button"
                   onClick={handleEnhanceWeapon}
@@ -1552,10 +1643,21 @@ export function MonsterEncounterArena() {
                   <Hammer className="size-3.5" aria-hidden />
                   ตีบวกอาวุธ (+{weaponInfo.weaponPlus} → +{Math.min(MAX_PLUS, weaponInfo.weaponPlus + 1)})
                 </button>
-                {enhanceNotice && (
-                  <p className="mt-1.5 text-xs text-primary">{enhanceNotice}</p>
-                )}
               </div>
+            )}
+            {enhanceNotice && (
+              <p
+                role="status"
+                className={`mt-2 border px-2.5 py-1.5 text-xs font-semibold ${
+                  enhanceNotice.outcome === 'destroyed' || enhanceNotice.outcome === 'error' || enhanceNotice.outcome === 'down'
+                    ? 'border-destructive bg-destructive/15 text-destructive'
+                    : enhanceNotice.outcome === 'success'
+                      ? 'border-accent/60 bg-accent/15 text-accent'
+                      : 'border-primary/40 bg-background/70 text-primary'
+                }`}
+              >
+                {enhanceNotice.text}
+              </p>
             )}
           </div>
 

@@ -842,8 +842,8 @@ export const PREMIUM_CATALOG: PremiumProduct[] = [
   {
     productId: 'prod_asura_protect_scroll_1',
     itemId: 'enhance_protect_scroll_1',
-    name: 'ใบประกันความเสียหาย x2',
-    description: 'ป้องกันระดับไอเทมลดลง (-1) เมื่อตีบวกล้มเหลวที่ +6 ขึ้นไป',
+    name: 'ใบกันแตก x2',
+    description: 'ป้องกันไม่ให้อาวุธแตกหาย (และกันเกราะ +6 ขึ้นไปลดระดับ) เมื่อตีบวกล้มเหลว',
     icon: 'enhance_protect_scroll_1',
     diamondPrice: 140,
     category: 'consumables',
@@ -859,8 +859,8 @@ export const PREMIUM_CATALOG: PremiumProduct[] = [
   {
     productId: 'prod_asura_protect_scroll_2',
     itemId: 'enhance_protect_scroll_2',
-    name: 'ใบประกันความเสียหายชั้นดี x2',
-    description: 'ป้องกันระดับลดลง + คืนหินตีบวก 50% เมื่อตีบวกล้มเหลว',
+    name: 'ใบกันแตกชั้นดี x2',
+    description: 'ป้องกันอาวุธแตกหาย ป้องกันระดับลดลง + คืนหินตีบวก 50% เมื่อตีบวกล้มเหลว',
     icon: 'enhance_protect_scroll_2',
     diamondPrice: 260,
     category: 'consumables',
