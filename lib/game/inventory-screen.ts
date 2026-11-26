@@ -20,9 +20,13 @@ import {
   resolveItemEquipmentSlot,
 } from './equipment-ui'
 import {
+  RAINBOW_NAME_COLOR,
+  applyRolledNameColorInExtV2,
   getFoodBuffForItem,
   pruneDepletedQuickSlotsInExtV2,
+  rollRandomNameColor,
   sanitizeExtV2,
+  unlockAndEnableRainbowInExtV2,
   type ActiveBoostBuff,
 } from './extended-systems'
 import { MAPS, TILE } from './maps'
@@ -695,6 +699,34 @@ export function useConsumableInInventory(
     return {
       nextSave,
       message: 'ใช้ใบแจ้งลบฉายา ล้างนามแฝงและฉายาทั้งหมดออกเรียบร้อยแล้ว',
+      error: null,
+    }
+  }
+
+  if (def.id === 'name_color_potion') {
+    const extV2 = sanitizeExtV2(nextSave.extV2)
+    const picked = rollRandomNameColor(extV2.nameColor)
+    nextSave.extV2 = applyRolledNameColorInExtV2(extV2, picked)
+    nextSave.savedAt = Date.now()
+    consumeOne()
+    return {
+      nextSave,
+      message:
+        picked.hex === RAINBOW_NAME_COLOR
+          ? '★ ระดับตำนาน! สุ่มได้ "สีรุ้งพิเศษ (Rainbow Mode)" ปลดล็อกและเปิดใช้งานในหน้าสถานะแล้ว!'
+          : `ใช้น้ำยาสุ่มสีชื่อ! เปลี่ยนสีชื่อเป็น "${picked.name}" (${picked.hex}) แล้ว`,
+      error: null,
+    }
+  }
+
+  if (def.id === 'rainbow_name_potion') {
+    const extV2 = sanitizeExtV2(nextSave.extV2)
+    nextSave.extV2 = unlockAndEnableRainbowInExtV2(extV2)
+    nextSave.savedAt = Date.now()
+    consumeOne()
+    return {
+      nextSave,
+      message: '★ ปลดล็อกและเปิดใช้ตัวเลือก "สีรุ้งพิเศษ (Rainbow Mode)" ในหน้าสถานะเรียบร้อยแล้ว!',
       error: null,
     }
   }

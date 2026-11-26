@@ -960,6 +960,23 @@ export const PREMIUM_CATALOG: PremiumProduct[] = [
     qty: 1,
     vipExpGrant: 10,
   },
+  {
+    productId: 'prod_asura_name_color',
+    itemId: 'name_color_potion',
+    name: 'น้ำยาสุ่มสีชื่อ',
+    description: 'กดใช้เพื่อสุ่มเปลี่ยนสีชื่อตัวละครแบบถาวร (แสดงบนหัวตัวละครและแถบสถานะ)',
+    icon: 'name_color_potion',
+    diamondPrice: 35,
+    category: 'diamond-items',
+    rarity: 'หายาก',
+    stock: null,
+    purchaseLimit: null,
+    enabled: true,
+    expiration: null,
+    rewardKind: 'item',
+    qty: 1,
+    vipExpGrant: 12,
+  },
 ]
 
 export type AsuraShopCategoryId = 'recommend' | 'support' | 'upgrade' | 'fashion' | 'companion' | 'scrolls'
@@ -1079,7 +1096,8 @@ export function resolveAsuraShopBucket(prod: PremiumProduct): {
   if (
     id.includes('reset') ||
     id.includes('name_ticket') ||
-    id.includes('title_clear')
+    id.includes('title_clear') ||
+    id.includes('name_color')
   ) {
     return { category: 'scrolls', subTab: 'character' }
   }

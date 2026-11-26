@@ -6,6 +6,18 @@ import {
   renameWithTicketInSave,
   useConsumableInInventory,
 } from './inventory-screen'
+import {
+  NAME_COLOR_PALETTE,
+  RAINBOW_NAME_COLOR,
+  createDefaultExtV2,
+  getNameColorGlowStyle,
+  getNameColorPresentation,
+  resolveAnimatedRainbowHex,
+  rollRandomNameColor,
+  sanitizeExtV2,
+  sanitizeNameColor,
+  toggleRainbowNameInExtV2,
+} from './extended-systems'
 import { MAPS, TILE } from './maps'
 import { MAX_PET_LEVEL } from './systems'
 import { GRAPHICS_QUALITY_PRESETS } from './ui-layout'
@@ -193,3 +205,111 @@ test('GRAPHICS_QUALITY_PRESETS provide high, medium, and low lag-reduction profi
   assert.equal(GRAPHICS_QUALITY_PRESETS.low.disableShadowsAndGlow, true)
   assert.equal(GRAPHICS_QUALITY_PRESETS.low.crispPixelScale, true)
 })
+
+test('name_color_potion randomizes player name color without repeating consecutive colors', () => {
+  assert.equal(sanitizeNameColor(' #38BDF8 '), '#38bdf8')
+  assert.equal(sanitizeNameColor('red'), null)
+  assert.equal(sanitizeNameColor('javascript:alert(1)'), null)
+
+  for (const entry of NAME_COLOR_PALETTE) {
+    const next = rollRandomNameColor(entry.hex, () => 0.5)
+    assert.notEqual(next.hex.toLowerCase(), entry.hex.toLowerCase())
+    assert.ok(NAME_COLOR_PALETTE.some((p) => p.hex === next.hex))
+  }
+
+  const save = createTestSave({
+    inventory: [{ uid: 'u_nc', itemId: 'name_color_potion', qty: 3, plus: 0 }],
+  })
+
+  const isValidRolledColor = (c: string | null) =>
+    Boolean(c && (c === RAINBOW_NAME_COLOR || NAME_COLOR_PALETTE.some((entry) => entry.hex === c)))
+
+  const use1 = useConsumableInInventory(save, 'u_nc')
+  assert.equal(use1.error, null)
+  const color1 = sanitizeExtV2(use1.nextSave.extV2).nameColor
+  assert.ok(isValidRolledColor(color1))
+  assert.equal(use1.nextSave.inventory[0]?.qty, 2)
+
+  const use2 = useConsumableInInventory(use1.nextSave, 'u_nc')
+  assert.equal(use2.error, null)
+  const color2 = sanitizeExtV2(use2.nextSave.extV2).nameColor
+  assert.ok(isValidRolledColor(color2))
+  assert.notEqual(color2, color1)
+  assert.equal(use2.nextSave.inventory[0]?.qty, 1)
+})
+
+test('getNameColorGlowStyle produces layered glow textShadow for valid hex colors and undefined otherwise', () => {
+  assert.equal(getNameColorGlowStyle(null), undefined)
+  assert.equal(getNameColorGlowStyle(undefined), undefined)
+  assert.equal(getNameColorGlowStyle('red'), undefined)
+
+  const prominent = getNameColorGlowStyle('#93C5FD', 'prominent')
+  assert.ok(prominent)
+  assert.equal(prominent.color, '#93c5fd')
+  assert.match(prominent.textShadow, /rgba\(147, 197, 253, 0\.88\)/)
+  assert.match(prominent.textShadow, /28px rgba\(147, 197, 253, 0\.34\)/)
+
+  const subtle = getNameColorGlowStyle('#f0a', 'subtle')
+  assert.ok(subtle)
+  assert.equal(subtle.color, '#f0a')
+  assert.match(subtle.textShadow, /rgba\(255, 0, 170, 0\.78\)/)
+})
+
+test('legendary rainbow roll, rainbow_name_potion, and Rainbow Mode toggle work end-to-end', () => {
+  assert.equal(sanitizeNameColor('rainbow'), RAINBOW_NAME_COLOR)
+  assert.equal(sanitizeNameColor(' RAINBOW '), RAINBOW_NAME_COLOR)
+  assert.equal(getNameColorGlowStyle(RAINBOW_NAME_COLOR), undefined)
+
+  // Rolling below legendary chance hits Rainbow Mode (legendary)
+  const rolledLegend = rollRandomNameColor('#38bdf8', () => 0.05)
+  assert.equal(rolledLegend.hex, RAINBOW_NAME_COLOR)
+  assert.equal(rolledLegend.rarity, 'legendary')
+
+  // Locked extV2 rejects Rainbow Mode toggle
+  const lockedExt = createDefaultExtV2()
+  assert.equal(lockedExt.rainbowNameUnlocked, false)
+  const lockedToggle = toggleRainbowNameInExtV2(lockedExt)
+  assert.equal(lockedToggle.ok, false)
+
+  // Using rainbow_name_potion unlocks and enables Rainbow Mode while remembering prior static color
+  const baseSave = createTestSave({
+    extV2: {
+      ...createDefaultExtV2(),
+      nameColor: '#4ade80',
+      savedStaticNameColor: '#4ade80',
+    },
+    inventory: [{ uid: 'u_rainbow', itemId: 'rainbow_name_potion', qty: 1, plus: 0 }],
+  })
+  const used = useConsumableInInventory(baseSave, 'u_rainbow')
+  assert.equal(used.error, null)
+  const extAfterUse = sanitizeExtV2(used.nextSave.extV2)
+  assert.equal(extAfterUse.nameColor, RAINBOW_NAME_COLOR)
+  assert.equal(extAfterUse.rainbowNameUnlocked, true)
+  assert.equal(extAfterUse.savedStaticNameColor, '#4ade80')
+  assert.equal(used.nextSave.inventory.length, 0)
+
+  // Toggling OFF restores saved static color, toggling ON reactivates Rainbow Mode
+  const turnedOff = toggleRainbowNameInExtV2(extAfterUse)
+  assert.equal(turnedOff.ok, true)
+  assert.equal(turnedOff.enabled, false)
+  assert.equal(turnedOff.nextExtV2.nameColor, '#4ade80')
+  assert.equal(turnedOff.nextExtV2.rainbowNameUnlocked, true)
+
+  const turnedOn = toggleRainbowNameInExtV2(turnedOff.nextExtV2)
+  assert.equal(turnedOn.ok, true)
+  assert.equal(turnedOn.enabled, true)
+  assert.equal(turnedOn.nextExtV2.nameColor, RAINBOW_NAME_COLOR)
+
+  // Presentation & canvas animated hex helper
+  const presProminent = getNameColorPresentation(RAINBOW_NAME_COLOR, 'prominent')
+  assert.equal(presProminent.className, 'rainbow-name-text')
+  assert.equal(presProminent.style, undefined)
+
+  const c0 = resolveAnimatedRainbowHex(0)
+  const c1 = resolveAnimatedRainbowHex(1500)
+  assert.match(c0, /^#[0-9a-f]{6}$/)
+  assert.match(c1, /^#[0-9a-f]{6}$/)
+  assert.notEqual(c0, c1)
+})
+
+

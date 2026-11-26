@@ -902,7 +902,7 @@ service cloud.firestore {
           'cosmeticWing',
           'weaponSkinId',
           'gemFashionId',
-          'frameId'
+          'nameColor'
         ]) &&
         isValidId(data.userId) &&
         data.userId == userId &&
@@ -964,7 +964,7 @@ service cloud.firestore {
         (!('cosmeticWing' in data) || (data.cosmeticWing is string && data.cosmeticWing.size() <= 48 && data.cosmeticWing.matches('^[a-zA-Z0-9_\\-]*$'))) &&
         (!('weaponSkinId' in data) || (data.weaponSkinId is string && data.weaponSkinId.size() <= 48 && data.weaponSkinId.matches('^[a-zA-Z0-9_\\-]*$'))) &&
         (!('gemFashionId' in data) || (data.gemFashionId is string && data.gemFashionId.size() <= 48 && data.gemFashionId.matches('^[a-zA-Z0-9_\\-]*$'))) &&
-        (!('frameId' in data) || (data.frameId is string && data.frameId.size() <= 48 && data.frameId.matches('^[a-zA-Z0-9_\\-]*$')));
+        (!('nameColor' in data) || (data.nameColor is string && data.nameColor.size() <= 16 && data.nameColor.matches('^(#[0-9a-fA-F]{3,8}|rainbow)?$')));
     }
 
     function isValidPartyMemberInfo(member, memberUid) {
@@ -2218,7 +2218,7 @@ service cloud.firestore {
           'cosmeticWing',
           'weaponSkinId',
           'gemFashionId',
-          'frameId'
+          'nameColor'
         ]);
 
       allow delete: if isSignedIn() &&

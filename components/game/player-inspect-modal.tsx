@@ -24,6 +24,8 @@ import {
   triggerBotSocialReaction,
   unblockPlayerAction,
 } from '@/lib/game/engine'
+import { getNameColorPresentation, sanitizeExtV2, sanitizeNameColor } from '@/lib/game/extended-systems'
+import { cn } from '@/lib/utils'
 import { resolveFashionLoadoutFromRemote } from '@/lib/game/fashion-renderer'
 import { MAPS } from '@/lib/game/maps'
 import { createDuelFighter, getJobRole, getJobRoleLabel } from '@/lib/game/mmo-systems'
@@ -127,6 +129,14 @@ export function PlayerInspectModal() {
   const job = JOBS[normalizeJobId(profile?.jobId)]
   const roleLabel = getJobRoleLabel(getJobRole(normalizeJobId(profile?.jobId)))
   const titleDef = profile?.activeTitle ? TITLE_DEFS.find((t) => t.id === profile.activeTitle) : null
+  const remoteMatch = profile
+    ? game.remotePlayers.find(
+        (r) => r.userId === profile.userId || (profile.gameUid && r.gameUid === profile.gameUid),
+      )
+    : undefined
+  const inspectedNameColor = isSelf
+    ? sanitizeExtV2(p.extV2).nameColor
+    : sanitizeNameColor(remoteMatch?.nameColor ?? (onlineEntry as { nameColor?: string } | undefined)?.nameColor)
 
   const closeModal = () => {
     game.inspectTarget = null
@@ -289,7 +299,18 @@ export function PlayerInspectModal() {
               </div>
               <div className="min-w-0 flex-1 space-y-0.5 text-xs">
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <p className="truncate text-sm font-bold text-foreground">{profile.name}</p>
+                  {(() => {
+                    const inspectNamePres = getNameColorPresentation(inspectedNameColor, 'prominent')
+                    return (
+                      <p
+                        data-testid="inspect-player-name"
+                        className={cn('truncate px-1 text-sm font-bold leading-snug text-foreground', inspectNamePres.className)}
+                        style={inspectNamePres.style}
+                      >
+                        {profile.name}
+                      </p>
+                    )
+                  })()}
                   <span className="border border-primary/40 bg-primary/15 px-1.5 py-0.5 font-mono text-[10px] text-primary">
                     UID {profile.gameUid}
                   </span>

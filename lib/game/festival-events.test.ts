@@ -216,16 +216,16 @@ describe('festival-events player progression, gifts, missions & shop', () => {
     const incomplete = claimFestivalMissionInState(state, 'hunt_80', now)
     assert.equal(incomplete.ok, false)
 
-    // Buy limited item (lk_frame costs 65, limit 1)
-    const buyFrame = spendFestivalTokensForShopInState(state, 'lk_frame', now)
-    assert.equal(buyFrame.ok, true)
-    if (!buyFrame.ok) throw new Error('expected shop exchange ok')
-    state = buyFrame.next
-    assert.equal(getFestivalTokenCount(state, 'loy_krathong'), 50 + claimedHunt.mission.rewardTokens - 65)
+    // Buy limited item (lk_title costs 55, limit 1)
+    const buyTitle = spendFestivalTokensForShopInState(state, 'lk_title', now)
+    assert.equal(buyTitle.ok, true)
+    if (!buyTitle.ok) throw new Error('expected shop exchange ok')
+    state = buyTitle.next
+    assert.equal(getFestivalTokenCount(state, 'loy_krathong'), 50 + claimedHunt.mission.rewardTokens - 55)
 
-    // Buying lk_frame second time rejected due to limitPerCycle: 1
-    const buyFrameAgain = spendFestivalTokensForShopInState(state, 'lk_frame', now)
-    assert.equal(buyFrameAgain.ok, false)
+    // Buying lk_title second time rejected due to limitPerCycle: 1
+    const buyTitleAgain = spendFestivalTokensForShopInState(state, 'lk_title', now)
+    assert.equal(buyTitleAgain.ok, false)
 
     // Sanitization preserves valid data and clamps invalid tokens
     const sanitized = sanitizeFestivalPlayerState({
@@ -311,21 +311,21 @@ describe('universal event tokens, event items & event token shop', () => {
     let state = depositUniversalEventTokensInState(createDefaultFestivalPlayerState(), 200).next
 
     // Lifetime cosmetic limit (1 max across all weeks)
-    const buyFrame = spendUniversalEventTokensForShopInState(state, 'evt_frame_champ', week1)
-    assert.equal(buyFrame.ok, true)
-    if (!buyFrame.ok) throw new Error('expected frame purchase ok')
-    state = buyFrame.next
-    assert.equal(getUniversalEventTokenCount(state), 120)
+    const buyWeaponSkin = spendUniversalEventTokensForShopInState(state, 'evt_wskin_aurora', week1)
+    assert.equal(buyWeaponSkin.ok, true)
+    if (!buyWeaponSkin.ok) throw new Error('expected weapon skin purchase ok')
+    state = buyWeaponSkin.next
+    assert.equal(getUniversalEventTokenCount(state), 115)
 
-    const buyFrameAgainNextWeek = spendUniversalEventTokensForShopInState(state, 'evt_frame_champ', nextWeek)
-    assert.equal(buyFrameAgainNextWeek.ok, false)
+    const buyWeaponSkinAgainNextWeek = spendUniversalEventTokensForShopInState(state, 'evt_wskin_aurora', nextWeek)
+    assert.equal(buyWeaponSkinAgainNextWeek.ok, false)
 
     // Weekly item limit resets across ISO weeks
     const keyW1 = getEventTokenShopCycleKey({ kind: 'item' }, week1)
     const keyW2 = getEventTokenShopCycleKey({ kind: 'item' }, nextWeek)
     assert.notEqual(keyW1, keyW2)
 
-    // evt_mythic_chest costs 45 (we have 120 -> can buy 2, 3rd fails due to insufficient tokens)
+    // evt_mythic_chest costs 45 (we have 115 -> can buy 2, 3rd fails due to insufficient tokens)
     const chest1 = spendUniversalEventTokensForShopInState(state, 'evt_mythic_chest', week1)
     assert.equal(chest1.ok, true)
     if (!chest1.ok) throw new Error('expected chest1 ok')
@@ -335,7 +335,7 @@ describe('universal event tokens, event items & event token shop', () => {
     assert.equal(chest2.ok, true)
     if (!chest2.ok) throw new Error('expected chest2 ok')
     state = chest2.next
-    assert.equal(getUniversalEventTokenCount(state), 30)
+    assert.equal(getUniversalEventTokenCount(state), 25)
 
     const chestTooExpensive = spendUniversalEventTokensForShopInState(state, 'evt_mythic_chest', week1)
     assert.equal(chestTooExpensive.ok, false)

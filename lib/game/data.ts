@@ -1980,6 +1980,8 @@ const BASE_ITEMS: Record<string, ItemDef> = {
   skill_reset_potion: { id: 'skill_reset_potion', name: 'น้ำยาลืมทักษะ', kind: 'consumable', itemCategory: 'special', price: 600, defaultRarity: 'rare', icon: 'potion', color: '#c084fc', description: 'ใช้ล้างแต้มทักษะ (SP) ทั้งหมดคืนฟรี 1 ครั้ง', effect: true },
   job_reset_potion: { id: 'job_reset_potion', name: 'น้ำยาเปลี่ยนอาชีพ', kind: 'consumable', itemCategory: 'special', price: 1500, defaultRarity: 'epic', icon: 'potion', color: '#f59e0b', description: 'รีเซ็ตสายอาชีพกลับสู่ผู้ฝึกหัด (คงเลเวลและอุปกรณ์) เพื่อเลือกสายใหม่', effect: true },
   title_clear_scroll: { id: 'title_clear_scroll', name: 'ใบแจ้งลบฉายา', kind: 'consumable', itemCategory: 'special', price: 250, icon: 'scroll', color: '#94a3b8', description: 'ล้างนามแฝงและฉายาที่แสดงบนตัวละครออกทั้งหมดทันที' },
+  name_color_potion: { id: 'name_color_potion', name: 'น้ำยาสุ่มสีชื่อ', kind: 'consumable', itemCategory: 'special', price: 1200, sellPrice: 400, defaultRarity: 'rare', icon: 'potion', color: '#e879f9', description: 'กดใช้เพื่อสุ่มเปลี่ยนสีชื่อตัวละครของคุณแบบถาวร (แสดงบนหัวตัวละคร แถบสถานะ และผู้เล่นรอบข้าง) พร้อมโอกาสระดับตำนานปลดล็อก "สีรุ้งพิเศษ"!', effect: true },
+  rainbow_name_potion: { id: 'rainbow_name_potion', name: 'น้ำยาสีรุ้งระดับตำนาน', kind: 'consumable', itemCategory: 'special', price: 15000, sellPrice: 5000, defaultRarity: 'legendary', element: 'holy', icon: 'potion', color: '#f472b6', description: 'ไอเทมสีระดับตำนาน: กดใช้เพื่อปลดล็อกและเปิดใช้งานตัวเลือก "สีรุ้งพิเศษ (Rainbow Mode)" ในหน้าสถานะแบบถาวร', effect: true },
   companion_gacha_box: { id: 'companion_gacha_box', name: 'กล่องสุ่มคู่หู Pixel Quest', kind: 'consumable', itemCategory: 'special', price: 2400, sellPrice: 800, defaultRarity: 'epic', icon: 'bag', color: '#f472b6', description: 'เปิดเพื่อสุ่มรับคู่หู (ผอบ) หรือผลึกวิวัฒนาการคู่หู x5 + EXP สัตว์เลี้ยง', effect: true },
 
   // ---- Event Items, Event Goods & Event Tokens ----
@@ -2183,6 +2185,7 @@ export const SHOP_STOCK: string[] = [
   'blue_potion',
   'purple_potion',
   'return_scroll',
+  'name_color_potion',
   'enhance_stone',
   'wooden_stick',
   'short_sword',

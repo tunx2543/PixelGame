@@ -16,11 +16,16 @@ import {
   DAILY_FREE_CHEST_TIER_ID,
   EVENT_CHEST_SPRITE_CROP,
   EVENT_LUCKY_BOX_SPRITE_CROP,
+  SHOP_VIP_BUNDLE_ARTWORK_HEIGHT,
+  SHOP_VIP_BUNDLE_ARTWORK_SRC,
+  SHOP_VIP_BUNDLE_ARTWORK_WIDTH,
+  SHOP_VIP_BUNDLE_SPRITE_CROPS,
   calculateChestRarityProbabilities,
   canClaimDailyFreeChest,
   claimDailyFreeTreasureChest,
   formatCooldownDuration,
   getDailyFreeChestStatus,
+  getShopCustomArtworkCrop,
   openMultipleTreasureChests,
   openTreasureChest,
   rollChestRarity,
@@ -329,4 +334,44 @@ test('all 4 gacha chest tiers and separate event chest crop have distinct valid 
   assert.ok(COMPANION_BOX_SPRITE_CROP.sy >= 0 && COMPANION_BOX_SPRITE_CROP.sy + COMPANION_BOX_SPRITE_CROP.sh <= BOX_EXCHANGE_ARTWORK_HEIGHT)
   assert.ok(EVENT_LUCKY_BOX_SPRITE_CROP.sy >= 0 && EVENT_LUCKY_BOX_SPRITE_CROP.sy + EVENT_LUCKY_BOX_SPRITE_CROP.sh <= BOX_EXCHANGE_ARTWORK_HEIGHT)
   assert.ok(COMPANION_BOX_SPRITE_CROP.sx + COMPANION_BOX_SPRITE_CROP.sw < EVENT_LUCKY_BOX_SPRITE_CROP.sx)
+})
+
+test('shop VIP and bundle artwork crops slice all 6 items cleanly from 1795672649220_d9e58e71.jpg', () => {
+  assert.equal(SHOP_VIP_BUNDLE_ARTWORK_SRC, '/assets/aistudio/1795672649220_d9e58e71.jpg')
+  assert.equal(SHOP_VIP_BUNDLE_ARTWORK_WIDTH, 1536)
+  assert.equal(SHOP_VIP_BUNDLE_ARTWORK_HEIGHT, 688)
+
+  const expectedMappings: Array<[string, string]> = [
+    ['vip_card_7d', 'prod_vip_card_7d'],
+    ['vip_card_30d', 'prod_vip_card_30d'],
+    ['vip_exp_crystal', 'prod_vip_exp_crystal'],
+    ['bundle_aurora_starter', 'prod_special_aurora_starter'],
+    ['bundle_celestial_vault', 'prod_special_celestial_vault'],
+    ['bundle_fast_learn_7d', 'prod_asura_fast_learn_7d'],
+  ]
+
+  for (const [itemId, productId] of expectedMappings) {
+    const byItem = getShopCustomArtworkCrop(itemId)
+    const byProd = getShopCustomArtworkCrop(productId)
+    assert.ok(byItem, `Missing crop for ${itemId}`)
+    assert.deepEqual(byItem, byProd)
+    assert.equal(byItem.src, SHOP_VIP_BUNDLE_ARTWORK_SRC)
+    assert.ok(byItem.sx >= 0 && byItem.sx + byItem.sw <= SHOP_VIP_BUNDLE_ARTWORK_WIDTH)
+    assert.ok(byItem.sy >= 0 && byItem.sy + byItem.sh <= SHOP_VIP_BUNDLE_ARTWORK_HEIGHT)
+    assert.ok(byItem.sw >= 90 && byItem.sh >= 120)
+  }
+
+  // Row 1 items sit above Row 2 items with no vertical overlap
+  const topMaxY = Math.max(
+    SHOP_VIP_BUNDLE_SPRITE_CROPS.vip_card_7d.sy + SHOP_VIP_BUNDLE_SPRITE_CROPS.vip_card_7d.sh,
+    SHOP_VIP_BUNDLE_SPRITE_CROPS.vip_card_30d.sy + SHOP_VIP_BUNDLE_SPRITE_CROPS.vip_card_30d.sh,
+    SHOP_VIP_BUNDLE_SPRITE_CROPS.vip_exp_crystal.sy + SHOP_VIP_BUNDLE_SPRITE_CROPS.vip_exp_crystal.sh,
+  )
+  const botMinY = Math.min(
+    SHOP_VIP_BUNDLE_SPRITE_CROPS.bundle_aurora_starter.sy,
+    SHOP_VIP_BUNDLE_SPRITE_CROPS.bundle_celestial_vault.sy,
+    SHOP_VIP_BUNDLE_SPRITE_CROPS.bundle_fast_learn_7d.sy,
+  )
+  assert.ok(topMaxY < botMinY)
+  assert.equal(getShopCustomArtworkCrop('nonexistent_item'), null)
 })

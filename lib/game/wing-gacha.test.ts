@@ -199,6 +199,8 @@ test('legacy saves & remote presence with removed wings sanitize cleanly without
   for (const removedId of REMOVED_WING_IDS) {
     assert.equal(legacyExt.unlockedCosmetics.includes(removedId), false)
   }
+  assert.equal(legacyExt.unlockedCosmetics.includes('frame_royal'), false)
+  assert.equal('equippedFrame' in legacyExt, false)
   assert.equal(legacyExt.equippedWing, null)
   assert.equal(legacyExt.loadouts[0].wingId, null)
   assert.equal(legacyExt.equippedWeaponSkin, 'wskin_starlight')

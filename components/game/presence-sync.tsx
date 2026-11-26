@@ -97,7 +97,7 @@ function resolveLocalAppearance(player: SaveData) {
   const cosmeticWing = extV2.equippedWing ?? ''
   const weaponSkinId = extV2.equippedWeaponSkin ?? ''
   const gemFashionId = player.equippedGemFashion ?? ''
-  const frameId = extV2.equippedFrame ?? ''
+  const nameColor = extV2.nameColor ?? ''
 
   const appearanceKey = [
     rebirthCount,
@@ -116,7 +116,7 @@ function resolveLocalAppearance(player: SaveData) {
     cosmeticWing,
     weaponSkinId,
     gemFashionId,
-    frameId,
+    nameColor,
   ].join('|')
 
   return {
@@ -136,7 +136,7 @@ function resolveLocalAppearance(player: SaveData) {
     cosmeticWing,
     weaponSkinId,
     gemFashionId,
-    frameId,
+    nameColor,
     appearanceKey,
   }
 }
@@ -584,7 +584,7 @@ export function PresenceSync() {
           cosmeticWing: appearance.cosmeticWing,
           weaponSkinId: appearance.weaponSkinId,
           gemFashionId: appearance.gemFashionId,
-          frameId: appearance.frameId,
+          nameColor: appearance.nameColor,
         })
         if (ok) {
           hasPublishedFbPresence = true
@@ -893,7 +893,7 @@ export function PresenceSync() {
         cosmeticWing: appearance.cosmeticWing,
         weaponSkinId: appearance.weaponSkinId,
         gemFashionId: appearance.gemFashionId,
-        frameId: appearance.frameId,
+        nameColor: appearance.nameColor,
       }
     }
 

@@ -16,7 +16,6 @@ export interface PlayerBotDef {
   weaponType: 'sword' | 'staff' | 'bow'
   weaponColor: string
   weaponSkinId: string
-  frameId: string
   fashionCostume: string
   fashionHair: string
   fashionWings?: string
@@ -105,7 +104,6 @@ export interface BotRemoteSnapshot {
   fashionHair?: string
   fashionWings?: string
   weaponSkinId?: string
-  frameId?: string
   bubble?: { text: string; until: number } | null
 }
 
@@ -151,7 +149,6 @@ export const PLAYER_BOT_DEFS: readonly PlayerBotDef[] = [
     weaponType: 'sword',
     weaponColor: '#38bdf8',
     weaponSkinId: 'wskin_starlight',
-    frameId: 'frame_royal',
     fashionCostume: 'costume_royal_knight',
     fashionHair: 'hair_crimson_spike',
     petId: 'phao_silver_wolf',
@@ -200,7 +197,6 @@ export const PLAYER_BOT_DEFS: readonly PlayerBotDef[] = [
     weaponType: 'staff',
     weaponColor: '#f472b6',
     weaponSkinId: 'wskin_sakura',
-    frameId: 'frame_loy_krathong',
     fashionCostume: 'costume_sakura_kimono',
     fashionHair: 'hair_celestial_twintail',
     petId: 'phao_ribbon_bunny',
@@ -248,7 +244,6 @@ export const PLAYER_BOT_DEFS: readonly PlayerBotDef[] = [
     weaponType: 'bow',
     weaponColor: '#34d399',
     weaponSkinId: 'wskin_event_aurora',
-    frameId: 'frame_dragon',
     fashionCostume: 'costume_shadow_phantom',
     fashionHair: 'hair_silver_lunar',
     fashionWings: 'wing_drv_a7582c8d',
@@ -625,7 +620,6 @@ export function botsToRemotePlayers(states: readonly BotEntityState[], nowMs = D
     fashionHair: bot.def.fashionHair,
     fashionWings: bot.def.fashionWings,
     weaponSkinId: bot.def.weaponSkinId,
-    frameId: bot.def.frameId,
     bubble: bot.bubble,
   }))
 }

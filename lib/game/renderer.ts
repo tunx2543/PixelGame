@@ -42,7 +42,7 @@ import {
 import { preloadMountSpriteSheet, preloadPetSpriteSheet } from './sprite-sheets'
 import { resolvePetAnimationFrame } from './pet-follow'
 import { TITLE_DEFS } from './rpg-systems'
-import { GATHERING_NODES, getCosmeticDef, getWorldTimePhase, sanitizeExtV2 } from './extended-systems'
+import { GATHERING_NODES, getWorldTimePhase, isRainbowNameColor, resolveAnimatedRainbowHex, sanitizeExtV2, sanitizeNameColor } from './extended-systems'
 import { drawOverworldSkillEffect, drawRebirthAura, drawSpiritAwakeningAura } from './vfx-canvas'
 import { getMenuIconCanvas, type MenuIconId } from './menu-icons'
 import { computeWorldFloatTransform } from './floating-damage'
@@ -1344,7 +1344,6 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     extV2,
   })
   preloadFashionLayers(localLoadout)
-  const equippedFrame = getCosmeticDef(extV2.equippedFrame)
   ents.push({
     y: p.y,
     draw: () => {
@@ -2334,7 +2333,10 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     const remoteJob = JOBS[normalizeJobId(other.jobId)]
     const activeTitleDef = other.activeTitle ? TITLE_DEFS.find((item) => item.id === other.activeTitle) : null
     const vipTierDef = (other.vipLevel ?? 0) > 0 ? getVipTierDef(other.vipLevel ?? 0) : null
-    const equippedFrame = getCosmeticDef(other.frameId)
+    const customNameColor = sanitizeNameColor(other.nameColor)
+    const resolvedRemoteNameColor = isRainbowNameColor(customNameColor)
+      ? resolveAnimatedRainbowHex(Date.now())
+      : customNameColor
     const gmPrefix = other.gm ? '[GM] ' : ''
     const vipPrefix = vipTierDef ? `[${vipTierDef.badgeLabel}] ` : ''
     const displayNameLine = `${gmPrefix}${vipPrefix}${other.displayName}`
@@ -2351,18 +2353,6 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     ctx.fillRect(Math.round(footCx - rbw / 2), Math.round(footTopY), Math.round(rbw), Math.round(rbh))
 
     let nameOffsetY = footTopY + rbh + 7.5 * dpr
-    if (equippedFrame) {
-      ctx.save()
-      ctx.strokeStyle = equippedFrame.primaryColor
-      ctx.fillStyle = equippedFrame.secondaryColor
-      ctx.globalAlpha = 0.72
-      const fw = Math.max(76, displayNameLine.length * 4.8) * dpr
-      const fh = 12 * dpr
-      ctx.fillRect(Math.round(footCx - fw / 2), Math.round(nameOffsetY - fh / 2), Math.round(fw), Math.round(fh))
-      ctx.lineWidth = 1.1 * dpr
-      ctx.strokeRect(Math.round(footCx - fw / 2), Math.round(nameOffsetY - fh / 2), Math.round(fw), Math.round(fh))
-      ctx.restore()
-    }
     if (activeTitleDef) {
       text(`«${activeTitleDef.name}»`, footCx, nameOffsetY, activeTitleDef.color, 7.6)
       nameOffsetY += 9 * dpr
@@ -2371,7 +2361,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       displayNameLine,
       footCx,
       nameOffsetY,
-      other.gm ? '#ffd60a' : equippedFrame?.primaryColor ?? vipTierDef?.badgeColor ?? '#ffffff',
+      resolvedRemoteNameColor ?? (other.gm ? '#ffd60a' : vipTierDef?.badgeColor ?? '#ffffff'),
       9.2,
     )
     text(guildLine, footCx, nameOffsetY + 9.5 * dpr, other.guildTag ? '#fde68a' : '#cbd5e1', 7.8)
@@ -2444,18 +2434,6 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         : job.name
 
     let labelY = barTopY + hpH + mpH + gap + 8 * dpr
-    if (equippedFrame) {
-      ctx.save()
-      ctx.strokeStyle = equippedFrame.primaryColor
-      ctx.fillStyle = equippedFrame.secondaryColor
-      ctx.globalAlpha = 0.72
-      const fw = Math.max(76, displayNameLine.length * 4.8) * dpr
-      const fh = 12 * dpr
-      ctx.fillRect(Math.round(barCx - fw / 2), Math.round(labelY - fh / 2), Math.round(fw), Math.round(fh))
-      ctx.lineWidth = 1.1 * dpr
-      ctx.strokeRect(Math.round(barCx - fw / 2), Math.round(labelY - fh / 2), Math.round(fw), Math.round(fh))
-      ctx.restore()
-    }
     if (activeTitleDef) {
       text(`«${activeTitleDef.name}»`, barCx, labelY, activeTitleDef.color, 7.6)
       labelY += 9 * dpr
@@ -2464,7 +2442,8 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       displayNameLine,
       barCx,
       labelY,
-      p.gm ? '#ffd60a' : equippedFrame?.primaryColor ?? (vipBonus.active && vipBonus.tierDef ? vipBonus.tierDef.badgeColor : '#ffffff'),
+      (isRainbowNameColor(extV2.nameColor) ? resolveAnimatedRainbowHex(Date.now()) : extV2.nameColor) ??
+        (p.gm ? '#ffd60a' : (vipBonus.active && vipBonus.tierDef ? vipBonus.tierDef.badgeColor : '#ffffff')),
       9.4,
     )
     text(

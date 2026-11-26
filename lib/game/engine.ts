@@ -224,7 +224,9 @@ import {
   MAX_LOADOUTS,
   MAX_SKILL_UPGRADE,
   QUICK_SLOT_COUNT,
+  RAINBOW_NAME_COLOR,
   TALENT_NODES,
+  applyRolledNameColorInExtV2,
   calculateOfflineAfkRewards,
   computeTalentBonuses,
   createDefaultExtV2,
@@ -238,10 +240,13 @@ import {
   isItemListableOnMarket,
   lifeSkillExpToNext,
   pruneDepletedQuickSlotsInExtV2,
+  rollRandomNameColor,
   rollGatheringDrops,
   sanitizeExtV2,
   sanitizeQuickSlots,
   skillUpgradeCost,
+  toggleRainbowNameInExtV2,
+  unlockAndEnableRainbowInExtV2,
   type ActiveBoostBuff,
   type CosmeticSlot,
   type OfflineAfkSummary,
@@ -729,7 +734,7 @@ export interface RemotePlayer {
   cosmeticWing?: string
   weaponSkinId?: string
   gemFashionId?: string
-  frameId?: string
+  nameColor?: string
   previousX?: number
   previousY?: number
   receivedAt?: number
@@ -1548,7 +1553,6 @@ export function exchangeFestivalShopRewardAction(rewardId: string): { ok: boolea
     }
     if (cDef?.slot === 'wing') extV2.equippedWing = target.cosmeticId
     else if (cDef?.slot === 'weaponSkin') extV2.equippedWeaponSkin = target.cosmeticId
-    else if (cDef?.slot === 'frame') extV2.equippedFrame = target.cosmeticId
   } else if (target.kind === 'title' && target.titleId) {
     const rpg = sanitizeRpgExt(p.rpgExt)
     if (!rpg.titles.includes(target.titleId)) {
@@ -1633,7 +1637,6 @@ export function exchangeUniversalEventShopRewardAction(rewardId: string): { ok: 
     }
     if (cDef?.slot === 'wing') extV2.equippedWing = target.cosmeticId
     else if (cDef?.slot === 'weaponSkin') extV2.equippedWeaponSkin = target.cosmeticId
-    else if (cDef?.slot === 'frame') extV2.equippedFrame = target.cosmeticId
   } else if (target.kind === 'title' && target.titleId) {
     const rpg = sanitizeRpgExt(p.rpgExt)
     if (!rpg.titles.includes(target.titleId)) {
@@ -2446,6 +2449,29 @@ export function consumeItem(id: string): boolean {
     if (p.rpgExt) p.rpgExt.activeTitle = null
     if (cdDur > 0) game.itemCd[def.id] = cdDur
     return succeedConsume('ใช้ใบแจ้งลบฉายา ล้างนามแฝงและฉายาทั้งหมดออกเรียบร้อยแล้ว')
+  }
+
+  if (def.id === 'name_color_potion') {
+    const extV2 = sanitizeExtV2(p.extV2)
+    const picked = rollRandomNameColor(extV2.nameColor)
+    p.extV2 = applyRolledNameColorInExtV2(extV2, picked)
+    removeUid(p.inventory, id, 1)
+    if (cdDur > 0) game.itemCd[def.id] = cdDur
+    if (picked.hex === RAINBOW_NAME_COLOR) {
+      addFloat(p.x, p.y - 30, '★ ตำนาน: สีรุ้งพิเศษ!', '#f472b6', 12)
+      return succeedConsume('★ ระดับตำนาน! สุ่มได้ "สีรุ้งพิเศษ (Rainbow Mode)" ปลดล็อกและเปิดใช้งานในหน้าสถานะแล้ว!', 'loot')
+    }
+    addFloat(p.x, p.y - 30, `สีชื่อใหม่: ${picked.name}!`, picked.hex, 11)
+    return succeedConsume(`ใช้น้ำยาสุ่มสีชื่อ! เปลี่ยนสีชื่อเป็น "${picked.name}" (${picked.hex}) แล้ว`, 'loot')
+  }
+
+  if (def.id === 'rainbow_name_potion') {
+    const extV2 = sanitizeExtV2(p.extV2)
+    p.extV2 = unlockAndEnableRainbowInExtV2(extV2)
+    removeUid(p.inventory, id, 1)
+    if (cdDur > 0) game.itemCd[def.id] = cdDur
+    addFloat(p.x, p.y - 30, '★ ปลดล็อกสีรุ้งพิเศษ!', '#f472b6', 12)
+    return succeedConsume('★ ปลดล็อกและเปิดใช้ตัวเลือก "สีรุ้งพิเศษ (Rainbow Mode)" ในหน้าสถานะเรียบร้อยแล้ว!', 'loot')
   }
 
   if (def.id === 'companion_gacha_box') {
@@ -6356,6 +6382,31 @@ export function updatePlayerAliasAction(alias: string): { ok: boolean; message: 
   return { ok: true, message: clean ? `อัปเดตนามแฝง "${clean}" สำเร็จ` : 'ล้างนามแฝงเรียบร้อย' }
 }
 
+export function toggleRainbowNameModeAction(enable?: boolean): { ok: boolean; enabled: boolean; message: string } {
+  const p = player()
+  const extV2 = sanitizeExtV2(p.extV2)
+  const hasLegendaryPotion = p.inventory.some((it) => it.itemId === 'rainbow_name_potion' && it.qty > 0)
+  const preparedExt = hasLegendaryPotion && !extV2.rainbowNameUnlocked
+    ? { ...extV2, rainbowNameUnlocked: true }
+    : extV2
+  const res = toggleRainbowNameInExtV2(preparedExt, enable)
+  if (!res.ok) {
+    return {
+      ok: false,
+      enabled: false,
+      message: 'ต้องสุ่มได้รับไอเทมสีระดับตำนาน "สีรุ้งพิเศษ" ก่อนจึงจะเปิดใช้งานโหมดนี้ได้',
+    }
+  }
+  p.extV2 = res.nextExtV2
+  const msg = res.enabled
+    ? 'เปิดใช้งาน "สีรุ้งพิเศษ (Rainbow Mode)" แล้ว! สีชื่อจะเปลี่ยนแบบต่อเนื่อง'
+    : 'ปิดโหมดสีรุ้งพิเศษและกลับสู่สีชื่อเดิมเรียบร้อยแล้ว'
+  say('system', msg)
+  saveGame()
+  notify()
+  return { ok: true, enabled: res.enabled, message: msg }
+}
+
 export function resetSkillsAction(): { ok: boolean; message: string } {
   const p = player()
   const levels = p.skillLevels ?? {}
@@ -6591,7 +6642,6 @@ export function unlockCosmeticAction(cosmeticId: string): { ok: boolean; message
   extV2.unlockedCosmetics.push(cosmeticId)
   if (def.slot === 'wing') extV2.equippedWing = cosmeticId
   else if (def.slot === 'weaponSkin') extV2.equippedWeaponSkin = cosmeticId
-  else extV2.equippedFrame = cosmeticId
   p.extV2 = extV2
   const prem = ensurePremiumState(p)
   if ((def.slot === 'wing' || def.slot === 'weaponSkin') && !prem.fashion.unlockedIds.includes(cosmeticId)) {
@@ -6620,7 +6670,7 @@ export function equipCosmeticAction(slot: CosmeticSlot, cosmeticId: string | nul
     const prem = ensurePremiumState(p)
     if (cosmeticId && !prem.fashion.unlockedIds.includes(cosmeticId)) prem.fashion.unlockedIds.push(cosmeticId)
     prem.fashion.equipped.weaponSkin = cosmeticId
-  } else extV2.equippedFrame = cosmeticId
+  }
   p.extV2 = extV2
   saveGame()
   notify()

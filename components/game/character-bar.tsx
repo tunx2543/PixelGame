@@ -14,6 +14,8 @@ import {
   resolvePlayerFashionLoadout,
   type PanelId,
 } from '@/lib/game/engine'
+import { getNameColorPresentation, sanitizeExtV2 } from '@/lib/game/extended-systems'
+import { cn } from '@/lib/utils'
 import { PERMANENT_GM_GAME_UID } from '@/lib/game/permissions'
 import { computeProfileProgressBars } from '@/lib/game/hud-vitals'
 import { formatVipRemaining, getEffectiveVipBonuses } from '@/lib/game/premium/vip'
@@ -224,7 +226,18 @@ export function CharacterBar({ compact = false }: { compact?: boolean; layout?: 
                 {vipBonus.tierDef.badgeLabel}
               </button>
             )}
-            <span className="min-w-0 truncate">{p.name}</span>
+            {(() => {
+              const namePres = getNameColorPresentation(sanitizeExtV2(p.extV2).nameColor, 'subtle')
+              return (
+                <span
+                  data-testid="character-bar-name"
+                  className={cn('min-w-0 truncate px-0.5 leading-snug', namePres.className)}
+                  style={namePres.style}
+                >
+                  {p.name}
+                </span>
+              )
+            })()}
           </div>
 
           {!compact && (

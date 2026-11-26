@@ -6,7 +6,6 @@ import {
   ArrowUpDown,
   Backpack,
   Coins,
-  Crown,
   Eye,
   Feather,
   Gem,
@@ -29,7 +28,6 @@ import {
   ensurePremiumState,
   equip,
   equipCombatPet,
-  equipCosmeticAction,
   equipFashionAction,
   equipMount,
   getInventoryCapacity,
@@ -50,9 +48,7 @@ import {
 } from '@/lib/game/engine'
 import type { FashionLoadout } from '@/lib/game/fashion-renderer'
 import {
-  COSMETIC_DEFS,
   QUICK_SLOT_COUNT,
-  sanitizeExtV2,
 } from '@/lib/game/extended-systems'
 import {
   FASHION_CHARACTER_SLOTS,
@@ -284,7 +280,6 @@ export function InventoryPanel() {
   const quickSlots = getQuickSlots()
   const prem = ensurePremiumState(p)
   const vipBonuses = getEffectiveVipBonuses(prem.vip)
-  const extV2 = sanitizeExtV2(p.extV2)
   const petState = sanitizePetState(p.petState, p.ownedGemItems, p.equippedGemCompanion)
   const mountState = sanitizeMountState(p.mountState, p.ownedGemItems)
 
@@ -293,7 +288,6 @@ export function InventoryPanel() {
     const isVip = vipBonuses.active && vipBonuses.exclusiveFashionIds.includes(f.id)
     return prem.fashion.unlockedIds.includes(f.id) || isVip || Boolean(f.freeStarter)
   })
-  const unlockedFrames = COSMETIC_DEFS.filter((c) => c.slot === 'frame' && extV2.unlockedCosmetics.includes(c.id))
   const ownedPetIds = Object.keys(petState.ownedPets)
   const ownedMountIds = Object.keys(mountState.ownedMounts)
 
@@ -677,7 +671,7 @@ export function InventoryPanel() {
               })}
             </div>
 
-            {visibleFashionItems.length === 0 && (fashionSlotFilter !== 'all' || unlockedFrames.length === 0) ? (
+            {visibleFashionItems.length === 0 ? (
               <p className="rounded border border-border/70 bg-secondary/20 py-8 text-center text-xs text-muted-foreground">
                 ยังไม่มีแฟชั่นในหมวดนี้ — เลือกปลดล็อกเพิ่มได้ที่ห้องแต่งตัวแฟชั่น หรือร้านค้าเพชร
               </p>
@@ -763,42 +757,6 @@ export function InventoryPanel() {
                     </div>
                   )
                 })}
-
-                {fashionSlotFilter === 'all' &&
-                  unlockedFrames.map((cos) => {
-                    const equipped = extV2.equippedFrame === cos.id
-                    return (
-                      <div
-                        key={cos.id}
-                        className={cn(
-                          'flex items-center justify-between gap-2 rounded border-2 p-2 text-xs',
-                          equipped ? 'border-accent bg-accent/10' : 'border-border bg-card/80',
-                        )}
-                      >
-                        <div className="flex min-w-0 items-center gap-2">
-                          <span
-                            className="grid size-10 shrink-0 place-items-center overflow-hidden rounded border bg-[#0d1220]"
-                            style={{ borderColor: cos.primaryColor }}
-                          >
-                            <img src={`/assets/fashion/icons/${cos.id}.png`} alt={cos.name} className="size-9 object-contain" />
-                          </span>
-                          <div className="min-w-0">
-                            <p className="truncate font-bold text-foreground">{cos.name}</p>
-                            <p className="flex items-center gap-1 truncate text-[10px] text-amber-300">
-                              <Crown className="size-3" aria-hidden /> กรอบชื่อ
-                            </p>
-                          </div>
-                        </div>
-                        <PxButton
-                          variant={equipped ? 'secondary' : 'accent'}
-                          className="px-2 py-1 text-[10px]"
-                          onClick={() => equipCosmeticAction('frame', equipped ? null : cos.id)}
-                        >
-                          {equipped ? 'ถอด' : 'สวมใส่'}
-                        </PxButton>
-                      </div>
-                    )
-                  })}
               </div>
             )}
           </div>

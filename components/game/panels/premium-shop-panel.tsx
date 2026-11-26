@@ -144,8 +144,10 @@ import {
 import { useGame } from '@/lib/game/use-game'
 import { cn } from '@/lib/utils'
 import { formatNum } from '../format'
+import { ChestArtworkSprite } from '../chest-artwork'
 import { ItemIcon } from '../item-icon'
 import { SpriteModelCanvas } from '../sprite-model-canvas'
+import { getShopCustomArtworkCrop } from '@/lib/game/treasure-chest'
 import { PanelFrame, PxButton } from './panels'
 
 type PremiumTabId =
@@ -220,6 +222,20 @@ function formatDateTime(ms: number): string {
 }
 
 function ProductThumb({ product }: { product: PremiumProduct }) {
+  const shopCustomCrop = getShopCustomArtworkCrop(product.itemId) ?? getShopCustomArtworkCrop(product.productId)
+  if (shopCustomCrop) {
+    return (
+      <ChestArtworkSprite
+        crop={shopCustomCrop}
+        alt={product.name}
+        size={38}
+        squareFit
+        maskMode="wide"
+        showGlow
+        testId={`shop-art-${product.itemId}`}
+      />
+    )
+  }
   if (ITEMS[product.itemId]) {
     return <ItemIcon itemId={product.itemId} size={32} />
   }

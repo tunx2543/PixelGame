@@ -412,6 +412,90 @@
   .chest-revealed-pop { animation: chest-revealed-pop 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
   .world-boss-screen-flash { animation: world-boss-screen-flash 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards; will-change: opacity; }
 
+  @keyframes rainbow-name-cycle {
+    0% {
+      color: #fb7185;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 7px rgba(251, 113, 133, 0.9), 0 0 16px rgba(251, 113, 133, 0.56), 0 0 28px rgba(251, 113, 133, 0.34);
+    }
+    17% {
+      color: #fbbf24;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 7px rgba(251, 191, 36, 0.9), 0 0 16px rgba(251, 191, 36, 0.56), 0 0 28px rgba(251, 191, 36, 0.34);
+    }
+    34% {
+      color: #4ade80;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 7px rgba(74, 222, 128, 0.9), 0 0 16px rgba(74, 222, 128, 0.56), 0 0 28px rgba(74, 222, 128, 0.34);
+    }
+    51% {
+      color: #38bdf8;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 7px rgba(56, 189, 248, 0.9), 0 0 16px rgba(56, 189, 248, 0.56), 0 0 28px rgba(56, 189, 248, 0.34);
+    }
+    68% {
+      color: #c084fc;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 7px rgba(192, 132, 252, 0.9), 0 0 16px rgba(192, 132, 252, 0.56), 0 0 28px rgba(192, 132, 252, 0.34);
+    }
+    85% {
+      color: #f472b6;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 7px rgba(244, 114, 182, 0.9), 0 0 16px rgba(244, 114, 182, 0.56), 0 0 28px rgba(244, 114, 182, 0.34);
+    }
+    100% {
+      color: #fb7185;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 7px rgba(251, 113, 133, 0.9), 0 0 16px rgba(251, 113, 133, 0.56), 0 0 28px rgba(251, 113, 133, 0.34);
+    }
+  }
+
+  @keyframes rainbow-name-cycle-subtle {
+    0% {
+      color: #fb7185;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 5px rgba(251, 113, 133, 0.8), 0 0 12px rgba(251, 113, 133, 0.45);
+    }
+    20% {
+      color: #fbbf24;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 5px rgba(251, 191, 36, 0.8), 0 0 12px rgba(251, 191, 36, 0.45);
+    }
+    40% {
+      color: #4ade80;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 5px rgba(74, 222, 128, 0.8), 0 0 12px rgba(74, 222, 128, 0.45);
+    }
+    60% {
+      color: #38bdf8;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 5px rgba(56, 189, 248, 0.8), 0 0 12px rgba(56, 189, 248, 0.45);
+    }
+    80% {
+      color: #c084fc;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 5px rgba(192, 132, 252, 0.8), 0 0 12px rgba(192, 132, 252, 0.45);
+    }
+    100% {
+      color: #fb7185;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 5px rgba(251, 113, 133, 0.8), 0 0 12px rgba(251, 113, 133, 0.45);
+    }
+  }
+
+  @keyframes rainbow-avatar-glow {
+    0% { border-color: rgba(251, 113, 133, 0.65); box-shadow: 0 0 18px rgba(251, 113, 133, 0.25); }
+    25% { border-color: rgba(251, 191, 36, 0.65); box-shadow: 0 0 18px rgba(251, 191, 36, 0.25); }
+    50% { border-color: rgba(56, 189, 248, 0.65); box-shadow: 0 0 18px rgba(56, 189, 248, 0.25); }
+    75% { border-color: rgba(192, 132, 252, 0.65); box-shadow: 0 0 18px rgba(192, 132, 252, 0.25); }
+    100% { border-color: rgba(251, 113, 133, 0.65); box-shadow: 0 0 18px rgba(251, 113, 133, 0.25); }
+  }
+
+  .rainbow-name-text {
+    color: #fb7185;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 7px rgba(251, 113, 133, 0.9), 0 0 16px rgba(251, 113, 133, 0.56), 0 0 28px rgba(251, 113, 133, 0.34);
+    animation: rainbow-name-cycle 4.5s linear infinite;
+  }
+
+  .rainbow-name-text-subtle {
+    color: #fb7185;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 5px rgba(251, 113, 133, 0.8), 0 0 12px rgba(251, 113, 133, 0.45);
+    animation: rainbow-name-cycle-subtle 4.5s linear infinite;
+  }
+
+  .rainbow-avatar-aura {
+    border-color: rgba(251, 113, 133, 0.65);
+    box-shadow: 0 0 18px rgba(251, 113, 133, 0.25);
+    animation: rainbow-avatar-glow 4.5s linear infinite;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .chest-opening-shake,
     .chest-opening-flash,
@@ -426,8 +510,17 @@
     .item-vfx-particle-up,
     .item-vfx-spark,
     .item-vfx-burst,
-    .item-vfx-border-glow {
+    .item-vfx-border-glow,
+    .rainbow-name-text,
+    .rainbow-name-text-subtle,
+    .rainbow-avatar-aura {
       animation: none !important;
+    }
+
+    .rainbow-name-text,
+    .rainbow-name-text-subtle {
+      color: #f472b6;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 8px rgba(244, 114, 182, 0.78);
     }
   }
 }

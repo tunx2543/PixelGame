@@ -9,6 +9,7 @@ import {
   COMPANION_BOX_SPRITE_CROP,
   EVENT_CHEST_SPRITE_CROP,
   EVENT_LUCKY_BOX_SPRITE_CROP,
+  getShopCustomArtworkCrop,
 } from '@/lib/game/treasure-chest'
 import { cn } from '@/lib/utils'
 import { ChestArtworkSprite } from './chest-artwork'
@@ -17,6 +18,22 @@ import { ItemVfxBox } from './item-vfx'
 export function ItemIcon({ itemId, size = 32, className }: { itemId: string; size?: number; className?: string }) {
   const def = ITEMS[itemId]
   if (!def) return null
+
+  const shopCustomCrop = getShopCustomArtworkCrop(itemId)
+  if (shopCustomCrop) {
+    return (
+      <ChestArtworkSprite
+        crop={shopCustomCrop}
+        alt={def.name}
+        size={size}
+        squareFit
+        maskMode="wide"
+        showGlow={size >= 24}
+        testId={`shop-art-${itemId}`}
+        className={className}
+      />
+    )
+  }
 
   if (itemId === 'companion_gacha_box') {
     return (

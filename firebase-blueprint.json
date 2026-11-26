@@ -566,11 +566,11 @@
           "maxLength": 48,
           "pattern": "^[a-zA-Z0-9_\\-]*$"
         },
-        "frameId": {
+        "nameColor": {
           "type": "string",
-          "description": "Equipped overhead name frame identifier.",
-          "maxLength": 48,
-          "pattern": "^[a-zA-Z0-9_\\-]*$"
+          "description": "Custom hex name color or 'rainbow' applied via name_color_potion / rainbow_name_potion.",
+          "maxLength": 16,
+          "pattern": "^(#[0-9a-fA-F]{3,8}|rainbow)?$"
         }
       },
       "required": [

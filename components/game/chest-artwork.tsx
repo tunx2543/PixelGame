@@ -15,6 +15,7 @@ export function ChestArtworkSprite({
   open = false,
   squareFit = false,
   showGlow = true,
+  maskMode = 'default',
   testId,
   dataTier,
   className,
@@ -25,6 +26,7 @@ export function ChestArtworkSprite({
   open?: boolean
   squareFit?: boolean
   showGlow?: boolean
+  maskMode?: 'default' | 'wide'
   testId?: string
   dataTier?: string
   className?: string
@@ -44,6 +46,10 @@ export function ChestArtworkSprite({
   const src = crop.src ?? CHEST_ARTWORK_SHEET_SRC
   const sheetW = crop.sheetWidth ?? CHEST_ARTWORK_SHEET_SIZE
   const sheetH = crop.sheetHeight ?? CHEST_ARTWORK_SHEET_SIZE
+  const maskGradient =
+    maskMode === 'wide'
+      ? 'radial-gradient(ellipse 96% 94% at 50% 50%, #000 72%, transparent 100%)'
+      : 'radial-gradient(ellipse 86% 84% at 50% 52%, #000 62%, transparent 99%)'
 
   const spriteNode = (
     <div
@@ -75,10 +81,8 @@ export function ChestArtworkSprite({
       <div
         className="relative h-full w-full overflow-hidden rounded-lg"
         style={{
-          WebkitMaskImage:
-            'radial-gradient(ellipse 86% 84% at 50% 52%, #000 62%, transparent 99%)',
-          maskImage:
-            'radial-gradient(ellipse 86% 84% at 50% 52%, #000 62%, transparent 99%)',
+          WebkitMaskImage: maskGradient,
+          maskImage: maskGradient,
         }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}

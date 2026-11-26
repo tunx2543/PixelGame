@@ -167,7 +167,7 @@ export const FESTIVAL_EVENTS: FestivalEventDef[] = [
     name: 'เทศกาลลอยกระทงแสงจันทร์',
     subtitle: 'Loy Krathong Light Festival',
     description:
-      'คืนพระจันทร์เต็มดวงริมสายน้ำแห่ง Pixel Quest ออกล่ามอนสเตอร์และปราบบอสเพื่อสะสมกระทงแสงจันทร์ แลกรับกรอบชื่อและไอเทมพิเศษเฉพาะฤดูกาล',
+      'คืนพระจันทร์เต็มดวงริมสายน้ำแห่ง Pixel Quest ออกล่ามอนสเตอร์และปราบบอสเพื่อสะสมกระทงแสงจันทร์ แลกรับไอเทมและของสะสมพิเศษเฉพาะฤดูกาล',
     scheduleLabel: 'ทุกปี 10 – 30 พฤศจิกายน (เวลาไทย)',
     tokenName: 'กระทงแสงจันทร์',
     accentColor: '#fbbf24',
@@ -219,15 +219,6 @@ export const FESTIVAL_EVENTS: FestivalEventDef[] = [
       },
     ],
     shopRewards: [
-      {
-        id: 'lk_frame',
-        name: 'กรอบชื่อจันทร์กระจ่างลอยกระทง',
-        description: 'ปลดล็อกกรอบชื่อพิเศษเรืองแสงทองฟ้า (สวมใส่ได้ในหน้าแฟชั่น)',
-        kind: 'cosmetic',
-        cosmeticId: 'frame_loy_krathong',
-        costTokens: 65,
-        limitPerCycle: 1,
-      },
       {
         id: 'lk_title',
         name: 'ฉายา: ผู้จุดประทีปจันทร์กระจ่าง',
@@ -305,7 +296,7 @@ export const FESTIVAL_EVENTS: FestivalEventDef[] = [
     name: 'เทศกาลเหมันต์ & ปีใหม่สากล',
     subtitle: 'Winter Starlight & New Year',
     description:
-      'เฉลิมฉลองส่งท้ายปีเก่าต้อนรับปีใหม่ด้วยหิมะดาวพร่างพราว โบนัส EXP +75% และร้านค้าแลกกรอบชื่อและไอเทมเสริมพลังระดับตำนาน',
+      'เฉลิมฉลองส่งท้ายปีเก่าต้อนรับปีใหม่ด้วยหิมะดาวพร่างพราว โบนัส EXP +75% และร้านค้าแลกของรางวัลและไอเทมเสริมพลังระดับตำนาน',
     scheduleLabel: 'ทุกปี 20 ธันวาคม – 10 มกราคม (เวลาไทย)',
     tokenName: 'ดาวหิมะมงคล',
     accentColor: '#38bdf8',
@@ -357,15 +348,6 @@ export const FESTIVAL_EVENTS: FestivalEventDef[] = [
       },
     ],
     shopRewards: [
-      {
-        id: 'ny_frame',
-        name: 'กรอบชื่อเกียรติยศมังกรปีใหม่',
-        description: 'ปลดล็อกกรอบชื่อสีครามเรืองแสง (สวมใส่ในหน้าแฟชั่น)',
-        kind: 'cosmetic',
-        cosmeticId: 'frame_dragon',
-        costTokens: 65,
-        limitPerCycle: 1,
-      },
       {
         id: 'ny_title',
         name: 'ฉายา: ดาราแห่งเหมันตฤดู',
@@ -1085,15 +1067,6 @@ export const EVENT_TOKEN_SHOP_REWARDS: FestivalShopRewardDef[] = [
     qty: 1,
     costTokens: 60,
     limitPerCycle: 2,
-  },
-  {
-    id: 'evt_frame_champ',
-    name: 'กรอบชื่อแชมป์เปี้ยนกิจกรรม',
-    description: 'ปลดล็อกกรอบชื่อทองคำสลักแสงเหนือแบบถาวร (สวมใส่ได้ในห้องแต่งตัว)',
-    kind: 'cosmetic',
-    cosmeticId: 'frame_event_champion',
-    costTokens: 80,
-    limitPerCycle: 1,
   },
   {
     id: 'evt_wskin_aurora',

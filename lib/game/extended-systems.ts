@@ -521,10 +521,10 @@ export function grantBattlePassExpToState(state: BattlePassState, gain: number):
 }
 
 /* ========================================================================== */
-/* 4. COSMETICS & WARDROBE (WINGS / WEAPON SKINS / FRAMES)                    */
+/* 4. COSMETICS & WARDROBE (WINGS / WEAPON SKINS)                             */
 /* ========================================================================== */
 
-export type CosmeticSlot = 'wing' | 'weaponSkin' | 'frame'
+export type CosmeticSlot = 'wing' | 'weaponSkin'
 
 export interface CosmeticDef {
   id: string
@@ -566,34 +566,6 @@ export const COSMETIC_DEFS: CosmeticDef[] = [
     diamondCost: 50,
   },
   {
-    id: 'frame_royal',
-    slot: 'frame',
-    name: 'กรอบชื่อราชันย์ทองคำ',
-    description: 'กรอบแสดงชื่อผู้กล้าสีทองเหนือศีรษะและโปรไฟล์',
-    primaryColor: '#fbbf24',
-    secondaryColor: '#78350f',
-    goldCost: 3500,
-    diamondCost: 0,
-  },
-  {
-    id: 'frame_dragon',
-    slot: 'frame',
-    name: 'กรอบชื่อเกียรติยศมังกร',
-    description: 'กรอบชื่อสีครามเรืองแสงสำหรับนักล่ามังกร',
-    primaryColor: '#22d3ee',
-    secondaryColor: '#1e3a8a',
-    diamondCost: 40,
-  },
-  {
-    id: 'frame_loy_krathong',
-    slot: 'frame',
-    name: 'กรอบชื่อจันทร์กระจ่างลอยกระทง',
-    description: 'กรอบชื่อพิเศษประจำเทศกาลลอยกระทงแสงจันทร์ (ปลดล็อกจากร้านเทศกาล)',
-    primaryColor: '#fde047',
-    secondaryColor: '#1d4ed8',
-    diamondCost: 60,
-  },
-  {
     id: 'wskin_festival_crimson',
     slot: 'weaponSkin',
     name: 'สกินอาวุธเปลวประทีปมงคล',
@@ -601,15 +573,6 @@ export const COSMETIC_DEFS: CosmeticDef[] = [
     primaryColor: '#fb7185',
     secondaryColor: '#f59e0b',
     diamondCost: 55,
-  },
-  {
-    id: 'frame_event_champion',
-    slot: 'frame',
-    name: 'กรอบชื่อแชมป์เปี้ยนกิจกรรม',
-    description: 'กรอบชื่อทองคำสลักแสงเหนือสำหรับผู้สะสมโทเคนกิจกรรม (แลกรับจากร้านโทเคนกิจกรรม)',
-    primaryColor: '#f59e0b',
-    secondaryColor: '#e11d48',
-    diamondCost: 70,
   },
   {
     id: 'wskin_event_aurora',
@@ -621,6 +584,224 @@ export const COSMETIC_DEFS: CosmeticDef[] = [
     diamondCost: 75,
   },
 ]
+
+export const RAINBOW_NAME_COLOR = 'rainbow' as const
+export const LEGENDARY_RAINBOW_ROLL_CHANCE = 0.12
+
+export interface NameColorDef {
+  hex: string
+  name: string
+  rarity?: 'rare' | 'legendary'
+}
+
+export const LEGENDARY_RAINBOW_NAME_COLOR: NameColorDef = {
+  hex: RAINBOW_NAME_COLOR,
+  name: 'สีรุ้งพิเศษ (Rainbow Mode)',
+  rarity: 'legendary',
+}
+
+export const NAME_COLOR_PALETTE: readonly NameColorDef[] = [
+  { hex: '#facc15', name: 'ทองคำสุริยัน', rarity: 'rare' },
+  { hex: '#38bdf8', name: 'ฟ้าดาราจักร', rarity: 'rare' },
+  { hex: '#4ade80', name: 'เขียวมรกต', rarity: 'rare' },
+  { hex: '#f472b6', name: 'ชมพูซากุระ', rarity: 'rare' },
+  { hex: '#c084fc', name: 'ม่วงอเมทิสต์', rarity: 'rare' },
+  { hex: '#fb7185', name: 'แดงกุหลาบเพลิง', rarity: 'rare' },
+  { hex: '#22d3ee', name: 'ครามธารน้ำแข็ง', rarity: 'rare' },
+  { hex: '#fb923c', name: 'ส้มอำพัน', rarity: 'rare' },
+  { hex: '#a3e635', name: 'เขียวมะนาวเรืองแสง', rarity: 'rare' },
+  { hex: '#e879f9', name: 'บานเย็นมายา', rarity: 'rare' },
+  { hex: '#fde047', name: 'เหลืองแสงจันทร์', rarity: 'rare' },
+  { hex: '#2dd4bf', name: 'เขียวน้ำทะเล', rarity: 'rare' },
+  { hex: '#fda4af', name: 'พีชกลีบเหมย', rarity: 'rare' },
+  { hex: '#93c5fd', name: 'ครามนภา', rarity: 'rare' },
+]
+
+export function isRainbowNameColor(value: unknown): boolean {
+  return typeof value === 'string' && value.trim().toLowerCase() === RAINBOW_NAME_COLOR
+}
+
+export function sanitizeStaticNameHex(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const trimmed = raw.trim().slice(0, 16)
+  return /^#[0-9a-fA-F]{3,8}$/.test(trimmed) ? trimmed.toLowerCase() : null
+}
+
+export function sanitizeNameColor(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const trimmed = raw.trim().slice(0, 16)
+  if (trimmed.toLowerCase() === RAINBOW_NAME_COLOR) return RAINBOW_NAME_COLOR
+  return /^#[0-9a-fA-F]{3,8}$/.test(trimmed) ? trimmed.toLowerCase() : null
+}
+
+export function getNameColorLabel(hex: string | null | undefined): string | null {
+  const norm = sanitizeNameColor(hex)
+  if (!norm) return null
+  if (norm === RAINBOW_NAME_COLOR) return LEGENDARY_RAINBOW_NAME_COLOR.name
+  return NAME_COLOR_PALETTE.find((entry) => entry.hex.toLowerCase() === norm)?.name ?? norm
+}
+
+export function rollRandomNameColor(
+  currentColor: string | null | undefined,
+  rng: () => number = Math.random,
+  options?: { allowLegendary?: boolean; legendaryChance?: number },
+): NameColorDef {
+  const currentNorm = sanitizeNameColor(currentColor)
+  const roll = Math.max(0, Math.min(0.999999, rng()))
+  const allowLegendary = options?.allowLegendary !== false && currentNorm !== RAINBOW_NAME_COLOR
+  const legendaryChance = allowLegendary
+    ? Math.max(0, Math.min(0.95, options?.legendaryChance ?? LEGENDARY_RAINBOW_ROLL_CHANCE))
+    : 0
+
+  if (legendaryChance > 0 && roll < legendaryChance) {
+    return LEGENDARY_RAINBOW_NAME_COLOR
+  }
+
+  const pool = currentNorm
+    ? NAME_COLOR_PALETTE.filter((entry) => entry.hex.toLowerCase() !== currentNorm)
+    : NAME_COLOR_PALETTE
+  const list = pool.length > 0 ? pool : NAME_COLOR_PALETTE
+  const normalizedRoll =
+    legendaryChance > 0 ? Math.max(0, Math.min(0.999999, (roll - legendaryChance) / (1 - legendaryChance))) : roll
+  const rawIdx = Math.floor(normalizedRoll * list.length)
+  return list[rawIdx] ?? NAME_COLOR_PALETTE[0]
+}
+
+export function applyRolledNameColorInExtV2(
+  extV2: PlayerExtensionV2,
+  picked: NameColorDef,
+): PlayerExtensionV2 {
+  const prevStatic = sanitizeStaticNameHex(extV2.savedStaticNameColor) ?? sanitizeStaticNameHex(extV2.nameColor)
+  if (picked.hex === RAINBOW_NAME_COLOR) {
+    return {
+      ...extV2,
+      nameColor: RAINBOW_NAME_COLOR,
+      rainbowNameUnlocked: true,
+      savedStaticNameColor: prevStatic,
+    }
+  }
+  const nextHex = sanitizeStaticNameHex(picked.hex)
+  return {
+    ...extV2,
+    nameColor: nextHex,
+    savedStaticNameColor: nextHex,
+  }
+}
+
+export function unlockAndEnableRainbowInExtV2(extV2: PlayerExtensionV2): PlayerExtensionV2 {
+  const prevStatic = sanitizeStaticNameHex(extV2.savedStaticNameColor) ?? sanitizeStaticNameHex(extV2.nameColor)
+  return {
+    ...extV2,
+    nameColor: RAINBOW_NAME_COLOR,
+    rainbowNameUnlocked: true,
+    savedStaticNameColor: prevStatic,
+  }
+}
+
+export function toggleRainbowNameInExtV2(
+  extV2: PlayerExtensionV2,
+  enable?: boolean,
+): { ok: boolean; enabled: boolean; nextExtV2: PlayerExtensionV2 } {
+  const unlocked = Boolean(extV2.rainbowNameUnlocked) || isRainbowNameColor(extV2.nameColor)
+  if (!unlocked) {
+    return { ok: false, enabled: false, nextExtV2: extV2 }
+  }
+  const currentlyRainbow = isRainbowNameColor(extV2.nameColor)
+  const targetEnabled = enable ?? !currentlyRainbow
+  if (targetEnabled) {
+    const prevStatic = sanitizeStaticNameHex(extV2.savedStaticNameColor) ?? sanitizeStaticNameHex(extV2.nameColor)
+    return {
+      ok: true,
+      enabled: true,
+      nextExtV2: {
+        ...extV2,
+        rainbowNameUnlocked: true,
+        savedStaticNameColor: prevStatic,
+        nameColor: RAINBOW_NAME_COLOR,
+      },
+    }
+  }
+  const restored = sanitizeStaticNameHex(extV2.savedStaticNameColor)
+  return {
+    ok: true,
+    enabled: false,
+    nextExtV2: {
+      ...extV2,
+      rainbowNameUnlocked: true,
+      nameColor: restored,
+    },
+  }
+}
+
+function hslToHex(hDeg: number, sPct: number, lPct: number): string {
+  const h = ((hDeg % 360) + 360) % 360
+  const s = Math.max(0, Math.min(100, sPct)) / 100
+  const l = Math.max(0, Math.min(100, lPct)) / 100
+  const c = (1 - Math.abs(2 * l - 1)) * s
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1))
+  const m = l - c / 2
+  let r1 = 0
+  let g1 = 0
+  let b1 = 0
+  if (h < 60) [r1, g1, b1] = [c, x, 0]
+  else if (h < 120) [r1, g1, b1] = [x, c, 0]
+  else if (h < 180) [r1, g1, b1] = [0, c, x]
+  else if (h < 240) [r1, g1, b1] = [0, x, c]
+  else if (h < 300) [r1, g1, b1] = [x, 0, c]
+  else [r1, g1, b1] = [c, 0, x]
+  const toHex = (n: number) => Math.round((n + m) * 255).toString(16).padStart(2, '0')
+  return `#${toHex(r1)}${toHex(g1)}${toHex(b1)}`
+}
+
+export function resolveAnimatedRainbowHex(nowMs: number = Date.now()): string {
+  const hue = (nowMs * 0.08) % 360
+  return hslToHex(hue, 92, 68)
+}
+
+export function getNameColorGlowStyle(
+  hex: string | null | undefined,
+  intensity: 'subtle' | 'prominent' = 'prominent',
+): { color: string; textShadow: string } | undefined {
+  const norm = sanitizeStaticNameHex(hex)
+  if (!norm) return undefined
+
+  const raw = norm.slice(1)
+  let r = 255
+  let g = 255
+  let b = 255
+  if (raw.length === 3 || raw.length === 4) {
+    r = Number.parseInt(raw[0] + raw[0], 16)
+    g = Number.parseInt(raw[1] + raw[1], 16)
+    b = Number.parseInt(raw[2] + raw[2], 16)
+  } else if (raw.length >= 6) {
+    r = Number.parseInt(raw.slice(0, 2), 16)
+    g = Number.parseInt(raw.slice(2, 4), 16)
+    b = Number.parseInt(raw.slice(4, 6), 16)
+  }
+
+  const prominent = intensity === 'prominent'
+  const textShadow = prominent
+    ? `0 1px 2px rgba(0, 0, 0, 0.95), 0 0 7px rgba(${r}, ${g}, ${b}, 0.88), 0 0 16px rgba(${r}, ${g}, ${b}, 0.56), 0 0 28px rgba(${r}, ${g}, ${b}, 0.34)`
+    : `0 1px 2px rgba(0, 0, 0, 0.95), 0 0 5px rgba(${r}, ${g}, ${b}, 0.78), 0 0 12px rgba(${r}, ${g}, ${b}, 0.45)`
+
+  return { color: norm, textShadow }
+}
+
+export function getNameColorPresentation(
+  value: string | null | undefined,
+  intensity: 'subtle' | 'prominent' = 'prominent',
+): { className: string; style: { color: string; textShadow: string } | undefined } {
+  if (isRainbowNameColor(value)) {
+    return {
+      className: intensity === 'prominent' ? 'rainbow-name-text' : 'rainbow-name-text-subtle',
+      style: undefined,
+    }
+  }
+  return {
+    className: '',
+    style: getNameColorGlowStyle(value, intensity),
+  }
+}
 
 export function getCosmeticDef(id: string | null | undefined): CosmeticDef | null {
   if (!id) return null
@@ -785,7 +966,9 @@ export interface PlayerExtensionV2 {
   unlockedCosmetics: string[]
   equippedWing: string | null
   equippedWeaponSkin: string | null
-  equippedFrame: string | null
+  nameColor: string | null
+  rainbowNameUnlocked: boolean
+  savedStaticNameColor: string | null
   loadouts: LoadoutPreset[]
   claimedGuideSteps: string[]
   gatherCount: number
@@ -824,7 +1007,9 @@ export function createDefaultExtV2(): PlayerExtensionV2 {
     unlockedCosmetics: [],
     equippedWing: null,
     equippedWeaponSkin: null,
-    equippedFrame: null,
+    nameColor: null,
+    rainbowNameUnlocked: false,
+    savedStaticNameColor: null,
     loadouts: [
       { id: 'preset_1', name: 'เซ็ตฟาร์มไว', equipmentUids: {}, wingId: null, weaponSkinId: null },
       { id: 'preset_2', name: 'เซ็ตตีบอส', equipmentUids: {}, wingId: null, weaponSkinId: null },
@@ -963,8 +1148,10 @@ export function sanitizeExtV2(raw: unknown): PlayerExtensionV2 {
     typeof obj.equippedWeaponSkin === 'string' && unlockedCosmetics.includes(obj.equippedWeaponSkin)
       ? obj.equippedWeaponSkin
       : null
-  const equippedFrame =
-    typeof obj.equippedFrame === 'string' && unlockedCosmetics.includes(obj.equippedFrame) ? obj.equippedFrame : null
+  const nameColor = sanitizeNameColor(obj.nameColor)
+  const rainbowNameUnlocked = Boolean(obj.rainbowNameUnlocked) || isRainbowNameColor(nameColor)
+  const savedStaticNameColor =
+    sanitizeStaticNameHex(obj.savedStaticNameColor) ?? sanitizeStaticNameHex(nameColor)
 
   const loadouts: LoadoutPreset[] = def.loadouts.map((fallback, idx) => {
     const src = Array.isArray(obj.loadouts) ? obj.loadouts[idx] : undefined
@@ -1009,7 +1196,9 @@ export function sanitizeExtV2(raw: unknown): PlayerExtensionV2 {
     unlockedCosmetics,
     equippedWing,
     equippedWeaponSkin,
-    equippedFrame,
+    nameColor,
+    rainbowNameUnlocked,
+    savedStaticNameColor,
     loadouts,
     claimedGuideSteps: Array.isArray(obj.claimedGuideSteps)
       ? [...new Set(obj.claimedGuideSteps.filter((id): id is string => typeof id === 'string'))]

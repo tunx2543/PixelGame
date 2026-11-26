@@ -11,6 +11,7 @@ import {
   GripHorizontal,
   Info,
   Layers,
+  Lock,
   Maximize2,
   Minimize2,
   Minus,
@@ -69,6 +70,7 @@ import {
   setQuickSlot,
   socketRuneAction,
   toggleMountRiding,
+  toggleRainbowNameModeAction,
   unequip,
   unequipAllFashionAction,
   updatePlayerAliasAction,
@@ -83,6 +85,8 @@ import {
   TALENT_NODES,
   computeTalentBonuses,
   getActiveAsuraBoostSummary,
+  getNameColorPresentation,
+  isRainbowNameColor,
   sanitizeExtV2,
   skillUpgradeCost,
   type TalentBranch,
@@ -260,6 +264,10 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
   const statResetPotCount = countItem('stat_reset_potion')
   const skillResetPotCount = countItem('skill_reset_potion')
   const jobResetPotCount = countItem('job_reset_potion')
+  const isRainbowUnlocked = Boolean(extV2.rainbowNameUnlocked || isRainbowNameColor(extV2.nameColor))
+  const isRainbowActive = isRainbowNameColor(extV2.nameColor)
+  const headerNamePresentation = getNameColorPresentation(extV2.nameColor, 'subtle')
+  const statusNamePresentation = getNameColorPresentation(extV2.nameColor, 'prominent')
 
   const isGmDev = Boolean(p.gm && isCurrentAccountGm())
   const displayCid = isGmDev ? PERMANENT_GM_GAME_UID : (p.gameUid ?? getActiveAccountGameUid() ?? String(p.uid ?? '100001'))
@@ -387,7 +395,13 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
           </div>
           <div className="min-w-0 leading-tight">
             <div className="flex items-center gap-1.5">
-              <span className="truncate text-xs font-bold text-amber-300">{p.name}</span>
+              <span
+                data-testid="hub-header-character-name"
+                className={cn('truncate px-0.5 text-xs font-bold leading-snug text-amber-300', headerNamePresentation.className)}
+                style={headerNamePresentation.style}
+              >
+                {p.name}
+              </span>
               <span className="text-[10px] text-sky-300 tabular-nums">Lv.{p.level}</span>
             </div>
             <h2 className="truncate text-sm font-bold text-white sm:text-base">{TAB_TITLES[activeTab]}</h2>
@@ -1253,7 +1267,7 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
               </div>
 
               {/* Right: Race/Class/Rebirth + Avatar + EXP/JP Bars + Alias + 4 Sub-views */}
-              <div className="flex flex-col justify-between gap-2.5 rounded-lg border border-[#254068] bg-[#111a28]/90 p-3">
+              <div className="flex flex-col justify-between gap-1.5 rounded-lg border border-[#254068] bg-[#111a28]/90 p-2.5">
                 <div className="flex items-start justify-between gap-2">
                   <div className="space-y-1 text-xs">
                     <div className="flex items-center gap-2">
@@ -1292,14 +1306,27 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
 
                 {/* Middle Sub-view Switch */}
                 {statusSubView === 'character' && (
-                  <div className="flex flex-col items-center gap-1.5 py-1">
-                    <div className="grid size-24 place-items-center rounded-xl border border-[#294874] bg-radial from-[#1b2e4a] to-[#0b121d]">
+                  <div className="flex flex-col items-center gap-1 py-0.5">
+                    <div
+                      className={cn(
+                        'grid size-20 place-items-center rounded-xl border border-[#294874] bg-radial from-[#1b2e4a] to-[#0b121d] transition-shadow',
+                        isRainbowActive && 'rainbow-avatar-aura',
+                      )}
+                      style={
+                        !isRainbowActive && extV2.nameColor
+                          ? {
+                              borderColor: `${extV2.nameColor}66`,
+                              boxShadow: `0 0 18px ${extV2.nameColor}26`,
+                            }
+                          : undefined
+                      }
+                    >
                       <SpriteModelCanvas
                         mode="job"
                         id={p.jobId}
                         action="auto"
                         dir="down"
-                        size={86}
+                        size={74}
                         fashion={fashionLoadout}
                         isGm={p.gm}
                         rebirthCount={p.rebirthCount ?? 0}
@@ -1307,9 +1334,61 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                         label={p.name}
                       />
                     </div>
-                    <p className="text-xs font-bold text-white tabular-nums">
-                      {p.name} <span className="text-slate-400">(cid:{displayCid})</span>
+                    <p className="flex flex-wrap items-center justify-center gap-1 text-xs font-bold text-white tabular-nums">
+                      <span
+                        data-testid="status-character-name"
+                        className={cn('px-1.5 py-0.5 text-sm font-extrabold tracking-wide', statusNamePresentation.className)}
+                        style={statusNamePresentation.style}
+                      >
+                        {p.name}
+                      </span>
+                      <span className="text-slate-400">(cid:{displayCid})</span>
                     </p>
+
+                    <button
+                      type="button"
+                      role="switch"
+                      data-testid="rainbow-mode-toggle"
+                      aria-checked={isRainbowActive}
+                      disabled={!isRainbowUnlocked}
+                      onClick={() => {
+                        const res = toggleRainbowNameModeAction()
+                        setNotice({ ok: res.ok, text: res.message })
+                        if (res.ok) playQuestClaimSfx(isSfxMuted())
+                      }}
+                      title={
+                        isRainbowUnlocked
+                          ? 'สลับการแสดงผลสีชื่อรุ้งพิเศษแบบต่อเนื่อง'
+                          : 'สุ่มรับไอเทมสีระดับตำนานจากน้ำยาสุ่มสีชื่อเพื่อปลดล็อกโหมดนี้'
+                      }
+                      className={cn(
+                        'mt-0.5 flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-bold transition-all',
+                        !isRainbowUnlocked
+                          ? 'cursor-not-allowed border-slate-700/80 bg-[#0d1521]/80 text-slate-400 opacity-75'
+                          : isRainbowActive
+                            ? 'border-fuchsia-400/75 bg-gradient-to-r from-rose-500/20 via-amber-400/20 to-sky-400/25 text-white shadow-[0_0_14px_rgba(244,114,182,0.3)] hover:brightness-110'
+                            : 'border-[#335688] bg-[#132035] text-slate-200 hover:border-fuchsia-400/60 hover:text-white',
+                      )}
+                    >
+                      {isRainbowUnlocked ? (
+                        <Sparkles className={cn('size-3.5', isRainbowActive ? 'text-amber-300' : 'text-fuchsia-300')} aria-hidden />
+                      ) : (
+                        <Lock className="size-3 text-slate-400" aria-hidden />
+                      )}
+                      <span>สีรุ้งพิเศษ (Rainbow Mode)</span>
+                      <span
+                        className={cn(
+                          'rounded px-1.5 py-0.5 text-[9.5px] font-extrabold',
+                          !isRainbowUnlocked
+                            ? 'bg-slate-800 text-slate-400'
+                            : isRainbowActive
+                              ? 'bg-emerald-500/25 text-emerald-200'
+                              : 'bg-slate-700/80 text-slate-300',
+                        )}
+                      >
+                        {!isRainbowUnlocked ? 'ล็อก · ระดับตำนาน' : isRainbowActive ? 'เปิดอยู่' : 'ปิดอยู่'}
+                      </span>
+                    </button>
                   </div>
                 )}
 
@@ -1493,7 +1572,7 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                 </div>
 
                 {/* Bottom 4 Circular Sub-view Toggles */}
-                <div className="grid grid-cols-4 gap-2 pt-1">
+                <div className="grid grid-cols-4 gap-2 pt-0.5">
                   {(
                     [
                       ['character', 'ตัวละคร', User],
@@ -1508,11 +1587,11 @@ export function AsuraCharacterHub({ initialTab = 'inventory' }: { initialTab?: A
                         key={id}
                         type="button"
                         onClick={() => setStatusSubView(id)}
-                        className="flex flex-col items-center gap-1"
+                        className="flex flex-col items-center gap-0.5"
                       >
                         <span
                           className={cn(
-                            'grid size-11 place-items-center rounded-full border-2 transition-transform hover:scale-105',
+                            'grid size-10 place-items-center rounded-full border-2 transition-transform hover:scale-105',
                             active
                               ? 'border-amber-300 bg-amber-400/20 text-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.35)]'
                               : 'border-[#3b6bb3] bg-[#162740] text-sky-300',

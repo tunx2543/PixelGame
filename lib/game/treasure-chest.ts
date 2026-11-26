@@ -68,6 +68,99 @@ export const EVENT_LUCKY_BOX_SPRITE_CROP: ChestSpriteCropSpec = {
   glowHex: '#38bdf8',
 }
 
+export const SHOP_VIP_BUNDLE_ARTWORK_SRC =
+  '/assets/aistudio/1795672649220_d9e58e71.jpg'
+export const SHOP_VIP_BUNDLE_ARTWORK_WIDTH = 1536
+export const SHOP_VIP_BUNDLE_ARTWORK_HEIGHT = 688
+
+export type ShopVipBundleItemId =
+  | 'vip_card_7d'
+  | 'vip_card_30d'
+  | 'vip_exp_crystal'
+  | 'bundle_aurora_starter'
+  | 'bundle_celestial_vault'
+  | 'bundle_fast_learn_7d'
+
+export const SHOP_VIP_BUNDLE_SPRITE_CROPS: Record<ShopVipBundleItemId, ChestSpriteCropSpec> = {
+  vip_card_7d: {
+    src: SHOP_VIP_BUNDLE_ARTWORK_SRC,
+    sheetWidth: SHOP_VIP_BUNDLE_ARTWORK_WIDTH,
+    sheetHeight: SHOP_VIP_BUNDLE_ARTWORK_HEIGHT,
+    sx: 212,
+    sy: 75,
+    sw: 174,
+    sh: 139,
+    glowHex: '#fbbf24',
+  },
+  vip_card_30d: {
+    src: SHOP_VIP_BUNDLE_ARTWORK_SRC,
+    sheetWidth: SHOP_VIP_BUNDLE_ARTWORK_WIDTH,
+    sheetHeight: SHOP_VIP_BUNDLE_ARTWORK_HEIGHT,
+    sx: 678,
+    sy: 76,
+    sw: 176,
+    sh: 136,
+    glowHex: '#c084fc',
+  },
+  vip_exp_crystal: {
+    src: SHOP_VIP_BUNDLE_ARTWORK_SRC,
+    sheetWidth: SHOP_VIP_BUNDLE_ARTWORK_WIDTH,
+    sheetHeight: SHOP_VIP_BUNDLE_ARTWORK_HEIGHT,
+    sx: 1173,
+    sy: 79,
+    sw: 104,
+    sh: 135,
+    glowHex: '#38bdf8',
+  },
+  bundle_aurora_starter: {
+    src: SHOP_VIP_BUNDLE_ARTWORK_SRC,
+    sheetWidth: SHOP_VIP_BUNDLE_ARTWORK_WIDTH,
+    sheetHeight: SHOP_VIP_BUNDLE_ARTWORK_HEIGHT,
+    sx: 208,
+    sy: 388,
+    sw: 180,
+    sh: 152,
+    glowHex: '#2dd4bf',
+  },
+  bundle_celestial_vault: {
+    src: SHOP_VIP_BUNDLE_ARTWORK_SRC,
+    sheetWidth: SHOP_VIP_BUNDLE_ARTWORK_WIDTH,
+    sheetHeight: SHOP_VIP_BUNDLE_ARTWORK_HEIGHT,
+    sx: 669,
+    sy: 388,
+    sw: 185,
+    sh: 152,
+    glowHex: '#60a5fa',
+  },
+  bundle_fast_learn_7d: {
+    src: SHOP_VIP_BUNDLE_ARTWORK_SRC,
+    sheetWidth: SHOP_VIP_BUNDLE_ARTWORK_WIDTH,
+    sheetHeight: SHOP_VIP_BUNDLE_ARTWORK_HEIGHT,
+    sx: 1128,
+    sy: 389,
+    sw: 197,
+    sh: 152,
+    glowHex: '#4ade80',
+  },
+}
+
+const SHOP_VIP_PRODUCT_TO_ITEM: Record<string, ShopVipBundleItemId> = {
+  prod_vip_card_7d: 'vip_card_7d',
+  prod_vip_card_30d: 'vip_card_30d',
+  prod_vip_exp_crystal: 'vip_exp_crystal',
+  prod_special_aurora_starter: 'bundle_aurora_starter',
+  prod_special_celestial_vault: 'bundle_celestial_vault',
+  prod_asura_fast_learn_7d: 'bundle_fast_learn_7d',
+}
+
+export function getShopCustomArtworkCrop(itemOrProductId: string): ChestSpriteCropSpec | null {
+  if (itemOrProductId in SHOP_VIP_BUNDLE_SPRITE_CROPS) {
+    return SHOP_VIP_BUNDLE_SPRITE_CROPS[itemOrProductId as ShopVipBundleItemId]
+  }
+  const mapped = SHOP_VIP_PRODUCT_TO_ITEM[itemOrProductId]
+  return mapped ? SHOP_VIP_BUNDLE_SPRITE_CROPS[mapped] : null
+}
+
 export interface ChestTierDef {
   id: ChestTierId
   tierBadgeTh: string

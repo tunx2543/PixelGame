@@ -1,20 +1,17 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Coins, Crown, Eye, Gem, RotateCcw, ShieldCheck, Sparkles } from 'lucide-react'
+import { Coins, Eye, Gem, RotateCcw, ShieldCheck } from 'lucide-react'
 import { ITEMS } from '@/lib/game/data'
 import {
   ensurePremiumState,
-  equipCosmeticAction,
   equipFashionAction,
   openPanel,
   resolvePlayerFashionLoadout,
   unequipAllFashionAction,
-  unlockCosmeticAction,
   unlockFashionShopItemAction,
 } from '@/lib/game/engine'
 import type { FashionLoadout } from '@/lib/game/fashion-renderer'
-import { COSMETIC_DEFS, sanitizeExtV2 } from '@/lib/game/extended-systems'
 import { PREMIUM_CATALOG } from '@/lib/game/premium/catalog'
 import {
   FASHION_CHARACTER_SLOTS,
@@ -32,7 +29,7 @@ import { formatNum } from '../format'
 import { SpriteModelCanvas, type PreviewAction } from '../sprite-model-canvas'
 import { PanelFrame, PxButton } from './panels'
 
-type WardrobeFilterTab = 'all' | FashionSlot | 'frame'
+type WardrobeFilterTab = 'all' | FashionSlot
 
 const DIR_LABELS: Array<{ dir: Dir; label: string }> = [
   { dir: 'down', label: 'หน้า' },
@@ -78,7 +75,6 @@ export function WardrobePanel() {
   if (!p) return null
 
   const prem = ensurePremiumState(p)
-  const extV2 = sanitizeExtV2(p.extV2)
   const vipBonuses = getEffectiveVipBonuses(prem.vip)
 
   const hasPreview = Object.keys(previewOverrides).length > 0
@@ -89,15 +85,9 @@ export function WardrobePanel() {
 
   const equippedCount = FASHION_CHARACTER_SLOTS.filter((slot) => Boolean(equippedLoadout[slot])).length
   const fashionItems =
-    slotFilter === 'frame'
-      ? []
-      : slotFilter === 'all'
-        ? PREMIUM_FASHION_ITEMS
-        : PREMIUM_FASHION_ITEMS.filter((item) => item.slot === slotFilter)
-  const frameCosmetics =
-    slotFilter === 'all' || slotFilter === 'frame'
-      ? COSMETIC_DEFS.filter((c) => c.slot === 'frame')
-      : []
+    slotFilter === 'all'
+      ? PREMIUM_FASHION_ITEMS
+      : PREMIUM_FASHION_ITEMS.filter((item) => item.slot === slotFilter)
 
   const togglePreview = (slot: FashionSlot, fashionId: string) => {
     setPreviewOverrides((prev) => {
@@ -306,7 +296,7 @@ export function WardrobePanel() {
             className="px-2.5 py-1 text-[11px]"
             onClick={() => setSlotFilter('all')}
           >
-            ทั้งหมด ({PREMIUM_FASHION_ITEMS.length + COSMETIC_DEFS.filter((c) => c.slot === 'frame').length})
+            ทั้งหมด ({PREMIUM_FASHION_ITEMS.length})
           </PxButton>
           {FASHION_CHARACTER_SLOTS.map((slot) => (
             <PxButton
@@ -318,13 +308,6 @@ export function WardrobePanel() {
               {FASHION_SLOT_LABELS[slot].split('(')[0].trim()}
             </PxButton>
           ))}
-          <PxButton
-            variant={slotFilter === 'frame' ? 'primary' : 'secondary'}
-            className="px-2.5 py-1 text-[11px]"
-            onClick={() => setSlotFilter('frame')}
-          >
-            กรอบชื่อ
-          </PxButton>
         </div>
 
         {notice && (
@@ -472,81 +455,6 @@ export function WardrobePanel() {
                   ) : (
                     <PxButton variant="secondary" onClick={() => openPanel('gem-shop')}>
                       {f.vipRequired ? `ปลดล็อก VIP ${f.vipRequired}+` : 'ดูร้านค้า/กิจกรรม'}
-                    </PxButton>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-
-          {frameCosmetics.map((cos) => {
-            const owned = extV2.unlockedCosmetics.includes(cos.id)
-            const equipped = extV2.equippedFrame === cos.id
-            const canAfford =
-              (cos.goldCost ? p.gold >= cos.goldCost : true) &&
-              (cos.diamondCost > 0 ? p.diamonds >= cos.diamondCost : true)
-
-            return (
-              <div
-                key={cos.id}
-                className={cn(
-                  'flex flex-col justify-between gap-2.5 border-2 p-3 text-xs',
-                  equipped ? 'border-cyan-400 bg-cyan-500/10' : 'border-border bg-background/70',
-                )}
-              >
-                <div className="flex items-start gap-2.5">
-                  <div
-                    className="grid size-12 shrink-0 place-items-center overflow-hidden rounded border-2 bg-[#0d1220]"
-                    style={{ borderColor: cos.primaryColor }}
-                  >
-                    <img
-                      src={`/assets/fashion/icons/${cos.id}.png`}
-                      alt={cos.name}
-                      className="size-11 object-contain"
-                    />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="truncate font-bold text-foreground">{cos.name}</p>
-                      <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-300">
-                        <Crown className="size-3" aria-hidden /> กรอบชื่อ
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">{cos.description}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between gap-2 border-t border-border/50 pt-2">
-                  {owned ? (
-                    <>
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-300">
-                        <Sparkles className="size-3.5" aria-hidden /> {equipped ? 'กำลังสวมใส่' : 'ปลดล็อกแล้ว'}
-                      </span>
-                      <PxButton
-                        variant={equipped ? 'secondary' : 'accent'}
-                        onClick={() => {
-                          const res = equipCosmeticAction('frame', equipped ? null : cos.id)
-                          playQuestClaimSfx(false)
-                          setNotice({ ok: res.ok, text: res.message })
-                        }}
-                      >
-                        {equipped ? 'ถอดออก' : 'สวมใส่เลย'}
-                      </PxButton>
-                    </>
-                  ) : (
-                    <PxButton
-                      variant="primary"
-                      className="w-full"
-                      disabled={!canAfford}
-                      onClick={() => {
-                        const res = unlockCosmeticAction(cos.id)
-                        if (res.ok) playQuestClaimSfx(true)
-                        setNotice({ ok: res.ok, text: res.message })
-                      }}
-                    >
-                      <span className="flex items-center justify-center gap-1.5 tabular-nums">
-                        ปลดล็อก ({cos.goldCost ? `${formatNum(cos.goldCost)} G` : `${cos.diamondCost} เพชร`})
-                      </span>
                     </PxButton>
                   )}
                 </div>

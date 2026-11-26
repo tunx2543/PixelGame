@@ -43,7 +43,7 @@ export interface WorldPresencePayload {
   cosmeticWing: string
   weaponSkinId: string
   gemFashionId: string
-  frameId: string
+  nameColor: string
 }
 
 export interface BuildPresenceInput {
@@ -79,7 +79,7 @@ export interface BuildPresenceInput {
   cosmeticWing?: string | null
   weaponSkinId?: string | null
   gemFashionId?: string | null
-  frameId?: string | null
+  nameColor?: string | null
 }
 
 export interface RemotePlayerSnapshot {
@@ -116,7 +116,7 @@ export interface RemotePlayerSnapshot {
   cosmeticWing?: string
   weaponSkinId?: string
   gemFashionId?: string
-  frameId?: string
+  nameColor?: string
   previousX?: number
   previousY?: number
   receivedAt?: number
@@ -151,6 +151,13 @@ function sanitizeOptionalHexColor(value: unknown): string {
   if (typeof value !== 'string') return ''
   const trimmed = value.trim().slice(0, 16)
   return /^#[0-9a-fA-F]{3,8}$/.test(trimmed) ? trimmed : ''
+}
+
+function sanitizeOptionalNameColor(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  const trimmed = value.trim().slice(0, 16)
+  if (trimmed.toLowerCase() === 'rainbow') return 'rainbow'
+  return /^#[0-9a-fA-F]{3,8}$/.test(trimmed) ? trimmed.toLowerCase() : ''
 }
 
 function sanitizeOptionalGuildTag(value: unknown): string {
@@ -277,7 +284,7 @@ export function buildWorldPresencePayload(input: BuildPresenceInput): WorldPrese
     cosmeticWing: sanitizeOptionalPresenceId(input.cosmeticWing),
     weaponSkinId: sanitizeOptionalPresenceId(input.weaponSkinId),
     gemFashionId: sanitizeOptionalPresenceId(input.gemFashionId),
-    frameId: sanitizeOptionalPresenceId(input.frameId),
+    nameColor: sanitizeOptionalNameColor(input.nameColor),
   }
 }
 
@@ -409,7 +416,7 @@ export function parseWorldPresenceToRemotePlayer(
     cosmeticWing: sanitizeOptionalPresenceId(docData.cosmeticWing),
     weaponSkinId: sanitizeOptionalPresenceId(docData.weaponSkinId),
     gemFashionId: sanitizeOptionalPresenceId(docData.gemFashionId),
-    frameId: sanitizeOptionalPresenceId(docData.frameId),
+    nameColor: sanitizeOptionalNameColor(docData.nameColor),
     previousX: sameMapExisting ? (posChanged ? sameMapExisting.x : (sameMapExisting.previousX ?? sameMapExisting.x)) : x,
     previousY: sameMapExisting ? (posChanged ? sameMapExisting.y : (sameMapExisting.previousY ?? sameMapExisting.y)) : y,
     receivedAt: posChanged ? nowMs : (sameMapExisting?.receivedAt ?? nowMs),
