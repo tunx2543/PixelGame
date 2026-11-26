@@ -9,11 +9,13 @@ import {
   BGM_TRACK_IDS,
   clampBgmVolume,
   getBgmTrackMeta,
+  getBgmTracksByCategory,
   isDungeonBgmMapId,
   isSpecialEventBgmMapId,
   pickPlayableAudioUrl,
   resolveBgmTheme,
   resolveBgmTrackId,
+  resolveEffectiveBgmSelection,
 } from './bgm-tracks'
 import {
   BGM_ORCHESTRAL_SCORES,
@@ -108,7 +110,7 @@ test('every game map resolves to its own distinct MMORPG Open World track ID and
 
     const score = getOrchestralScore(trackId)
     assert.equal(score.trackId, trackId)
-    assert.equal(score.steps.length, 32, `Score for ${trackId} should have 32 steps (4 bars)`)
+    assert.equal(score.steps.length, 64, `Score for ${trackId} should have 64 steps (8 bars A-B)`)
   }
   assert.equal(seenPerMapIds.size, Object.keys(MAPS).length)
 })
@@ -125,7 +127,30 @@ test('battle/boss precedence overrides map exploration track then restores exact
   assert.equal(resolveBgmTrackId({ screen: 'game', mapId: 'act_fishing' }), 'act_fishing')
 })
 
-test('all 27 BGM_TRACK_IDS have valid orchestral scores and positive note frequencies', () => {
+test('resolveEffectiveBgmSelection supports Jukebox track pinning and restores auto-map sync', () => {
+  const autoTown = resolveEffectiveBgmSelection({ screen: 'game', mapId: 'town' }, null)
+  assert.deepEqual(autoTown, { theme: 'town', trackId: 'town', isPinned: false })
+
+  const pinnedIsles = resolveEffectiveBgmSelection({ screen: 'game', mapId: 'meadow', inCombat: true }, 'isles')
+  assert.deepEqual(pinnedIsles, { theme: 'field', trackId: 'isles', isPinned: true })
+
+  const restoredCombat = resolveEffectiveBgmSelection({ screen: 'game', mapId: 'meadow', inCombat: true }, null)
+  assert.deepEqual(restoredCombat, { theme: 'battle', trackId: 'battle', isPinned: false })
+})
+
+test('getBgmTracksByCategory partitions all 27 tracks cleanly across 5 categories', () => {
+  const all = getBgmTracksByCategory('all')
+  assert.equal(all.length, BGM_TRACK_IDS.length)
+  const groupedCount =
+    getBgmTracksByCategory('town').length +
+    getBgmTracksByCategory('field').length +
+    getBgmTracksByCategory('dungeon').length +
+    getBgmTracksByCategory('activity').length +
+    getBgmTracksByCategory('combat').length
+  assert.equal(groupedCount, BGM_TRACK_IDS.length)
+})
+
+test('all 27 BGM_TRACK_IDS have valid 8-bar orchestral scores, counter-melodies, and positive note frequencies', () => {
   assert.equal(validateAllOrchestralScores(), true)
   assert.equal(noteToHz('A4'), 440)
   assert.ok(Math.abs(noteToHz('C4') - 261.63) < 0.05)
@@ -136,15 +161,21 @@ test('all 27 BGM_TRACK_IDS have valid orchestral scores and positive note freque
     assert.ok(BGM_MAP_TRACK_CATALOG[id], `Missing map track meta for ${id}`)
     const score = BGM_ORCHESTRAL_SCORES[id]
     assert.ok(score, `Missing orchestral score for ${id}`)
-    assert.equal(score.steps.length, 32)
-    distinctBpmTimbrePairs.add(`${id}:${score.bpm}:${score.leadTimbre}:${score.arpTimbre}:${score.padTimbre}`)
+    assert.equal(score.steps.length, 64)
+    assert.ok(score.counterGain > 0, `Score ${id} should configure counterGain`)
+    distinctBpmTimbrePairs.add(`${id}:${score.bpm}:${score.leadTimbre}:${score.counterTimbre}:${score.arpTimbre}:${score.padTimbre}`)
 
     let hasMelody = false
+    let hasCounter = false
     let hasChord = false
     for (const step of score.steps) {
       if (step.melody) {
         assert.ok(noteToHz(step.melody) > 0, `Invalid melody note ${step.melody} in ${id}`)
         hasMelody = true
+      }
+      if (step.counter) {
+        assert.ok(noteToHz(step.counter) > 0, `Invalid counter note ${step.counter} in ${id}`)
+        hasCounter = true
       }
       if (step.arp) {
         assert.ok(noteToHz(step.arp) > 0, `Invalid arp note ${step.arp} in ${id}`)
@@ -160,6 +191,7 @@ test('all 27 BGM_TRACK_IDS have valid orchestral scores and positive note freque
       }
     }
     assert.ok(hasMelody, `Score ${id} must contain melody notes`)
+    assert.ok(hasCounter, `Score ${id} must contain counter-melody harmony notes`)
     assert.ok(hasChord, `Score ${id} must contain harmonic chords`)
   }
   assert.equal(distinctBpmTimbrePairs.size, BGM_TRACK_IDS.length)

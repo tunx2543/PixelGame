@@ -1,7 +1,7 @@
 import type { PlayerExtensionV2 } from './extended-systems'
 import { getFashionItemDef } from './premium/fashion-pet'
 import type { FashionSlot, PremiumState } from './premium/types'
-import type { Dir } from './sprites'
+import type { Dir, SpriteAction } from './sprites'
 
 export type FashionLoadout = Partial<Record<FashionSlot, string | null>>
 
@@ -22,8 +22,8 @@ export function getFashionLayerImage(fashionId: string | null | undefined): HTML
 
 export function preloadFashionLayers(loadout: FashionLoadout | null | undefined): void {
   if (!loadout || typeof document === 'undefined') return
-  for (const id of Object.values(loadout)) {
-    if (id) getFashionLayerImage(id)
+  if (loadout.wings) {
+    getFashionLayerImage(loadout.wings)
   }
 }
 
@@ -89,51 +89,122 @@ export function resolveFashionLoadoutFromRemote(other: {
   }
 }
 
+export interface WingFollowMotion {
+  anchorXFrac: number
+  anchorYFrac: number
+  profileScaleX: number
+  flapScaleX: number
+  flapScaleY: number
+  tiltRad: number
+  flipX: boolean
+  bobPx: number
+  lungePx: number
+}
+
+const IDLE_BOB_SEQ = [0, 1.8, 0.6, -0.8] as const
+const WALK_BOB_SEQ = [0, -4.5, 0, -4.5] as const
+const ATTACK_BOB_SEQ = [1, -4, -1, 1] as const
+const ATTACK_LUNGE_SEQ = [-4, 10, 13, 3] as const
+const SKILL_BOB_SEQ = [3, -7, -4.5, 1] as const
+const SKILL_LUNGE_SEQ = [-2, 4, 7, 2] as const
+
+export function resolveWingFollowMotion(opts: {
+  dir: Dir
+  action?: SpriteAction
+  frame: number
+  timeSec?: number
+  isAnimatedSheet?: boolean
+}): WingFollowMotion {
+  const { dir, action, frame, timeSec = 0, isAnimatedSheet = false } = opts
+  const rawAction: SpriteAction = action ?? (frame > 0 ? 'walk' : 'idle')
+  const normalizedAction: 'idle' | 'walk' | 'attack' | 'skill' =
+    rawAction === 'run' || rawAction === 'follow'
+      ? 'walk'
+      : rawAction === 'mount' || rawAction === 'dismount'
+        ? 'idle'
+        : rawAction === 'attack' || rawAction === 'skill' || rawAction === 'walk'
+          ? rawAction
+          : 'idle'
+
+  const f = frame < 0 ? 0 : Math.floor(frame) % 4
+
+  let bobPx = 0
+  let lungePx = 0
+  if (normalizedAction === 'idle') {
+    bobPx = IDLE_BOB_SEQ[f]
+  } else if (normalizedAction === 'walk') {
+    bobPx = WALK_BOB_SEQ[f]
+  } else if (normalizedAction === 'skill') {
+    bobPx = SKILL_BOB_SEQ[f]
+    lungePx = SKILL_LUNGE_SEQ[f]
+  } else {
+    bobPx = ATTACK_BOB_SEQ[f]
+    lungePx = ATTACK_LUNGE_SEQ[f]
+  }
+
+  const dirSign = dir === 'left' ? -1 : dir === 'right' ? 1 : 0
+  const flipX = dir === 'left'
+  const profileScaleX = dir === 'left' || dir === 'right' ? 0.78 : 1
+  const backOffsetXFrac = -dirSign * 0.065
+  const lungeXFrac = dirSign * (lungePx / 168)
+  const anchorXFrac = 0.5 + backOffsetXFrac + lungeXFrac
+  const baseAnchorYFrac = dir === 'up' ? 0.51 : 0.49
+  const anchorYFrac = baseAnchorYFrac + bobPx / 192
+
+  let flapScaleX = 1
+  let flapScaleY = 1
+  let tiltRad = 0
+
+  if (normalizedAction === 'idle') {
+    const breath = isAnimatedSheet ? 0 : Math.sin(timeSec * 2.8) * 0.024
+    flapScaleX = 1 + breath
+    flapScaleY = 1 + breath * 0.8
+  } else if (normalizedAction === 'walk') {
+    const strideLift = f === 1 || f === 3 ? 1 : 0
+    const strideFlex = isAnimatedSheet ? 0 : strideLift * 0.04 + Math.sin(timeSec * 8) * 0.012
+    flapScaleX = 1 + strideFlex
+    flapScaleY = 1 + strideFlex * 0.75
+    tiltRad = -dirSign * (0.045 + strideLift * 0.018)
+  } else {
+    const combatFlex = isAnimatedSheet ? 0 : f === 0 ? -0.045 : f === 1 || f === 2 ? 0.075 : 0.02
+    flapScaleX = 1 + combatFlex
+    flapScaleY = 1 + combatFlex * 0.75
+    const combatTilt = f === 0 ? -0.035 : f === 1 || f === 2 ? 0.075 : 0.02
+    tiltRad = -dirSign * combatTilt
+  }
+
+  return {
+    anchorXFrac,
+    anchorYFrac,
+    profileScaleX,
+    flapScaleX,
+    flapScaleY,
+    tiltRad,
+    flipX,
+    bobPx,
+    lungePx,
+  }
+}
+
 export function getFashionRenderSignature(
   loadout: FashionLoadout | null | undefined,
   timeSec?: number,
 ): string {
-  if (!loadout) return ''
-  const orderedSlots: FashionSlot[] = [
-    'hat',
-    'hair',
-    'costume',
-    'pants',
-    'shoes',
-    'wings',
-    'back',
-    'accessory',
-    'aura',
-    'weaponSkin',
-    'mountAppearance',
-  ]
-  return orderedSlots
-    .map((slot) => {
-      const id = loadout[slot] ?? ''
-      if (!id) return ''
-      const img = getFashionLayerImage(id)
-      const ready = img ? (img.complete && img.naturalWidth > 0 ? '1' : '0') : 'n'
-      if (slot === 'wings' && timeSec !== undefined) {
-        const def = getFashionItemDef(id)
-        if (def?.wingAnimSheetAsset) {
-          const frames = Math.max(1, def.wingAnimFrames ?? 16)
-          return `${slot}:${id}@${ready}:f${Math.floor(timeSec * 12) % frames}`
-        }
-        if (def?.wingSpriteAsset) {
-          return `${slot}:${id}@${ready}:w${Math.floor(timeSec * 6) % 8}`
-        }
-      }
-      return `${slot}:${id}@${ready}`
-    })
-    .filter(Boolean)
-    .join(',')
-}
-
-const DIR_ROW: Record<Dir, number> = {
-  down: 0,
-  left: 1,
-  right: 2,
-  up: 3,
+  const wingId = sanitizeResolvedWingId(loadout?.wings)
+  if (!wingId) return ''
+  const img = getFashionLayerImage(wingId)
+  const ready = img ? (img.complete && img.naturalWidth > 0 ? '1' : '0') : 'n'
+  if (timeSec !== undefined) {
+    const def = getFashionItemDef(wingId)
+    if (def?.wingAnimSheetAsset) {
+      const frames = Math.max(1, def.wingAnimFrames ?? 16)
+      return `wings:${wingId}@${ready}:f${Math.floor(timeSec * 16) % frames}`
+    }
+    if (def?.wingSpriteAsset) {
+      return `wings:${wingId}@${ready}:w${Math.floor(timeSec * 8) % 16}`
+    }
+  }
+  return `wings:${wingId}@${ready}`
 }
 
 export function drawCharacterFashionLayers(opts: {
@@ -141,6 +212,7 @@ export function drawCharacterFashionLayers(opts: {
   loadout: FashionLoadout | null | undefined
   phase: 'behind' | 'overBody' | 'overBack'
   dir: Dir
+  action?: SpriteAction
   frame: number
   dx: number
   dy: number
@@ -149,92 +221,77 @@ export function drawCharacterFashionLayers(opts: {
   alpha?: number
   timeSec?: number
 }): boolean {
-  const { ctx, loadout, phase, dir, frame, dx, dy, dw, dh, alpha = 1, timeSec } = opts
-  if (!loadout) return false
+  const { ctx, loadout, phase, dir, action, frame, dx, dy, dw, dh, alpha = 1, timeSec } = opts
+  const wingId = sanitizeResolvedWingId(loadout?.wings)
+  if (!wingId) return false
 
-  let slots: FashionSlot[] = []
-  if (phase === 'behind') {
-    slots = dir === 'up' ? ['aura'] : ['aura', 'wings', 'back']
-  } else if (phase === 'overBody') {
-    slots = ['shoes', 'pants', 'costume', 'hair', 'hat', 'accessory']
-  } else if (phase === 'overBack') {
-    slots = dir === 'up' ? ['back', 'wings'] : []
-  }
+  const shouldDrawWings =
+    (phase === 'behind' && dir !== 'up') ||
+    (phase === 'overBack' && dir === 'up')
+  if (!shouldDrawWings) return false
 
-  if (slots.length === 0) return false
+  const def = getFashionItemDef(wingId)
+  const img = getFashionLayerImage(wingId)
+  if (!def || !img || !img.complete || img.naturalWidth <= 0) return false
+
+  const isAnimatedSheet = Boolean(def.wingAnimSheetAsset)
+  if (!isAnimatedSheet && !def.wingSpriteAsset) return false
 
   const t = timeSec ?? (typeof performance !== 'undefined' ? performance.now() / 1000 : 0)
-  const row = DIR_ROW[dir] ?? 0
-  const col = Math.abs(frame < 0 ? 0 : Math.floor(frame)) % 4
-  const sx = col * 168
-  const sy = row * 192
-  let drewAny = false
+  const motion = resolveWingFollowMotion({
+    dir,
+    action,
+    frame,
+    timeSec: t,
+    isAnimatedSheet,
+  })
+
+  const targetH = dh * (isAnimatedSheet ? 0.96 : 0.88)
+  const targetW = dw * (isAnimatedSheet ? 1.24 : 1.14) * motion.profileScaleX
+  const anchorX = dx + dw * motion.anchorXFrac
+  const anchorY = dy + dh * motion.anchorYFrac
 
   ctx.save()
   if (alpha < 1) {
     ctx.globalAlpha *= alpha
   }
+  ctx.imageSmoothingEnabled = false
+  ctx.translate(anchorX, anchorY)
+  if (motion.tiltRad !== 0) {
+    ctx.rotate(motion.tiltRad)
+  }
+  ctx.scale((motion.flipX ? -1 : 1) * motion.flapScaleX, motion.flapScaleY)
 
-  for (const slot of slots) {
-    const id = loadout[slot]
-    if (!id) continue
-    const def = getFashionItemDef(id)
-    const img = getFashionLayerImage(id)
-    if (!img || !img.complete || img.naturalWidth <= 0) continue
-
-    if (slot === 'wings' && (def?.wingAnimSheetAsset || def?.wingSpriteAsset)) {
-      const sideBiasX = dir === 'left' ? dw * 0.12 : dir === 'right' ? -dw * 0.12 : 0
-      const scaleX = dir === 'left' || dir === 'right' ? 0.72 : 1
-      const flapBob = def.wingAnimSheetAsset ? 0 : Math.sin(t * 5.2) * (dh * 0.025)
-      const flapScaleY = def.wingAnimSheetAsset ? 1 : 1 + Math.sin(t * 5.2) * 0.055
-      const targetH = dh * (def.wingAnimSheetAsset ? 0.96 : 0.88)
-      const targetW = dw * (def.wingAnimSheetAsset ? 1.24 : 1.14) * scaleX
-      const anchorX = dx + dw * 0.5 + sideBiasX
-      const anchorY = dy + dh * (dir === 'up' ? 0.45 : 0.42) + flapBob
-
-      ctx.save()
-      ctx.imageSmoothingEnabled = false
-      ctx.translate(anchorX, anchorY)
-      ctx.scale(1, flapScaleY)
-
-      if (def.wingAnimSheetAsset) {
-        const frames = Math.max(1, def.wingAnimFrames ?? 16)
-        const frameW = Math.max(1, Math.floor(img.naturalWidth / frames))
-        const frameH = Math.max(1, img.naturalHeight)
-        const frameIdx = Math.floor(t * 12) % frames
-        ctx.drawImage(
-          img,
-          frameIdx * frameW,
-          0,
-          frameW,
-          frameH,
-          -targetW / 2,
-          -targetH / 2,
-          targetW,
-          targetH,
-        )
-      } else {
-        ctx.drawImage(
-          img,
-          0,
-          0,
-          img.naturalWidth,
-          img.naturalHeight,
-          -targetW / 2,
-          -targetH / 2,
-          targetW,
-          targetH,
-        )
-      }
-      ctx.restore()
-      drewAny = true
-      continue
-    }
-
-    ctx.drawImage(img, sx, sy, 168, 192, dx, dy, dw, dh)
-    drewAny = true
+  if (isAnimatedSheet) {
+    const frames = Math.max(1, def.wingAnimFrames ?? 16)
+    const frameW = Math.max(1, Math.floor(img.naturalWidth / frames))
+    const frameH = Math.max(1, img.naturalHeight)
+    const frameIdx = Math.floor(t * 16) % frames
+    ctx.drawImage(
+      img,
+      frameIdx * frameW,
+      0,
+      frameW,
+      frameH,
+      -targetW / 2,
+      -targetH / 2,
+      targetW,
+      targetH,
+    )
+  } else {
+    ctx.drawImage(
+      img,
+      0,
+      0,
+      img.naturalWidth,
+      img.naturalHeight,
+      -targetW / 2,
+      -targetH / 2,
+      targetW,
+      targetH,
+    )
   }
 
   ctx.restore()
-  return drewAny
+  return true
 }

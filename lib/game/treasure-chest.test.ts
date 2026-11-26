@@ -3,10 +3,19 @@ import assert from 'node:assert/strict'
 import { ITEMS } from './data'
 import { EQUIPMENT_RARITY_ORDER } from './mmo-systems'
 import {
+  BOX_EXCHANGE_ARTWORK_HEIGHT,
+  BOX_EXCHANGE_ARTWORK_SRC,
+  BOX_EXCHANGE_ARTWORK_WIDTH,
+  CHEST_ARTWORK_SHEET_SIZE,
+  CHEST_ARTWORK_SHEET_SRC,
   CHEST_TIERS,
   CHEST_TIER_ORDER,
+  CHEST_TIER_SPRITE_CROPS,
+  COMPANION_BOX_SPRITE_CROP,
   DAILY_FREE_CHEST_COOLDOWN_MS,
   DAILY_FREE_CHEST_TIER_ID,
+  EVENT_CHEST_SPRITE_CROP,
+  EVENT_LUCKY_BOX_SPRITE_CROP,
   calculateChestRarityProbabilities,
   canClaimDailyFreeChest,
   claimDailyFreeTreasureChest,
@@ -280,4 +289,44 @@ test('daily free chest eligibility, 24h cooldown enforcement, and free standard 
   })
   assert.equal(claim2.ok, true)
   assert.equal(claim2.nextClaimedAt, t24h)
+})
+
+test('all 4 gacha chest tiers and separate event chest crop have distinct valid slices inside the chest artwork sheet', () => {
+  assert.equal(CHEST_TIER_ORDER.length, 4)
+  assert.deepEqual([...CHEST_TIER_ORDER], ['wooden', 'silver', 'golden', 'mythic'])
+  assert.equal(Object.keys(CHEST_TIERS).length, 4)
+  assert.equal('event' in CHEST_TIERS, false)
+  assert.equal(
+    CHEST_ARTWORK_SHEET_SRC,
+    '/assets/aistudio/01a21260-db44-7542-9a46-d57a4211f511_70d060be.png',
+  )
+
+  let prevCenterX = -1
+  for (const tierId of CHEST_TIER_ORDER) {
+    const def = CHEST_TIERS[tierId]
+    const crop = CHEST_TIER_SPRITE_CROPS[tierId]
+    assert.ok(def.tierBadgeTh.length > 0)
+    assert.ok(crop, `Missing sprite crop for ${tierId}`)
+    assert.ok(crop.sx >= 0 && crop.sx + crop.sw <= CHEST_ARTWORK_SHEET_SIZE)
+    assert.ok(crop.sy >= 0 && crop.sy + crop.sh <= CHEST_ARTWORK_SHEET_SIZE)
+    assert.ok(crop.sw >= 140 && crop.sh >= 160)
+    const centerX = crop.sx + crop.sw / 2
+    assert.ok(centerX > prevCenterX, `Expected left-to-right order for ${tierId}`)
+    prevCenterX = centerX
+  }
+
+  // Event chest artwork crop exists separately for events UI without being in the random gacha system
+  assert.ok(EVENT_CHEST_SPRITE_CROP.sx >= 0 && EVENT_CHEST_SPRITE_CROP.sx + EVENT_CHEST_SPRITE_CROP.sw <= CHEST_ARTWORK_SHEET_SIZE)
+  assert.ok(EVENT_CHEST_SPRITE_CROP.sy >= 0 && EVENT_CHEST_SPRITE_CROP.sy + EVENT_CHEST_SPRITE_CROP.sh <= CHEST_ARTWORK_SHEET_SIZE)
+  assert.ok(EVENT_CHEST_SPRITE_CROP.sw >= 140 && EVENT_CHEST_SPRITE_CROP.sh >= 160)
+  assert.ok(EVENT_CHEST_SPRITE_CROP.sx + EVENT_CHEST_SPRITE_CROP.sw / 2 > prevCenterX)
+
+  // Companion box & Event lucky box crops fit inside the dual-chest artwork without overlap or text bleed
+  assert.equal(COMPANION_BOX_SPRITE_CROP.src, BOX_EXCHANGE_ARTWORK_SRC)
+  assert.equal(EVENT_LUCKY_BOX_SPRITE_CROP.src, BOX_EXCHANGE_ARTWORK_SRC)
+  assert.ok(COMPANION_BOX_SPRITE_CROP.sx >= 0 && COMPANION_BOX_SPRITE_CROP.sx + COMPANION_BOX_SPRITE_CROP.sw <= BOX_EXCHANGE_ARTWORK_WIDTH)
+  assert.ok(EVENT_LUCKY_BOX_SPRITE_CROP.sx >= 0 && EVENT_LUCKY_BOX_SPRITE_CROP.sx + EVENT_LUCKY_BOX_SPRITE_CROP.sw <= BOX_EXCHANGE_ARTWORK_WIDTH)
+  assert.ok(COMPANION_BOX_SPRITE_CROP.sy >= 0 && COMPANION_BOX_SPRITE_CROP.sy + COMPANION_BOX_SPRITE_CROP.sh <= BOX_EXCHANGE_ARTWORK_HEIGHT)
+  assert.ok(EVENT_LUCKY_BOX_SPRITE_CROP.sy >= 0 && EVENT_LUCKY_BOX_SPRITE_CROP.sy + EVENT_LUCKY_BOX_SPRITE_CROP.sh <= BOX_EXCHANGE_ARTWORK_HEIGHT)
+  assert.ok(COMPANION_BOX_SPRITE_CROP.sx + COMPANION_BOX_SPRITE_CROP.sw < EVENT_LUCKY_BOX_SPRITE_CROP.sx)
 })

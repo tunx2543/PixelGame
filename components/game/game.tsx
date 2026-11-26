@@ -45,6 +45,7 @@ import { TopAnnouncementTicker, WorldBanner } from './world-banner'
 import { WorldBossEntranceOverlay } from './world-boss-entrance-overlay'
 import { WorldBossHpBar } from './world-boss-hp-bar'
 import { WorldBossVictoryOverlay } from './world-boss-victory-overlay'
+import { ZoneMusicToast } from './zone-music-toast'
 
 function LootToast() {
   const loot = game.lootToast
@@ -201,6 +202,7 @@ export function Game() {
         {/* Top Announcement Ticker & Global World Boss HP Bar */}
         {!g.zenHud && <WorldBossHpBar />}
         {!g.zenHud && <TopAnnouncementTicker />}
+        {!g.zenHud && <ZoneMusicToast />}
         {!g.zenHud && <ActivityHudOverlay />}
 
         {/* ZONE 1: มุมซ้ายบน — Unit Frame + Quest/Party Strip + Buff Timer Strip + PK/Auto/Mount Toggles */}

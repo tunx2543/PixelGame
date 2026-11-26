@@ -9,7 +9,6 @@ import {
   evolveCombatPetAction,
   feedCombatPet,
   openPanel,
-  resolvePlayerFashionLoadout,
   storeMount,
   summonMount,
   toggleMountRiding,
@@ -440,7 +439,7 @@ export function PetsPanel() {
                         action={activeMountBonus.mounted ? 'run' : 'idle'}
                         dir={previewDir}
                         mountLevel={activeMountBonus.level}
-                        mountSkinId={resolvePlayerFashionLoadout(p).mountAppearance}
+                        mountSkinId={null}
                         showRider={showMountRider || activeMountBonus.mounted}
                         riderJobId={p.jobId}
                         size={60}
@@ -540,7 +539,6 @@ export function PetsPanel() {
                 const lvScale = 1 + (lv - 1) * 0.16
                 const speedPct = mount.speedBonusPct + (lv - 1) * 3
                 const upgCost = mountUpgradeCost(lv)
-                const activeMountSkin = isSelected ? resolvePlayerFashionLoadout(p).mountAppearance : null
 
                 return (
                   <div
@@ -561,7 +559,7 @@ export function PetsPanel() {
                           action={isRiding ? 'run' : isSelected ? 'walk' : 'idle'}
                           dir={previewDir}
                           mountLevel={lv}
-                          mountSkinId={activeMountSkin}
+                          mountSkinId={null}
                           showRider={showMountRider}
                           riderJobId={p.jobId}
                           size={62}

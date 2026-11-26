@@ -28,7 +28,6 @@ import {
   preloadFashionLayers,
   type FashionLoadout,
 } from '@/lib/game/fashion-renderer'
-import { getFashionItemDef } from '@/lib/game/premium/fashion-pet'
 import { drawRebirthAura, drawSpiritAwakeningAura } from '@/lib/game/vfx-canvas'
 
 export type PreviewAction = SpriteAction | 'auto'
@@ -90,21 +89,7 @@ export function SpriteModelCanvas({
   const phaseCallbackRef = useRef(onAutoPhaseChange)
   phaseCallbackRef.current = onAutoPhaseChange
 
-  const fashionDep = fashion
-    ? [
-        fashion.hat ?? '',
-        fashion.hair ?? '',
-        fashion.costume ?? '',
-        fashion.pants ?? '',
-        fashion.shoes ?? '',
-        fashion.wings ?? '',
-        fashion.back ?? '',
-        fashion.accessory ?? '',
-        fashion.aura ?? '',
-        fashion.weaponSkin ?? '',
-        fashion.mountAppearance ?? '',
-      ].join('|')
-    : ''
+  const fashionDep = fashion?.wings ?? ''
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -272,19 +257,9 @@ export function SpriteModelCanvas({
       if (mode === 'job') {
         const jobDef = JOBS[normalizeJobId(id)]
         const spec = getJobModelSpec(jobDef.id)
-        const baseColors = jobHumanColors(jobDef.id, jobDef.colors, false)
-        const costumeDef = getFashionItemDef(fashion?.costume)
-        const hairDef = getFashionItemDef(fashion?.hair)
-        const auraDef = getFashionItemDef(fashion?.aura)
-        const weaponSkinDef = getFashionItemDef(fashion?.weaponSkin)
-        const colors = {
-          ...baseColors,
-          ...(costumeDef?.paletteOverride ?? {}),
-          ...(hairDef?.paletteOverride ?? {}),
-          ...(auraDef?.paletteOverride ?? {}),
-        }
+        const colors = jobHumanColors(jobDef.id, jobDef.colors, false)
         const weapon = weaponOverride !== undefined ? weaponOverride : (jobDef.weaponTypes[0] ?? 'stick')
-        const wColor = weaponSkinDef?.primaryColor ?? weaponColorOverride ?? jobDef.colors.accent
+        const wColor = weaponColorOverride ?? jobDef.colors.accent
         drawable = resolveHumanDrawable(
           colors,
           dir,
@@ -295,7 +270,7 @@ export function SpriteModelCanvas({
           effectiveAction,
           isAttack ? attackFrame : isSkill ? skillFrame : undefined,
         )
-        auraColor = auraDef?.primaryColor ?? spec.auraColor
+        auraColor = spec.auraColor
       } else if (mode === 'pet') {
         const spec = getPetModelSpec(id)
         const petAction: SpriteAction = effectiveAction === 'skill' ? 'attack' : effectiveAction
@@ -371,16 +346,7 @@ export function SpriteModelCanvas({
           const cropW = Math.min(drawable.width, Math.round(baseCropW * hdScale))
           const cropH = Math.min(drawable.height, Math.round(baseCropH * hdScale))
           const sx = Math.max(0, Math.round((drawable.width - cropW) / 2))
-          const hasWearableFashion = Boolean(
-            fashion &&
-              (fashion.hat ||
-                fashion.hair ||
-                fashion.costume ||
-                fashion.accessory ||
-                fashion.wings ||
-                fashion.back ||
-                fashion.aura),
-          )
+          const hasWearableFashion = Boolean(fashion?.wings)
           const rawSy = gmReady ? 7 : Math.round((isSheet ? 5 : 3) * hdScale)
           const sy = hasWearableFashion ? Math.max(0, rawSy - Math.round(1.5 * hdScale)) : rawSy
 
@@ -402,6 +368,7 @@ export function SpriteModelCanvas({
                 loadout: fashion,
                 phase: 'behind',
                 dir,
+                action: effectiveAction,
                 frame,
                 dx: 0,
                 dy: 0,
@@ -415,6 +382,7 @@ export function SpriteModelCanvas({
                 loadout: fashion,
                 phase: 'overBody',
                 dir,
+                action: effectiveAction,
                 frame,
                 dx: 0,
                 dy: 0,
@@ -427,6 +395,7 @@ export function SpriteModelCanvas({
                 loadout: fashion,
                 phase: 'overBack',
                 dir,
+                action: effectiveAction,
                 frame,
                 dx: 0,
                 dy: 0,
@@ -520,6 +489,7 @@ export function SpriteModelCanvas({
               loadout: fashion,
               phase: 'behind',
               dir,
+              action: effectiveAction,
               frame,
               dx,
               dy,
@@ -581,6 +551,7 @@ export function SpriteModelCanvas({
               loadout: fashion,
               phase: 'overBody',
               dir,
+              action: effectiveAction,
               frame,
               dx,
               dy,
@@ -593,6 +564,7 @@ export function SpriteModelCanvas({
               loadout: fashion,
               phase: 'overBack',
               dir,
+              action: effectiveAction,
               frame,
               dx,
               dy,
@@ -605,9 +577,8 @@ export function SpriteModelCanvas({
 
           if (isAttack && !gmReady && !drawable.sheetId && attackProgress > 0.2 && attackProgress < 0.85) {
             const slashAlpha = Math.max(0, 1 - Math.abs(attackProgress - 0.5) * 2.4)
-            const weaponSkinDef = mode === 'job' ? getFashionItemDef(fashion?.weaponSkin) : null
             ctx.globalAlpha = slashAlpha
-            ctx.strokeStyle = weaponSkinDef?.primaryColor ?? auraColor ?? '#ffd60a'
+            ctx.strokeStyle = auraColor ?? '#ffd60a'
             ctx.lineWidth = 2
             const arcCenterX =
               centerX + lungeOffset + (dir === 'left' ? -drawW * 0.14 : dir === 'right' ? drawW * 0.14 : 0)
@@ -639,22 +610,19 @@ export function SpriteModelCanvas({
       }
     }
 
-    if (reducedMotion && mode === 'job' && fashion) {
-      for (const fId of Object.values(fashion)) {
-        if (!fId) continue
-        const img = getFashionLayerImage(fId)
-        if (img && !img.complete) {
-          img.addEventListener(
-            'load',
-            () => {
-              if (!cancelled && isVisible) {
-                lastSig = ''
-                renderFrame(performance.now())
-              }
-            },
-            { once: true },
-          )
-        }
+    if (reducedMotion && mode === 'job' && fashion?.wings) {
+      const img = getFashionLayerImage(fashion.wings)
+      if (img && !img.complete) {
+        img.addEventListener(
+          'load',
+          () => {
+            if (!cancelled && isVisible) {
+              lastSig = ''
+              renderFrame(performance.now())
+            }
+          },
+          { once: true },
+        )
       }
     }
 

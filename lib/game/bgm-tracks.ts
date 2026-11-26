@@ -30,6 +30,8 @@ export type BgmTrackId =
   | 'act_treasure'
   | 'act_fishing'
 
+export type BgmTrackCategory = 'town' | 'field' | 'dungeon' | 'activity' | 'combat'
+
 export interface BgmTrackSpec {
   theme: BgmTheme
   labelTh: string
@@ -41,9 +43,11 @@ export interface BgmTrackSpec {
 export interface BgmMapTrackMeta {
   trackId: BgmTrackId
   theme: BgmTheme
+  category: BgmTrackCategory
   labelTh: string
   titleEn: string
   styleTh: string
+  moodTh: string
   bpm: number
   keyLabel: string
   candidates: readonly string[]
@@ -59,7 +63,21 @@ export interface BgmResolveContext {
   dungeonActive?: boolean
 }
 
+export interface BgmEffectiveSelection {
+  theme: BgmTheme
+  trackId: BgmTrackId
+  isPinned: boolean
+}
+
 export const BGM_BATTLE_HOLD_SEC = 8
+
+export const BGM_TRACK_CATEGORY_LABELS: Record<BgmTrackCategory, string> = {
+  town: 'เมือง & หน้าแรก',
+  field: 'Open World',
+  dungeon: 'ดันเจี้ยน',
+  activity: 'กิจกรรม & เทศกาล',
+  combat: 'ต่อสู้ & บอส',
+}
 
 export const BGM_THEMES: readonly BgmTheme[] = [
   'login',
@@ -164,9 +182,11 @@ export const BGM_MAP_TRACK_CATALOG: Record<BgmTrackId, BgmMapTrackMeta> = {
   login: {
     trackId: 'login',
     theme: 'login',
+    category: 'town',
     labelTh: 'หน้าแรก · รุ่งอรุณแห่งอาณาจักร',
     titleEn: 'Dawn of the Realm',
-    styleTh: 'Orchestral Harp & Horn',
+    styleTh: 'Orchestral Harp, Choir & Horn',
+    moodTh: 'อลังการ ชวนออกเดินทางสู่โลกแฟนตาซี',
     bpm: 78,
     keyLabel: 'C Maj',
     candidates: makeCandidates('login', 'login'),
@@ -174,9 +194,11 @@ export const BGM_MAP_TRACK_CATALOG: Record<BgmTrackId, BgmMapTrackMeta> = {
   town: {
     trackId: 'town',
     theme: 'town',
+    category: 'town',
     labelTh: 'เมืองปราการเริ่มต้น · ลานแสงแรก',
     titleEn: 'Haven of First Light',
-    styleTh: 'Acoustic Lute, Flute & Strings',
+    styleTh: 'Acoustic Lute, Flute & Warm Strings',
+    moodTh: 'อบอุ่น ปลอดภัย กลิ่นอายเมืองหลวง MMORPG ยามเช้า',
     bpm: 92,
     keyLabel: 'G Maj',
     candidates: makeCandidates('town', 'town'),
@@ -184,9 +206,11 @@ export const BGM_MAP_TRACK_CATALOG: Record<BgmTrackId, BgmMapTrackMeta> = {
   field: {
     trackId: 'field',
     theme: 'field',
+    category: 'field',
     labelTh: 'แดนผจญภัย Open World',
     titleEn: 'Boundless Horizon',
-    styleTh: 'Pastoral Flute & Harp',
+    styleTh: 'Pastoral Whistle, Harp & Strings',
+    moodTh: 'โปร่งโล่ง กว้างไกล พร้อมออกสำรวจเส้นขอบฟ้า',
     bpm: 104,
     keyLabel: 'F Maj',
     candidates: makeCandidates('field', 'field'),
@@ -194,9 +218,11 @@ export const BGM_MAP_TRACK_CATALOG: Record<BgmTrackId, BgmMapTrackMeta> = {
   meadow: {
     trackId: 'meadow',
     theme: 'field',
+    category: 'field',
     labelTh: 'ทุ่งหญ้า · สายลมมรกต',
     titleEn: 'Emerald Breeze Plains',
     styleTh: 'Celtic Whistle, Harp & Strings',
+    moodTh: 'สดใส ร่าเริง ลมพัดผ่านทุ่งดอกไม้',
     bpm: 106,
     keyLabel: 'F Maj',
     candidates: makeCandidates('meadow', 'field'),
@@ -204,9 +230,11 @@ export const BGM_MAP_TRACK_CATALOG: Record<BgmTrackId, BgmMapTrackMeta> = {
   vale: {
     trackId: 'vale',
     theme: 'field',
+    category: 'field',
     labelTh: 'หุบเขาเขียว · เสียงสะท้อนหุบเขา',
     titleEn: 'Verdant Valley Echoes',
-    styleTh: 'Sweeping Strings & Lute',
+    styleTh: 'Sweeping Strings, Flute & Lute',
+    moodTh: 'ละมุน กังวาน ราวสายน้ำตกกลางหุบผา',
     bpm: 100,
     keyLabel: 'D Maj',
     candidates: makeCandidates('vale', 'field'),
@@ -214,9 +242,11 @@ export const BGM_MAP_TRACK_CATALOG: Record<BgmTrackId, BgmMapTrackMeta> = {
   woods: {
     trackId: 'woods',
     theme: 'field',
+    category: 'field',
     labelTh: 'ป่าละเมาะ · ร่มเงาพฤกษา',
     titleEn: 'Whispering Canopy',
-    styleTh: 'Woodwind Flute & Plucked Lute',
+    styleTh: 'Woodwind Flute, Lute & Harp',
+    moodTh: 'ลึกลับอ่อนๆ สงบร่มรื่นใต้เรือนยอดไม้',
     bpm: 94,
     keyLabel: 'A Dor',
     candidates: makeCandidates('woods', 'field'),
@@ -224,9 +254,11 @@ export const BGM_MAP_TRACK_CATALOG: Record<BgmTrackId, BgmMapTrackMeta> = {
   forest: {
     trackId: 'forest',
     theme: 'field',
+    category: 'field',
     labelTh: 'ป่าลึก · หัวใจพนาโบราณ',
     titleEn: 'Ancient Sylvan Heart',
-    styleTh: 'Mystic Pan Flute & Celesta',
+    styleTh: 'Mystic Pan Flute, Celesta & Breeze',
+    moodTh: 'มนตร์ขลัง แสงหิ่งห้อยกลางพงไพรโบราณ',
     bpm: 86,
     keyLabel: 'E Min',
     candidates: makeCandidates('forest', 'field'),
@@ -234,9 +266,11 @@ export const BGM_MAP_TRACK_CATALOG: Record<BgmTrackId, BgmMapTrackMeta> = {
   coast: {
     trackId: 'coast',
     theme: 'field',
-    labelTh: 'ชายฝั่ง · ระลอกคลื่นคราม',
+    category: 'town',
+    labelTh: 'เมืองท่าชายฝั่ง · ระลอกคลื่นคราม',
     titleEn: 'Azure Tide Promenade',
-    styleTh: 'Coastal Harp, Oboe & Breeze Pad',
+    styleTh: 'Coastal Oboe, Harp & Breeze Pad',
+    moodTh: 'พลิ้วไหว สบายใจ ดั่งท่าเรือริมทะเลสีคราม',
     bpm: 98,
     keyLabel: 'C Mix',
     candidates: makeCandidates('coast', 'field'),
@@ -244,9 +278,11 @@ export const BGM_MAP_TRACK_CATALOG: Record<BgmTrackId, BgmMapTrackMeta> = {
   cave: {
     trackId: 'cave',
     theme: 'dungeon',
+    category: 'dungeon',
     labelTh: 'ถ้ำ · ก้องกังวานผลึกคริสตัล',
     titleEn: 'Crystal Cavern Resonance',
-    styleTh: 'Echoing Celesta & Deep Cavern Pad',
+    styleTh: 'Echoing Celesta, Organ & Deep Pad',
+    moodTh: 'เย็นเยียบ แพรวพราว เสียงสะท้อนผลึกใต้พิภพ',
     bpm: 78,
     keyLabel: 'C# Min',
     candidates: makeCandidates('cave', 'dungeon'),
@@ -254,9 +290,11 @@ export const BGM_MAP_TRACK_CATALOG: Record<BgmTrackId, BgmMapTrackMeta> = {
   desert: {
     trackId: 'desert',
     theme: 'field',
-    labelTh: 'ทะเลทราย · พยับแดดสีทอง',
+    category: 'field',
+    labelTh: 'นครทะเลทราย · พยับแดดสีทอง',
     titleEn: 'Dunes of Golden Mirage',
-    styleTh: 'Desert Oud, Reed & Frame Drum',
+    styleTh: 'Desert Oud, Lute & Frame Drum',
+    moodTh: 'มนตร์เสน่ห์แดนทราย คาราวานและโอเอซิสสีทอง',
     bpm: 98,
     keyLabel: 'D Hijaz',
     candidates: makeCandidates('desert', 'field'),
@@ -264,9 +302,11 @@ export const BGM_MAP_TRACK_CATALOG: Record<BgmTrackId, BgmMapTrackMeta> = {
   graveyard: {
     trackId: 'graveyard',
     theme: 'dungeon',
+    category: 'dungeon',
     labelTh: 'สุสาน · บทสวดใต้แสงจันทร์',
     titleEn: 'Moonlit Requiem',
-    styleTh: 'Gothic Organ, Cello & Bell',
+    styleTh: 'Gothic Organ, Cello & Chimes',
+    moodTh: 'ขรึม เศร้าลึก ท่ามกลางหมอกใต้เงาจันทร์',
     bpm: 72,
     keyLabel: 'B Min',
     candidates: makeCandidates('graveyard', 'dungeon'),
@@ -274,9 +314,11 @@ export const BGM_MAP_TRACK_CATALOG: Record<BgmTrackId, BgmMapTrackMeta> = {
   isles: {
     trackId: 'isles',
     theme: 'field',
+    category: 'town',
     labelTh: 'หมู่เกาะตะวันออก · ล่องเรือบูรพา',
     titleEn: 'Eastern Archipelago Voyage',
-    styleTh: 'Pentatonic Koto & Bamboo Flute',
+    styleTh: 'Pentatonic Koto, Flute & Strings',
+    moodTh: 'กลิ่นอายซากุระและศาลเจ้าบูรพาอันสง่างาม',
     bpm: 104,
     keyLabel: 'D Pent',
     candidates: makeCandidates('isles', 'field'),
@@ -284,9 +326,11 @@ export const BGM_MAP_TRACK_CATALOG: Record<BgmTrackId, BgmMapTrackMeta> = {
   snow: {
     trackId: 'snow',
     theme: 'field',
-    labelTh: 'แดนหิมะ · ค่ำคืนยอดผาน้ำแข็ง',
+    category: 'town',
+    labelTh: 'นครหิมะ · ค่ำคืนยอดผาน้ำแข็ง',
     titleEn: 'Frostpeak Nocturne',
-    styleTh: 'Ice Celesta, High Strings & Harp',
+    styleTh: 'Ice Celesta, Harp & Ethereal Choir',
+    moodTh: 'ใสบริสุทธิ์ เยือกเย็นใต้แสงออโรรา',
     bpm: 76,
     keyLabel: 'Eb Maj',
     candidates: makeCandidates('snow', 'field'),
@@ -294,9 +338,11 @@ export const BGM_MAP_TRACK_CATALOG: Record<BgmTrackId, BgmMapTrackMeta> = {
   ruins: {
     trackId: 'ruins',
     theme: 'dungeon',
+    category: 'dungeon',
     labelTh: 'ซากปราสาท · อนุสรณ์นครร้าง',
     titleEn: 'Fallen Citadel Elegy',
     styleTh: 'Noble Strings, Harp & Horn',
+    moodTh: 'โหยหา เกียรติยศของป้อมปราการโบราณ',
     bpm: 84,
     keyLabel: 'F# Min',
     candidates: makeCandidates('ruins', 'dungeon'),
@@ -304,9 +350,11 @@ export const BGM_MAP_TRACK_CATALOG: Record<BgmTrackId, BgmMapTrackMeta> = {
   volcano: {
     trackId: 'volcano',
     theme: 'dungeon',
+    category: 'dungeon',
     labelTh: 'ภูเขาไฟ · ปล่องเพลิงออบซิเดียน',
     titleEn: 'Obsidian Caldera',
     styleTh: 'War Drums, Low Brass & Strings',
+    moodTh: 'ระอุ คุกรุ่น ดุดันเหนือทะเลลาวา',
     bpm: 112,
     keyLabel: 'E Phryg',
     candidates: makeCandidates('volcano', 'dungeon'),
@@ -314,9 +362,11 @@ export const BGM_MAP_TRACK_CATALOG: Record<BgmTrackId, BgmMapTrackMeta> = {
   sky: {
     trackId: 'sky',
     theme: 'field',
-    labelTh: 'แดนลอยฟ้า · มหาสมุทรเมฆา',
+    category: 'town',
+    labelTh: 'นครลอยฟ้า · มหาสมุทรเมฆา',
     titleEn: 'Celestial Cloudsea',
     styleTh: 'Lydian Choir, Harp & Flute',
+    moodTh: 'ล่องลอย ศักดิ์สิทธิ์ เหนือหมู่เมฆสวรรค์',
     bpm: 94,
     keyLabel: 'A Lyd',
     candidates: makeCandidates('sky', 'field'),
@@ -324,9 +374,11 @@ export const BGM_MAP_TRACK_CATALOG: Record<BgmTrackId, BgmMapTrackMeta> = {
   abyss: {
     trackId: 'abyss',
     theme: 'dungeon',
+    category: 'dungeon',
     labelTh: 'ห้วงอเวจี · วิหารสุญญตา',
     titleEn: 'Void Sanctum',
     styleTh: 'Abyssal Organ, Bell & Dark Strings',
+    moodTh: 'มืดหม่น น่าเกรงขาม ณ ขอบเหวต่างมิติ',
     bpm: 82,
     keyLabel: 'C Min',
     candidates: makeCandidates('abyss', 'dungeon'),
@@ -334,9 +386,11 @@ export const BGM_MAP_TRACK_CATALOG: Record<BgmTrackId, BgmMapTrackMeta> = {
   world: {
     trackId: 'world',
     theme: 'field',
+    category: 'field',
     labelTh: 'วิหารบอสโลก · วิหารไททัน',
     titleEn: 'Sanctum of the Titan',
-    styleTh: 'Grand Cathedral Brass & Strings',
+    styleTh: 'Grand Cathedral Brass, Choir & Strings',
+    moodTh: 'ยิ่งใหญ่ กดดัน ก่อนเผชิญหน้าผู้พิทักษ์โลก',
     bpm: 116,
     keyLabel: 'D Min',
     candidates: makeCandidates('world', 'field'),
@@ -344,9 +398,11 @@ export const BGM_MAP_TRACK_CATALOG: Record<BgmTrackId, BgmMapTrackMeta> = {
   dungeon: {
     trackId: 'dungeon',
     theme: 'dungeon',
+    category: 'dungeon',
     labelTh: 'ดันเจี้ยน & หอคอย · เขาวงกตโบราณ',
     titleEn: 'Labyrinth Ascent',
-    styleTh: 'Dungeon Strings, Bass & Percussion',
+    styleTh: 'Dungeon Oboe, Strings & Percussion',
+    moodTh: 'ตื่นตัว ท้าทาย ทุกย่างก้าวในหอคอย',
     bpm: 102,
     keyLabel: 'A Min',
     candidates: makeCandidates('dungeon', 'dungeon'),
@@ -354,9 +410,11 @@ export const BGM_MAP_TRACK_CATALOG: Record<BgmTrackId, BgmMapTrackMeta> = {
   battle: {
     trackId: 'battle',
     theme: 'battle',
+    category: 'combat',
     labelTh: 'ปะทะมอนสเตอร์ · คมดาบนักรบ',
     titleEn: 'Blade & Valor',
     styleTh: 'Action Strings, Brass & Drums',
+    moodTh: 'เร้าใจ รวดเร็ว จังหวะประจันหน้าศัตรู',
     bpm: 132,
     keyLabel: 'E Min',
     candidates: makeCandidates('battle', 'battle'),
@@ -364,9 +422,11 @@ export const BGM_MAP_TRACK_CATALOG: Record<BgmTrackId, BgmMapTrackMeta> = {
   boss: {
     trackId: 'boss',
     theme: 'boss',
+    category: 'combat',
     labelTh: 'ศึกบอสใหญ่ · มหาศึกตำนาน',
     titleEn: 'Clash of Legends',
-    styleTh: 'Epic Boss Orchestra & Timpani',
+    styleTh: 'Epic Boss Orchestra, Choir & Timpani',
+    moodTh: 'ดุเดือด สูงสุดขีดแห่งมหาศึกบอส',
     bpm: 144,
     keyLabel: 'D Min',
     candidates: makeCandidates('boss', 'boss'),
@@ -374,9 +434,11 @@ export const BGM_MAP_TRACK_CATALOG: Record<BgmTrackId, BgmMapTrackMeta> = {
   event: {
     trackId: 'event',
     theme: 'event',
+    category: 'activity',
     labelTh: 'กิจกรรมพิเศษ · เทศกาลรื่นเริง',
     titleEn: 'Grand Realm Festival',
-    styleTh: 'Festive Flute, Lute & Percussion',
+    styleTh: 'Festive Whistle, Lute & Percussion',
+    moodTh: 'สนุกสนาน ครึกครื้น งานฉลองกลางเมือง',
     bpm: 120,
     keyLabel: 'G Maj',
     candidates: makeCandidates('event', 'event'),
@@ -384,9 +446,11 @@ export const BGM_MAP_TRACK_CATALOG: Record<BgmTrackId, BgmMapTrackMeta> = {
   act_invasion: {
     trackId: 'act_invasion',
     theme: 'event',
+    category: 'activity',
     labelTh: 'สมรภูมิป้องกันเมือง · เสียงแตรป้อมปราการ',
     titleEn: 'Bastion Under Siege',
     styleTh: 'Heroic Brass March & War Drums',
+    moodTh: 'ฮึกเหิม ต้านคลื่นมอนสเตอร์หน้ากำแพงเมือง',
     bpm: 128,
     keyLabel: 'D Min',
     candidates: makeCandidates('act_invasion', 'event'),
@@ -394,9 +458,11 @@ export const BGM_MAP_TRACK_CATALOG: Record<BgmTrackId, BgmMapTrackMeta> = {
   act_guild_war: {
     trackId: 'act_guild_war',
     theme: 'event',
+    category: 'activity',
     labelTh: 'สงครามกิลด์ · ธงชัยสมรภูมิ',
     titleEn: 'Banner of the Guilds',
-    styleTh: 'Anthem Horns, Strings & Snare',
+    styleTh: 'Anthem Horns, Choir & Snare',
+    moodTh: 'สง่างาม ทรงพลัง เพื่อศักดิ์ศรีแห่งกิลด์',
     bpm: 126,
     keyLabel: 'C Min',
     candidates: makeCandidates('act_guild_war', 'event'),
@@ -404,9 +470,11 @@ export const BGM_MAP_TRACK_CATALOG: Record<BgmTrackId, BgmMapTrackMeta> = {
   act_bounty: {
     trackId: 'act_bounty',
     theme: 'event',
+    category: 'activity',
     labelTh: 'ลานล่าค่าหัว · รอยเท้านักล่า',
     titleEn: 'Trail of the Outlaw',
-    styleTh: 'Rhythmic Lute, Horn & Shaker',
+    styleTh: 'Rhythmic Oud, Lute & Shaker',
+    moodTh: 'ลุ้นระทึก ไล่ล่าเป้าหมายค่าหัว',
     bpm: 114,
     keyLabel: 'A Min',
     candidates: makeCandidates('act_bounty', 'event'),
@@ -414,9 +482,11 @@ export const BGM_MAP_TRACK_CATALOG: Record<BgmTrackId, BgmMapTrackMeta> = {
   act_treasure: {
     trackId: 'act_treasure',
     theme: 'event',
+    category: 'activity',
     labelTh: 'เกาะขุมทรัพย์ · เข็มทิศโจรสลัด',
     titleEn: "Corsair's Compass",
     styleTh: 'Nautical Whistle, Lute & Bodhran',
+    moodTh: 'คึกคัก ผจญภัยล่าสมบัติข้ามทะเล',
     bpm: 116,
     keyLabel: 'G Mix',
     candidates: makeCandidates('act_treasure', 'event'),
@@ -424,9 +494,11 @@ export const BGM_MAP_TRACK_CATALOG: Record<BgmTrackId, BgmMapTrackMeta> = {
   act_fishing: {
     trackId: 'act_fishing',
     theme: 'event',
+    category: 'activity',
     labelTh: 'บึงตกปลายักษ์ · อ่าวสายน้ำสงบ',
     titleEn: "Serene Angler's Cove",
     styleTh: 'Relaxing Water Harp & Flute',
+    moodTh: 'ผ่อนคลาย เงียบสงบ ริมผืนน้ำใส',
     bpm: 88,
     keyLabel: 'F Maj',
     candidates: makeCandidates('act_fishing', 'event'),
@@ -458,6 +530,10 @@ export function isDungeonBgmMapId(mapId?: string | null): boolean {
 
 export function isSpecialEventBgmMapId(mapId?: string | null): boolean {
   return Boolean(mapId && SPECIAL_EVENT_MAP_IDS.has(mapId))
+}
+
+export function isValidBgmTrackId(trackId?: string | null): trackId is BgmTrackId {
+  return Boolean(trackId && TRACK_ID_SET.has(trackId))
 }
 
 export function resolveBgmTheme(
@@ -569,8 +645,32 @@ export function resolveBgmTrackId(
   return resolveBgmTheme(ctx)
 }
 
+export function resolveEffectiveBgmSelection(
+  input: string | BgmResolveContext,
+  pinnedTrackId?: BgmTrackId | null,
+): BgmEffectiveSelection {
+  if (isValidBgmTrackId(pinnedTrackId)) {
+    return {
+      theme: getBgmTrackMeta(pinnedTrackId).theme,
+      trackId: pinnedTrackId,
+      isPinned: true,
+    }
+  }
+  return {
+    theme: resolveBgmTheme(input),
+    trackId: resolveBgmTrackId(input),
+    isPinned: false,
+  }
+}
+
 export function getBgmTrackMeta(trackId: BgmTrackId): BgmMapTrackMeta {
   return BGM_MAP_TRACK_CATALOG[trackId] ?? BGM_MAP_TRACK_CATALOG.town
+}
+
+export function getBgmTracksByCategory(category?: BgmTrackCategory | 'all'): BgmMapTrackMeta[] {
+  const all = BGM_TRACK_IDS.map((id) => BGM_MAP_TRACK_CATALOG[id])
+  if (!category || category === 'all') return all
+  return all.filter((m) => m.category === category)
 }
 
 export function pickPlayableAudioUrl(

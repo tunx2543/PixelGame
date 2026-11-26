@@ -46,8 +46,10 @@ import {
 } from '@/lib/game/festival-events'
 import { TITLE_DEFS, sanitizeRpgExt } from '@/lib/game/rpg-systems'
 import { playQuestClaimSfx } from '@/lib/game/sfx'
+import { EVENT_CHEST_SPRITE_CROP } from '@/lib/game/treasure-chest'
 import { useGame } from '@/lib/game/use-game'
 import { cn } from '@/lib/utils'
+import { ChestArtworkSprite } from '../chest-artwork'
 import { formatNum } from '../format'
 import { ItemIcon } from '../item-icon'
 import { PanelFrame, PxButton } from './panels'
@@ -286,9 +288,22 @@ export function EventsPanel() {
               </div>
 
               <div className="border-t border-white/10 pt-2">
-                <p className="mb-1.5 text-[10.5px] text-slate-300 tabular-nums">
-                  ของขวัญรายวัน: +{active.def.dailyGift.tokens} {active.def.tokenName} · +{dailyUniversalTokens} โทเคนกิจกรรม · +{formatNum(active.def.dailyGift.gold)} G · +{active.def.dailyGift.diamonds} เพชร
-                </p>
+                <div className="mb-2 flex items-center gap-2.5">
+                  <ChestArtworkSprite
+                    crop={EVENT_CHEST_SPRITE_CROP}
+                    alt="หีบกิจกรรม"
+                    size={44}
+                    open={!dailyReady}
+                    squareFit
+                    testId="event-chest-hero-artwork"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-bold text-rose-200">หีบของขวัญเทศกาลรายวัน</p>
+                    <p className="text-[10.5px] leading-snug text-slate-300 tabular-nums">
+                      +{active.def.dailyGift.tokens} {active.def.tokenName} · +{dailyUniversalTokens} โทเคนกิจกรรม · +{formatNum(active.def.dailyGift.gold)} G · +{active.def.dailyGift.diamonds} เพชร
+                    </p>
+                  </div>
+                </div>
                 <PxButton
                   variant={dailyReady ? 'accent' : 'secondary'}
                   disabled={!dailyReady}
@@ -523,13 +538,20 @@ export function EventsPanel() {
                     )}
                   >
                     <div className="flex items-start gap-2.5">
-                      <div className="grid size-10 shrink-0 place-items-center border border-border bg-background/80">
+                      <div className="grid size-12 shrink-0 place-items-center border border-border bg-background/80">
                         {itemDef ? (
-                          <ItemIcon itemId={itemDef.id} size={28} />
+                          <ItemIcon itemId={itemDef.id} size={40} />
                         ) : cosDef ? (
                           <CosmeticIconThumb cosmeticId={cosDef.id} name={cosDef.name} />
                         ) : titleDef ? (
                           <Crown className="size-5 text-amber-300" aria-hidden />
+                        ) : reward.name.includes('หีบ') ? (
+                          <ChestArtworkSprite
+                            crop={EVENT_CHEST_SPRITE_CROP}
+                            alt={reward.name}
+                            size={40}
+                            squareFit
+                          />
                         ) : (
                           <Gem className="size-5 text-cyan-300" aria-hidden />
                         )}
@@ -641,9 +663,9 @@ export function EventsPanel() {
                     )}
                   >
                     <div className="flex items-start gap-2.5">
-                      <div className="grid size-10 shrink-0 place-items-center border border-border bg-background/80">
+                      <div className="grid size-12 shrink-0 place-items-center border border-border bg-background/80">
                         {itemDef ? (
-                          <ItemIcon itemId={itemDef.id} size={28} />
+                          <ItemIcon itemId={itemDef.id} size={40} />
                         ) : cosDef ? (
                           <CosmeticIconThumb cosmeticId={cosDef.id} name={cosDef.name} />
                         ) : titleDef ? (

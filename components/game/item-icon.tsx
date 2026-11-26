@@ -5,12 +5,61 @@ import type { InvItem } from '@/lib/game/engine'
 import { resolveItemImagePath } from '@/lib/game/items'
 import { resolveEffectiveRarity, type EquipmentRarity } from '@/lib/game/mmo-systems'
 import { itemIconUrl } from '@/lib/game/sprites'
+import {
+  COMPANION_BOX_SPRITE_CROP,
+  EVENT_CHEST_SPRITE_CROP,
+  EVENT_LUCKY_BOX_SPRITE_CROP,
+} from '@/lib/game/treasure-chest'
 import { cn } from '@/lib/utils'
+import { ChestArtworkSprite } from './chest-artwork'
 import { ItemVfxBox } from './item-vfx'
 
 export function ItemIcon({ itemId, size = 32, className }: { itemId: string; size?: number; className?: string }) {
   const def = ITEMS[itemId]
   if (!def) return null
+
+  if (itemId === 'companion_gacha_box') {
+    return (
+      <ChestArtworkSprite
+        crop={COMPANION_BOX_SPRITE_CROP}
+        alt={def.name}
+        size={size}
+        squareFit
+        showGlow={size >= 24}
+        testId="companion-box-item-icon"
+        className={className}
+      />
+    )
+  }
+
+  if (itemId === 'event_lucky_box') {
+    return (
+      <ChestArtworkSprite
+        crop={EVENT_LUCKY_BOX_SPRITE_CROP}
+        alt={def.name}
+        size={size}
+        squareFit
+        showGlow={size >= 24}
+        testId="event-lucky-box-item-icon"
+        className={className}
+      />
+    )
+  }
+
+  if (itemId === 'event_mythic_chest') {
+    return (
+      <ChestArtworkSprite
+        crop={EVENT_CHEST_SPRITE_CROP}
+        alt={def.name}
+        size={size}
+        squareFit
+        showGlow={size >= 24}
+        testId="event-chest-item-icon"
+        className={className}
+      />
+    )
+  }
+
   const primarySrc = resolveItemImagePath(def)
 
   return (

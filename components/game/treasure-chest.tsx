@@ -18,6 +18,7 @@ import { isSfxMuted, playEnhanceSfx, playLevelUpSfx, playVictorySfx } from '@/li
 import {
   CHEST_TIERS,
   CHEST_TIER_ORDER,
+  CHEST_TIER_SPRITE_CROPS,
   DAILY_FREE_CHEST_TIER_ID,
   calculateChestRarityProbabilities,
   claimDailyFreeTreasureChest,
@@ -35,6 +36,7 @@ import {
 } from '@/lib/game/treasure-chest'
 import { cn } from '@/lib/utils'
 import { formatNum } from './format'
+import { ChestArtworkSprite } from './chest-artwork'
 import { ItemIcon } from './item-icon'
 import { ItemVfxBox } from './item-vfx'
 
@@ -114,54 +116,18 @@ const CHEST_PALETTES: Record<ChestTierId, ChestPalette> = {
   },
   mythic: {
     outline: '#16091b',
-    bodyDark: '#3b0764',
-    bodyMid: '#6b21a8',
-    bodyLight: '#9333ea',
-    trimDark: '#be123c',
-    trimMid: '#fb7185',
-    trimLight: '#fde047',
+    bodyDark: '#5b0c1c',
+    bodyMid: '#9f1239',
+    bodyLight: '#e11d48',
+    trimDark: '#92400e',
+    trimMid: '#fbbf24',
+    trimLight: '#fef08a',
     gem: '#f43f5e',
     gemGlow: '#fef08a',
-    interior: '#1e062c',
+    interior: '#260612',
     gold: '#fde047',
   },
 }
-
-// 20x18 pixel matrix for closed vs open treasure chest
-const CLOSED_CHEST_ROWS = [
-  '....OOOOOOOOOOOO....',
-  '..OOTTTTTTTTTTTTOO..',
-  '.OTTLBBBBBBBBBBLLTO.',
-  '.OTBLLLLLLLLLLLLBTO.',
-  'OOTBBBBBBBBBBBBBBTOO',
-  'OTTTBBBBBBBBBBBBTTTO',
-  'OTTTTTTTTTTTTTTTTTTO',
-  'OOTTTTTTGGGTTTTTTTOO',
-  'OOBBBBBTGGGTBBBBBBOO',
-  'OTBMMMMTGDGTMMMMMBTO',
-  'OTBMMMMTGGGTMMMMMBTO',
-  'OTBMMMMTTTTTMMMMMBTO',
-  'OTBDDDDDDDDDDDDDDBTO',
-  'OOTTTTTTTTTTTTTTTTOO',
-  '.OOOOOOOOOOOOOOOOOO.',
-]
-
-const OPEN_CHEST_ROWS = [
-  '..OOOOOOOOOOOOOOOO..',
-  '.OTTTTTTTTTTTTTTTTO.',
-  '.OTLBBBBBBBBBBBBBLTO',
-  '.OTBBBBBBBBBBBBBBBTO',
-  'OOTIIIIIIIIIIIIIITOO',
-  'OTTIICCCGGGCCCGCIITO',
-  'OTTTTTTGGDGGTTTTTTTO',
-  'OOBBBBBTGGGTBBBBBBOO',
-  'OTBMMMMTGGGTMMMMMBTO',
-  'OTBMMMMTTTTTMMMMMBTO',
-  'OTBDDDDDDDDDDDDDDBTO',
-  'OTBDDDDDDDDDDDDDDBTO',
-  'OOTTTTTTTTTTTTTTTTOO',
-  '.OOOOOOOOOOOOOOOOOO.',
-]
 
 export function PixelChestCanvas({
   tierId,
@@ -174,256 +140,18 @@ export function PixelChestCanvas({
   size?: number
   className?: string
 }) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const crop = CHEST_TIER_SPRITE_CROPS[tierId] ?? CHEST_TIER_SPRITE_CROPS.wooden
+  const tierDef = CHEST_TIERS[tierId] ?? CHEST_TIERS.wooden
 
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    const pal = CHEST_PALETTES[tierId] ?? CHEST_PALETTES.wooden
-    const w = 240
-    const h = 188
-    canvas.width = w
-    canvas.height = h
-    ctx.clearRect(0, 0, w, h)
-    ctx.imageSmoothingEnabled = true
-    ctx.imageSmoothingQuality = 'high'
-
-    const rr = (x: number, y: number, rw: number, rh: number, r: number) => {
-      ctx.beginPath()
-      ctx.roundRect(x, y, rw, rh, r)
-    }
-
-    // Ground ambient drop shadow (gives 2.5D floating weight)
-    const shadowGrad = ctx.createRadialGradient(w * 0.5, h * 0.87, 10, w * 0.5, h * 0.87, 94)
-    shadowGrad.addColorStop(0, 'rgba(4, 7, 18, 0.72)')
-    shadowGrad.addColorStop(0.6, 'rgba(4, 7, 18, 0.34)')
-    shadowGrad.addColorStop(1, 'rgba(4, 7, 18, 0)')
-    ctx.fillStyle = shadowGrad
-    ctx.beginPath()
-    ctx.ellipse(w * 0.5, h * 0.87, 92, 18, 0, 0, Math.PI * 2)
-    ctx.fill()
-
-    // Subtle tier aura behind chest
-    if (tierId === 'golden' || tierId === 'mythic' || open) {
-      const aura = ctx.createRadialGradient(w * 0.5, h * 0.48, 8, w * 0.5, h * 0.48, 92)
-      aura.addColorStop(0, `${pal.gemGlow}55`)
-      aura.addColorStop(0.55, `${pal.gold}24`)
-      aura.addColorStop(1, 'rgba(0,0,0,0)')
-      ctx.fillStyle = aura
-      ctx.beginPath()
-      ctx.arc(w * 0.5, h * 0.48, 92, 0, Math.PI * 2)
-      ctx.fill()
-    }
-
-    // 2.5D Chest Base (front + right side bevel for depth)
-    const bx = 34
-    const by = open ? 86 : 82
-    const bw = 152
-    const bh = 74
-
-    // Right 3D side panel
-    ctx.fillStyle = pal.bodyDark
-    ctx.beginPath()
-    ctx.moveTo(bx + bw - 6, by + 2)
-    ctx.lineTo(bx + bw + 22, by - 12)
-    ctx.lineTo(bx + bw + 22, by + bh - 12)
-    ctx.lineTo(bx + bw - 4, by + bh)
-    ctx.closePath()
-    ctx.fill()
-    ctx.strokeStyle = pal.outline
-    ctx.lineWidth = 3
-    ctx.stroke()
-
-    // Right side metallic strap
-    ctx.fillStyle = pal.trimDark
-    ctx.beginPath()
-    ctx.moveTo(bx + bw + 6, by - 4)
-    ctx.lineTo(bx + bw + 14, by - 8)
-    ctx.lineTo(bx + bw + 14, by + bh - 8)
-    ctx.lineTo(bx + bw + 6, by + bh - 4)
-    ctx.closePath()
-    ctx.fill()
-
-    // Main front chest body with gradient
-    const bodyGrad = ctx.createLinearGradient(bx, by, bx, by + bh)
-    bodyGrad.addColorStop(0, pal.bodyLight)
-    bodyGrad.addColorStop(0.45, pal.bodyMid)
-    bodyGrad.addColorStop(1, pal.bodyDark)
-    ctx.fillStyle = bodyGrad
-    rr(bx, by, bw, bh, 10)
-    ctx.fill()
-    ctx.strokeStyle = pal.outline
-    ctx.lineWidth = 3.5
-    ctx.stroke()
-
-    // Horizontal plank seams on front
-    ctx.strokeStyle = 'rgba(0,0,0,0.28)'
-    ctx.lineWidth = 2
-    for (const py of [by + 25, by + 49]) {
-      ctx.beginPath()
-      ctx.moveTo(bx + 16, py)
-      ctx.lineTo(bx + bw - 16, py)
-      ctx.stroke()
-    }
-
-    // Metallic rim & vertical bands on front
-    const trimGrad = ctx.createLinearGradient(bx, by, bx, by + bh)
-    trimGrad.addColorStop(0, pal.trimLight)
-    trimGrad.addColorStop(0.5, pal.trimMid)
-    trimGrad.addColorStop(1, pal.trimDark)
-    ctx.fillStyle = trimGrad
-    for (const sx of [bx + 4, bx + bw - 18]) {
-      rr(sx, by + 2, 14, bh - 4, 4)
-      ctx.fill()
-      ctx.strokeStyle = pal.outline
-      ctx.lineWidth = 2
-      ctx.stroke()
-    }
-    // Bottom metallic rail
-    rr(bx + 2, by + bh - 12, bw - 4, 10, 4)
-    ctx.fill()
-    ctx.stroke()
-
-    if (open) {
-      // Open lid tilted backwards + glowing interior treasure
-      ctx.save()
-      const lidGrad = ctx.createLinearGradient(bx, 18, bx, 88)
-      lidGrad.addColorStop(0, pal.bodyLight)
-      lidGrad.addColorStop(1, pal.bodyDark)
-      ctx.fillStyle = lidGrad
-      ctx.beginPath()
-      ctx.moveTo(bx + 12, 22)
-      ctx.quadraticCurveTo(bx + bw * 0.5, 8, bx + bw + 16, 18)
-      ctx.lineTo(bx + bw + 18, 72)
-      ctx.lineTo(bx, 86)
-      ctx.closePath()
-      ctx.fill()
-      ctx.strokeStyle = pal.outline
-      ctx.lineWidth = 3.5
-      ctx.stroke()
-
-      // Interior dark cavity
-      ctx.fillStyle = pal.interior
-      ctx.beginPath()
-      ctx.moveTo(bx + 8, by + 4)
-      ctx.lineTo(bx + 20, by - 16)
-      ctx.lineTo(bx + bw + 12, by - 16)
-      ctx.lineTo(bx + bw - 6, by + 4)
-      ctx.closePath()
-      ctx.fill()
-
-      // Treasure gold coins mound + light beam
-      const coinGrad = ctx.createRadialGradient(bx + bw * 0.52, by - 6, 4, bx + bw * 0.52, by - 6, 56)
-      coinGrad.addColorStop(0, '#fef9c3')
-      coinGrad.addColorStop(0.55, pal.gold)
-      coinGrad.addColorStop(1, 'rgba(245, 158, 11, 0)')
-      ctx.fillStyle = coinGrad
-      ctx.beginPath()
-      ctx.ellipse(bx + bw * 0.52, by - 6, 52, 16, 0, 0, Math.PI * 2)
-      ctx.fill()
-
-      // Gold coins pile details
-      for (let i = 0; i < 9; i++) {
-        const cx = bx + 34 + i * 12
-        const cy = by - 5 - (i % 3) * 3
-        ctx.fillStyle = i % 2 === 0 ? '#fde047' : '#f59e0b'
-        ctx.beginPath()
-        ctx.ellipse(cx, cy, 7, 4, 0, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.strokeStyle = '#92400e'
-        ctx.lineWidth = 1
-        ctx.stroke()
-      }
-      ctx.restore()
-    } else {
-      // Closed 2.5D arched domed lid (front + 3D side arc)
-      ctx.fillStyle = pal.bodyDark
-      ctx.beginPath()
-      ctx.moveTo(bx + bw - 6, by + 4)
-      ctx.quadraticCurveTo(bx + bw + 10, by - 40, bx + bw + 22, by - 12)
-      ctx.lineTo(bx + bw + 22, by - 10)
-      ctx.lineTo(bx + bw - 4, by + 4)
-      ctx.closePath()
-      ctx.fill()
-      ctx.strokeStyle = pal.outline
-      ctx.lineWidth = 3
-
-      const lidGrad = ctx.createLinearGradient(bx, by - 46, bx, by + 8)
-      lidGrad.addColorStop(0, pal.bodyLight)
-      lidGrad.addColorStop(0.5, pal.bodyMid)
-      lidGrad.addColorStop(1, pal.bodyDark)
-      ctx.fillStyle = lidGrad
-      ctx.beginPath()
-      ctx.moveTo(bx - 4, by + 4)
-      ctx.quadraticCurveTo(bx + 2, by - 42, bx + 26, by - 44)
-      ctx.lineTo(bx + bw - 14, by - 48)
-      ctx.quadraticCurveTo(bx + bw + 14, by - 40, bx + bw + 18, by - 12)
-      ctx.lineTo(bx + bw - 2, by + 4)
-      ctx.closePath()
-      ctx.fill()
-      ctx.strokeStyle = pal.outline
-      ctx.lineWidth = 3.5
-      ctx.stroke()
-
-      // Curved metallic lid straps
-      ctx.fillStyle = trimGrad
-      for (const sx of [bx + 6, bx + bw - 22]) {
-        rr(sx, by - 40, 14, 44, 6)
-        ctx.fill()
-        ctx.strokeStyle = pal.outline
-        ctx.lineWidth = 2
-        ctx.stroke()
-      }
-
-      // Lid top rim overhang lip
-      rr(bx - 5, by - 4, bw + 6, 12, 5)
-      ctx.fillStyle = trimGrad
-      ctx.fill()
-      ctx.strokeStyle = pal.outline
-      ctx.lineWidth = 2.5
-      ctx.stroke()
-    }
-
-    // Center ornate lock plate + 2.5D faceted gemstone
-    const lx = bx + bw * 0.5
-    const ly = by + (open ? 12 : 4)
-    ctx.fillStyle = trimGrad
-    rr(lx - 15, ly - 10, 30, 32, 7)
-    ctx.fill()
-    ctx.strokeStyle = pal.outline
-    ctx.lineWidth = 2.5
-    ctx.stroke()
-
-    const gemGrad = ctx.createRadialGradient(lx - 3, ly + 2, 1, lx, ly + 6, 11)
-    gemGrad.addColorStop(0, '#ffffff')
-    gemGrad.addColorStop(0.35, pal.gemGlow)
-    gemGrad.addColorStop(0.8, pal.gem)
-    gemGrad.addColorStop(1, pal.outline)
-    ctx.fillStyle = gemGrad
-    ctx.beginPath()
-    ctx.moveTo(lx, ly - 4)
-    ctx.lineTo(lx + 9, ly + 6)
-    ctx.lineTo(lx, ly + 16)
-    ctx.lineTo(lx - 9, ly + 6)
-    ctx.closePath()
-    ctx.fill()
-    ctx.strokeStyle = pal.outline
-    ctx.lineWidth = 1.8
-    ctx.stroke()
-  }, [tierId, open])
-
-  const height = Math.round(size * 0.78)
   return (
-    <canvas
-      ref={canvasRef}
-      width={240}
-      height={188}
-      style={{ width: size, height }}
-      aria-hidden="true"
-      className={cn('select-none drop-shadow-[0_6px_12px_rgba(0,0,0,0.45)]', className)}
+    <ChestArtworkSprite
+      crop={crop}
+      alt={`${tierDef.tierBadgeTh} (${tierDef.name})`}
+      size={size}
+      open={open}
+      testId={`chest-artwork-${tierId}`}
+      dataTier={tierId}
+      className={className}
     />
   )
 }
@@ -489,11 +217,14 @@ export function TreasureChestRewardScreen({
         )}
       >
         <header className="flex items-center justify-between border-b border-slate-700/80 bg-[#131d2e] px-4 py-3">
-          <div className="min-w-0">
-            <p className="text-xs text-slate-400">{reward.chestName}</p>
-            <h2 className={cn('truncate text-base font-bold sm:text-lg', rarityMeta.textColorClass)}>
-              ได้รับรางวัลระดับ {rarityMeta.thaiLabel} ({rarityMeta.label})
-            </h2>
+          <div className="flex min-w-0 items-center gap-3">
+            <PixelChestCanvas tierId={reward.chestTierId} open size={38} />
+            <div className="min-w-0">
+              <p className="text-xs text-slate-400">{reward.chestName}</p>
+              <h2 className={cn('truncate text-base font-bold sm:text-lg', rarityMeta.textColorClass)}>
+                ได้รับรางวัลระดับ {rarityMeta.thaiLabel} ({rarityMeta.label})
+              </h2>
+            </div>
           </div>
           <button
             type="button"
@@ -705,13 +436,16 @@ export function TreasureChestBatchRewardScreen({
         )}
       >
         <header className="flex items-center justify-between border-b border-slate-700/80 bg-[#131d2e] px-4 py-3">
-          <div className="min-w-0">
-            <p className="text-xs text-slate-400">
-              {selectedReward.chestName} · เปิดต่อเนื่อง {summary.totalCount} ครั้ง
-            </p>
-            <h2 className={cn('truncate text-base font-bold sm:text-lg', highestMeta.textColorClass)}>
-              สรุปรางวัล Quick Open x{summary.totalCount} (สูงสุดระดับ{highestMeta.thaiLabel})
-            </h2>
+          <div className="flex min-w-0 items-center gap-3">
+            <PixelChestCanvas tierId={selectedReward.chestTierId} open size={38} />
+            <div className="min-w-0">
+              <p className="text-xs text-slate-400">
+                {selectedReward.chestName} · เปิดต่อเนื่อง {summary.totalCount} ครั้ง
+              </p>
+              <h2 className={cn('truncate text-base font-bold sm:text-lg', highestMeta.textColorClass)}>
+                สรุปรางวัล Quick Open x{summary.totalCount} (สูงสุดระดับ{highestMeta.thaiLabel})
+              </h2>
+            </div>
           </div>
           <button
             type="button"
@@ -1387,7 +1121,19 @@ export function TreasureChest({
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h3 className="text-base font-bold text-amber-200 sm:text-lg">{tierDef.name}</h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className="rounded border px-1.5 py-0.5 text-[10px] font-bold"
+                  style={{
+                    borderColor: `${tierDef.accentHex}80`,
+                    backgroundColor: `${tierDef.accentHex}22`,
+                    color: tierDef.accentHex,
+                  }}
+                >
+                  {tierDef.tierBadgeTh}
+                </span>
+                <h3 className="text-base font-bold text-amber-200 sm:text-lg">{tierDef.name}</h3>
+              </div>
               <p className="text-xs text-slate-300">{tierDef.subtitle}</p>
             </div>
             <div className="flex items-center gap-3 text-xs tabular-nums">
@@ -1484,11 +1230,13 @@ export function TreasureChest({
           )}
 
           <div className="relative z-10 text-center text-xs text-slate-300">
-            <span>โบนัสทอง {formatNum(tierDef.goldBonusRange[0])}–{formatNum(tierDef.goldBonusRange[1])} G</span>
+            <span className="whitespace-nowrap">โบนัสทอง {formatNum(tierDef.goldBonusRange[0])}–{formatNum(tierDef.goldBonusRange[1])} G</span>
             <span aria-hidden="true"> · </span>
-            <span>ตีบวก +{tierDef.plusRange[0]} ถึง +{tierDef.plusRange[1]}</span>
+            <span className="whitespace-nowrap">ตีบวก +{tierDef.plusRange[0]} ถึง +{tierDef.plusRange[1]}</span>
             <span aria-hidden="true"> · </span>
-            <span className={minRarityMeta.textColorClass}>ขั้นต่ำ {minRarityMeta.thaiLabel}</span>
+            <span className={cn('whitespace-nowrap font-semibold', minRarityMeta.textColorClass)}>
+              ขั้นต่ำ {minRarityMeta.thaiLabel}
+            </span>
           </div>
         </div>
 
@@ -1617,7 +1365,10 @@ export function TreasureChest({
       {/* Right Column: Chest Tiers & Recent Pulls */}
       <div className="flex flex-col gap-4">
         <section className="rounded-xl border border-slate-700/80 bg-[#101826] p-4">
-          <h3 className="mb-3 text-sm font-bold text-slate-100">เลือกประเภทหีบสมบัติ</h3>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h3 className="text-sm font-bold text-slate-100">เลือกประเภทหีบสมบัติ</h3>
+            <span className="text-[11px] text-slate-400">{CHEST_TIER_ORDER.length} ระดับ</span>
+          </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {CHEST_TIER_ORDER.map((id) => {
               const def = CHEST_TIERS[id]
@@ -1627,6 +1378,7 @@ export function TreasureChest({
                 <button
                   key={id}
                   type="button"
+                  data-testid={`chest-tier-btn-${id}`}
                   onClick={() => {
                     if (timerRef.current !== null) {
                       window.clearTimeout(timerRef.current)
@@ -1640,21 +1392,33 @@ export function TreasureChest({
                   className={cn(
                     'flex items-center gap-3 rounded-lg border p-2.5 text-left transition-colors',
                     selected
-                      ? 'border-amber-400 bg-amber-500/15'
+                      ? 'border-amber-400 bg-amber-500/15 ring-1 ring-amber-400/40'
                       : 'border-slate-700/80 bg-slate-900/60 hover:border-slate-500',
                   )}
                 >
                   <div className="shrink-0">
-                    <PixelChestCanvas tierId={id} open={false} size={48} />
+                    <PixelChestCanvas tierId={id} open={false} size={52} />
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-bold text-white">{def.name}</p>
-                    <p className={cn('text-[11px] font-medium', minMeta.textColorClass)}>
-                      ขั้นต่ำ {minMeta.thaiLabel}
-                    </p>
-                    <p className="mt-0.5 text-[11px] text-amber-300 tabular-nums">
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span
+                        className="shrink-0 rounded px-1.5 py-0.5 text-[9.5px] font-bold leading-none"
+                        style={{
+                          backgroundColor: `${def.accentHex}24`,
+                          color: def.accentHex,
+                        }}
+                      >
+                        {def.tierBadgeTh}
+                      </span>
+                      <span className={cn('text-[10.5px] font-medium whitespace-nowrap', minMeta.textColorClass)}>
+                        ขั้นต่ำ {minMeta.thaiLabel}
+                      </span>
+                    </div>
+                    <p className="text-xs font-bold leading-snug text-white">{def.name}</p>
+                    <p className="text-[11px] text-amber-300 tabular-nums">
                       {def.costGold === 0 ? 'เปิดฟรี' : `${formatNum(def.costGold)} G`}
                       {def.keyQty ? ` / ${def.keyQty} กุญแจ` : ''}
+                      <span className="text-slate-400"> · +{def.plusRange[0]}–{def.plusRange[1]}</span>
                     </p>
                   </div>
                 </button>

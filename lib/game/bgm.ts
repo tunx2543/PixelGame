@@ -4,15 +4,21 @@ import {
   BGM_MAP_TRACK_CATALOG,
   BGM_THEMES,
   BGM_TRACK_CATALOG,
+  BGM_TRACK_CATEGORY_LABELS,
   BGM_TRACK_IDS,
   clampBgmVolume,
   getBgmTrackMeta,
+  getBgmTracksByCategory,
+  isValidBgmTrackId,
   pickPlayableAudioUrl,
   resolveBgmTheme,
   resolveBgmTrackId,
+  resolveEffectiveBgmSelection,
+  type BgmEffectiveSelection,
   type BgmMapTrackMeta,
   type BgmResolveContext,
   type BgmTheme,
+  type BgmTrackCategory,
   type BgmTrackId,
 } from './bgm-tracks'
 import {
@@ -31,15 +37,21 @@ export {
   BGM_MAP_TRACK_CATALOG,
   BGM_THEMES,
   BGM_TRACK_CATALOG,
+  BGM_TRACK_CATEGORY_LABELS,
   BGM_TRACK_IDS,
   getBgmTrackMeta,
+  getBgmTracksByCategory,
   isDungeonBgmMapId,
   isSpecialEventBgmMapId,
+  isValidBgmTrackId,
   resolveBgmTheme,
   resolveBgmTrackId,
+  resolveEffectiveBgmSelection,
+  type BgmEffectiveSelection,
   type BgmMapTrackMeta,
   type BgmResolveContext,
   type BgmTheme,
+  type BgmTrackCategory,
   type BgmTrackId,
   type BgmTrackSpec,
 } from './bgm-tracks'
@@ -53,6 +65,7 @@ export interface BgmSnapshot {
   activeTheme: BgmTheme | null
   desiredTrackId: BgmTrackId
   activeTrackId: BgmTrackId | null
+  pinnedTrackId: BgmTrackId | null
   source: BgmPlaybackSource
   activeUrl: string | null
   availableTracks: Record<BgmTheme, string[]>
@@ -90,6 +103,7 @@ let activeTrackWetGain: GainNode | null = null
 let activeBufferSource: AudioBufferSourceNode | null = null
 let activeHtmlAudio: HTMLAudioElement | null = null
 let synthTimer: number | null = null
+let activePumpFn: (() => void) | null = null
 let nextSynthNoteTime = 0
 let synthStepIdx = 0
 
@@ -99,6 +113,7 @@ let desiredTheme: BgmTheme = 'login'
 let activeTheme: BgmTheme | null = null
 let desiredTrackId: BgmTrackId = 'login'
 let activeTrackId: BgmTrackId | null = null
+let pinnedTrackId: BgmTrackId | null = null
 let activeSource: BgmPlaybackSource = 'idle'
 let activeUrl: string | null = null
 let lastContext: BgmResolveContext = { screen: 'login' }
@@ -225,7 +240,7 @@ function releaseActiveTrackBuses(immediate = false) {
   if (!bgmCtx || (!dry && !wet)) return
 
   const now = bgmCtx.currentTime
-  const fadeOutSec = immediate ? 0.015 : 0.09
+  const fadeOutSec = immediate ? 0.055 : 0.45
 
   for (const bus of [dry, wet]) {
     if (!bus) continue
@@ -239,7 +254,7 @@ function releaseActiveTrackBuses(immediate = false) {
         } catch {
           // Already disconnected.
         }
-      }, Math.ceil((fadeOutSec + 0.04) * 1000))
+      }, Math.ceil((fadeOutSec + 0.06) * 1000))
     } catch {
       try {
         bus.disconnect()
@@ -255,6 +270,7 @@ function stopActivePlayback(clearTrack = true, immediateFade = false) {
     window.clearInterval(synthTimer)
     synthTimer = null
   }
+  activePumpFn = null
   if (activeBufferSource) {
     try {
       activeBufferSource.onended = null
@@ -337,15 +353,55 @@ async function loadTrackManifest(): Promise<BgmManifestData> {
  * ============================================================================ */
 
 function connectVoice(
+  ctx: AudioContext,
   node: AudioNode,
   dryBus: AudioNode,
   wetBus: AudioNode | null,
-  reverbSendRatio = 1,
+  pan = 0,
 ) {
+  if (pan !== 0 && typeof ctx.createStereoPanner === 'function') {
+    const panner = ctx.createStereoPanner()
+    panner.pan.setValueAtTime(Math.max(-1, Math.min(1, pan)), ctx.currentTime)
+    node.connect(panner)
+    panner.connect(dryBus)
+    if (wetBus) panner.connect(wetBus)
+    return
+  }
   node.connect(dryBus)
-  if (wetBus && reverbSendRatio > 0) {
+  if (wetBus) {
     node.connect(wetBus)
   }
+}
+
+function scheduleWoodwindBreath(
+  ctx: AudioContext,
+  dryBus: AudioNode,
+  wetBus: AudioNode | null,
+  hz: number,
+  when: number,
+  gainAmount: number,
+  pan = 0,
+) {
+  if (gainAmount <= 0) return
+  const noise = ctx.createBufferSource()
+  noise.buffer = getNoiseBuffer(ctx)
+
+  const bp = ctx.createBiquadFilter()
+  bp.type = 'bandpass'
+  bp.frequency.setValueAtTime(Math.min(4200, Math.max(1200, hz * 2.1)), when)
+  bp.Q.setValueAtTime(1.8, when)
+
+  const env = ctx.createGain()
+  env.gain.setValueAtTime(0.0001, when)
+  env.gain.linearRampToValueAtTime(gainAmount * 0.14, when + 0.014)
+  env.gain.exponentialRampToValueAtTime(0.0001, when + 0.075)
+
+  noise.connect(bp)
+  bp.connect(env)
+  connectVoice(ctx, env, dryBus, wetBus, pan)
+
+  noise.start(when)
+  noise.stop(when + 0.085)
 }
 
 function schedulePadChord(
@@ -385,7 +441,7 @@ function schedulePadChord(
   chordBus.gain.exponentialRampToValueAtTime(0.0001, when + durSec)
 
   chordBus.connect(filter)
-  connectVoice(filter, dryBus, wetBus)
+  connectVoice(ctx, filter, dryBus, wetBus, 0)
 
   for (let i = 0; i < notes.length; i++) {
     const hz = noteToHz(notes[i])
@@ -512,7 +568,7 @@ function scheduleArpNote(
   overtone.connect(overGain)
   overGain.connect(filter)
   filter.connect(env)
-  connectVoice(env, dryBus, wetBus)
+  connectVoice(ctx, env, dryBus, wetBus, -0.26)
 
   osc.start(when)
   overtone.start(when)
@@ -529,6 +585,7 @@ function scheduleLeadNote(
   when: number,
   durSec: number,
   gainAmount: number,
+  pan = -0.04,
 ) {
   const hz = noteToHz(note)
   if (hz <= 0 || gainAmount <= 0) return
@@ -557,6 +614,7 @@ function scheduleLeadNote(
       attack = 0.055
       vibRate = timbre === 'whistle' ? 5.8 : 5.0
       vibDepth = 5.0
+      scheduleWoodwindBreath(ctx, dryBus, wetBus, hz, when, gainAmount, pan)
       break
     }
     case 'oboe': {
@@ -677,7 +735,7 @@ function scheduleLeadNote(
   osc2.connect(osc2Gain)
   osc2Gain.connect(filter)
   filter.connect(env)
-  connectVoice(env, dryBus, wetBus)
+  connectVoice(ctx, env, dryBus, wetBus, pan)
 
   osc1.start(when)
   osc2.start(when)
@@ -723,7 +781,7 @@ function scheduleBassNote(
   cello.connect(celloGain)
   celloGain.connect(filter)
   filter.connect(env)
-  connectVoice(env, dryBus, wetBus)
+  connectVoice(ctx, env, dryBus, wetBus, 0)
 
   sub.start(when)
   cello.start(when)
@@ -757,7 +815,7 @@ function schedulePercHit(
     env.gain.exponentialRampToValueAtTime(0.0001, when + dur)
 
     osc.connect(env)
-    connectVoice(env, dryBus, wetBus)
+    connectVoice(ctx, env, dryBus, wetBus, 0)
     osc.start(when)
     osc.stop(when + dur + 0.03)
     return
@@ -779,7 +837,7 @@ function schedulePercHit(
     env.gain.exponentialRampToValueAtTime(0.0001, when + 0.16)
     noiseSrc.connect(filter)
     filter.connect(env)
-    connectVoice(env, dryBus, wetBus)
+    connectVoice(ctx, env, dryBus, wetBus, 0.08)
     noiseSrc.start(when)
     noiseSrc.stop(when + 0.18)
   } else {
@@ -791,7 +849,7 @@ function schedulePercHit(
     env.gain.exponentialRampToValueAtTime(0.0001, when + 0.075)
     noiseSrc.connect(filter)
     filter.connect(env)
-    connectVoice(env, dryBus, wetBus)
+    connectVoice(ctx, env, dryBus, wetBus, 0.18)
     noiseSrc.start(when)
     noiseSrc.stop(when + 0.09)
   }
@@ -820,9 +878,24 @@ function scheduleOrchestralStep(
     scheduleArpNote(ctx, dryBus, wetBus, step.arp, score.arpTimbre, when, score.stepSec, score.arpGain)
   }
 
+  if (step.counter) {
+    const counterDur = Math.max(score.stepSec * 1.1, (step.counterDurSteps ?? 2.2) * score.stepSec)
+    scheduleLeadNote(
+      ctx,
+      dryBus,
+      wetBus,
+      step.counter,
+      score.counterTimbre,
+      when,
+      counterDur,
+      score.counterGain,
+      0.28,
+    )
+  }
+
   if (step.melody) {
     const melDur = Math.max(score.stepSec * 0.85, (step.melodyDurSteps ?? 1.4) * score.stepSec)
-    scheduleLeadNote(ctx, dryBus, wetBus, step.melody, score.leadTimbre, when, melDur, score.leadGain)
+    scheduleLeadNote(ctx, dryBus, wetBus, step.melody, score.leadTimbre, when, melDur, score.leadGain, -0.04)
   }
 
   if (step.perc) {
@@ -840,14 +913,17 @@ function startSynthLoop(trackId: BgmTrackId, theme: BgmTheme) {
 
   const score = getOrchestralScore(trackId)
 
+  const now = ctx.currentTime
   const dryBus = ctx.createGain()
-  dryBus.gain.setValueAtTime(0.88, ctx.currentTime)
+  dryBus.gain.setValueAtTime(0.0001, now)
+  dryBus.gain.linearRampToValueAtTime(0.88, now + 0.36)
   dryBus.connect(mixCompressor)
 
   let wetBus: GainNode | null = null
   if (reverbNode) {
     wetBus = ctx.createGain()
-    wetBus.gain.setValueAtTime(score.reverbMix, ctx.currentTime)
+    wetBus.gain.setValueAtTime(0.0001, now)
+    wetBus.gain.linearRampToValueAtTime(score.reverbMix, now + 0.42)
     wetBus.connect(reverbNode)
   }
 
@@ -877,6 +953,7 @@ function startSynthLoop(trackId: BgmTrackId, theme: BgmTheme) {
     }
   }
 
+  activePumpFn = pump
   pump()
   synthTimer = window.setInterval(pump, 55)
   emitChange()
@@ -967,7 +1044,8 @@ function ensureLifecycleHooks() {
         .resume()
         .then(() => {
           if (!bgmMuted && activeSource === 'synth' && activeTrackId) {
-            nextSynthNoteTime = ctx.currentTime + 0.05
+            nextSynthNoteTime = ctx.currentTime + 0.04
+            activePumpFn?.()
           }
         })
         .catch(() => undefined)
@@ -992,7 +1070,8 @@ function ensureLifecycleHooks() {
           .resume()
           .then(() => {
             if (bgmCtx && activeSource === 'synth') {
-              nextSynthNoteTime = bgmCtx.currentTime + 0.05
+              nextSynthNoteTime = bgmCtx.currentTime + 0.04
+              activePumpFn?.()
             }
           })
           .catch(() => undefined)
@@ -1021,6 +1100,10 @@ export function getBgmVolume(): number {
   return bgmVolume
 }
 
+export function getPinnedBgmTrack(): BgmTrackId | null {
+  return pinnedTrackId
+}
+
 export function getBgmSnapshot(): BgmSnapshot {
   return {
     muted: bgmMuted,
@@ -1029,6 +1112,7 @@ export function getBgmSnapshot(): BgmSnapshot {
     activeTheme,
     desiredTrackId,
     activeTrackId,
+    pinnedTrackId,
     source: activeSource,
     activeUrl,
     availableTracks: manifestCache.tracks,
@@ -1065,8 +1149,9 @@ export function stopBgm() {
 
 export function syncBgmContext(ctxInput: BgmResolveContext, forceRestart = false) {
   lastContext = ctxInput
-  const nextTheme = resolveBgmTheme(ctxInput)
-  const nextTrackId = resolveBgmTrackId(ctxInput)
+  const effective = resolveEffectiveBgmSelection(ctxInput, pinnedTrackId)
+  const nextTheme = effective.theme
+  const nextTrackId = effective.trackId
   const changed = desiredTheme !== nextTheme || desiredTrackId !== nextTrackId
   desiredTheme = nextTheme
   desiredTrackId = nextTrackId
@@ -1087,6 +1172,7 @@ export function syncBgmContext(ctxInput: BgmResolveContext, forceRestart = false
     activeTrackId === nextTrackId &&
     (activeBufferSource !== null || activeHtmlAudio !== null || synthTimer !== null)
   if (isRunning && !forceRestart) {
+    if (changed) emitChange()
     return
   }
 
@@ -1099,6 +1185,25 @@ export function syncBgmContext(ctxInput: BgmResolveContext, forceRestart = false
 
 export function syncBgmForMap(mapId: string, bossActive = false) {
   syncBgmContext({ screen: 'game', mapId, bossActive })
+}
+
+export function setPinnedBgmTrack(
+  trackId: BgmTrackId | null,
+  unmuteIfNeeded = false,
+): BgmTrackId | null {
+  pinnedTrackId = trackId && isValidBgmTrackId(trackId) ? trackId : null
+  if (unmuteIfNeeded && bgmMuted) {
+    bgmMuted = false
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.setItem(BGM_MUTED_KEY, '0')
+      } catch {
+        // Ignore storage access errors.
+      }
+    }
+  }
+  syncBgmContext(lastContext, Boolean(pinnedTrackId))
+  return pinnedTrackId
 }
 
 export function setBgmMuted(muted: boolean, contextOrMapId?: string | BgmResolveContext): boolean {
@@ -1118,8 +1223,9 @@ export function setBgmMuted(muted: boolean, contextOrMapId?: string | BgmResolve
 
   if (bgmMuted) {
     lastContext = nextCtx
-    desiredTheme = resolveBgmTheme(nextCtx)
-    desiredTrackId = resolveBgmTrackId(nextCtx)
+    const effective = resolveEffectiveBgmSelection(nextCtx, pinnedTrackId)
+    desiredTheme = effective.theme
+    desiredTrackId = effective.trackId
     stopBgm()
   } else {
     syncBgmContext(nextCtx, true)

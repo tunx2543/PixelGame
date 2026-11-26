@@ -11,8 +11,66 @@ import { EQUIPMENT_RARITY_META, EQUIPMENT_RARITY_ORDER } from './mmo-systems'
 export type ChestTierId = 'wooden' | 'silver' | 'golden' | 'mythic'
 export type ChestPaymentMode = 'gold' | 'key'
 
+export const CHEST_ARTWORK_SHEET_SRC =
+  '/assets/aistudio/01a21260-db44-7542-9a46-d57a4211f511_70d060be.png'
+export const CHEST_ARTWORK_SHEET_SIZE = 832
+
+export const BOX_EXCHANGE_ARTWORK_SRC =
+  '/assets/aistudio/1795664643369_78d52694.jpg'
+export const BOX_EXCHANGE_ARTWORK_WIDTH = 1408
+export const BOX_EXCHANGE_ARTWORK_HEIGHT = 768
+
+export interface ChestSpriteCropSpec {
+  src?: string
+  sheetWidth?: number
+  sheetHeight?: number
+  sx: number
+  sy: number
+  sw: number
+  sh: number
+  glowHex: string
+}
+
+export const CHEST_TIER_SPRITE_CROPS: Record<ChestTierId, ChestSpriteCropSpec> = {
+  wooden: { sx: 4, sy: 362, sw: 162, sh: 192, glowHex: '#38bdf8' },
+  silver: { sx: 165, sy: 362, sw: 162, sh: 192, glowHex: '#bae6fd' },
+  golden: { sx: 327, sy: 362, sw: 164, sh: 192, glowHex: '#a855f7' },
+  mythic: { sx: 493, sy: 362, sw: 168, sh: 192, glowHex: '#facc15' },
+}
+
+export const EVENT_CHEST_SPRITE_CROP: ChestSpriteCropSpec = {
+  sx: 661,
+  sy: 362,
+  sw: 164,
+  sh: 192,
+  glowHex: '#fb7185',
+}
+
+export const COMPANION_BOX_SPRITE_CROP: ChestSpriteCropSpec = {
+  src: BOX_EXCHANGE_ARTWORK_SRC,
+  sheetWidth: BOX_EXCHANGE_ARTWORK_WIDTH,
+  sheetHeight: BOX_EXCHANGE_ARTWORK_HEIGHT,
+  sx: 226,
+  sy: 196,
+  sw: 344,
+  sh: 328,
+  glowHex: '#d946ef',
+}
+
+export const EVENT_LUCKY_BOX_SPRITE_CROP: ChestSpriteCropSpec = {
+  src: BOX_EXCHANGE_ARTWORK_SRC,
+  sheetWidth: BOX_EXCHANGE_ARTWORK_WIDTH,
+  sheetHeight: BOX_EXCHANGE_ARTWORK_HEIGHT,
+  sx: 856,
+  sy: 196,
+  sw: 344,
+  sh: 328,
+  glowHex: '#38bdf8',
+}
+
 export interface ChestTierDef {
   id: ChestTierId
+  tierBadgeTh: string
   name: string
   subtitle: string
   costGold: number
@@ -30,6 +88,7 @@ export interface ChestTierDef {
 export const CHEST_TIERS: Record<ChestTierId, ChestTierDef> = {
   wooden: {
     id: 'wooden',
+    tierBadgeTh: 'หีบฟรี',
     name: 'หีบไม้ผจญภัย',
     subtitle: 'หีบฝึกหัดเปิดฟรีลุ้นอุปกรณ์ทุกประเภท',
     costGold: 0,
@@ -45,11 +104,12 @@ export const CHEST_TIERS: Record<ChestTierId, ChestTierDef> = {
       legendary: 3,
       mythic: 1,
     },
-    accentHex: '#d97706',
-    frameClass: 'border-amber-600/70 bg-amber-950/30',
+    accentHex: '#38bdf8',
+    frameClass: 'border-sky-500/70 bg-sky-950/30',
   },
   silver: {
     id: 'silver',
+    tierBadgeTh: 'หีบธรรมดา',
     name: 'หีบอัศวินเงิน',
     subtitle: 'การันตีระดับไม่ธรรมดา (Uncommon) ขึ้นไป',
     costGold: 600,
@@ -65,11 +125,12 @@ export const CHEST_TIERS: Record<ChestTierId, ChestTierDef> = {
       legendary: 7,
       mythic: 2,
     },
-    accentHex: '#38bdf8',
-    frameClass: 'border-sky-400/75 bg-sky-950/30',
+    accentHex: '#94a3b8',
+    frameClass: 'border-slate-400/75 bg-slate-900/50',
   },
   golden: {
     id: 'golden',
+    tierBadgeTh: 'หีบหายาก',
     name: 'หีบทองคำราชันย์',
     subtitle: 'การันตีระดับหายาก (Rare) ขึ้นไป · ใช้ทองหรือกุญแจ 1 ดอก',
     costGold: 2200,
@@ -87,11 +148,12 @@ export const CHEST_TIERS: Record<ChestTierId, ChestTierDef> = {
       legendary: 17,
       mythic: 6,
     },
-    accentHex: '#fbbf24',
-    frameClass: 'border-amber-400/85 bg-amber-950/35',
+    accentHex: '#a855f7',
+    frameClass: 'border-purple-400/85 bg-purple-950/35',
   },
   mythic: {
     id: 'mythic',
+    tierBadgeTh: 'หีบมหากาพย์',
     name: 'หีบสมบัติเทพ Pixel Quest',
     subtitle: 'การันตีระดับมหากาพย์ (Epic) ขึ้นไป · โอกาสระดับเทพสูงสุด',
     costGold: 7500,
@@ -109,8 +171,8 @@ export const CHEST_TIERS: Record<ChestTierId, ChestTierDef> = {
       legendary: 36,
       mythic: 18,
     },
-    accentHex: '#fb7185',
-    frameClass: 'border-rose-400/90 bg-rose-950/35',
+    accentHex: '#fbbf24',
+    frameClass: 'border-amber-400/90 bg-amber-950/35',
   },
 }
 

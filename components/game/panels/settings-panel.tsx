@@ -1,8 +1,16 @@
 'use client'
 
 import { useState } from 'react'
-import { Gauge, Keyboard, Layout, Music, PackageCheck, RefreshCw, RotateCcw, Sliders, Sparkles, Volume2, VolumeX } from 'lucide-react'
-import { getBgmTrackMeta, setBgmMuted, setBgmVolume } from '@/lib/game/bgm'
+import { Disc3, Gauge, Keyboard, Layout, Music, PackageCheck, Play, RefreshCw, RotateCcw, Sliders, Sparkles, Volume2, VolumeX } from 'lucide-react'
+import {
+  BGM_TRACK_CATEGORY_LABELS,
+  getBgmTrackMeta,
+  getBgmTracksByCategory,
+  setBgmMuted,
+  setBgmVolume,
+  setPinnedBgmTrack,
+  type BgmTrackCategory,
+} from '@/lib/game/bgm'
 import { getEngineBgmContext, toggleZenHud } from '@/lib/game/engine'
 import { playQuestClaimSfx, setSfxMuted, setSfxVolume } from '@/lib/game/sfx'
 import {
@@ -47,10 +55,12 @@ export function SettingsPanel({ onClose }: { onClose?: () => void } = {}) {
   const bgm = useBgmState()
   const sfx = useSfxState()
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
+  const [jukeboxCategory, setJukeboxCategory] = useState<BgmTrackCategory | 'all'>('town')
 
   const bgmVol = Math.round(bgm.volume * 100)
   const sfxVol = Math.round(sfx.volume * 100)
   const currentTrack = getBgmTrackMeta(bgm.desiredTrackId)
+  const jukeboxTracks = getBgmTracksByCategory(jukeboxCategory)
 
   const handleToggleBgm = () => {
     setBgmMuted(!bgm.muted, p ? getEngineBgmContext() : { screen: 'login' })
@@ -159,6 +169,107 @@ export function SettingsPanel({ onClose }: { onClose?: () => void } = {}) {
                 onChange={(e) => handleSfxVolumeChange(Number(e.target.value))}
                 className="flex-1 cursor-pointer accent-sky-400"
               />
+            </div>
+          </div>
+
+          {/* World Music Jukebox */}
+          <div className="space-y-2 rounded border border-border/60 bg-background/45 p-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="flex items-center gap-1.5 font-semibold text-foreground">
+                  <Disc3 className="size-3.5 text-amber-300" aria-hidden />
+                  คลังเพลงแต่ละเมือง & Open World (27 แทร็ก)
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  {bgm.pinnedTrackId
+                    ? `กำลังล็อกฟังเพลง: ${currentTrack.labelTh}`
+                    : `โหมดอัตโนมัติตามแผนที่ · ตอนนี้: ${currentTrack.labelTh}`}
+                </p>
+              </div>
+              {bgm.pinnedTrackId && (
+                <PxButton
+                  variant="accent"
+                  onClick={() => {
+                    setPinnedBgmTrack(null)
+                    setStatusMsg('สลับกลับเป็นโหมดเปลี่ยนเพลงอัตโนมัติตามแผนที่แล้ว')
+                  }}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    <RotateCcw className="size-3" aria-hidden />
+                    อัตโนมัติตามแผนที่
+                  </span>
+                </PxButton>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-1">
+              {(
+                [
+                  ['town', 'เมืองหลัก'],
+                  ['field', 'Open World'],
+                  ['dungeon', 'ดันเจี้ยน'],
+                  ['activity', 'กิจกรรม'],
+                  ['combat', 'ต่อสู้ & บอส'],
+                  ['all', 'ทั้งหมด'],
+                ] as Array<[BgmTrackCategory | 'all', string]>
+              ).map(([cat, label]) => {
+                const count = getBgmTracksByCategory(cat).length
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setJukeboxCategory(cat)}
+                    className={`pixel-btn px-2 py-1 text-[10px] font-bold ${
+                      jukeboxCategory === cat
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-background/70 text-foreground hover:bg-secondary'
+                    }`}
+                  >
+                    {label} ({count})
+                  </button>
+                )
+              })}
+            </div>
+
+            <div className="grid max-h-56 gap-1.5 overflow-y-auto pr-1 sm:grid-cols-2">
+              {jukeboxTracks.map((track) => {
+                const isSelected = bgm.desiredTrackId === track.trackId
+                return (
+                  <button
+                    key={track.trackId}
+                    type="button"
+                    data-testid={`settings-jukebox-track-${track.trackId}`}
+                    onClick={() => {
+                      setPinnedBgmTrack(track.trackId, true)
+                      setStatusMsg(`กำลังบรรเลง: ${track.labelTh} (${track.titleEn})`)
+                    }}
+                    className={`flex items-start justify-between gap-2 rounded border p-2 text-left transition-colors ${
+                      isSelected
+                        ? 'border-amber-300/80 bg-amber-500/15 text-amber-100'
+                        : 'border-border/70 bg-background/60 text-foreground hover:border-primary/60'
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[11px] font-bold">{track.labelTh}</p>
+                      <p className="truncate text-[10px] text-amber-200/85">
+                        {track.titleEn} · {track.keyLabel} · {track.bpm} BPM
+                      </p>
+                      <p className="truncate text-[9.5px] text-muted-foreground">
+                        {BGM_TRACK_CATEGORY_LABELS[track.category]} · {track.styleTh}
+                      </p>
+                    </div>
+                    <span
+                      className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded border ${
+                        isSelected
+                          ? 'border-amber-300 bg-amber-400/25 text-amber-200'
+                          : 'border-border bg-secondary text-muted-foreground'
+                      }`}
+                    >
+                      <Play className="size-3" aria-hidden />
+                    </span>
+                  </button>
+                )
+              })}
             </div>
           </div>
         </section>

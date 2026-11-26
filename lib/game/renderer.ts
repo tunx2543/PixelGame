@@ -1,5 +1,4 @@
 import { ITEMS, JOBS, MONSTERS, normalizeJobId, type MonsterSprite } from './data'
-import { GEM_SHOP_ITEMS } from './gem-shop'
 import { currentMap, game, getStats } from './engine'
 import {
   compareDepthOrder,
@@ -49,12 +48,10 @@ import { getMenuIconCanvas, type MenuIconId } from './menu-icons'
 import { computeWorldFloatTransform } from './floating-damage'
 import {
   drawCharacterFashionLayers,
-  getFashionLayerImage,
   preloadFashionLayers,
   resolveFashionLoadoutFromRemote,
   resolveFashionLoadoutFromSave,
 } from './fashion-renderer'
-import { getFashionItemDef } from './premium/fashion-pet'
 import { getEffectiveVipBonuses, getVipTierDef } from './premium/vip'
 import { sanitizePremiumState } from './premium/wallet'
 import { getUiPreferences } from './ui-layout'
@@ -162,25 +159,6 @@ const THEME_BG: Record<string, string> = {
   frost: '#b8d0e8',
   dream: '#315743',
   colosseum: '#3c3228',
-}
-
-function drawGemItemPixels(
-  ctx: CanvasRenderingContext2D,
-  item: { pixels: string[]; colors: { primary: string; secondary: string; accent: string } },
-  x: number,
-  y: number,
-  cellSize = 1,
-) {
-  const colors = { '1': item.colors.primary, '2': item.colors.secondary, '3': item.colors.accent }
-  ctx.save()
-  item.pixels.forEach((row, rowIndex) => {
-    Array.from(row.padEnd(8, '.').slice(0, 8)).forEach((pixel, columnIndex) => {
-      if (pixel === '.') return
-      ctx.fillStyle = colors[pixel as keyof typeof colors]
-      ctx.fillRect(Math.round(x + columnIndex * cellSize), Math.round(y + rowIndex * cellSize), cellSize, cellSize)
-    })
-  })
-  ctx.restore()
 }
 
 function drawWeaponAttackOverlay(
@@ -1072,28 +1050,14 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         : (Math.sin(t * 1.3 + remoteX) > 0.96 ? -1 : Math.floor(t * 2.4) % 4)
 
     const remoteRebirth = Math.max(0, Math.min(6, Math.floor(other.rebirthCount ?? 0)))
-    const gemFashion = other.gemFashionId ? GEM_SHOP_ITEMS.find((item) => item.id === other.gemFashionId) : undefined
-    const costumeFashion = getFashionItemDef(other.fashionCostume)
-    const hairFashion = getFashionItemDef(other.fashionHair)
-    const auraFashion = getFashionItemDef(other.fashionAura)
-    const mountSkinFashion = getFashionItemDef(other.mountSkinId)
-    const equippedWeaponSkin = getCosmeticDef(other.weaponSkinId)
     const activeMountDef = other.mountId ? getMountDef(other.mountId) : null
     const activePetDef = other.petId ? getCombatPetDef(other.petId) : null
     const remoteLoadout = resolveFashionLoadoutFromRemote(other)
     preloadFashionLayers(remoteLoadout)
 
     const remoteWeapon = other.weaponType ?? remoteJob.weaponTypes[0] ?? 'stick'
-    const remoteWeaponColor = equippedWeaponSkin?.primaryColor ?? (other.weaponColor || remoteJob.colors.accent)
-    const baseStyledColors = jobHumanColors(remoteJob.id, remoteJob.colors, false)
-    const styledColors = {
-      ...baseStyledColors,
-      ...(costumeFashion?.paletteOverride?.body ? { body: costumeFashion.paletteOverride.body } : {}),
-      ...(costumeFashion?.paletteOverride?.legs ? { legs: costumeFashion.paletteOverride.legs } : {}),
-      ...(costumeFashion?.paletteOverride?.accent ? { accent: costumeFashion.paletteOverride.accent } : {}),
-      ...(costumeFashion?.paletteOverride?.hat ? { hat: costumeFashion.paletteOverride.hat } : {}),
-      ...(hairFashion?.paletteOverride?.hair ? { hair: hairFashion.paletteOverride.hair } : {}),
-    }
+    const remoteWeaponColor = other.weaponColor || remoteJob.colors.accent
+    const styledColors = jobHumanColors(remoteJob.id, remoteJob.colors, false)
     const remoteDrawable = resolveHumanDrawable(
       styledColors,
       other.facing,
@@ -1165,13 +1129,13 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           ctx.restore()
         }
 
-        if (isMounted && (activeMountDef?.auraColor || mountSkinFashion)) {
+        if (isMounted && activeMountDef?.auraColor) {
           ctx.save()
-          ctx.strokeStyle = mountSkinFashion?.primaryColor ?? activeMountDef?.auraColor ?? '#38bdf8'
-          ctx.lineWidth = mountSkinFashion ? 1.8 : 1.2
+          ctx.strokeStyle = activeMountDef.auraColor
+          ctx.lineWidth = 1.2
           ctx.globalAlpha = 0.45 + Math.sin(t * 4) * 0.14
           ctx.beginPath()
-          ctx.ellipse(remoteX, remoteY - 1, mountSkinFashion ? 15 : 13, 5.5, 0, 0, Math.PI * 2)
+          ctx.ellipse(remoteX, remoteY - 1, 13, 5.5, 0, 0, Math.PI * 2)
           ctx.stroke()
           ctx.restore()
         }
@@ -1205,7 +1169,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
             remoteMountAnim.frame,
             remoteAtkFrame,
             1,
-            mountSkinFashion?.id,
+            null,
           )
           if (mImg.width > 0 && mImg.height > 0) {
             const mHd = mImg.dataset?.hdScale ? Number(mImg.dataset.hdScale) : 1
@@ -1225,6 +1189,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         const remoteDy = Math.round(-remoteH + remoteFootOffset)
         const remoteClipH = isMounted && remoteSeat ? Math.round(remoteH * remoteSeat.legClipRatio) : 0
         const remoteRiderFrame = isMounted && !remoteAttacking ? 0 : remoteFrame
+        const remoteRiderAction: SpriteAction = isMounted && !remoteAttacking ? 'idle' : remoteAction
         ctx.save()
         ctx.translate(Math.round(remoteX + riderSeatX + ox), Math.round(remoteY + oy + riderSeatY))
         if (remoteClipH > 0) {
@@ -1237,6 +1202,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           loadout: remoteLoadout,
           phase: 'behind',
           dir: other.facing,
+          action: remoteRiderAction,
           frame: remoteRiderFrame,
           dx: remoteDx,
           dy: remoteDy,
@@ -1257,6 +1223,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           loadout: remoteLoadout,
           phase: 'overBody',
           dir: other.facing,
+          action: remoteRiderAction,
           frame: remoteRiderFrame,
           dx: remoteDx,
           dy: remoteDy,
@@ -1269,6 +1236,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           loadout: remoteLoadout,
           phase: 'overBack',
           dir: other.facing,
+          action: remoteRiderAction,
           frame: remoteRiderFrame,
           dx: remoteDx,
           dy: remoteDy,
@@ -1288,7 +1256,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
             other.facing,
             activeMountDef,
             1,
-            mountSkinFashion?.primaryColor,
+            undefined,
           )
         }
 
@@ -1305,44 +1273,6 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           })
         }
 
-        const remoteHatImg = getFashionLayerImage(remoteLoadout.hat)
-        const hasLoadedRemoteHat = Boolean(remoteHatImg && remoteHatImg.complete && remoteHatImg.naturalWidth > 0)
-        if (!hasLoadedRemoteHat && (gemFashion?.id === 'aurora_cat_hood' || hairFashion?.id === 'aurora_cat_hood')) {
-          const catGem =
-            gemFashion?.id === 'aurora_cat_hood'
-              ? gemFashion
-              : GEM_SHOP_ITEMS.find((g) => g.id === 'aurora_cat_hood')
-          if (catGem) {
-            drawGemItemPixels(ctx, catGem, remoteX - 5, remoteY + riderSeatY - remoteH - 1, 1.25)
-          }
-        }
-
-        if (gemFashion?.id === 'sunfire_aura' || (auraFashion && !auraFashion.linkedGemItemId)) {
-          const pCol = auraFashion?.primaryColor ?? gemFashion?.colors.primary ?? '#fbbf24'
-          const aCol = auraFashion?.accentColor ?? gemFashion?.colors.accent ?? '#fde047'
-          ctx.save()
-          ctx.globalAlpha = 0.72
-          ctx.strokeStyle = pCol
-          if (!disableGlow) {
-            ctx.shadowColor = aCol
-            ctx.shadowBlur = 7
-          }
-          ctx.lineWidth = 1.5
-          ctx.beginPath()
-          ctx.ellipse(remoteX, remoteY - 7, 12 + Math.sin(t * 4) * 1.5, 8, t * 0.3, 0, Math.PI * 2)
-          ctx.stroke()
-          ctx.fillStyle = aCol
-          for (let spark = 0; spark < 4; spark++) {
-            const angle = t * 2 + spark * (Math.PI / 2)
-            ctx.fillRect(
-              Math.round(remoteX + Math.cos(angle) * 13),
-              Math.round(remoteY - 8 + Math.sin(angle) * 9),
-              2,
-              2,
-            )
-          }
-          ctx.restore()
-        }
       },
     })
 
@@ -1395,7 +1325,6 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
 
   const job = JOBS[normalizeJobId(p.jobId)]
   const weapon = p.equipment.weapon ? ITEMS[p.equipment.weapon.itemId] : null
-  const gemFashion = GEM_SHOP_ITEMS.find((item) => item.id === p.equippedGemFashion)
   const activePet = getActivePetBonuses(p.petState, p.equippedGemCompanion, p.ownedGemItems)
   const activeMount = getActiveMountBonuses(p.mountState, p.ownedGemItems)
   const extV2 = sanitizeExtV2(p.extV2)
@@ -1415,11 +1344,6 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     extV2,
   })
   preloadFashionLayers(localLoadout)
-  const costumeFashion = getFashionItemDef(localLoadout.costume)
-  const hairFashion = getFashionItemDef(localLoadout.hair)
-  const auraFashion = getFashionItemDef(localLoadout.aura)
-  const mountSkinFashion = getFashionItemDef(localLoadout.mountAppearance)
-  const equippedWeaponSkin = getCosmeticDef(localLoadout.weaponSkin ?? extV2.equippedWeaponSkin)
   const equippedFrame = getCosmeticDef(extV2.equippedFrame)
   ents.push({
     y: p.y,
@@ -1442,18 +1366,10 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
             ? Math.floor(game.walkT * 10) % walkMod
             : (Math.sin(t * 1.4) > 0.96 ? -1 : Math.floor(t * 2.4) % 4)
       const weaponType = weapon?.weaponType ?? job.weaponTypes[0] ?? 'stick'
-      const baseStyledColors = jobHumanColors(job.id, job.colors, false)
-      const styledColors = {
-        ...baseStyledColors,
-        ...(costumeFashion?.paletteOverride?.body ? { body: costumeFashion.paletteOverride.body } : {}),
-        ...(costumeFashion?.paletteOverride?.legs ? { legs: costumeFashion.paletteOverride.legs } : {}),
-        ...(costumeFashion?.paletteOverride?.accent ? { accent: costumeFashion.paletteOverride.accent } : {}),
-        ...(costumeFashion?.paletteOverride?.hat ? { hat: costumeFashion.paletteOverride.hat } : {}),
-        ...(hairFashion?.paletteOverride?.hair ? { hair: hairFashion.paletteOverride.hair } : {}),
-      }
+      const styledColors = jobHumanColors(job.id, job.colors, false)
       const weaponDrawColor = castingSkill
         ? game.skillVfxColor
-        : (equippedWeaponSkin?.primaryColor ?? weapon?.color ?? job.colors.accent)
+        : (weapon?.color ?? job.colors.accent)
       const drawable = resolveHumanDrawable(
         styledColors,
         game.facing,
@@ -1560,14 +1476,14 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         ctx.restore()
       }
       ctx.globalAlpha = p.invisible ? 0.18 : 1
-      if (isRidingOrHopping && activeMount && (activeMount.def.auraColor || mountSkinFashion || activeMount.level >= 5)) {
+      if (isRidingOrHopping && activeMount && (activeMount.def.auraColor || activeMount.level >= 5)) {
         const tier = getMountVisualTier(activeMount.level)
         ctx.save()
-        ctx.strokeStyle = mountSkinFashion?.primaryColor ?? activeMount.def.auraColor ?? (tier >= 3 ? '#fbbf24' : '#38bdf8')
-        ctx.lineWidth = mountSkinFashion || tier >= 4 ? 1.8 : 1.2
+        ctx.strokeStyle = activeMount.def.auraColor ?? (tier >= 3 ? '#fbbf24' : '#38bdf8')
+        ctx.lineWidth = tier >= 4 ? 1.8 : 1.2
         ctx.globalAlpha = (p.invisible ? 0.12 : 0.45) + Math.sin(t * 4) * 0.14
         ctx.beginPath()
-        ctx.ellipse(p.x, p.y - 1, mountSkinFashion || tier >= 4 ? 15 : 13, 5.5, 0, 0, Math.PI * 2)
+        ctx.ellipse(p.x, p.y - 1, tier >= 4 ? 15 : 13, 5.5, 0, 0, Math.PI * 2)
         ctx.stroke()
         ctx.restore()
       }
@@ -1616,7 +1532,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           mountAnimState.frame,
           atkFrame,
           activeMount.level,
-          mountSkinFashion?.id,
+          null,
         )
         if (mImg.width > 0 && mImg.height > 0) {
           const mHd = mImg.dataset?.hdScale ? Number(mImg.dataset.hdScale) : 1
@@ -1645,7 +1561,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           mountAnimState.frame,
           atkFrame,
           activeMount.level,
-          mountSkinFashion?.id,
+          null,
         )
         if (mImg.width > 0 && mImg.height > 0) {
           const mHd = mImg.dataset?.hdScale ? Number(mImg.dataset.hdScale) : 1
@@ -1664,6 +1580,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
       const localDy = Math.round(-drawH + footOffset)
       const localClipH = isSeatedInSaddle && seatOffset ? Math.round(drawH * seatOffset.legClipRatio) : 0
       const riderFrame = isSeatedInSaddle && !attacking && !castingSkill ? 0 : frame
+      const riderAction: SpriteAction = isSeatedInSaddle && !attacking && !castingSkill ? 'idle' : action
       ctx.save()
       ctx.translate(Math.round(p.x + riderSeatX + ox), Math.round(p.y + oy + riderSeatY))
       if (localClipH > 0) {
@@ -1676,6 +1593,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         loadout: localLoadout,
         phase: 'behind',
         dir: game.facing,
+        action: riderAction,
         frame: riderFrame,
         dx: localDx,
         dy: localDy,
@@ -1690,6 +1608,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         loadout: localLoadout,
         phase: 'overBody',
         dir: game.facing,
+        action: riderAction,
         frame: riderFrame,
         dx: localDx,
         dy: localDy,
@@ -1703,6 +1622,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         loadout: localLoadout,
         phase: 'overBack',
         dir: game.facing,
+        action: riderAction,
         frame: riderFrame,
         dx: localDx,
         dy: localDy,
@@ -1729,7 +1649,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           game.facing,
           activeMount.def,
           activeMount.level,
-          mountSkinFashion?.primaryColor,
+          undefined,
         )
       }
       if (isSummonedCompanion && game.facing !== 'up') {
@@ -1747,35 +1667,6 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           layer: 'front',
           disableGlow,
         })
-      }
-      const localHatImg = getFashionLayerImage(localLoadout.hat)
-      const hasLoadedLocalHat = Boolean(localHatImg && localHatImg.complete && localHatImg.naturalWidth > 0)
-      if (!hasLoadedLocalHat && (gemFashion?.id === 'aurora_cat_hood' || hairFashion?.id === 'aurora_cat_hood')) {
-        const catGem = gemFashion?.id === 'aurora_cat_hood' ? gemFashion : GEM_SHOP_ITEMS.find((g) => g.id === 'aurora_cat_hood')
-        if (catGem) {
-          drawGemItemPixels(ctx, catGem, p.x - 5, p.y + riderSeatY - drawH - 1, 1.25)
-        }
-      }
-      if (gemFashion?.id === 'sunfire_aura' || (auraFashion && !auraFashion.linkedGemItemId)) {
-        const pCol = auraFashion?.primaryColor ?? gemFashion?.colors.primary ?? '#fbbf24'
-        const aCol = auraFashion?.accentColor ?? gemFashion?.colors.accent ?? '#fde047'
-        ctx.save()
-        ctx.globalAlpha = p.invisible ? 0.12 : 0.72
-        ctx.strokeStyle = pCol
-        if (!disableGlow) {
-          ctx.shadowColor = aCol
-          ctx.shadowBlur = 7
-        }
-        ctx.lineWidth = 1.5
-        ctx.beginPath()
-        ctx.ellipse(p.x, p.y - 7, 12 + Math.sin(t * 4) * 1.5, 8, t * 0.3, 0, Math.PI * 2)
-        ctx.stroke()
-        ctx.fillStyle = aCol
-        for (let spark = 0; spark < 4; spark++) {
-          const angle = t * 2 + spark * (Math.PI / 2)
-          ctx.fillRect(Math.round(p.x + Math.cos(angle) * 13), Math.round(p.y - 8 + Math.sin(angle) * 9), 2, 2)
-        }
-        ctx.restore()
       }
       ctx.globalAlpha = 1
     },
