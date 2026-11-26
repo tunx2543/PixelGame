@@ -602,7 +602,10 @@ export function resolveHumanDrawable(
 ): ResolvedDrawable {
   const requestedAction: SpriteAction = attacking ? 'attack' : actionOverride ?? (frame > 0 ? 'walk' : 'idle')
   if (typeof document !== 'undefined' && colors.jobId && !colors.skeleton && !colors.goblinEars) {
-    const sheetFrameIdx = requestedAction === 'attack' ? (attackFrameOverride ?? frame) : frame
+    const sheetFrameIdx =
+      requestedAction === 'attack' || requestedAction === 'skill'
+        ? (attackFrameOverride ?? frame)
+        : frame
     const spec = getHeroSheetFrameSpec(colors.jobId, dir, requestedAction, sheetFrameIdx)
     if (spec) return sheetSpecToResolvedDrawable(spec)
   }
@@ -652,7 +655,18 @@ export function resolveNpcDrawable(
 /* ---------------- Articulated Humanoids (All 12 Jobs) ---------------- */
 
 export type Dir = 'down' | 'up' | 'left' | 'right'
-export type SpriteAction = 'idle' | 'walk' | 'run' | 'follow' | 'mount' | 'dismount' | 'attack' | 'skill'
+export type SpriteAction =
+  | 'idle'
+  | 'walk'
+  | 'run'
+  | 'follow'
+  | 'mount'
+  | 'dismount'
+  | 'attack'
+  | 'skill'
+  | 'hit'
+  | 'death'
+  | 'victory'
 export type HatStyle = RegistryHatStyle
 
 export interface HumanColors {
@@ -1265,7 +1279,7 @@ export function humanSprite(
 
   if (typeof document !== 'undefined' && colors.jobId && !colors.skeleton && !colors.goblinEars) {
     const sheetFrameIdx =
-      requestedAction === 'attack'
+      requestedAction === 'attack' || requestedAction === 'skill'
         ? (attackFrameOverride ?? frame)
         : frame
     const sheetCanvas = getHeroSheetFrame(colors.jobId, dir, requestedAction, sheetFrameIdx)
@@ -1277,11 +1291,15 @@ export function humanSprite(
       ? 'attack'
       : requestedAction === 'run' || requestedAction === 'follow'
         ? 'walk'
-        : requestedAction === 'mount' || requestedAction === 'dismount'
+        : requestedAction === 'mount' ||
+            requestedAction === 'dismount' ||
+            requestedAction === 'hit' ||
+            requestedAction === 'death' ||
+            requestedAction === 'victory'
           ? 'idle'
           : requestedAction
   const f = action === 'attack'
-    ? Math.abs(attackFrameOverride ?? frame) % 4
+    ? Math.abs(attackFrameOverride ?? frame) % 5
     : action === 'walk'
       ? Math.abs(frame) % 6
       : frame === -1

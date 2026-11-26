@@ -67,39 +67,49 @@ const HERO_FRAME_W = 168
 const HERO_FRAME_H = 192
 const HERO_ANCHOR_Y = 178 / HERO_FRAME_H
 
-function makeHeroSheetSpec(id: HeroSheetId, withIdleRows = false): SpriteSheetSpec {
+export const HERO_ANIMATION_DEFS = [
+  { name: 'idle', frames: 4, fps: 5 },
+  { name: 'walk', frames: 6, fps: 10 },
+  { name: 'run', frames: 6, fps: 14 },
+  { name: 'attack', frames: 5, fps: 14 },
+  { name: 'skill', frames: 6, fps: 12 },
+  { name: 'hit', frames: 3, fps: 12 },
+  { name: 'death', frames: 5, fps: 8 },
+  { name: 'victory', frames: 5, fps: 10 },
+] as const
+
+const HERO_DIRS = ['down', 'up', 'left', 'right'] as const
+
+function makeHeroSheetSpec(id: HeroSheetId): SpriteSheetSpec {
   const base = `/assets/hd/characters/${id}`
-  const prefixes = withIdleRows
-    ? ['walk_down', 'walk_left', 'walk_right', 'walk_up', 'attack', 'skill', 'idle_down', 'idle_left', 'idle_right', 'idle_up']
-    : ['walk_down', 'walk_left', 'walk_right', 'walk_up', 'attack', 'skill']
   const individualFrames: string[] = []
-  for (const prefix of prefixes) {
-    for (let i = 0; i < 4; i++) {
-      individualFrames.push(`${base}/${prefix}_${i}.png`)
+  const actions: Record<string, SpriteSheetActionSpec> = {}
+  let rowIdx = 0
+
+  for (const anim of HERO_ANIMATION_DEFS) {
+    for (const dir of HERO_DIRS) {
+      const baseFacing: SpriteSheetActionSpec['baseFacing'] =
+        dir === 'down' ? 'front' : dir === 'up' ? 'back' : dir
+      actions[`${anim.name}_${dir}`] = {
+        row: rowIdx,
+        frames: anim.frames,
+        baseFacing,
+      }
+      for (let f = 0; f < anim.frames; f++) {
+        individualFrames.push(`${base}/${anim.name}/${dir}/${f}.png`)
+      }
+      rowIdx += 1
     }
   }
-  const actions: Record<string, SpriteSheetActionSpec> = {
-    walk_down: { row: 0, frames: 4, baseFacing: 'front' },
-    walk_left: { row: 1, frames: 4, baseFacing: 'left' },
-    walk_right: { row: 2, frames: 4, baseFacing: 'right' },
-    walk_up: { row: 3, frames: 4, baseFacing: 'back' },
-    attack: { row: 4, frames: 4, baseFacing: 'right' },
-    skill: { row: 5, frames: 4, baseFacing: 'right' },
-  }
-  if (withIdleRows) {
-    actions.idle_down = { row: 6, frames: 4, baseFacing: 'front' }
-    actions.idle_left = { row: 7, frames: 4, baseFacing: 'left' }
-    actions.idle_right = { row: 8, frames: 4, baseFacing: 'right' }
-    actions.idle_up = { row: 9, frames: 4, baseFacing: 'back' }
-  }
+
   return {
     id,
     sheetPath: `${base}/sheet.png`,
     portraitPath: `${base}/portrait.png`,
     frameWidth: HERO_FRAME_W,
     frameHeight: HERO_FRAME_H,
-    cols: 4,
-    rows: withIdleRows ? 10 : 6,
+    cols: 6,
+    rows: rowIdx, // 32 rows (8 anims x 4 dirs)
     anchorX: 0.5,
     anchorY: HERO_ANCHOR_Y,
     hdScale: 4,
@@ -118,7 +128,7 @@ export const HERO_SPRITE_SHEETS: Record<HeroSheetId, SpriteSheetSpec> = {
   thief: makeHeroSheetSpec('thief'),
   kensei: makeHeroSheetSpec('kensei'),
   iron_fist: makeHeroSheetSpec('iron_fist'),
-  wicked_necromancer: makeHeroSheetSpec('wicked_necromancer', true),
+  wicked_necromancer: makeHeroSheetSpec('wicked_necromancer'),
   the_king: makeHeroSheetSpec('the_king'),
   sinister: makeHeroSheetSpec('sinister'),
   templar: makeHeroSheetSpec('templar'),
@@ -500,52 +510,25 @@ export function getHeroSheetFrameSpec(
   const spec = resolveHeroSheetSpec(jobId)
   if (!spec) return null
 
-  const isIdlePose = action === 'idle' || action === 'mount' || action === 'dismount'
-  const idleRowKey =
-    dir === 'left'
-      ? 'idle_left'
-      : dir === 'right'
-        ? 'idle_right'
-        : dir === 'up'
-          ? 'idle_up'
-          : 'idle_down'
-  const hasDedicatedIdle = Boolean(spec.actions[idleRowKey])
+  const normalizedAction =
+    action === 'follow'
+      ? 'walk'
+      : action === 'mount' || action === 'dismount'
+        ? 'idle'
+        : action
 
-  let rowKey: string
-  let flipX = false
+  const dirKey = dir === 'left' || dir === 'right' || dir === 'up' || dir === 'down' ? dir : 'down'
+  const rowKey = `${normalizedAction}_${dirKey}`
+  const rowSpec = spec.actions[rowKey] ?? spec.actions[`idle_${dirKey}`] ?? spec.actions.idle_down
 
-  if (action === 'skill') {
-    rowKey = 'skill'
-    flipX = dir === 'left'
-  } else if (action === 'attack') {
-    rowKey = 'attack'
-    flipX = dir === 'left'
-  } else if (isIdlePose && hasDedicatedIdle) {
-    rowKey = idleRowKey
-  } else {
-    rowKey =
-      dir === 'left'
-        ? 'walk_left'
-        : dir === 'right'
-          ? 'walk_right'
-          : dir === 'up'
-            ? 'walk_up'
-            : 'walk_down'
-  }
-
-  const rowSpec = spec.actions[rowKey] ?? spec.actions.walk_down
+  // For idle, negative frame (-1 blink marker) maps cleanly to frame 2 (the blink frame in our 4F idle cycle)
   const col =
-    isIdlePose && !hasDedicatedIdle
-      ? frame < 0
-        ? 0
-        : frame % 2 === 1
-          ? 1
-          : 0
-      : frame < 0
-        ? 0
-        : Math.abs(frame) % rowSpec.frames
+    normalizedAction === 'idle' && frame < 0
+      ? 2 % rowSpec.frames
+      : Math.max(0, Math.floor(Math.abs(frame))) % rowSpec.frames
 
-  return buildFrameDrawSpec(spec, rowSpec.row, col, flipX)
+  // Every direction has dedicated rendered frames in the 32x6 atlas — never mirror-flip
+  return buildFrameDrawSpec(spec, rowSpec.row, col, false)
 }
 
 export function getMonsterSheetFrameSpec(

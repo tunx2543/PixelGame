@@ -30,6 +30,9 @@ const ACTION_OPTIONS: Array<{ id: PreviewAction; label: string; short: string }>
   { id: 'dismount', label: 'ลงขี่ (Dismount)', short: 'Dismount' },
   { id: 'attack', label: 'โจมตี (Attack)', short: 'Attack' },
   { id: 'skill', label: 'ใช้สกิล (Skill)', short: 'Skill' },
+  { id: 'hit', label: 'บาดเจ็บ (Hit)', short: 'Hit' },
+  { id: 'death', label: 'พ่ายแพ้ (Death)', short: 'Death' },
+  { id: 'victory', label: 'ชัยชนะ (Victory)', short: 'Victory' },
 ]
 
 const DIR_LABELS: Record<ModelDir, string> = {
@@ -48,6 +51,9 @@ const ACTION_THAI: Record<SpriteAction, string> = {
   dismount: 'ลงจากสัตว์ขี่',
   attack: 'โจมตี',
   skill: 'ใช้สกิล',
+  hit: 'ได้รับบาดเจ็บ',
+  death: 'ล้มพ่ายแพ้',
+  victory: 'ฉลองชัยชนะ',
 }
 
 function getJobTraitTags(jobId: string): string[] {
@@ -268,10 +274,28 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
           <div className="flex flex-wrap gap-1" role="group" aria-label="เลือกแอนิเมชั่น">
             {ACTION_OPTIONS.filter((opt) =>
               tab === 'mounts'
-                ? opt.id !== 'attack' && opt.id !== 'skill' && opt.id !== 'follow'
+                ? opt.id !== 'attack' &&
+                  opt.id !== 'skill' &&
+                  opt.id !== 'follow' &&
+                  opt.id !== 'hit' &&
+                  opt.id !== 'death' &&
+                  opt.id !== 'victory'
                 : tab === 'pets'
-                  ? opt.id !== 'mount' && opt.id !== 'dismount' && opt.id !== 'skill'
-                  : opt.id !== 'run' && opt.id !== 'follow' && opt.id !== 'mount' && opt.id !== 'dismount',
+                  ? opt.id !== 'mount' &&
+                    opt.id !== 'dismount' &&
+                    opt.id !== 'skill' &&
+                    opt.id !== 'hit' &&
+                    opt.id !== 'death' &&
+                    opt.id !== 'victory'
+                  : tab === 'jobs'
+                    ? opt.id !== 'follow' && opt.id !== 'mount' && opt.id !== 'dismount'
+                    : opt.id !== 'run' &&
+                      opt.id !== 'follow' &&
+                      opt.id !== 'mount' &&
+                      opt.id !== 'dismount' &&
+                      opt.id !== 'hit' &&
+                      opt.id !== 'death' &&
+                      opt.id !== 'victory',
             ).map((opt) => (
               <button
                 key={opt.id}
@@ -479,7 +503,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                   </span>
                 )}
                 <span className="ml-auto font-mono text-[10px] text-muted-foreground tabular-nums">
-                  Idle 4F • Walk 4F (4 ทิศ) • Attack 4F • Skill 4F
+                  Idle 4F • Walk/Run 6F • Atk 5F • Skill 6F • Hit 3F • Death/Victory 5F
                 </span>
               </div>
 
@@ -1115,7 +1139,7 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
       <p className="flex items-center justify-between border-t border-border/60 pt-2 text-[11px] text-muted-foreground">
         <span className="flex items-center gap-1">
           <Eye className="size-3.5 text-primary" aria-hidden />
-          คลิกการ์ดเพื่อขยายดูแอนิเมชั่นแบบละเอียด 4 ทิศทาง (Idle 4 เฟรม / Walk 6 เฟรม / Attack 4 เฟรม)
+          คลิกการ์ดเพื่อขยายดูแอนิเมชั่นแบบละเอียด 4 ทิศทาง (Idle 4F / Walk-Run 6F / Atk 5F / Skill 6F / Hit 3F / Death-Victory 5F)
         </span>
         <span className="hidden items-center gap-1 sm:flex">
           <Shield className="size-3 text-accent" aria-hidden />

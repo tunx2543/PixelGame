@@ -138,6 +138,7 @@ export function EncounterStageCanvas({
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const stageWrapperRef = useRef<HTMLDivElement | null>(null)
   const lastShakingStateRef = useRef(false)
+  const outcomePhaseRef = useRef<{ phase: string; startedAt: number }>({ phase, startedAt: 0 })
   const latestRef = useRef({
     save,
     enemy,
@@ -166,6 +167,13 @@ export function EncounterStageCanvas({
     popups,
     shakeEvent,
   }
+
+  useEffect(() => {
+    outcomePhaseRef.current = {
+      phase,
+      startedAt: typeof performance !== 'undefined' ? performance.now() : 0,
+    }
+  }, [phase])
 
   useEffect(() => {
     const stageEl = stageWrapperRef.current
@@ -304,15 +312,34 @@ export function EncounterStageCanvas({
           const heroStrike = isPlayerAttacking && pAtkAge >= 0.25
           const heroLunge = isPlayerAttacking ? Math.sin(pAtkAge * Math.PI) * 34 : 0
           const heroShake = isPlayerHurt ? Math.sin(pHitAge * 26) * 5 : 0
-          const heroAction: SpriteAction = heroStrike ? 'attack' : heroStepIn ? 'walk' : 'idle'
-          const heroAttackFrame = heroStrike ? Math.min(3, Math.floor(((pAtkAge - 0.25) / 0.75) * 4)) : 0
-          const heroFrame = heroStrike
-            ? heroAttackFrame
-            : heroStepIn
-              ? Math.floor(pAtkAge * 16) % 4
-              : Math.sin(t * 1.4) > 0.96
-                ? -1
-                : Math.floor(t * (ph === 'FIGHTING' ? 3.2 : 2.2)) % 4
+          const outcomeElapsed = Math.max(0, (now - outcomePhaseRef.current.startedAt) / 1000)
+          const isDefeated = ph === 'DEFEAT'
+          const isVictorious = ph === 'VICTORY' && !isPlayerAttacking && !isPlayerHurt
+          const heroAction: SpriteAction = isDefeated
+            ? 'death'
+            : isPlayerHurt && !heroStrike
+              ? 'hit'
+              : heroStrike
+                ? 'attack'
+                : heroStepIn
+                  ? 'walk'
+                  : isVictorious
+                    ? 'victory'
+                    : 'idle'
+          const heroAttackFrame = heroStrike ? Math.min(4, Math.floor(((pAtkAge - 0.25) / 0.75) * 5)) : 0
+          const heroFrame = isDefeated
+            ? Math.min(4, Math.floor(outcomeElapsed * 6))
+            : heroAction === 'hit'
+              ? Math.min(2, Math.floor(pHitAge * 3))
+              : heroStrike
+                ? heroAttackFrame
+                : heroStepIn
+                  ? Math.floor(pAtkAge * 24) % 6
+                  : isVictorious
+                    ? Math.floor(outcomeElapsed * 6) % 5
+                    : Math.sin(t * 1.4) > 0.96
+                      ? -1
+                      : Math.floor(t * (ph === 'FIGHTING' ? 3.2 : 2.2)) % 4
           const styledJobColors = jobHumanColors(job.id, job.colors, false)
           const heroDrawable = resolveHumanDrawable(
             styledJobColors,

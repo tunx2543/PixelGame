@@ -107,6 +107,9 @@ const ATTACK_BOB_SEQ = [1, -4, -1, 1] as const
 const ATTACK_LUNGE_SEQ = [-4, 10, 13, 3] as const
 const SKILL_BOB_SEQ = [3, -7, -4.5, 1] as const
 const SKILL_LUNGE_SEQ = [-2, 4, 7, 2] as const
+const HIT_BOB_SEQ = [2, 4, 1] as const
+const HIT_LUNGE_SEQ = [-6, -4, -1] as const
+const VICTORY_BOB_SEQ = [0, -8, -11, -2, 0] as const
 
 export function resolveWingFollowMotion(opts: {
   dir: Dir
@@ -117,16 +120,23 @@ export function resolveWingFollowMotion(opts: {
 }): WingFollowMotion {
   const { dir, action, frame, timeSec = 0, isAnimatedSheet = false } = opts
   const rawAction: SpriteAction = action ?? (frame > 0 ? 'walk' : 'idle')
-  const normalizedAction: 'idle' | 'walk' | 'attack' | 'skill' =
-    rawAction === 'run' || rawAction === 'follow'
+  const normalizedAction: 'idle' | 'walk' | 'run' | 'attack' | 'skill' | 'hit' | 'death' | 'victory' =
+    rawAction === 'follow'
       ? 'walk'
       : rawAction === 'mount' || rawAction === 'dismount'
         ? 'idle'
-        : rawAction === 'attack' || rawAction === 'skill' || rawAction === 'walk'
+        : rawAction === 'run' ||
+            rawAction === 'attack' ||
+            rawAction === 'skill' ||
+            rawAction === 'walk' ||
+            rawAction === 'hit' ||
+            rawAction === 'death' ||
+            rawAction === 'victory'
           ? rawAction
           : 'idle'
 
-  const f = frame < 0 ? 0 : Math.floor(frame) % 4
+  const safeFrame = frame < 0 ? 0 : Math.floor(frame)
+  const f = safeFrame % 4
 
   let bobPx = 0
   let lungePx = 0
@@ -134,9 +144,23 @@ export function resolveWingFollowMotion(opts: {
     bobPx = IDLE_BOB_SEQ[f]
   } else if (normalizedAction === 'walk') {
     bobPx = WALK_BOB_SEQ[f]
+  } else if (normalizedAction === 'run') {
+    const rf = safeFrame % 6
+    bobPx = [-1.5, -4.5, -6, -1.5, -4.5, -6][rf]
+    lungePx = 4
   } else if (normalizedAction === 'skill') {
     bobPx = SKILL_BOB_SEQ[f]
     lungePx = SKILL_LUNGE_SEQ[f]
+  } else if (normalizedAction === 'hit') {
+    const hf = safeFrame % 3
+    bobPx = HIT_BOB_SEQ[hf]
+    lungePx = HIT_LUNGE_SEQ[hf]
+  } else if (normalizedAction === 'death') {
+    const df = Math.min(4, safeFrame)
+    bobPx = [4, 14, 24, 32, 34][df]
+  } else if (normalizedAction === 'victory') {
+    const vf = safeFrame % 5
+    bobPx = VICTORY_BOB_SEQ[vf]
   } else {
     bobPx = ATTACK_BOB_SEQ[f]
     lungePx = ATTACK_LUNGE_SEQ[f]
@@ -155,16 +179,20 @@ export function resolveWingFollowMotion(opts: {
   let flapScaleY = 1
   let tiltRad = 0
 
-  if (normalizedAction === 'idle') {
+  if (normalizedAction === 'idle' || normalizedAction === 'victory') {
     const breath = isAnimatedSheet ? 0 : Math.sin(timeSec * 2.8) * 0.024
     flapScaleX = 1 + breath
     flapScaleY = 1 + breath * 0.8
-  } else if (normalizedAction === 'walk') {
+  } else if (normalizedAction === 'walk' || normalizedAction === 'run') {
     const strideLift = f === 1 || f === 3 ? 1 : 0
     const strideFlex = isAnimatedSheet ? 0 : strideLift * 0.04 + Math.sin(timeSec * 8) * 0.012
     flapScaleX = 1 + strideFlex
     flapScaleY = 1 + strideFlex * 0.75
     tiltRad = -dirSign * (0.045 + strideLift * 0.018)
+  } else if (normalizedAction === 'hit' || normalizedAction === 'death') {
+    flapScaleX = normalizedAction === 'death' ? 0.85 : 0.94
+    flapScaleY = normalizedAction === 'death' ? 0.65 : 0.94
+    tiltRad = dirSign * 0.06
   } else {
     const combatFlex = isAnimatedSheet ? 0 : f === 0 ? -0.045 : f === 1 || f === 2 ? 0.075 : 0.02
     flapScaleX = 1 + combatFlex

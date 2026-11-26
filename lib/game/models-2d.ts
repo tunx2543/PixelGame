@@ -70,7 +70,12 @@ export interface JobModelSpec {
   animationFrames: {
     idle: number
     walk: number
+    run?: number
     attack: number
+    skill?: number
+    hit?: number
+    death?: number
+    victory?: number
   }
 }
 
@@ -116,7 +121,7 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     backpack: false,
     auraColor: '#60a5fa',
     wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 4, attack: 4 },
+    animationFrames: { idle: 4, walk: 6, run: 6, attack: 5, skill: 6, hit: 3, death: 5, victory: 5 },
   },
   swordsman: {
     jobId: 'swordsman',
@@ -133,7 +138,7 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     shieldCrestColor: '#f43f5e',
     shoulderPads: true,
     wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 4, attack: 4 },
+    animationFrames: { idle: 4, walk: 6, run: 6, attack: 5, skill: 6, hit: 3, death: 5, victory: 5 },
   },
   mage: {
     jobId: 'mage',
@@ -148,7 +153,7 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     capeColor: '#3b0764',
     auraColor: '#38bdf8',
     wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 4, attack: 4 },
+    animationFrames: { idle: 4, walk: 6, run: 6, attack: 5, skill: 6, hit: 3, death: 5, victory: 5 },
   },
   archer: {
     jobId: 'archer',
@@ -164,7 +169,7 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     scarfColor: '#e9c46a',
     quiver: true,
     wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 4, attack: 4 },
+    animationFrames: { idle: 4, walk: 6, run: 6, attack: 5, skill: 6, hit: 3, death: 5, victory: 5 },
   },
   cleric: {
     jobId: 'cleric',
@@ -180,7 +185,7 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     halo: true,
     auraColor: '#fde047',
     wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 4, attack: 4 },
+    animationFrames: { idle: 4, walk: 6, run: 6, attack: 5, skill: 6, hit: 3, death: 5, victory: 5 },
   },
   merchant: {
     jobId: 'merchant',
@@ -195,7 +200,7 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     scarfColor: '#fbbf24',
     backpack: true,
     wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 4, attack: 4 },
+    animationFrames: { idle: 4, walk: 6, run: 6, attack: 5, skill: 6, hit: 3, death: 5, victory: 5 },
   },
   thief: {
     jobId: 'thief',
@@ -211,7 +216,7 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     capeColor: '#1e1b2e',
     dualDaggers: true,
     wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 4, attack: 4 },
+    animationFrames: { idle: 4, walk: 6, run: 6, attack: 5, skill: 6, hit: 3, death: 5, victory: 5 },
   },
   kensei: {
     jobId: 'kensei',
@@ -228,7 +233,7 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     shoulderPads: true,
     auraColor: '#38bdf8',
     wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 4, attack: 4 },
+    animationFrames: { idle: 4, walk: 6, run: 6, attack: 5, skill: 6, hit: 3, death: 5, victory: 5 },
   },
   iron_fist: {
     jobId: 'iron_fist',
@@ -246,7 +251,7 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     shoulderPads: true,
     auraColor: '#fb923c',
     wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 4, attack: 4 },
+    animationFrames: { idle: 4, walk: 6, run: 6, attack: 5, skill: 6, hit: 3, death: 5, victory: 5 },
   },
   wicked_necromancer: {
     jobId: 'wicked_necromancer',
@@ -263,7 +268,7 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     shoulderPads: true,
     auraColor: '#a855f7',
     wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 4, attack: 4 },
+    animationFrames: { idle: 4, walk: 6, run: 6, attack: 5, skill: 6, hit: 3, death: 5, victory: 5 },
   },
   the_king: {
     jobId: 'the_king',
@@ -280,7 +285,7 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     halo: true,
     auraColor: '#facc15',
     wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 4, attack: 4 },
+    animationFrames: { idle: 4, walk: 6, run: 6, attack: 5, skill: 6, hit: 3, death: 5, victory: 5 },
   },
   sinister: {
     jobId: 'sinister',
@@ -298,7 +303,7 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     dualDaggers: true,
     auraColor: '#e11d48',
     wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 4, attack: 4 },
+    animationFrames: { idle: 4, walk: 6, run: 6, attack: 5, skill: 6, hit: 3, death: 5, victory: 5 },
   },
   templar: {
     jobId: 'templar',
@@ -317,7 +322,7 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     halo: true,
     auraColor: '#60a5fa',
     wingStyle: 'angel',
-    animationFrames: { idle: 4, walk: 4, attack: 4 },
+    animationFrames: { idle: 4, walk: 6, run: 6, attack: 5, skill: 6, hit: 3, death: 5, victory: 5 },
   },
   nekobaku: {
     jobId: 'nekobaku',
@@ -335,7 +340,7 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     quiver: true,
     auraColor: '#f472b6',
     wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 4, attack: 4 },
+    animationFrames: { idle: 4, walk: 6, run: 6, attack: 5, skill: 6, hit: 3, death: 5, victory: 5 },
   },
   mamushi: {
     jobId: 'mamushi',
@@ -352,7 +357,7 @@ export const JOB_MODEL_SPECS: Record<string, JobModelSpec> = {
     quiver: true,
     auraColor: '#22c55e',
     wingStyle: 'none',
-    animationFrames: { idle: 4, walk: 4, attack: 4 },
+    animationFrames: { idle: 4, walk: 6, run: 6, attack: 5, skill: 6, hit: 3, death: 5, victory: 5 },
   },
 }
 

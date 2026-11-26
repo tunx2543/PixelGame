@@ -644,7 +644,15 @@ export function renderHdHumanSprite(
 ): HTMLCanvasElement {
   const rawAction: SpriteAction = attacking ? 'attack' : actionOverride ?? (frame > 0 ? 'walk' : 'idle')
   const action: SpriteAction =
-    rawAction === 'run' ? 'walk' : rawAction === 'mount' || rawAction === 'dismount' ? 'idle' : rawAction
+    rawAction === 'run' || rawAction === 'follow'
+      ? 'walk'
+      : rawAction === 'mount' ||
+          rawAction === 'dismount' ||
+          rawAction === 'hit' ||
+          rawAction === 'death' ||
+          rawAction === 'victory'
+        ? 'idle'
+        : rawAction
   const isSkill = action === 'skill'
   const isAtk = action === 'attack'
   const f =

@@ -178,6 +178,27 @@ export function SpriteModelCanvas({
             effectiveAction = 'attack'
             attackProgress = (cycle - 5.05) / 1.35
           }
+        } else if (mode === 'job') {
+          const cycle = elapsed % 8.4
+          if (cycle < 1.2) {
+            effectiveAction = 'idle'
+          } else if (cycle < 2.4) {
+            effectiveAction = 'walk'
+          } else if (cycle < 3.6) {
+            effectiveAction = 'run'
+          } else if (cycle < 4.7) {
+            effectiveAction = 'attack'
+            attackProgress = (cycle - 3.6) / 1.1
+          } else if (cycle < 6.0) {
+            effectiveAction = 'skill'
+            attackProgress = (cycle - 4.7) / 1.3
+          } else if (cycle < 6.8) {
+            effectiveAction = 'hit'
+            attackProgress = (cycle - 6.0) / 0.8
+          } else {
+            effectiveAction = 'victory'
+            attackProgress = (cycle - 6.8) / 1.6
+          }
         } else {
           const cycle = elapsed % 5.1
           if (cycle < 1.35) {
@@ -195,10 +216,14 @@ export function SpriteModelCanvas({
       } else if (
         action === 'attack' ||
         action === 'skill' ||
+        action === 'hit' ||
+        action === 'death' ||
+        action === 'victory' ||
         action === 'mount' ||
         action === 'dismount'
       ) {
-        attackProgress = reducedMotion ? 0.5 : (elapsed * 1.35) % 1
+        const speed = action === 'hit' ? 1.85 : action === 'death' ? 0.95 : 1.25
+        attackProgress = reducedMotion ? 0.5 : (elapsed * speed) % 1
       }
 
       if (lastPhase !== effectiveAction) {
@@ -222,31 +247,63 @@ export function SpriteModelCanvas({
 
       const resolvedMonsterId = mode === 'monster' ? normalizeMonsterId(id) : id
       const isCatalogMonster = mode === 'monster'
+      const jobAnimSpec = mode === 'job' ? getJobModelSpec(normalizeJobId(id)).animationFrames : null
       const isAttack = effectiveAction === 'attack'
       const isSkill = effectiveAction === 'skill'
+      const isHit = effectiveAction === 'hit'
+      const isDeath = effectiveAction === 'death'
+      const isVictory = effectiveAction === 'victory'
       const isMountHop = effectiveAction === 'mount' || effectiveAction === 'dismount'
-      const atkCount = isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'attack', dir) : 4
-      const skillCount = isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'skill', dir) : 4
-      const walkMod = mode === 'job' ? 4 : isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'walk', dir) : 6
-      const idleCount = isCatalogMonster ? getCatalogMonsterFrameCount(resolvedMonsterId, 'idle', dir) : 4
+      const atkCount = jobAnimSpec
+        ? jobAnimSpec.attack
+        : isCatalogMonster
+          ? getCatalogMonsterFrameCount(resolvedMonsterId, 'attack', dir)
+          : 4
+      const skillCount = jobAnimSpec
+        ? jobAnimSpec.skill
+        : isCatalogMonster
+          ? getCatalogMonsterFrameCount(resolvedMonsterId, 'skill', dir)
+          : 4
+      const walkMod = jobAnimSpec
+        ? (effectiveAction === 'run' ? jobAnimSpec.run : jobAnimSpec.walk)
+        : isCatalogMonster
+          ? getCatalogMonsterFrameCount(resolvedMonsterId, 'walk', dir)
+          : 6
+      const idleCount = jobAnimSpec
+        ? jobAnimSpec.idle
+        : isCatalogMonster
+          ? getCatalogMonsterFrameCount(resolvedMonsterId, 'idle', dir)
+          : 4
+      const hitCount = jobAnimSpec?.hit ?? 3
+      const deathCount = jobAnimSpec?.death ?? 5
+      const victoryCount = jobAnimSpec?.victory ?? 5
       const attackFrame = isAttack ? Math.min(atkCount - 1, Math.floor(attackProgress * atkCount)) : 0
       const skillFrame = isSkill ? Math.min(skillCount - 1, Math.floor(attackProgress * skillCount)) : 0
+      const hitFrame = isHit ? Math.min(hitCount - 1, Math.floor(attackProgress * hitCount)) : 0
+      const deathFrame = isDeath ? Math.min(deathCount - 1, Math.floor(attackProgress * deathCount)) : 0
+      const victoryFrame = isVictory ? Math.min(victoryCount - 1, Math.floor(attackProgress * victoryCount)) : 0
       const hopFrame = isMountHop ? Math.min(3, Math.floor(attackProgress * 4)) : 0
       const frame = isSkill
         ? skillFrame
         : isAttack
           ? attackFrame
-          : isMountHop
-            ? hopFrame
-            : effectiveAction === 'run'
-              ? Math.floor(elapsed * 12) % walkMod
-              : effectiveAction === 'follow'
-                ? Math.floor(elapsed * 9.5) % walkMod
-                : effectiveAction === 'walk'
-                  ? Math.floor(elapsed * (isCatalogMonster ? 7.5 : 8.5)) % walkMod
-                  : mode === 'job' && !reducedMotion && Math.sin(elapsed * 1.4) > 0.96
-                    ? -1
-                    : Math.floor(elapsed * (isCatalogMonster ? 5.0 : 2.6)) % idleCount
+          : isHit
+            ? hitFrame
+            : isDeath
+              ? deathFrame
+              : isVictory
+                ? victoryFrame
+                : isMountHop
+                  ? hopFrame
+                  : effectiveAction === 'run'
+                    ? Math.floor(elapsed * 12) % walkMod
+                    : effectiveAction === 'follow'
+                      ? Math.floor(elapsed * 9.5) % walkMod
+                      : effectiveAction === 'walk'
+                        ? Math.floor(elapsed * (isCatalogMonster ? 7.5 : 8.5)) % walkMod
+                        : mode === 'job' && !reducedMotion && Math.sin(elapsed * 1.4) > 0.96
+                          ? -1
+                          : Math.floor(elapsed * (isCatalogMonster ? 5.0 : 2.6)) % idleCount
 
       let drawable: ResolvedDrawable
       let auraColor: string | undefined

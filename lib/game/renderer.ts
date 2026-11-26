@@ -1041,8 +1041,8 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     const remoteAttacking = other.attackAnim > 0
     const remoteAction: SpriteAction = remoteAttacking ? 'attack' : other.moving ? 'walk' : 'idle'
     const atkProgress = remoteAttacking ? Math.max(0, Math.min(1, 1 - other.attackAnim / 0.3)) : 0
-    const remoteAtkFrame = Math.min(3, Math.floor(atkProgress * 4))
-    const remoteWalkMod = 4
+    const remoteAtkFrame = Math.min(4, Math.floor(atkProgress * 5))
+    const remoteWalkMod = 6
     const remoteFrame = remoteAttacking
       ? remoteAtkFrame
       : other.moving
@@ -1349,21 +1349,48 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     draw: () => {
       const castingSkill = game.skillAnim > 0
       const attacking = !castingSkill && game.attackAnim > 0
-      const action: SpriteAction = castingSkill ? 'skill' : attacking ? 'attack' : game.moving ? 'walk' : 'idle'
+      const hitReacting = !castingSkill && !attacking && game.hitAnim > 0
+      const celebrating = !castingSkill && !attacking && !hitReacting && !game.moving && game.victoryAnim > 0
+      const running = !castingSkill && !attacking && game.moving && game.moveHoldT > 0.65
+      const action: SpriteAction = castingSkill
+        ? 'skill'
+        : attacking
+          ? 'attack'
+          : hitReacting
+            ? 'hit'
+            : celebrating
+              ? 'victory'
+              : running
+                ? 'run'
+                : game.moving
+                  ? 'walk'
+                  : 'idle'
       const atkProgress = attacking ? Math.max(0, Math.min(1, 1 - game.attackAnim / 0.3)) : 0
-      const atkFrame = Math.min(3, Math.floor(atkProgress * 4))
+      const atkFrame = Math.min(4, Math.floor(atkProgress * 5))
       const skillProgress = castingSkill
         ? Math.max(0, Math.min(1, 1 - game.skillAnim / Math.max(0.2, game.skillAnimMax || 0.55)))
         : 0
-      const skillFrame = Math.min(3, Math.floor(skillProgress * 4))
-      const walkMod = 4
+      const skillFrame = Math.min(5, Math.floor(skillProgress * 6))
+      const hitProgress = hitReacting
+        ? Math.max(0, Math.min(1, 1 - game.hitAnim / Math.max(0.15, game.hitAnimMax || 0.28)))
+        : 0
+      const hitFrame = Math.min(2, Math.floor(hitProgress * 3))
+      const victoryProgress = celebrating
+        ? Math.max(0, Math.min(1, 1 - game.victoryAnim / Math.max(0.4, game.victoryAnimMax || 0.85)))
+        : 0
+      const victoryFrame = Math.min(4, Math.floor(victoryProgress * 5))
+      const walkMod = 6
       const frame = castingSkill
         ? skillFrame
         : attacking
           ? atkFrame
-          : game.moving
-            ? Math.floor(game.walkT * 10) % walkMod
-            : (Math.sin(t * 1.4) > 0.96 ? -1 : Math.floor(t * 2.4) % 4)
+          : hitReacting
+            ? hitFrame
+            : celebrating
+              ? victoryFrame
+              : game.moving
+                ? Math.floor(game.walkT * (running ? 14 : 10)) % walkMod
+                : (Math.sin(t * 1.4) > 0.96 ? -1 : Math.floor(t * 2.4) % 4)
       const weaponType = weapon?.weaponType ?? job.weaponTypes[0] ?? 'stick'
       const styledColors = jobHumanColors(job.id, job.colors, false)
       const weaponDrawColor = castingSkill

@@ -978,6 +978,10 @@ export const game = {
   skillAnim: 0,
   skillAnimMax: 0.55,
   skillVfxColor: '#38bdf8',
+  hitAnim: 0,
+  hitAnimMax: 0.28,
+  victoryAnim: 0,
+  victoryAnimMax: 0.85,
   petAttackCd: 0,
   petAttackAnim: 0,
   petFollow: createDefaultPetFollowState() as PetFollowState,
@@ -3868,6 +3872,10 @@ function killMonster(m: Monster) {
     }
   }
   addEffect({ type: 'burst', x: m.x, y: m.y - 6, r: def.boss || m.isWorldBoss ? 30 : 14, color: def.color, max: 0.4 })
+  if (def.boss || m.isWorldBoss) {
+    game.victoryAnim = 0.85
+    game.victoryAnimMax = 0.85
+  }
   const baseGold = randInt(def.gold[0], def.gold[1])
   const gold = Math.round(
     baseGold *
@@ -4058,6 +4066,8 @@ function onLevelUp(beforeStats: ReturnType<typeof getStats>) {
   }
   addEffect({ type: 'levelup', x: p.x, y: p.y, r: 20, color: '#ffd60a', max: 1.2 })
   addFloat(p.x, p.y - 40, 'LEVEL UP!', '#ffd60a', 14)
+  game.victoryAnim = 0.85
+  game.victoryAnimMax = 0.85
   say('system', `ยินดีด้วย! เลเวลอัพเป็น Lv.${p.level}`)
   say('system', `ค่าสถานะเพิ่ม: HP +${s.maxHp - beforeStats.maxHp}, MP +${s.maxMp - beforeStats.maxMp}, ATK +${s.atk - beforeStats.atk}, DEF +${s.def - beforeStats.def}`)
   const next = Object.values(JOBS).find((j) => j.from === p.jobId && j.reqLevel === p.level)
@@ -4431,7 +4441,12 @@ function hurtPlayer(
     outlineColor: POPUP_PALETTE[kind].outlineColor,
     duration: 0.95,
   })
-  if (p.hp <= 0) die()
+  if (p.hp <= 0) {
+    die()
+  } else {
+    game.hitAnim = 0.28
+    game.hitAnimMax = 0.28
+  }
 }
 
 function die() {
@@ -10221,6 +10236,8 @@ function resetRuntime() {
   game.mountWalkOnly = false
   game.attackAnim = 0
   game.skillAnim = 0
+  game.hitAnim = 0
+  game.victoryAnim = 0
   game.petAttackAnim = 0
   game.petFollow = createDefaultPetFollowState()
   game.skillCd = {}
@@ -10527,6 +10544,8 @@ export function update(dt: number) {
   game.attackCd -= dt
   game.attackAnim = Math.max(0, game.attackAnim - dt)
   game.skillAnim = Math.max(0, game.skillAnim - dt)
+  game.hitAnim = Math.max(0, game.hitAnim - dt)
+  game.victoryAnim = Math.max(0, game.victoryAnim - dt)
   if (game.mountAnim > 0) {
     game.mountAnim = Math.max(0, game.mountAnim - dt)
     if (game.mountAnim <= 0) game.mountTransition = 'none'

@@ -140,7 +140,7 @@ export function SkillVfxPreview({
 
       // Hero sprite
       const isHeroCasting = vfxActive && vfxProgress < 0.78
-      const heroSkillFrame = isHeroCasting ? Math.min(3, Math.floor((vfxProgress / 0.78) * 4)) : 0
+      const heroSkillFrame = isHeroCasting ? Math.min(5, Math.floor((vfxProgress / 0.78) * 6)) : 0
       const heroIdleFrame = Math.floor(timeSec * 3) % 4
       const lungeX = isHeroCasting ? Math.round(Math.sin((vfxProgress / 0.78) * Math.PI) * 8) : 0
       const heroDrawable = resolveHumanDrawable(
