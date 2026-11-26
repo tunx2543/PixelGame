@@ -1,15 +1,26 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { MAPS } from './maps'
 import {
   BGM_BATTLE_HOLD_SEC,
+  BGM_MAP_TRACK_CATALOG,
   BGM_THEMES,
   BGM_TRACK_CATALOG,
+  BGM_TRACK_IDS,
   clampBgmVolume,
+  getBgmTrackMeta,
   isDungeonBgmMapId,
   isSpecialEventBgmMapId,
   pickPlayableAudioUrl,
   resolveBgmTheme,
+  resolveBgmTrackId,
 } from './bgm-tracks'
+import {
+  BGM_ORCHESTRAL_SCORES,
+  getOrchestralScore,
+  noteToHz,
+  validateAllOrchestralScores,
+} from './bgm-scores'
 
 test('BGM catalog covers all 7 required themes with OGG and MP3 candidates', () => {
   assert.deepEqual([...BGM_THEMES], ['login', 'town', 'field', 'dungeon', 'battle', 'boss', 'event'])
@@ -79,6 +90,79 @@ test('combat BGM hysteresis holds battle music for BGM_BATTLE_HOLD_SEC then retu
     resolveBgmTheme({ screen: 'game', mapId: 'ruins', combatElapsedSec: BGM_BATTLE_HOLD_SEC + 1 }),
     'dungeon',
   )
+})
+
+test('every game map resolves to its own distinct MMORPG Open World track ID and score', () => {
+  const seenPerMapIds = new Set<string>()
+  for (const mapDef of Object.values(MAPS)) {
+    const trackId = resolveBgmTrackId({ screen: 'game', mapId: mapDef.id })
+    const expected = mapDef.id === 'act_boss_rush' ? 'boss' : mapDef.id
+    assert.equal(trackId, expected, `Map ${mapDef.id} should resolve to track ${expected}`)
+    seenPerMapIds.add(trackId)
+
+    const meta = getBgmTrackMeta(trackId)
+    assert.equal(meta.trackId, trackId)
+    assert.ok(meta.labelTh.length > 0)
+    assert.ok(meta.styleTh.length > 0)
+    assert.ok(meta.bpm >= 60 && meta.bpm <= 170)
+
+    const score = getOrchestralScore(trackId)
+    assert.equal(score.trackId, trackId)
+    assert.equal(score.steps.length, 32, `Score for ${trackId} should have 32 steps (4 bars)`)
+  }
+  assert.equal(seenPerMapIds.size, Object.keys(MAPS).length)
+})
+
+test('battle/boss precedence overrides map exploration track then restores exact map track', () => {
+  assert.equal(resolveBgmTrackId({ screen: 'game', mapId: 'desert', inCombat: true }), 'battle')
+  assert.equal(
+    resolveBgmTrackId({ screen: 'game', mapId: 'desert', combatElapsedSec: BGM_BATTLE_HOLD_SEC }),
+    'desert',
+  )
+  assert.equal(resolveBgmTrackId({ screen: 'game', mapId: 'snow', bossActive: true }), 'boss')
+  assert.equal(resolveBgmTrackId({ screen: 'game', mapId: 'snow', bossActive: false }), 'snow')
+  assert.equal(resolveBgmTrackId({ screen: 'game', mapId: 'volcano' }), 'volcano')
+  assert.equal(resolveBgmTrackId({ screen: 'game', mapId: 'act_fishing' }), 'act_fishing')
+})
+
+test('all 27 BGM_TRACK_IDS have valid orchestral scores and positive note frequencies', () => {
+  assert.equal(validateAllOrchestralScores(), true)
+  assert.equal(noteToHz('A4'), 440)
+  assert.ok(Math.abs(noteToHz('C4') - 261.63) < 0.05)
+  assert.equal(noteToHz(null), 0)
+
+  const distinctBpmTimbrePairs = new Set<string>()
+  for (const id of BGM_TRACK_IDS) {
+    assert.ok(BGM_MAP_TRACK_CATALOG[id], `Missing map track meta for ${id}`)
+    const score = BGM_ORCHESTRAL_SCORES[id]
+    assert.ok(score, `Missing orchestral score for ${id}`)
+    assert.equal(score.steps.length, 32)
+    distinctBpmTimbrePairs.add(`${id}:${score.bpm}:${score.leadTimbre}:${score.arpTimbre}:${score.padTimbre}`)
+
+    let hasMelody = false
+    let hasChord = false
+    for (const step of score.steps) {
+      if (step.melody) {
+        assert.ok(noteToHz(step.melody) > 0, `Invalid melody note ${step.melody} in ${id}`)
+        hasMelody = true
+      }
+      if (step.arp) {
+        assert.ok(noteToHz(step.arp) > 0, `Invalid arp note ${step.arp} in ${id}`)
+      }
+      if (step.bass) {
+        assert.ok(noteToHz(step.bass) > 0, `Invalid bass note ${step.bass} in ${id}`)
+      }
+      if (step.chord) {
+        hasChord = true
+        for (const n of step.chord) {
+          assert.ok(noteToHz(n) > 0, `Invalid chord note ${n} in ${id}`)
+        }
+      }
+    }
+    assert.ok(hasMelody, `Score ${id} must contain melody notes`)
+    assert.ok(hasChord, `Score ${id} must contain harmonic chords`)
+  }
+  assert.equal(distinctBpmTimbrePairs.size, BGM_TRACK_IDS.length)
 })
 
 test('pickPlayableAudioUrl selects OGG when supported and falls back to MP3 when OGG is unsupported', () => {

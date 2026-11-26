@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Gauge, Keyboard, Layout, Music, PackageCheck, RefreshCw, RotateCcw, Sliders, Sparkles, Volume2, VolumeX } from 'lucide-react'
-import { BGM_TRACK_CATALOG, setBgmMuted, setBgmVolume } from '@/lib/game/bgm'
+import { getBgmTrackMeta, setBgmMuted, setBgmVolume } from '@/lib/game/bgm'
 import { getEngineBgmContext, toggleZenHud } from '@/lib/game/engine'
 import { playQuestClaimSfx, setSfxMuted, setSfxVolume } from '@/lib/game/sfx'
 import {
@@ -50,7 +50,7 @@ export function SettingsPanel({ onClose }: { onClose?: () => void } = {}) {
 
   const bgmVol = Math.round(bgm.volume * 100)
   const sfxVol = Math.round(sfx.volume * 100)
-  const currentTrack = BGM_TRACK_CATALOG[bgm.desiredTheme]
+  const currentTrack = getBgmTrackMeta(bgm.desiredTrackId)
 
   const handleToggleBgm = () => {
     setBgmMuted(!bgm.muted, p ? getEngineBgmContext() : { screen: 'login' })
@@ -96,7 +96,7 @@ export function SettingsPanel({ onClose }: { onClose?: () => void } = {}) {
               เสียงเพลงประกอบ & เอฟเฟกต์ (Audio)
             </h3>
             <span className="rounded border border-amber-400/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-200">
-              {currentTrack.labelTh} · {bgm.muted ? 'ปิดอยู่' : bgm.source === 'file' ? 'MP3/OGG Loop' : '8-bit Synth Loop'}
+              {currentTrack.labelTh} · {bgm.muted ? 'ปิดอยู่' : bgm.source === 'file' ? 'MP3/OGG Loop' : `${currentTrack.styleTh}`}
             </span>
           </div>
 
@@ -105,7 +105,7 @@ export function SettingsPanel({ onClose }: { onClose?: () => void } = {}) {
               <div>
                 <p className="font-semibold text-foreground">เพลงประกอบพื้นหลัง (BGM)</p>
                 <p className="text-[11px] text-muted-foreground">
-                  เปลี่ยนอัตโนมัติ 7 สถานการณ์ (Login · เมือง · ฟาร์ม · ดันเจี้ยน · สู้มอน · สู้บอส · กิจกรรม)
+                  เพลงดนตรี Open World แยกเฉพาะทุกแผนที่ · เปลี่ยนอัตโนมัติ (เมือง · ฟาร์ม · ดันเจี้ยน · สู้มอน/บอส · กิจกรรม)
                 </p>
               </div>
               <PxButton variant={bgm.muted ? 'secondary' : 'accent'} onClick={handleToggleBgm}>

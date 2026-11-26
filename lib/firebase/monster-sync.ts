@@ -1,7 +1,6 @@
 'use client'
 
-import { doc, getDocFromServer } from 'firebase/firestore'
-import { db } from './client'
+import { testConnection } from './client'
 import { preloadMapCatalogSprites, refreshCatalogMonsterSprites } from '@/lib/game/catalog-sprites'
 import {
   getMonsterCacheRevision,
@@ -29,14 +28,7 @@ export async function syncLatestMonsterAssetsAndFirestore(options?: {
 
   const run = async (): Promise<{ revision: string; fromServer: boolean }> => {
     const purged = purgeStaleLocalMonsterCaches(Boolean(options?.forceBust))
-    let fromServer = false
-
-    try {
-      await getDocFromServer(doc(db, 'test', 'connection'))
-      fromServer = true
-    } catch {
-      // Guest / offline fallback keeps local catalog revision active.
-    }
+    const fromServer = await testConnection()
 
     const revision =
       options?.forceBust || purged

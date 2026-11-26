@@ -113,6 +113,7 @@ import {
   FISHING_DERBY_SPOTS,
   GUILD_WAR_FLAG_SPOTS,
   INVASION_WAVES,
+  canEnterActivity,
   computeActivityRewards,
   getActivityByMapId,
   getActivityDef,
@@ -264,9 +265,11 @@ import {
   BGM_BATTLE_HOLD_SEC,
   isSpecialEventBgmMapId,
   resolveBgmTheme,
+  resolveBgmTrackId,
   syncBgmContext,
   type BgmResolveContext,
   type BgmTheme,
+  type BgmTrackId,
 } from './bgm'
 import {
   EQUIPMENT_RARITY_META,
@@ -6936,6 +6939,14 @@ export function enterActivityAction(
   const targetMap = MAPS[def.mapId]
   if (!targetMap) return { ok: false, message: 'ไม่พบแผนที่กิจกรรมนี้' }
 
+  const entryGate = canEnterActivity(activityId, Date.now())
+  if (!entryGate.ok) {
+    return {
+      ok: false,
+      message: entryGate.reason ?? `กิจกรรม "${def.name}" ปิดให้บริการวันนี้`,
+    }
+  }
+
   if (options?.bountyId) {
     const bounty = getBountyTargetById(options.bountyId)
     const extV2 = sanitizeExtV2(p.extV2)
@@ -10472,10 +10483,12 @@ export function getEngineBgmContext(): BgmResolveContext {
 }
 
 let lastEngineBgmTheme: BgmTheme | null = null
+let lastEngineBgmTrackId: BgmTrackId | null = null
 
 export function syncEngineBgm(force = false) {
   const ctx = getEngineBgmContext()
   lastEngineBgmTheme = resolveBgmTheme(ctx)
+  lastEngineBgmTrackId = resolveBgmTrackId(ctx)
   syncBgmContext(ctx, force)
 }
 
@@ -10484,6 +10497,7 @@ export function quitToTitle() {
   game.p = null
   resetRuntime()
   lastEngineBgmTheme = 'login'
+  lastEngineBgmTrackId = 'login'
   syncBgmContext({ screen: 'login' })
   notify()
 }
@@ -10872,8 +10886,10 @@ export function update(dt: number) {
   game.saveT += dt
   if (game.saveT >= 10) saveGame()
 
-  const nextTheme = resolveBgmTheme(getEngineBgmContext())
-  if (nextTheme !== lastEngineBgmTheme) {
+  const bgmCtx = getEngineBgmContext()
+  const nextTheme = resolveBgmTheme(bgmCtx)
+  const nextTrackId = resolveBgmTrackId(bgmCtx)
+  if (nextTheme !== lastEngineBgmTheme || nextTrackId !== lastEngineBgmTrackId) {
     syncEngineBgm()
   }
 }

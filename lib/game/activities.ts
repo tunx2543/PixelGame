@@ -39,6 +39,26 @@ export const ACTIVITY_SIGNATURE_ITEM_BY_ACTIVITY: Record<ActivityId, string> = {
   fishing: 'act_item_golden_bait',
 }
 
+export const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000
+export const THAI_WEEKDAY_SHORT: readonly string[] = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'] as const
+export const THAI_WEEKDAY_FULL: readonly string[] = [
+  'อาทิตย์',
+  'จันทร์',
+  'อังคาร',
+  'พุธ',
+  'พฤหัสบดี',
+  'ศุกร์',
+  'เสาร์',
+] as const
+export const DISPLAY_WEEKDAY_ORDER: readonly number[] = [1, 2, 3, 4, 5, 6, 0] as const
+
+export function formatOpenWeekdaysThai(openWeekdays: readonly number[]): string {
+  const allowed = new Set(openWeekdays)
+  return DISPLAY_WEEKDAY_ORDER.filter((day) => allowed.has(day))
+    .map((day) => THAI_WEEKDAY_SHORT[day])
+    .join(' · ')
+}
+
 export interface ActivityDef {
   id: ActivityId
   mapId: string
@@ -48,6 +68,9 @@ export interface ActivityDef {
   recommendedLevel: number
   dailyCap: number
   durationSec: number
+  /** Bangkok (UTC+7) weekdays when this activity is open (0 = Sun .. 6 = Sat) */
+  openWeekdays: readonly number[]
+  openDaysLabel: string
   scheduleLabel: string
   peakHoursLocal: number[]
   rewardSummary: string
@@ -67,7 +90,9 @@ export const ACTIVITY_DEFS: readonly ActivityDef[] = [
     recommendedLevel: 10,
     dailyCap: 3,
     durationSec: 240,
-    scheduleLabel: 'เปิดทุกวัน · รอบพิเศษ 12:00 / 18:00 / 21:00 น.',
+    openWeekdays: [1, 3, 5, 0],
+    openDaysLabel: 'จ. · พ. · ศ. · อา.',
+    scheduleLabel: 'เปิดวัน จ. · พ. · ศ. · อา. · รอบพิเศษ 12:00 / 18:00 / 21:00 น.',
     peakHoursLocal: [12, 18, 21],
     rewardSummary: 'กล่องสุ่มอาวุธกิจกรรม · เสบียงป้อมปราการ · เพชร & โทเคน',
     featuredItemIds: ['act_weapon_box_rare', 'act_item_bastion_ration'],
@@ -84,7 +109,9 @@ export const ACTIVITY_DEFS: readonly ActivityDef[] = [
     recommendedLevel: 20,
     dailyCap: 3,
     durationSec: 240,
-    scheduleLabel: 'เปิดทุกวัน · ช่วงศึกใหญ่ 19:00 – 22:00 น.',
+    openWeekdays: [2, 4, 6],
+    openDaysLabel: 'อ. · พฤ. · ส.',
+    scheduleLabel: 'เปิดวัน อ. · พฤ. · ส. · ช่วงศึกใหญ่ 19:00 – 22:00 น.',
     peakHoursLocal: [19, 20, 21],
     rewardSummary: 'หีบสุ่มศาสตราวุธวีรบุรุษ · แตรศึกกิลด์ · หินตีบวก & เพชร',
     featuredItemIds: ['act_weapon_box_legend', 'act_item_war_horn'],
@@ -101,7 +128,9 @@ export const ACTIVITY_DEFS: readonly ActivityDef[] = [
     recommendedLevel: 12,
     dailyCap: 5,
     durationSec: 180,
-    scheduleLabel: 'เปิดตลอดวัน · เปลี่ยนเป้าหมายได้ตามระดับพลัง',
+    openWeekdays: [1, 2, 4, 6],
+    openDaysLabel: 'จ. · อ. · พฤ. · ส.',
+    scheduleLabel: 'เปิดวัน จ. · อ. · พฤ. · ส. · เปลี่ยนเป้าหมายได้ตามระดับพลัง',
     peakHoursLocal: [13, 17, 22],
     rewardSummary: 'กล่องสุ่มอาวุธ · ตรานายพรานค่าหัว · ทองก้อนโต & เพชร',
     featuredItemIds: ['act_weapon_box_rare', 'act_weapon_box_legend', 'act_item_bounty_seal'],
@@ -118,7 +147,9 @@ export const ACTIVITY_DEFS: readonly ActivityDef[] = [
     recommendedLevel: 15,
     dailyCap: 3,
     durationSec: 180,
-    scheduleLabel: 'เปิดตลอดวัน · โบนัสขุดทอง 14:00 & 20:00 น.',
+    openWeekdays: [3, 5, 0],
+    openDaysLabel: 'พ. · ศ. · อา.',
+    scheduleLabel: 'เปิดวัน พ. · ศ. · อา. · โบนัสขุดทอง 14:00 & 20:00 น.',
     peakHoursLocal: [14, 20],
     rewardSummary: 'กล่องสุ่มอาวุธกิจกรรม · เข็มทิศโจรสลัด · ผลึกวิญญาณคู่หู',
     featuredItemIds: ['act_weapon_box_rare', 'act_item_pirate_compass', 'pet_essence'],
@@ -135,7 +166,9 @@ export const ACTIVITY_DEFS: readonly ActivityDef[] = [
     recommendedLevel: 30,
     dailyCap: 3,
     durationSec: 300,
-    scheduleLabel: 'เปิดตลอดวัน · บันทึกสถิติเวลาไวสุดส่วนตัว',
+    openWeekdays: [2, 3, 6, 0],
+    openDaysLabel: 'อ. · พ. · ส. · อา.',
+    scheduleLabel: 'เปิดวัน อ. · พ. · ส. · อา. · บันทึกสถิติเวลาไวสุดส่วนตัว',
     peakHoursLocal: [15, 20, 23],
     rewardSummary: 'หีบสุ่มศาสตราวุธวีรบุรุษ · น้ำอมฤตแชมเปี้ยน · หินตีบวก & เพชร',
     featuredItemIds: ['act_weapon_box_legend', 'act_item_colosseum_elixir'],
@@ -152,7 +185,9 @@ export const ACTIVITY_DEFS: readonly ActivityDef[] = [
     recommendedLevel: 1,
     dailyCap: 5,
     durationSec: 120,
-    scheduleLabel: 'เปิดทุกวัน · เขตปลอดภัย 100% ไร้การต่อสู้',
+    openWeekdays: [1, 4, 5, 0],
+    openDaysLabel: 'จ. · พฤ. · ศ. · อา.',
+    scheduleLabel: 'เปิดวัน จ. · พฤ. · ศ. · อา. · เขตปลอดภัย 100% ไร้การต่อสู้',
     peakHoursLocal: [11, 16, 21],
     rewardSummary: 'กล่องสุ่มอาวุธกิจกรรม · เหยื่อทองคำเทพวารี · ปลาคาร์ปทองคำ',
     featuredItemIds: ['act_weapon_box_rare', 'act_item_golden_bait', 'fish_golden'],
@@ -587,18 +622,89 @@ export function recordActivityClearInState(
   }
 }
 
+export interface ActivityScheduleStatus {
+  open: boolean
+  isPeakBonus: boolean
+  badgeText: string
+  currentWeekday: number
+  currentWeekdayShort: string
+  currentWeekdayFull: string
+  openWeekdays: readonly number[]
+  openDaysLabel: string
+  nextOpenWeekday: number
+  nextOpenDayShort: string
+  nextOpenDayFull: string
+}
+
+export function getBangkokActivityTimeParts(nowMs = Date.now()): { dayOfWeek: number; hour: number } {
+  const shifted = new Date(nowMs + BANGKOK_OFFSET_MS)
+  return {
+    dayOfWeek: shifted.getUTCDay(),
+    hour: shifted.getUTCHours(),
+  }
+}
+
+export function getNextOpenWeekday(openWeekdays: readonly number[], currentWeekday: number): number {
+  const safeCurrent = ((Math.floor(currentWeekday) % 7) + 7) % 7
+  for (let offset = 1; offset <= 7; offset++) {
+    const candidate = (safeCurrent + offset) % 7
+    if (openWeekdays.includes(candidate)) return candidate
+  }
+  return safeCurrent
+}
+
 export function getActivityScheduleStatus(
   activityId: ActivityId,
   nowMs = Date.now(),
-): { open: boolean; isPeakBonus: boolean; badgeText: string } {
+): ActivityScheduleStatus {
   const def = getActivityDef(activityId)
-  const hour = new Date(nowMs).getHours()
-  const isPeakBonus = def.peakHoursLocal.includes(hour)
+  const { dayOfWeek, hour } = getBangkokActivityTimeParts(nowMs)
+  const open = def.openWeekdays.includes(dayOfWeek)
+  const isPeakBonus = open && def.peakHoursLocal.includes(hour)
+  const nextOpenWeekday = getNextOpenWeekday(def.openWeekdays, dayOfWeek)
+  const currentWeekdayShort = THAI_WEEKDAY_SHORT[dayOfWeek] ?? 'อา.'
+  const currentWeekdayFull = THAI_WEEKDAY_FULL[dayOfWeek] ?? 'อาทิตย์'
+  const nextOpenDayShort = THAI_WEEKDAY_SHORT[nextOpenWeekday] ?? currentWeekdayShort
+  const nextOpenDayFull = THAI_WEEKDAY_FULL[nextOpenWeekday] ?? currentWeekdayFull
+
   return {
-    open: true,
+    open,
     isPeakBonus,
-    badgeText: isPeakBonus ? 'ช่วงโบนัสกิจกรรม x1.25' : 'เปิดให้วาร์ปเข้าร่วม',
+    badgeText: !open
+      ? 'ปิดวันนี้'
+      : isPeakBonus
+        ? 'ช่วงโบนัสกิจกรรม x1.25'
+        : 'เปิดวันนี้',
+    currentWeekday: dayOfWeek,
+    currentWeekdayShort,
+    currentWeekdayFull,
+    openWeekdays: def.openWeekdays,
+    openDaysLabel: def.openDaysLabel,
+    nextOpenWeekday,
+    nextOpenDayShort,
+    nextOpenDayFull,
   }
+}
+
+export function canEnterActivity(
+  activityId: ActivityId,
+  nowMs = Date.now(),
+): { ok: boolean; reason?: string; status: ActivityScheduleStatus } {
+  const def = getActivityDef(activityId)
+  const status = getActivityScheduleStatus(activityId, nowMs)
+  if (!status.open) {
+    return {
+      ok: false,
+      status,
+      reason: `กิจกรรม "${def.name}" ปิดให้บริการในวัน${status.currentWeekdayFull} (เปิดเฉพาะวัน ${status.openDaysLabel} · เปิดรอบถัดไปวัน${status.nextOpenDayFull})`,
+    }
+  }
+  return { ok: true, status }
+}
+
+export function getTodayOpenActivities(nowMs = Date.now()): ActivityDef[] {
+  const { dayOfWeek } = getBangkokActivityTimeParts(nowMs)
+  return ACTIVITY_DEFS.filter((def) => def.openWeekdays.includes(dayOfWeek))
 }
 
 export interface ActivityWeaponRollResult {

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import {
+  CalendarDays,
   Clock,
   Compass,
   Crosshair,
@@ -9,6 +10,7 @@ import {
   Fish,
   Flag,
   Gift,
+  Lock,
   MapPin,
   ShieldAlert,
   Sparkles,
@@ -18,9 +20,12 @@ import {
 import {
   ACTIVITY_DEFS,
   BOUNTY_TARGETS,
+  DISPLAY_WEEKDAY_ORDER,
+  THAI_WEEKDAY_SHORT,
   getActivityByMapId,
   getActivityScheduleStatus,
   getBountyTargetById,
+  getTodayOpenActivities,
   isActivityMapId,
   type ActivityId,
 } from '@/lib/game/activities'
@@ -58,6 +63,17 @@ export function ActivitiesPanel() {
   const insideActivity = getActivityByMapId(p.mapId)
   const selectedBountyId = actProg?.selectedBountyId ?? BOUNTY_TARGETS[0].id
   const nowMs = Date.now()
+  const openTodayCount = getTodayOpenActivities(nowMs).length
+  const sampleSchedule = getActivityScheduleStatus(ACTIVITY_DEFS[0].id, nowMs)
+
+  const orderedDefs = [...ACTIVITY_DEFS].sort((a, b) => {
+    const aHere = isActivityMapId(p.mapId) && p.mapId === a.mapId ? 1 : 0
+    const bHere = isActivityMapId(p.mapId) && p.mapId === b.mapId ? 1 : 0
+    if (aHere !== bHere) return bHere - aHere
+    const aOpen = getActivityScheduleStatus(a.id, nowMs).open ? 1 : 0
+    const bOpen = getActivityScheduleStatus(b.id, nowMs).open ? 1 : 0
+    return bOpen - aOpen
+  })
 
   const handleEnter = (activityId: ActivityId) => {
     const res = enterActivityAction(
@@ -80,7 +96,7 @@ export function ActivitiesPanel() {
   return (
     <PanelFrame
       title="กิจกรรมพิเศษประจำวัน (Non-Festival)"
-      subtitle="วาร์ปเข้า-ออกแต่ละแผนที่กิจกรรมได้จากหน้านี้หรือเมนูหลักเท่านั้น · ไม่มีประตูวาร์ปในแผนที่"
+      subtitle="เปิดคละวันตามตารางเวลาไทย (UTC+7) · วาร์ปเข้า-ออกแต่ละแผนที่กิจกรรมได้จากหน้านี้เท่านั้น"
     >
       <div className="space-y-3">
         {insideActivity ? (
@@ -100,10 +116,19 @@ export function ActivitiesPanel() {
             </PxButton>
           </div>
         ) : (
-          <div className="flex flex-wrap items-center justify-between gap-2 border border-sky-400/40 bg-sky-950/25 px-3 py-2 text-xs text-sky-100/90">
+          <div
+            data-testid="activities-schedule-banner"
+            className="flex flex-wrap items-center justify-between gap-2 border border-sky-400/40 bg-sky-950/25 px-3 py-2 text-xs text-sky-100/90"
+          >
             <div className="flex items-center gap-2">
               <Sparkles className="size-4 shrink-0 text-sky-300" aria-hidden />
-              <span>ทุกกิจกรรมมีแผนที่เฉพาะตัว (6 แมพแยกอิสระ) วาร์ปเข้าและวาร์ปกลับได้ทันที</span>
+              <span>
+                วันนี้วัน{sampleSchedule.currentWeekdayFull} · เปิดให้เข้าเล่น{' '}
+                <strong className="text-emerald-300 tabular-nums">
+                  {openTodayCount}/{ACTIVITY_DEFS.length}
+                </strong>{' '}
+                กิจกรรม (สลับหมุนเวียนวันเปิดตลอดสัปดาห์)
+              </span>
             </div>
             <span className="text-[11px] font-semibold text-amber-300 tabular-nums">
               Lv.ปัจจุบัน: {p.level}
@@ -126,7 +151,7 @@ export function ActivitiesPanel() {
         )}
 
         <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
-          {ACTIVITY_DEFS.map((def) => {
+          {orderedDefs.map((def) => {
             const Icon = ACTIVITY_ICON_MAP[def.id]
             const schedule = getActivityScheduleStatus(def.id, nowMs)
             const dailyClears = actProg?.dailyClears[def.id] ?? 0
@@ -148,9 +173,14 @@ export function ActivitiesPanel() {
               <article
                 key={def.id}
                 data-testid={`activity-card-${def.id}`}
+                data-open={schedule.open ? 'true' : 'false'}
                 className={cn(
-                  'flex flex-col justify-between gap-2.5 border-2 bg-[#111827]/95 p-3 transition-colors',
-                  isHere ? 'border-amber-400/85 bg-[#1b1f33]' : 'border-border/80 hover:border-primary/60',
+                  'flex flex-col justify-between gap-2.5 border-2 p-3 transition-colors',
+                  isHere
+                    ? 'border-amber-400/85 bg-[#1b1f33]'
+                    : schedule.open
+                      ? 'border-border/80 bg-[#111827]/95 hover:border-primary/60'
+                      : 'border-slate-800/90 bg-[#0b101b]/90 opacity-85',
                 )}
               >
                 <div className="space-y-2">
@@ -158,7 +188,7 @@ export function ActivitiesPanel() {
                     <div className="flex min-w-0 items-center gap-2">
                       <div
                         className="grid size-9 shrink-0 place-items-center border border-white/15 bg-black/40"
-                        style={{ color: def.accentColor }}
+                        style={{ color: schedule.open ? def.accentColor : '#64748b' }}
                       >
                         <Icon className="size-5" aria-hidden />
                       </div>
@@ -170,11 +200,14 @@ export function ActivitiesPanel() {
                       </div>
                     </div>
                     <span
+                      data-testid={`activity-status-${def.id}`}
                       className={cn(
                         'shrink-0 border px-1.5 py-0.5 text-[10px] font-bold',
-                        schedule.isPeakBonus
-                          ? 'border-amber-400/70 bg-amber-500/15 text-amber-200'
-                          : 'border-emerald-400/50 bg-emerald-500/10 text-emerald-200',
+                        !schedule.open
+                          ? 'border-slate-600/70 bg-slate-800/80 text-slate-300'
+                          : schedule.isPeakBonus
+                            ? 'border-amber-400/70 bg-amber-500/15 text-amber-200'
+                            : 'border-emerald-400/50 bg-emerald-500/10 text-emerald-200',
                       )}
                     >
                       {schedule.badgeText}
@@ -182,6 +215,43 @@ export function ActivitiesPanel() {
                   </div>
 
                   <p className="text-[11px] leading-relaxed text-slate-300">{def.description}</p>
+
+                  <div className="space-y-1.5 border border-white/10 bg-black/30 p-2">
+                    <div className="flex items-center justify-between gap-2 text-[10.5px]">
+                      <span className="flex items-center gap-1 font-semibold text-sky-200">
+                        <CalendarDays className="size-3 shrink-0 text-sky-300" aria-hidden />
+                        เปิดวัน {schedule.openDaysLabel}
+                      </span>
+                      {!schedule.open && (
+                        <span className="shrink-0 text-[10px] text-amber-300/90">
+                          เปิดถัดไป: วัน{schedule.nextOpenDayFull}
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-7 gap-1" aria-label={`ตารางวันเปิดของ ${def.name}`}>
+                      {DISPLAY_WEEKDAY_ORDER.map((weekday) => {
+                        const isOpenDay = schedule.openWeekdays.includes(weekday)
+                        const isToday = schedule.currentWeekday === weekday
+                        return (
+                          <div
+                            key={weekday}
+                            className={cn(
+                              'border py-0.5 text-center text-[10px] font-bold tabular-nums',
+                              isToday && isOpenDay
+                                ? 'border-emerald-400 bg-emerald-500/25 text-emerald-100'
+                                : isToday && !isOpenDay
+                                  ? 'border-rose-400/70 bg-rose-950/50 text-rose-200'
+                                  : isOpenDay
+                                    ? 'border-sky-500/35 bg-sky-950/35 text-sky-200'
+                                    : 'border-white/5 bg-black/40 text-slate-500',
+                            )}
+                          >
+                            {THAI_WEEKDAY_SHORT[weekday]}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
 
                   {def.id === 'bounty' && selectedBounty && (
                     <div className="space-y-1 border border-amber-500/35 bg-black/30 p-2">
@@ -274,7 +344,7 @@ export function ActivitiesPanel() {
                       <DoorOpen className="size-3.5" aria-hidden />
                       วาร์ปออก
                     </PxButton>
-                  ) : (
+                  ) : schedule.open ? (
                     <PxButton
                       variant="primary"
                       onClick={() => handleEnter(def.id)}
@@ -282,6 +352,16 @@ export function ActivitiesPanel() {
                       className="shrink-0 font-bold"
                     >
                       วาร์ปเข้ากิจกรรม
+                    </PxButton>
+                  ) : (
+                    <PxButton
+                      variant="secondary"
+                      disabled
+                      data-testid={`activity-enter-${def.id}`}
+                      className="flex shrink-0 items-center gap-1 font-bold"
+                    >
+                      <Lock className="size-3" aria-hidden />
+                      ปิดวันนี้ (เปิด{schedule.nextOpenDayShort})
                     </PxButton>
                   )}
                 </div>
@@ -293,3 +373,4 @@ export function ActivitiesPanel() {
     </PanelFrame>
   )
 }
+

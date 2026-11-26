@@ -9,12 +9,14 @@ import {
   FISHING_DERBY_SPOTS,
   GUILD_WAR_FLAG_SPOTS,
   TREASURE_DIG_CANDIDATES,
+  canEnterActivity,
   computeActivityRewards,
   computeTreasureCompassHint,
   createDefaultActivitiesState,
   getActivityByMapId,
   getActivityScheduleStatus,
   getBountyTargetById,
+  getTodayOpenActivities,
   isActivityMapId,
   pickTreasureDigSpot,
   recordActivityClearInState,
@@ -162,9 +164,55 @@ describe('Non-Festival Activities Core Module', () => {
     assert.equal(reducedReward.dailyReduced, true)
     assert.ok(fullReward.diamonds > reducedReward.diamonds)
 
-    const status = getActivityScheduleStatus('guild_war', new Date(2026, 4, 10, 20, 0, 0).getTime())
-    assert.equal(status.open, true)
-    assert.equal(status.isPeakBonus, true)
+    // Bangkok Tue 2026-05-12 20:00 ICT (13:00 UTC) -> guild_war is open and in peak hours (19-21)
+    const tuePeakBkk = Date.UTC(2026, 4, 12, 13, 0, 0)
+    const statusOpen = getActivityScheduleStatus('guild_war', tuePeakBkk)
+    assert.equal(statusOpen.open, true)
+    assert.equal(statusOpen.isPeakBonus, true)
+
+    // Bangkok Sun 2026-05-10 20:00 ICT (13:00 UTC) -> guild_war is closed, so peak bonus does not trigger
+    const sunPeakBkk = Date.UTC(2026, 4, 10, 13, 0, 0)
+    const statusClosed = getActivityScheduleStatus('guild_war', sunPeakBkk)
+    assert.equal(statusClosed.open, false)
+    assert.equal(statusClosed.isPeakBonus, false)
+    assert.equal(statusClosed.nextOpenDayFull, 'อังคาร')
+  })
+
+  it('mixes non-festival activity open days across the week instead of opening every day', () => {
+    const distinctDaySignatures = new Set<string>()
+    for (const def of ACTIVITY_DEFS) {
+      assert.ok(
+        def.openWeekdays.length >= 2 && def.openWeekdays.length < 7,
+        `${def.id} must not be open every day (got ${def.openWeekdays.length} days)`,
+      )
+      assert.ok(!def.scheduleLabel.includes('เปิดทุกวัน') && !def.scheduleLabel.includes('เปิดตลอดวัน'))
+      distinctDaySignatures.add([...def.openWeekdays].sort((a, b) => a - b).join(','))
+    }
+    assert.equal(distinctDaySignatures.size, ACTIVITY_DEFS.length)
+
+    // Check all 7 consecutive Bangkok days (Sun 2026-05-10 .. Sat 2026-05-16, 12:00 ICT = 05:00 UTC)
+    for (let offset = 0; offset < 7; offset++) {
+      const bkkNoonMs = Date.UTC(2026, 4, 10 + offset, 5, 0, 0)
+      const openToday = getTodayOpenActivities(bkkNoonMs)
+      assert.ok(
+        openToday.length >= 2 && openToday.length < ACTIVITY_DEFS.length,
+        `Day offset ${offset} should have mixed open/closed activities (got ${openToday.length}/${ACTIVITY_DEFS.length})`,
+      )
+      for (const def of ACTIVITY_DEFS) {
+        const gate = canEnterActivity(def.id, bkkNoonMs)
+        if (openToday.some((d) => d.id === def.id)) {
+          assert.equal(gate.ok, true)
+        } else {
+          assert.equal(gate.ok, false)
+          assert.ok(gate.reason && gate.reason.includes('ปิดให้บริการ'))
+        }
+      }
+    }
+
+    // Verify Bangkok UTC+7 rollover boundary: 2026-11-25 17:30 UTC is Thursday 00:30 ICT (dayOfWeek = 4)
+    const bkkThuEarlyMs = Date.UTC(2026, 10, 25, 17, 30, 0)
+    assert.equal(canEnterActivity('guild_war', bkkThuEarlyMs).ok, true)
+    assert.equal(canEnterActivity('invasion', bkkThuEarlyMs).ok, false)
   })
 
   it('awards random weapon chests + signature activity items and zero direct weapons', () => {

@@ -3,14 +3,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { Music, SlidersHorizontal, Volume2, VolumeX } from 'lucide-react'
 import {
-  BGM_TRACK_CATALOG,
   getBgmSnapshot,
+  getBgmTrackMeta,
   setBgmVolume,
   subscribeBgm,
   toggleBgmMute,
   type BgmPlaybackSource,
   type BgmResolveContext,
   type BgmTheme,
+  type BgmTrackId,
 } from '@/lib/game/bgm'
 import {
   getSfxVolume,
@@ -28,6 +29,8 @@ export interface ClientBgmState {
   volume: number
   desiredTheme: BgmTheme
   activeTheme: BgmTheme | null
+  desiredTrackId: BgmTrackId
+  activeTrackId: BgmTrackId | null
   source: BgmPlaybackSource
 }
 
@@ -38,6 +41,8 @@ export function useBgmState(): ClientBgmState {
     volume: 0.35,
     desiredTheme: 'login',
     activeTheme: null,
+    desiredTrackId: 'login',
+    activeTrackId: null,
     source: 'idle',
   })
 
@@ -50,6 +55,8 @@ export function useBgmState(): ClientBgmState {
         volume: snap.volume,
         desiredTheme: snap.desiredTheme,
         activeTheme: snap.activeTheme,
+        desiredTrackId: snap.desiredTrackId,
+        activeTrackId: snap.activeTrackId,
         source: snap.source,
       })
     }
@@ -120,7 +127,7 @@ export function BgmQuickControl({
     }
   }, [open])
 
-  const themeSpec = BGM_TRACK_CATALOG[bgm.desiredTheme]
+  const trackMeta = getBgmTrackMeta(bgm.desiredTrackId)
   const bgmPct = Math.round(bgm.volume * 100)
   const sfxPct = Math.round(sfx.volume * 100)
 
@@ -134,7 +141,7 @@ export function BgmQuickControl({
             onClick={() => toggleBgmMute(context)}
             aria-pressed={!bgm.muted}
             aria-label={bgm.muted ? 'เปิดเพลงประกอบ (BGM)' : 'ปิดเพลงประกอบ (BGM)'}
-            title={`${bgm.muted ? 'เปิดเพลงประกอบ' : 'ปิดเพลงประกอบ'} (${themeSpec.labelTh})`}
+            title={`${bgm.muted ? 'เปิดเพลงประกอบ' : 'ปิดเพลงประกอบ'} (${trackMeta.labelTh})`}
             className={cn(
               'grid size-6 place-items-center rounded-full border shadow transition-colors sm:size-5',
               !bgm.muted
@@ -170,7 +177,7 @@ export function BgmQuickControl({
             onClick={() => toggleBgmMute(context)}
             aria-pressed={!bgm.muted}
             aria-label={bgm.muted ? 'เปิดเพลงประกอบ (BGM)' : 'ปิดเพลงประกอบ (BGM)'}
-            title={themeSpec.labelTh}
+            title={trackMeta.labelTh}
             className={cn(
               'pixel-btn flex min-h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 py-2 text-xs hover:brightness-110 sm:px-3',
               !bgm.muted ? 'bg-emerald-900/60 text-emerald-200' : 'bg-secondary text-foreground',
@@ -208,7 +215,7 @@ export function BgmQuickControl({
             )}
           >
             {bgm.muted ? <VolumeX className="size-3.5 shrink-0" aria-hidden /> : <Music className="size-3.5 shrink-0 text-amber-300" aria-hidden />}
-            <span className="whitespace-nowrap">{bgm.muted ? 'เพลง: ปิด' : themeSpec.labelTh}</span>
+            <span className="whitespace-nowrap">{bgm.muted ? 'เพลง: ปิด' : trackMeta.labelTh}</span>
           </button>
           <button
             type="button"
@@ -236,13 +243,15 @@ export function BgmQuickControl({
         >
           <div className="mb-2 flex items-center justify-between gap-2 border-b border-white/10 pb-1.5">
             <div className="min-w-0">
-              <p className="truncate font-bold text-amber-300">{themeSpec.labelTh}</p>
+              <p className="truncate font-bold text-amber-300" data-testid="bgm-current-track-label">
+                {trackMeta.labelTh}
+              </p>
               <p className="truncate text-[10px] text-slate-400">
                 {bgm.muted
                   ? 'ปิดเสียงเพลงอยู่'
                   : bgm.source === 'file'
-                    ? 'กำลังเล่นไฟล์เสียง (Loop)'
-                    : 'กำลังเล่นซินธ์อัตโนมัติ (Loop)'}
+                    ? `กำลังเล่นไฟล์เสียง · ${trackMeta.styleTh}`
+                    : `Open World Orchestra · ${trackMeta.styleTh} (${trackMeta.bpm} BPM)`}
               </p>
             </div>
             <button
