@@ -144,3 +144,28 @@ test('rejects another account from claiming the approved slip', async () => {
   }).firestore()
   await assertFails(claimSlip(otherDb))
 })
+
+test('rejects a second claim after the slip has already been claimed', async () => {
+  const db = playerDb()
+  await assertSucceeds(
+    setDoc(
+      doc(db, 'users', uid, 'characters', characterId, 'topupOrders', orderId),
+      orderRecord(),
+    ),
+  )
+  await assertSucceeds(claimSlip(db))
+  await assertFails(claimSlip(db))
+})
+
+test('allows only one of two simultaneous claim attempts', async () => {
+  const db = playerDb()
+  await assertSucceeds(
+    setDoc(
+      doc(db, 'users', uid, 'characters', characterId, 'topupOrders', orderId),
+      orderRecord(),
+    ),
+  )
+  const results = await Promise.allSettled([claimSlip(db), claimSlip(db)])
+  assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1)
+  assert.equal(results.filter((result) => result.status === 'rejected').length, 1)
+})
