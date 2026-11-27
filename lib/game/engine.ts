@@ -344,7 +344,6 @@ import {
   getPromptPayShopSettings,
   listAllTopupSlipRequestsForGm,
   listMyTopupSlipRequests,
-  markTopupSlipRequestClaimed,
   reviewTopupSlipRequest,
   savePromptPayShopSettings,
   submitManualTopupSlipRequest,
@@ -9407,44 +9406,9 @@ export async function claimApprovedManualTopupAction(
       return { ok: false, message: res.message || 'ไม่สามารถรับเพชรจากคำขอที่อนุมัติได้' }
     }
 
-    // Apply the credit first. The Firestore claim flag is only finalized after the
-    // deterministic top-up order is durably present, so a failed save remains retryable.
-    const applyResult = await applyVerifiedTopupAction(res.data.order)
-    if (!applyResult.ok && !applyResult.duplicate) {
-      return applyResult
-    }
-
-    const fbUser = firebaseAuth.currentUser
-    if (!fbUser || !fbUser.emailVerified) {
-      return { ok: false, message: 'ไม่พบการเข้าสู่ระบบที่ยืนยันอีเมลแล้ว จึงยังปิดรายการเติมเงินไม่ได้' }
-    }
-    const orderRecorded = await isGatewayRefRecorded(
-      fbUser.uid,
-      res.data.order.characterId,
-      req.requestId,
-    ).catch(() => false)
-    if (!orderRecorded) {
-      return {
-        ok: false,
-        message: 'ยังยืนยันคำสั่งเติมเงินใน Firestore ไม่สำเร็จ ระบบยังไม่ปิดสถานะสลิป กรุณาลองอีกครั้ง',
-      }
-    }
-
-    try {
-      await markTopupSlipRequestClaimed(req.requestId)
-    } catch (err) {
-      return {
-        ok: false,
-        message: formatReadableTopupError(
-          err,
-          'บันทึกคำสั่งเติมเงินแล้ว แต่ปิดสถานะสลิปไม่สำเร็จ กรุณาลองรับอีกครั้ง',
-        ),
-      }
-    }
-
-    return applyResult.ok
-      ? applyResult
-      : { ok: true, order: res.data.order, message: 'รายการเติมเงินนี้ถูกบันทึกแล้วและยืนยันสถานะเรียบร้อย' }
+    // The character save, diamond ledger, top-up order, and claimed flag are committed
+    // together by applyVerifiedTopupAction for manual GM-approved slips.
+    return await applyVerifiedTopupAction(res.data.order)
   } catch (err) {
     return {
       ok: false,
