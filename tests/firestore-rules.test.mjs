@@ -67,7 +67,7 @@ const orderRecord = (overrides = {}) => ({
   serverVerified: true,
   serverSignature: 'test-signature-1234567890',
   createdAtMs: 1700000000000,
-  createdAt: Timestamp.fromMillis(1700000000000),
+  createdAt: serverTimestamp(),
   ...overrides,
 })
 
