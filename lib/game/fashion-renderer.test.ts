@@ -1,14 +1,19 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import path from 'node:path'
 import {
   drawCharacterFashionLayers,
   getFashionRenderSignature,
+  hasWearableFashionLoadout,
   resolveFashionLoadoutFromSave,
+  resolveFashionSheetCoords,
   resolveWingFollowMotion,
   type FashionLoadout,
 } from './fashion-renderer'
+import { PREMIUM_FASHION_ITEMS } from './premium/fashion-pet'
 
-test('fashion render signature ignores all non-wing fashion slots and only tracks wings', () => {
+test('fashion render signature tracks all wearable fashion slots and animation buckets', () => {
   const nonWingOnly: FashionLoadout = {
     hat: 'aurora_cat_hood',
     hair: 'hair_crimson_spike',
@@ -23,23 +28,50 @@ test('fashion render signature ignores all non-wing fashion slots and only track
     mountAppearance: 'mount_skin_astral',
   }
 
-  assert.equal(getFashionRenderSignature(nonWingOnly, 1.25), '')
+  const sigNonWing = getFashionRenderSignature(nonWingOnly, 1.25)
+  assert.ok(sigNonWing.includes('hat:aurora_cat_hood@'))
+  assert.ok(sigNonWing.includes('hair:hair_crimson_spike@'))
+  assert.ok(sigNonWing.includes('costume:costume_royal_knight@'))
+  assert.ok(sigNonWing.includes('pants:pants_knight_greaves@'))
+  assert.ok(sigNonWing.includes('shoes:shoes_royal_greaves@'))
+  assert.ok(sigNonWing.includes('back:back_crimson_cape@'))
+  assert.ok(sigNonWing.includes('accessory:acc_crimson_scarf@'))
+  assert.ok(sigNonWing.includes('aura:sunfire_aura@'))
+
+  const emptySig = getFashionRenderSignature({}, 1.25)
+  assert.equal(emptySig, '')
+  assert.equal(hasWearableFashionLoadout(nonWingOnly), true)
+  assert.equal(hasWearableFashionLoadout({ weaponSkin: 'wskin_starlight' }), false)
 
   const withWings: FashionLoadout = {
     ...nonWingOnly,
     wings: 'wing_drv_45947e7e',
   }
-  const wingsOnly: FashionLoadout = {
-    wings: 'wing_drv_45947e7e',
-  }
-
   const sigWithAll = getFashionRenderSignature(withWings, 1.25)
-  const sigWingsOnly = getFashionRenderSignature(wingsOnly, 1.25)
-  assert.ok(sigWithAll.startsWith('wings:wing_drv_45947e7e@'))
-  assert.equal(sigWithAll, sigWingsOnly)
+  assert.ok(sigWithAll.includes('wings:wing_drv_45947e7e@'))
 })
 
-test('resolveFashionLoadoutFromSave preserves full equipped state while rendering skips non-wings', () => {
+test('resolveFashionSheetCoords aligns 6x32 synchronized fashion atlas cells with hero frames', () => {
+  const idleDown0 = resolveFashionSheetCoords('idle', 'down', 0)
+  assert.deepEqual(idleDown0, { row: 0, col: 0, sx: 0, sy: 0, sw: 168, sh: 192 })
+
+  const idleBlink = resolveFashionSheetCoords('idle', 'down', -1)
+  assert.deepEqual(idleBlink, { row: 0, col: 2, sx: 336, sy: 0, sw: 168, sh: 192 })
+
+  // Walk is animIndex 1 -> rows 4..7 ('down', 'up', 'left', 'right')
+  const walkLeft3 = resolveFashionSheetCoords('walk', 'left', 3)
+  assert.equal(walkLeft3.row, 6)
+  assert.equal(walkLeft3.col, 3)
+  assert.equal(walkLeft3.sx, 3 * 168)
+  assert.equal(walkLeft3.sy, 6 * 192)
+
+  // Victory is animIndex 7 -> rows 28..31 ('down', 'up', 'left', 'right')
+  const victoryRight4 = resolveFashionSheetCoords('victory', 'right', 4)
+  assert.equal(victoryRight4.row, 31)
+  assert.equal(victoryRight4.col, 4)
+})
+
+test('resolveFashionLoadoutFromSave preserves full equipped state and themed fashion sheets exist on disk', () => {
   const loadout = resolveFashionLoadoutFromSave({
     equippedGemFashion: 'aurora_cat_hood',
     extV2: {
@@ -48,7 +80,7 @@ test('resolveFashionLoadoutFromSave preserves full equipped state while renderin
     },
     premium: {
       fashion: {
-        unlockedIds: ['costume_royal_knight', 'wing_anim_inferno_phoenix'],
+        unlockedIds: ['costume_royal_knight', 'wing_anim_inferno_phoenix', 'costume_neko_suit'],
         equipped: {
           hat: 'hat_valkyrie_crown',
           hair: 'hair_silver_lunar',
@@ -66,12 +98,23 @@ test('resolveFashionLoadoutFromSave preserves full equipped state while renderin
     },
   })
 
-  // Save loadout stays intact for Wardrobe UI slot controls
   assert.equal(loadout.costume, 'costume_royal_knight')
   assert.equal(loadout.hat, 'hat_valkyrie_crown')
   assert.equal(loadout.wings, 'wing_anim_inferno_phoenix')
 
-  // Without DOM Image, drawCharacterFashionLayers safely returns false for non-wing phases too
+  // Verify every layered fashion item has both its 6x32 sheet and icon on disk
+  for (const item of PREMIUM_FASHION_ITEMS) {
+    if (item.layerSheetAsset) {
+      const layerDisk = path.join(process.cwd(), 'public', item.layerSheetAsset.replace(/^\/+/, ''))
+      assert.ok(fs.existsSync(layerDisk), `missing layer sheet ${item.layerSheetAsset} for ${item.id}`)
+      if (item.iconAsset) {
+        const iconDisk = path.join(process.cwd(), 'public', item.iconAsset.replace(/^\/+/, ''))
+        assert.ok(fs.existsSync(iconDisk), `missing icon ${item.iconAsset} for ${item.id}`)
+      }
+    }
+  }
+
+  // Without DOM Image, drawCharacterFashionLayers safely returns false
   const mockCtx = {
     save() {},
     restore() {},
@@ -102,8 +145,6 @@ test('resolveFashionLoadoutFromSave preserves full equipped state while renderin
 })
 
 test('resolveWingFollowMotion locks wings to character bob & lunge across walk, idle, attack, and skill', () => {
-  // Walk bounce: frame 1 & 3 lift character up by -4.5px; wings MUST move upward (smaller anchorYFrac),
-  // regardless of wall-clock timeSec!
   const walk0A = resolveWingFollowMotion({ dir: 'down', action: 'walk', frame: 0, timeSec: 0.1 })
   const walk1A = resolveWingFollowMotion({ dir: 'down', action: 'walk', frame: 1, timeSec: 0.1 })
   const walk1B = resolveWingFollowMotion({ dir: 'down', action: 'walk', frame: 1, timeSec: 0.73 })
@@ -113,20 +154,18 @@ test('resolveWingFollowMotion locks wings to character bob & lunge across walk, 
   assert.equal(walk1A.bobPx, -4.5)
   assert.equal(walk1B.bobPx, -4.5)
   assert.equal(walk3.bobPx, -4.5)
-  assert.equal(walk1A.anchorYFrac, walk1B.anchorYFrac, 'Wing Y anchor must not drift counter to character walk bob')
-  assert.ok(walk1A.anchorYFrac < walk0A.anchorYFrac, 'Wing anchor must rise when character bounces upward')
+  assert.equal(walk1A.anchorYFrac, walk1B.anchorYFrac)
+  assert.ok(walk1A.anchorYFrac < walk0A.anchorYFrac)
 
-  // Attack lunge: frame 2 lunges +13px along facing direction
   const atkRight = resolveWingFollowMotion({ dir: 'right', action: 'attack', frame: 2, timeSec: 0.2 })
   const atkLeft = resolveWingFollowMotion({ dir: 'left', action: 'attack', frame: 2, timeSec: 0.2 })
   const atkWindupRight = resolveWingFollowMotion({ dir: 'right', action: 'attack', frame: 0, timeSec: 0.2 })
 
   assert.equal(atkRight.lungePx, 13)
   assert.equal(atkLeft.lungePx, 13)
-  assert.ok(atkRight.anchorXFrac > atkWindupRight.anchorXFrac, 'Right attack lunge must carry wings rightward (+x)')
-  assert.ok(atkLeft.anchorXFrac < 0.5, 'Left attack lunge must carry wings leftward (-x)')
+  assert.ok(atkRight.anchorXFrac > atkWindupRight.anchorXFrac)
+  assert.ok(atkLeft.anchorXFrac < 0.5)
 
-  // Skill leap: frame 1 lifts -7px and lunges +4px
   const skillRight = resolveWingFollowMotion({ dir: 'right', action: 'skill', frame: 1, timeSec: 0.3 })
   assert.equal(skillRight.bobPx, -7)
   assert.equal(skillRight.lungePx, 4)

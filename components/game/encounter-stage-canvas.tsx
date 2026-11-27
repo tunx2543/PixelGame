@@ -18,6 +18,12 @@ import {
   resolveMonsterDrawable,
   type SpriteAction,
 } from '@/lib/game/sprites'
+import {
+  drawHeroDrawableWithFashion,
+  resolveFashionLoadoutFromSave,
+} from '@/lib/game/fashion-renderer'
+import { sanitizeExtV2 } from '@/lib/game/extended-systems'
+import { sanitizePremiumState } from '@/lib/game/premium/wallet'
 import { getActivePetBonuses } from '@/lib/game/systems'
 import { drawRebirthAura, drawStageSkillEffect } from '@/lib/game/vfx-canvas'
 
@@ -380,11 +386,42 @@ export function EncounterStageCanvas({
             })
           }
 
+          const extV2 = sanitizeExtV2(s.extV2)
+          const prem = sanitizePremiumState(s.premium, {
+            characterId: 'slot_1',
+            diamonds: s.diamonds ?? 0,
+            ownedGemItems: s.ownedGemItems,
+            equippedGemFashion: s.equippedGemFashion,
+            unlockedCosmetics: extV2.unlockedCosmetics,
+            equippedWing: extV2.equippedWing,
+            equippedWeaponSkin: extV2.equippedWeaponSkin,
+          })
+          const stageLoadout = resolveFashionLoadoutFromSave({
+            premium: prem,
+            equippedGemFashion: s.equippedGemFashion,
+            extV2,
+          })
+
           ctx.save()
           if (ph === 'DEFEAT') ctx.globalAlpha = 0.45
           else if (isPlayerHurt) ctx.globalAlpha = 0.65
           ctx.translate(heroX + heroLunge + heroShake, floorY)
-          drawResolvedDrawable(ctx, heroDrawable, Math.round(-hw / 2), Math.round(-hh + heroFootOffset), hw, hh)
+          drawHeroDrawableWithFashion({
+            ctx,
+            jobId: job.id,
+            drawable: heroDrawable,
+            loadout: stageLoadout,
+            dir: 'right',
+            action: heroAction,
+            frame: heroFrame,
+            dx: Math.round(-hw / 2),
+            dy: Math.round(-hh + heroFootOffset),
+            dw: hw,
+            dh: hh,
+            timeSec: t,
+            drawBase: () =>
+              drawResolvedDrawable(ctx, heroDrawable, Math.round(-hw / 2), Math.round(-hh + heroFootOffset), hw, hh),
+          })
           ctx.restore()
 
           if ((s.rebirthCount ?? 0) > 0 && ph !== 'DEFEAT') {

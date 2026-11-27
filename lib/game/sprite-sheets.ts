@@ -20,6 +20,16 @@ export type HeroSheetId =
   | 'nekobaku'
   | 'mamushi'
 
+export type HeroLayerName = 'full' | 'body' | 'armor' | 'hair' | 'weapon'
+
+const HERO_LAYER_FILE_MAP: Record<HeroLayerName, string> = {
+  full: 'sheet.png',
+  body: 'body_sheet.png',
+  armor: 'armor_sheet.png',
+  hair: 'hair_sheet.png',
+  weapon: 'weapon_sheet.png',
+}
+
 export type NpcSheetId =
   | 'merchant'
   | 'blacksmith'
@@ -381,6 +391,16 @@ export function preloadAllSpriteSheets(): void {
   }
 }
 
+export function preloadHeroLayerSheets(jobId?: string | null): void {
+  const spec = resolveHeroSheetSpec(jobId)
+  if (!spec || typeof Image === 'undefined') return
+  for (const layer of ['full', 'body', 'armor', 'hair', 'weapon'] as const) {
+    const file = HERO_LAYER_FILE_MAP[layer]
+    const path = layer === 'full' ? spec.sheetPath : spec.sheetPath.replace(/\/sheet\.png$/, `/${file}`)
+    getSheetImage(path)
+  }
+}
+
 export function preloadMountSpriteSheet(mountId?: string | null): void {
   const spec = getMountSheetSpec(mountId)
   if (spec) getSheetImage(spec.sheetPath)
@@ -396,8 +416,10 @@ function buildFrameDrawSpec(
   row: number,
   col: number,
   flipX = false,
+  sheetPathOverride?: string,
+  sheetIdOverride?: string,
 ): SheetFrameDrawSpec | null {
-  const img = getSheetImage(spec.sheetPath)
+  const img = getSheetImage(sheetPathOverride ?? spec.sheetPath)
   if (!img) return null
   const safeRow = Math.max(0, Math.min(spec.rows - 1, row))
   const safeCol = Math.max(0, Math.min(spec.cols - 1, col))
@@ -409,7 +431,7 @@ function buildFrameDrawSpec(
     sh: spec.frameHeight,
     flipX,
     hdScale: spec.hdScale,
-    sheetId: spec.id,
+    sheetId: sheetIdOverride ?? spec.id,
     anchorX: spec.anchorX,
     anchorY: spec.anchorY,
   }
@@ -506,6 +528,7 @@ export function getHeroSheetFrameSpec(
   dir: Dir,
   action: SpriteAction,
   frame: number,
+  layer: HeroLayerName = 'full',
 ): SheetFrameDrawSpec | null {
   const spec = resolveHeroSheetSpec(jobId)
   if (!spec) return null
@@ -527,8 +550,14 @@ export function getHeroSheetFrameSpec(
       ? 2 % rowSpec.frames
       : Math.max(0, Math.floor(Math.abs(frame))) % rowSpec.frames
 
+  const sheetPath =
+    layer === 'full'
+      ? spec.sheetPath
+      : spec.sheetPath.replace(/\/sheet\.png$/, `/${HERO_LAYER_FILE_MAP[layer]}`)
+  const sheetId = layer === 'full' ? spec.id : `${spec.id}:${layer}`
+
   // Every direction has dedicated rendered frames in the 32x6 atlas — never mirror-flip
-  return buildFrameDrawSpec(spec, rowSpec.row, col, false)
+  return buildFrameDrawSpec(spec, rowSpec.row, col, false, sheetPath, sheetId)
 }
 
 export function getMonsterSheetFrameSpec(

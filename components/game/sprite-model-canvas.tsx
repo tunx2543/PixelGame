@@ -7,7 +7,7 @@ import { JOBS, MONSTERS, normalizeJobId, type WeaponType } from '@/lib/game/data
 import { getJobModelSpec, getMonsterModelSpec, getMountModelSpec, getPetModelSpec } from '@/lib/game/models-2d'
 import { getMountDef, getMountRiderSeatOffset, type MountAnimAction } from '@/lib/game/mounts'
 import { getPetVisualTier } from '@/lib/game/pet-follow'
-import { preloadMountSpriteSheet, preloadPetSpriteSheet } from '@/lib/game/sprite-sheets'
+import { preloadHeroLayerSheets, preloadMountSpriteSheet, preloadPetSpriteSheet } from '@/lib/game/sprite-sheets'
 import {
   canvasToResolvedDrawable,
   type Dir,
@@ -22,9 +22,10 @@ import {
   type SpriteAction,
 } from '@/lib/game/sprites'
 import {
-  drawCharacterFashionLayers,
-  getFashionLayerImage,
+  drawHeroDrawableWithFashion,
+  getEquippedFashionImages,
   getFashionRenderSignature,
+  hasWearableFashionLoadout,
   preloadFashionLayers,
   type FashionLoadout,
 } from '@/lib/game/fashion-renderer'
@@ -89,7 +90,18 @@ export function SpriteModelCanvas({
   const phaseCallbackRef = useRef(onAutoPhaseChange)
   phaseCallbackRef.current = onAutoPhaseChange
 
-  const fashionDep = fashion?.wings ?? ''
+  const fashionDep = [
+    fashion?.hat ?? '',
+    fashion?.hair ?? '',
+    fashion?.costume ?? '',
+    fashion?.pants ?? '',
+    fashion?.shoes ?? '',
+    fashion?.wings ?? '',
+    fashion?.back ?? '',
+    fashion?.accessory ?? '',
+    fashion?.aura ?? '',
+    fashion?.weaponSkin ?? '',
+  ].join('|')
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -110,8 +122,9 @@ export function SpriteModelCanvas({
     let offscreenPortraitCanvas: HTMLCanvasElement | null = null
     const start = performance.now()
 
-    if (mode === 'job' && fashion) {
-      preloadFashionLayers(fashion)
+    if (mode === 'job') {
+      if (fashion) preloadFashionLayers(fashion)
+      if (fashion?.costume || fashion?.hair) preloadHeroLayerSheets(normalizeJobId(id))
     }
     if (mode === 'mount') {
       preloadMountSpriteSheet(id)
@@ -260,12 +273,12 @@ export function SpriteModelCanvas({
           ? getCatalogMonsterFrameCount(resolvedMonsterId, 'attack', dir)
           : 4
       const skillCount = jobAnimSpec
-        ? jobAnimSpec.skill
+        ? (jobAnimSpec.skill ?? 4)
         : isCatalogMonster
           ? getCatalogMonsterFrameCount(resolvedMonsterId, 'skill', dir)
           : 4
       const walkMod = jobAnimSpec
-        ? (effectiveAction === 'run' ? jobAnimSpec.run : jobAnimSpec.walk)
+        ? (effectiveAction === 'run' ? (jobAnimSpec.run ?? jobAnimSpec.walk) : jobAnimSpec.walk)
         : isCatalogMonster
           ? getCatalogMonsterFrameCount(resolvedMonsterId, 'walk', dir)
           : 6
@@ -403,7 +416,7 @@ export function SpriteModelCanvas({
           const cropW = Math.min(drawable.width, Math.round(baseCropW * hdScale))
           const cropH = Math.min(drawable.height, Math.round(baseCropH * hdScale))
           const sx = Math.max(0, Math.round((drawable.width - cropW) / 2))
-          const hasWearableFashion = Boolean(fashion?.wings)
+          const hasWearableFashion = hasWearableFashionLoadout(fashion)
           const rawSy = gmReady ? 7 : Math.round((isSheet ? 5 : 3) * hdScale)
           const sy = hasWearableFashion ? Math.max(0, rawSy - Math.round(1.5 * hdScale)) : rawSy
 
@@ -420,10 +433,11 @@ export function SpriteModelCanvas({
               offCtx.clearRect(0, 0, offscreenPortraitCanvas.width, offscreenPortraitCanvas.height)
               offCtx.imageSmoothingEnabled = true
               offCtx.imageSmoothingQuality = 'medium'
-              drawCharacterFashionLayers({
+              drawHeroDrawableWithFashion({
                 ctx: offCtx,
+                jobId: normalizeJobId(id),
+                drawable,
                 loadout: fashion,
-                phase: 'behind',
                 dir,
                 action: effectiveAction,
                 frame,
@@ -432,33 +446,7 @@ export function SpriteModelCanvas({
                 dw: drawable.width,
                 dh: drawable.height,
                 timeSec: elapsed,
-              })
-              drawResolvedDrawable(offCtx, drawable, 0, 0, drawable.width, drawable.height)
-              drawCharacterFashionLayers({
-                ctx: offCtx,
-                loadout: fashion,
-                phase: 'overBody',
-                dir,
-                action: effectiveAction,
-                frame,
-                dx: 0,
-                dy: 0,
-                dw: drawable.width,
-                dh: drawable.height,
-                timeSec: elapsed,
-              })
-              drawCharacterFashionLayers({
-                ctx: offCtx,
-                loadout: fashion,
-                phase: 'overBack',
-                dir,
-                action: effectiveAction,
-                frame,
-                dx: 0,
-                dy: 0,
-                dw: drawable.width,
-                dh: drawable.height,
-                timeSec: elapsed,
+                drawBase: () => drawResolvedDrawable(offCtx, drawable, 0, 0, drawable.width, drawable.height),
               })
               ctx.drawImage(offscreenPortraitCanvas, sx, sy, cropW, cropH, 0, 0, canvas.width, canvas.height)
             } else {
@@ -540,11 +528,12 @@ export function SpriteModelCanvas({
           const dy = Math.round(-drawH + footPad)
           ctx.save()
           ctx.translate(drawX, drawAnchorY)
-          if (mode === 'job' && fashion) {
-            drawCharacterFashionLayers({
+          if (mode === 'job') {
+            drawHeroDrawableWithFashion({
               ctx,
+              jobId: normalizeJobId(id),
+              drawable,
               loadout: fashion,
-              phase: 'behind',
               dir,
               action: effectiveAction,
               frame,
@@ -553,9 +542,11 @@ export function SpriteModelCanvas({
               dw: drawW,
               dh: drawH,
               timeSec: elapsed,
+              drawBase: () => drawResolvedDrawable(ctx, drawable, dx, dy, drawW, drawH),
             })
+          } else {
+            drawResolvedDrawable(ctx, drawable, dx, dy, drawW, drawH)
           }
-          drawResolvedDrawable(ctx, drawable, dx, dy, drawW, drawH)
           if (mode === 'mount' && showRider) {
             const jobDef = JOBS[normalizeJobId(riderJobId)]
             const riderColors = jobHumanColors(jobDef.id, jobDef.colors, false)
@@ -602,34 +593,6 @@ export function SpriteModelCanvas({
               ctx.fillRect(seatPxX - Math.round(2.5 * worldToPreviewScale), seatPxY - Math.round(2.2 * worldToPreviewScale), Math.round(5 * worldToPreviewScale), Math.round(1.1 * worldToPreviewScale))
             }
           }
-          if (mode === 'job' && fashion) {
-            drawCharacterFashionLayers({
-              ctx,
-              loadout: fashion,
-              phase: 'overBody',
-              dir,
-              action: effectiveAction,
-              frame,
-              dx,
-              dy,
-              dw: drawW,
-              dh: drawH,
-              timeSec: elapsed,
-            })
-            drawCharacterFashionLayers({
-              ctx,
-              loadout: fashion,
-              phase: 'overBack',
-              dir,
-              action: effectiveAction,
-              frame,
-              dx,
-              dy,
-              dw: drawW,
-              dh: drawH,
-              timeSec: elapsed,
-            })
-          }
           ctx.restore()
 
           if (isAttack && !gmReady && !drawable.sheetId && attackProgress > 0.2 && attackProgress < 0.85) {
@@ -667,19 +630,20 @@ export function SpriteModelCanvas({
       }
     }
 
-    if (reducedMotion && mode === 'job' && fashion?.wings) {
-      const img = getFashionLayerImage(fashion.wings)
-      if (img && !img.complete) {
-        img.addEventListener(
-          'load',
-          () => {
-            if (!cancelled && isVisible) {
-              lastSig = ''
-              renderFrame(performance.now())
-            }
-          },
-          { once: true },
-        )
+    if (reducedMotion && mode === 'job' && fashion) {
+      for (const img of getEquippedFashionImages(fashion)) {
+        if (!img.complete) {
+          img.addEventListener(
+            'load',
+            () => {
+              if (!cancelled && isVisible) {
+                lastSig = ''
+                renderFrame(performance.now())
+              }
+            },
+            { once: true },
+          )
+        }
       }
     }
 

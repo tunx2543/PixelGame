@@ -1,9 +1,31 @@
 import type { PlayerExtensionV2 } from './extended-systems'
 import { getFashionItemDef } from './premium/fashion-pet'
 import type { FashionSlot, PremiumState } from './premium/types'
-import type { Dir, SpriteAction } from './sprites'
+import {
+  HERO_ANIMATION_DEFS,
+  drawSheetFrameSpec,
+  getHeroSheetFrameSpec,
+  preloadHeroLayerSheets,
+} from './sprite-sheets'
+import type { Dir, ResolvedDrawable, SpriteAction } from './sprites'
 
 export type FashionLoadout = Partial<Record<FashionSlot, string | null>>
+
+const HERO_SHEET_FRAME_W = 168
+const HERO_SHEET_FRAME_H = 192
+const HERO_DIRS: readonly Dir[] = ['down', 'up', 'left', 'right']
+
+const WEARABLE_FASHION_SLOTS: readonly FashionSlot[] = [
+  'hat',
+  'hair',
+  'costume',
+  'pants',
+  'shoes',
+  'wings',
+  'back',
+  'accessory',
+  'aura',
+]
 
 const layerImageCache = new Map<string, HTMLImageElement | null>()
 
@@ -20,10 +42,38 @@ export function getFashionLayerImage(fashionId: string | null | undefined): HTML
   return img
 }
 
+function isFashionImageReady(fashionId: string | null | undefined): HTMLImageElement | null {
+  const img = getFashionLayerImage(fashionId)
+  return img && img.complete && img.naturalWidth > 0 ? img : null
+}
+
+export function getEquippedFashionImages(loadout: FashionLoadout | null | undefined): HTMLImageElement[] {
+  if (!loadout || typeof document === 'undefined') return []
+  const imgs: HTMLImageElement[] = []
+  for (const slot of WEARABLE_FASHION_SLOTS) {
+    const id = loadout[slot]
+    if (!id) continue
+    const img = getFashionLayerImage(id)
+    if (img) imgs.push(img)
+  }
+  return imgs
+}
+
+export function hasWearableFashionLoadout(loadout: FashionLoadout | null | undefined): boolean {
+  if (!loadout) return false
+  for (const slot of WEARABLE_FASHION_SLOTS) {
+    if (loadout[slot]) return true
+  }
+  return false
+}
+
 export function preloadFashionLayers(loadout: FashionLoadout | null | undefined): void {
   if (!loadout || typeof document === 'undefined') return
-  if (loadout.wings) {
-    getFashionLayerImage(loadout.wings)
+  for (const slot of WEARABLE_FASHION_SLOTS) {
+    const id = loadout[slot]
+    if (id) {
+      getFashionLayerImage(id)
+    }
   }
 }
 
@@ -32,6 +82,15 @@ function sanitizeResolvedWingId(candidate: string | null | undefined): string | 
   const def = getFashionItemDef(candidate)
   if (!def || def.slot !== 'wings') return null
   if (!def.wingAnimSheetAsset && !def.wingSpriteAsset) return null
+  return def.id
+}
+
+function sanitizeWearableFashionId(slot: FashionSlot, candidate: string | null | undefined): string | null {
+  if (!candidate) return null
+  const def = getFashionItemDef(candidate)
+  if (!def || def.slot !== slot) return null
+  if (slot === 'wings') return sanitizeResolvedWingId(candidate)
+  if (!def.layerSheetAsset) return null
   return def.id
 }
 
@@ -86,6 +145,48 @@ export function resolveFashionLoadoutFromRemote(other: {
     aura: other.fashionAura ?? (other.gemFashionId === 'sunfire_aura' ? 'sunfire_aura' : null),
     weaponSkin: other.weaponSkinId ?? null,
     mountAppearance: other.mountSkinId ?? null,
+  }
+}
+
+export interface FashionSheetCoords {
+  row: number
+  col: number
+  sx: number
+  sy: number
+  sw: number
+  sh: number
+}
+
+export function resolveFashionSheetCoords(
+  action: SpriteAction | undefined,
+  dir: Dir,
+  frame: number,
+): FashionSheetCoords {
+  const rawAction: SpriteAction = action ?? (frame > 0 ? 'walk' : 'idle')
+  const normalizedAction =
+    rawAction === 'follow'
+      ? 'walk'
+      : rawAction === 'mount' || rawAction === 'dismount'
+        ? 'idle'
+        : rawAction
+
+  let animIndex = HERO_ANIMATION_DEFS.findIndex((d) => d.name === normalizedAction)
+  if (animIndex < 0) animIndex = 0
+  const animDef = HERO_ANIMATION_DEFS[animIndex]
+  const dirIndex = Math.max(0, HERO_DIRS.indexOf(dir))
+  const row = animIndex * HERO_DIRS.length + dirIndex
+  const col =
+    animDef.name === 'idle' && frame < 0
+      ? 2 % animDef.frames
+      : Math.max(0, Math.floor(Math.abs(frame))) % animDef.frames
+
+  return {
+    row,
+    col,
+    sx: col * HERO_SHEET_FRAME_W,
+    sy: row * HERO_SHEET_FRAME_H,
+    sw: HERO_SHEET_FRAME_W,
+    sh: HERO_SHEET_FRAME_H,
   }
 }
 
@@ -218,27 +319,69 @@ export function getFashionRenderSignature(
   loadout: FashionLoadout | null | undefined,
   timeSec?: number,
 ): string {
-  const wingId = sanitizeResolvedWingId(loadout?.wings)
-  if (!wingId) return ''
-  const img = getFashionLayerImage(wingId)
-  const ready = img ? (img.complete && img.naturalWidth > 0 ? '1' : '0') : 'n'
-  if (timeSec !== undefined) {
-    const def = getFashionItemDef(wingId)
-    if (def?.wingAnimSheetAsset) {
-      const frames = Math.max(1, def.wingAnimFrames ?? 16)
-      return `wings:${wingId}@${ready}:f${Math.floor(timeSec * 16) % frames}`
-    }
-    if (def?.wingSpriteAsset) {
-      return `wings:${wingId}@${ready}:w${Math.floor(timeSec * 8) % 16}`
+  if (!loadout) return ''
+  const parts: string[] = []
+  for (const slot of WEARABLE_FASHION_SLOTS) {
+    const itemId = sanitizeWearableFashionId(slot, loadout[slot])
+    if (!itemId) continue
+    const img = getFashionLayerImage(itemId)
+    const ready = img ? (img.complete && img.naturalWidth > 0 ? '1' : '0') : 'n'
+    if (slot === 'wings') {
+      if (timeSec !== undefined) {
+        const def = getFashionItemDef(itemId)
+        if (def?.wingAnimSheetAsset) {
+          const frames = Math.max(1, def.wingAnimFrames ?? 16)
+          parts.push(`wings:${itemId}@${ready}:f${Math.floor(timeSec * 16) % frames}`)
+          continue
+        }
+        if (def?.wingSpriteAsset) {
+          parts.push(`wings:${itemId}@${ready}:w${Math.floor(timeSec * 8) % 16}`)
+          continue
+        }
+      }
+      parts.push(`wings:${itemId}@${ready}`)
+    } else if (slot === 'aura') {
+      const animTick = timeSec !== undefined ? `:a${Math.floor(timeSec * 8) % 6}` : ''
+      parts.push(`aura:${itemId}@${ready}${animTick}`)
+    } else {
+      parts.push(`${slot}:${itemId}@${ready}`)
     }
   }
-  return `wings:${wingId}@${ready}`
+  return parts.join('|')
 }
 
-export function drawCharacterFashionLayers(opts: {
+function drawSynchronizedLayerSlot(opts: {
   ctx: CanvasRenderingContext2D
-  loadout: FashionLoadout | null | undefined
-  phase: 'behind' | 'overBody' | 'overBack'
+  slot: FashionSlot
+  itemId: string | null | undefined
+  dir: Dir
+  action?: SpriteAction
+  frame: number
+  dx: number
+  dy: number
+  dw: number
+  dh: number
+  alpha?: number
+}): boolean {
+  const { ctx, slot, itemId, dir, action, frame, dx, dy, dw, dh, alpha = 1 } = opts
+  const validId = sanitizeWearableFashionId(slot, itemId)
+  if (!validId) return false
+  const img = isFashionImageReady(validId)
+  if (!img) return false
+  const coords = resolveFashionSheetCoords(action, dir, frame)
+  ctx.save()
+  if (alpha < 1) {
+    ctx.globalAlpha *= alpha
+  }
+  ctx.imageSmoothingEnabled = dw < HERO_SHEET_FRAME_W
+  ctx.drawImage(img, coords.sx, coords.sy, coords.sw, coords.sh, dx, dy, dw, dh)
+  ctx.restore()
+  return true
+}
+
+function drawWingSlot(opts: {
+  ctx: CanvasRenderingContext2D
+  wingId: string
   dir: Dir
   action?: SpriteAction
   frame: number
@@ -249,18 +392,10 @@ export function drawCharacterFashionLayers(opts: {
   alpha?: number
   timeSec?: number
 }): boolean {
-  const { ctx, loadout, phase, dir, action, frame, dx, dy, dw, dh, alpha = 1, timeSec } = opts
-  const wingId = sanitizeResolvedWingId(loadout?.wings)
-  if (!wingId) return false
-
-  const shouldDrawWings =
-    (phase === 'behind' && dir !== 'up') ||
-    (phase === 'overBack' && dir === 'up')
-  if (!shouldDrawWings) return false
-
+  const { ctx, wingId, dir, action, frame, dx, dy, dw, dh, alpha = 1, timeSec } = opts
   const def = getFashionItemDef(wingId)
-  const img = getFashionLayerImage(wingId)
-  if (!def || !img || !img.complete || img.naturalWidth <= 0) return false
+  const img = isFashionImageReady(wingId)
+  if (!def || !img) return false
 
   const isAnimatedSheet = Boolean(def.wingAnimSheetAsset)
   if (!isAnimatedSheet && !def.wingSpriteAsset) return false
@@ -322,4 +457,265 @@ export function drawCharacterFashionLayers(opts: {
 
   ctx.restore()
   return true
+}
+
+export function drawCharacterFashionLayers(opts: {
+  ctx: CanvasRenderingContext2D
+  loadout: FashionLoadout | null | undefined
+  phase: 'behind' | 'overBody' | 'overBack'
+  dir: Dir
+  action?: SpriteAction
+  frame: number
+  dx: number
+  dy: number
+  dw: number
+  dh: number
+  alpha?: number
+  timeSec?: number
+}): boolean {
+  const { ctx, loadout, phase, dir, action, frame, dx, dy, dw, dh, alpha = 1, timeSec } = opts
+  if (!loadout) return false
+
+  let drew = false
+  const t = timeSec ?? (typeof performance !== 'undefined' ? performance.now() / 1000 : 0)
+
+  if (phase === 'behind') {
+    if (loadout.aura) {
+      const auraFrame = Math.floor(t * 8) % 6
+      if (
+        drawSynchronizedLayerSlot({
+          ctx,
+          slot: 'aura',
+          itemId: loadout.aura,
+          dir,
+          action: action ?? 'idle',
+          frame: action === 'idle' || !action ? auraFrame : frame,
+          dx,
+          dy,
+          dw,
+          dh,
+          alpha,
+        })
+      ) {
+        drew = true
+      }
+    }
+    if (dir !== 'up' && loadout.back) {
+      if (
+        drawSynchronizedLayerSlot({
+          ctx,
+          slot: 'back',
+          itemId: loadout.back,
+          dir,
+          action,
+          frame,
+          dx,
+          dy,
+          dw,
+          dh,
+          alpha,
+        })
+      ) {
+        drew = true
+      }
+    }
+    const wingId = sanitizeResolvedWingId(loadout.wings)
+    if (dir !== 'up' && wingId) {
+      if (drawWingSlot({ ctx, wingId, dir, action, frame, dx, dy, dw, dh, alpha, timeSec: t })) {
+        drew = true
+      }
+    }
+    return drew
+  }
+
+  if (phase === 'overBody') {
+    for (const slot of ['pants', 'shoes', 'costume', 'hair', 'hat', 'accessory'] as const) {
+      const id = loadout[slot]
+      if (!id) continue
+      if (
+        drawSynchronizedLayerSlot({
+          ctx,
+          slot,
+          itemId: id,
+          dir,
+          action,
+          frame,
+          dx,
+          dy,
+          dw,
+          dh,
+          alpha,
+        })
+      ) {
+        drew = true
+      }
+    }
+    return drew
+  }
+
+  // phase === 'overBack' (facing away: back accessory & wings sit over body)
+  if (dir === 'up') {
+    const wingId = sanitizeResolvedWingId(loadout.wings)
+    if (wingId) {
+      if (drawWingSlot({ ctx, wingId, dir, action, frame, dx, dy, dw, dh, alpha, timeSec: t })) {
+        drew = true
+      }
+    }
+    if (loadout.back) {
+      if (
+        drawSynchronizedLayerSlot({
+          ctx,
+          slot: 'back',
+          itemId: loadout.back,
+          dir,
+          action,
+          frame,
+          dx,
+          dy,
+          dw,
+          dh,
+          alpha,
+        })
+      ) {
+        drew = true
+      }
+    }
+  }
+  return drew
+}
+
+export function drawHeroDrawableWithFashion(opts: {
+  ctx: CanvasRenderingContext2D
+  jobId: string | undefined
+  drawable: ResolvedDrawable
+  loadout: FashionLoadout | null | undefined
+  dir: Dir
+  action?: SpriteAction
+  frame: number
+  dx: number
+  dy: number
+  dw: number
+  dh: number
+  alpha?: number
+  timeSec?: number
+  drawBase: () => void
+}): void {
+  const { ctx, jobId, drawable, loadout, dir, action, frame, dx, dy, dw, dh, alpha = 1, timeSec, drawBase } = opts
+  if (loadout) {
+    preloadFashionLayers(loadout)
+  }
+
+  drawCharacterFashionLayers({
+    ctx,
+    loadout,
+    phase: 'behind',
+    dir,
+    action,
+    frame,
+    dx,
+    dy,
+    dw,
+    dh,
+    alpha,
+    timeSec,
+  })
+
+  const costumeId = sanitizeWearableFashionId('costume', loadout?.costume)
+  const hairId = sanitizeWearableFashionId('hair', loadout?.hair)
+  const replaceArmor = Boolean(costumeId && isFashionImageReady(costumeId))
+  const replaceHair = Boolean(hairId && isFashionImageReady(hairId))
+
+  if (jobId && drawable.sheetId && (replaceArmor || replaceHair)) {
+    preloadHeroLayerSheets(jobId)
+    const actionKey: SpriteAction = action ?? (frame > 0 ? 'walk' : 'idle')
+    const bodySpec = getHeroSheetFrameSpec(jobId, dir, actionKey, frame, 'body')
+    const armorSpec = replaceArmor ? null : getHeroSheetFrameSpec(jobId, dir, actionKey, frame, 'armor')
+    const hairSpec = replaceHair ? null : getHeroSheetFrameSpec(jobId, dir, actionKey, frame, 'hair')
+    const weaponSpec = getHeroSheetFrameSpec(jobId, dir, actionKey, frame, 'weapon')
+
+    const modularReady =
+      Boolean(bodySpec) &&
+      Boolean(weaponSpec) &&
+      (replaceArmor || Boolean(armorSpec)) &&
+      (replaceHair || Boolean(hairSpec))
+
+    if (modularReady && bodySpec && weaponSpec) {
+      if (dir === 'up') {
+        drawSheetFrameSpec(ctx, weaponSpec, dx, dy, dw, dh)
+      }
+      drawSheetFrameSpec(ctx, bodySpec, dx, dy, dw, dh)
+
+      if (replaceArmor && costumeId) {
+        drawSynchronizedLayerSlot({ ctx, slot: 'pants', itemId: loadout?.pants, dir, action, frame, dx, dy, dw, dh, alpha })
+        drawSynchronizedLayerSlot({ ctx, slot: 'shoes', itemId: loadout?.shoes, dir, action, frame, dx, dy, dw, dh, alpha })
+        drawSynchronizedLayerSlot({ ctx, slot: 'costume', itemId: costumeId, dir, action, frame, dx, dy, dw, dh, alpha })
+      } else if (armorSpec) {
+        drawSheetFrameSpec(ctx, armorSpec, dx, dy, dw, dh)
+        drawSynchronizedLayerSlot({ ctx, slot: 'pants', itemId: loadout?.pants, dir, action, frame, dx, dy, dw, dh, alpha })
+        drawSynchronizedLayerSlot({ ctx, slot: 'shoes', itemId: loadout?.shoes, dir, action, frame, dx, dy, dw, dh, alpha })
+      }
+
+      if (replaceHair && hairId) {
+        drawSynchronizedLayerSlot({ ctx, slot: 'hair', itemId: hairId, dir, action, frame, dx, dy, dw, dh, alpha })
+      } else if (hairSpec) {
+        drawSheetFrameSpec(ctx, hairSpec, dx, dy, dw, dh)
+      }
+
+      drawSynchronizedLayerSlot({ ctx, slot: 'hat', itemId: loadout?.hat, dir, action, frame, dx, dy, dw, dh, alpha })
+      drawSynchronizedLayerSlot({ ctx, slot: 'accessory', itemId: loadout?.accessory, dir, action, frame, dx, dy, dw, dh, alpha })
+
+      if (dir !== 'up') {
+        drawSheetFrameSpec(ctx, weaponSpec, dx, dy, dw, dh)
+      }
+
+      drawCharacterFashionLayers({
+        ctx,
+        loadout,
+        phase: 'overBack',
+        dir,
+        action,
+        frame,
+        dx,
+        dy,
+        dw,
+        dh,
+        alpha,
+        timeSec,
+      })
+      return
+    }
+  }
+
+  // Default: base composite sheet + overBody accessories/hats/pants/shoes + overBack
+  drawBase()
+  if (loadout) {
+    drawCharacterFashionLayers({
+      ctx,
+      loadout,
+      phase: 'overBody',
+      dir,
+      action,
+      frame,
+      dx,
+      dy,
+      dw,
+      dh,
+      alpha,
+      timeSec,
+    })
+    drawCharacterFashionLayers({
+      ctx,
+      loadout,
+      phase: 'overBack',
+      dir,
+      action,
+      frame,
+      dx,
+      dy,
+      dw,
+      dh,
+      alpha,
+      timeSec,
+    })
+  }
 }

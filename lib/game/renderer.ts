@@ -47,7 +47,7 @@ import { drawOverworldSkillEffect, drawRebirthAura, drawSpiritAwakeningAura } fr
 import { getMenuIconCanvas, type MenuIconId } from './menu-icons'
 import { computeWorldFloatTransform } from './floating-damage'
 import {
-  drawCharacterFashionLayers,
+  drawHeroDrawableWithFashion,
   preloadFashionLayers,
   resolveFashionLoadoutFromRemote,
   resolveFashionLoadoutFromSave,
@@ -1197,10 +1197,11 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           ctx.rect(remoteDx - 12, remoteDy - 12, remoteW + 24, remoteH - remoteClipH + 14)
           ctx.clip()
         }
-        drawCharacterFashionLayers({
+        drawHeroDrawableWithFashion({
           ctx,
+          jobId: remoteJob.id,
+          drawable: remoteRiderDrawable,
           loadout: remoteLoadout,
-          phase: 'behind',
           dir: other.facing,
           action: remoteRiderAction,
           frame: remoteRiderFrame,
@@ -1209,40 +1210,15 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
           dw: remoteW,
           dh: remoteH,
           timeSec: t,
-        })
-        drawResolvedDrawable(
-          ctx,
-          remoteRiderDrawable,
-          remoteDx,
-          remoteDy,
-          remoteW,
-          remoteH,
-        )
-        drawCharacterFashionLayers({
-          ctx,
-          loadout: remoteLoadout,
-          phase: 'overBody',
-          dir: other.facing,
-          action: remoteRiderAction,
-          frame: remoteRiderFrame,
-          dx: remoteDx,
-          dy: remoteDy,
-          dw: remoteW,
-          dh: remoteH,
-          timeSec: t,
-        })
-        drawCharacterFashionLayers({
-          ctx,
-          loadout: remoteLoadout,
-          phase: 'overBack',
-          dir: other.facing,
-          action: remoteRiderAction,
-          frame: remoteRiderFrame,
-          dx: remoteDx,
-          dy: remoteDy,
-          dw: remoteW,
-          dh: remoteH,
-          timeSec: t,
+          drawBase: () =>
+            drawResolvedDrawable(
+              ctx,
+              remoteRiderDrawable,
+              remoteDx,
+              remoteDy,
+              remoteW,
+              remoteH,
+            ),
         })
         if (remoteAttacking && !isRemoteGmEpic && !remoteRiderDrawable.sheetId) {
           drawWeaponAttackOverlay(ctx, other.facing, remoteWeapon, atkProgress, remoteWeaponColor)
@@ -1614,10 +1590,11 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         ctx.rect(localDx - 12, localDy - 12, drawW + 24, drawH - localClipH + 14)
         ctx.clip()
       }
-      drawCharacterFashionLayers({
+      drawHeroDrawableWithFashion({
         ctx,
+        jobId: job.id,
+        drawable: localRiderDrawable,
         loadout: localLoadout,
-        phase: 'behind',
         dir: game.facing,
         action: riderAction,
         frame: riderFrame,
@@ -1625,37 +1602,8 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
         dy: localDy,
         dw: drawW,
         dh: drawH,
-        alpha: p.invisible ? 0.2 : 1,
         timeSec: t,
-      })
-      drawResolvedDrawable(ctx, localRiderDrawable, localDx, localDy, drawW, drawH)
-      drawCharacterFashionLayers({
-        ctx,
-        loadout: localLoadout,
-        phase: 'overBody',
-        dir: game.facing,
-        action: riderAction,
-        frame: riderFrame,
-        dx: localDx,
-        dy: localDy,
-        dw: drawW,
-        dh: drawH,
-        alpha: p.invisible ? 0.2 : 1,
-        timeSec: t,
-      })
-      drawCharacterFashionLayers({
-        ctx,
-        loadout: localLoadout,
-        phase: 'overBack',
-        dir: game.facing,
-        action: riderAction,
-        frame: riderFrame,
-        dx: localDx,
-        dy: localDy,
-        dw: drawW,
-        dh: drawH,
-        alpha: p.invisible ? 0.2 : 1,
-        timeSec: t,
+        drawBase: () => drawResolvedDrawable(ctx, localRiderDrawable, localDx, localDy, drawW, drawH),
       })
       if ((attacking || (castingSkill && !isGmEpic)) && !isGmEpic && !localRiderDrawable.sheetId) {
         drawWeaponAttackOverlay(
