@@ -488,6 +488,17 @@ service cloud.firestore {
         (!next.claimed || next.progress >= next.target);
     }
 
+    function isMatchingManualTopupOrder(requestId, characterId, slip) {
+      let orderPath = /databases/$(database)/documents/users/$(request.auth.uid)/characters/$(characterId)/topupOrders/$(('ORD-' + requestId));
+      let orderData = get(orderPath).data;
+      return orderData != null &&
+        orderData.ownerId == request.auth.uid &&
+        orderData.gatewayRef == requestId &&
+        orderData.provider == 'promptpay_manual_gm' &&
+        orderData.packageId == slip.packageId &&
+        orderData.totalDiamonds == slip.totalDiamonds;
+    }
+
     function isValidTopupOrder(data, orderId, characterId) {
       return data.keys().hasAll([
           'orderId',
@@ -3468,12 +3479,7 @@ service cloud.firestore {
             existing().status == 'approved' &&
             existing().claimed == false &&
             // A slip can only be finalized after its deterministic order is durably created.
-            exists(/databases/$(database)/documents/users/$(request.auth.uid)/characters/$(existing().characterId)/topupOrders/$(('ORD-' + requestId))) &&
-            get(/databases/$(database)/documents/users/$(request.auth.uid)/characters/$(existing().characterId)/topupOrders/$(('ORD-' + requestId))).data.ownerId == request.auth.uid &&
-            get(/databases/$(database)/documents/users/$(request.auth.uid)/characters/$(existing().characterId)/topupOrders/$(('ORD-' + requestId))).data.gatewayRef == requestId &&
-            get(/databases/$(database)/documents/users/$(request.auth.uid)/characters/$(existing().characterId)/topupOrders/$(('ORD-' + requestId))).data.provider == 'promptpay_manual_gm' &&
-            get(/databases/$(database)/documents/users/$(request.auth.uid)/characters/$(existing().characterId)/topupOrders/$(('ORD-' + requestId))).data.packageId == existing().packageId &&
-            get(/databases/$(database)/documents/users/$(request.auth.uid)/characters/$(existing().characterId)/topupOrders/$(('ORD-' + requestId))).data.totalDiamonds == existing().totalDiamonds &&
+            isMatchingManualTopupOrder(requestId, existing().characterId, existing()) &&
             incoming().claimed == true &&
             incoming().status == 'approved' &&
             incoming().claimedAtMs is int &&
