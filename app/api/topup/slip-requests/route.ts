@@ -78,11 +78,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, message: 'รูปสลิปไม่ถูกต้องหรือขนาดใหญ่เกินไป' }, { status: 400 })
   }
 
-  const clientHash =
-    typeof body?.slipHash === 'string' && /^[a-fA-F0-9]{64}$/.test(body.slipHash.trim())
-      ? body.slipHash.trim().toLowerCase()
-      : null
-  const slipHash = clientHash || computeDataUrlSha256(slipDataUrl)
+  // Always hash the actual uploaded bytes on the server; never trust a client-supplied hash.
+  const slipHash = computeDataUrlSha256(slipDataUrl)
 
   if (!isCloudflareWorkersRuntime() && isPersistentSlipHashUsed(slipHash)) {
     return NextResponse.json(
@@ -92,9 +89,8 @@ export async function POST(req: Request) {
   }
 
   const reward = calculateTopupReward(pkg, Boolean(body?.isFirstPurchase))
-  const rawReqId =
-    typeof body?.requestId === 'string' ? body.requestId.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) : ''
-  const requestId = rawReqId.length >= 6 ? rawReqId : makeServerTxId('SLIP')
+  // Stable document IDs make the same slip image collide across accounts and retries.
+  const requestId = `SLIP-${slipHash.slice(0, 48)}`
   const record: TopupSlipRequestRecord = {
     requestId,
     ownerId: auth.actor.uid,
