@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 import { NextResponse } from 'next/server'
+import { isCloudflareWorkersRuntime } from '@/lib/server/runtime-store'
 import { isTopupAdminEmail, normalizeGameUidInput } from '@/lib/game/permissions'
 import { calculateTopupReward, getTopupPackage, type TopupSlipRequestRecord } from '@/lib/game/premium/topup'
 import { makeServerTxId, resolveActorFromRequest } from '@/lib/server/premium-security'
@@ -83,7 +84,7 @@ export async function POST(req: Request) {
       : null
   const slipHash = clientHash || computeDataUrlSha256(slipDataUrl)
 
-  if (isPersistentSlipHashUsed(slipHash)) {
+  if (!isCloudflareWorkersRuntime() && isPersistentSlipHashUsed(slipHash)) {
     return NextResponse.json(
       { ok: false, message: 'สลิปรูปนี้ถูกส่งเข้าระบบแล้ว (ตรวจพบแฮชสลิปซ้ำ ป้องกันการใช้สลิปเดิมซ้ำ)' },
       { status: 409 },
@@ -122,8 +123,9 @@ export async function POST(req: Request) {
     createdAtMs: Date.now(),
   }
 
-  addStoredSlipRequest(record)
+  if (!isCloudflareWorkersRuntime()) addStoredSlipRequest(record)
   return NextResponse.json({
+    requiresFirestorePersistence: isCloudflareWorkersRuntime(),
     ok: true,
     request: record,
     message: `ส่งสลิปสำเร็จ (${requestId})! รอแอดมิน/GM ตรวจสอบแล้วกดรับเพชรได้ทันที`,
