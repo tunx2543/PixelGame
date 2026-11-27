@@ -9,7 +9,6 @@ import {
 import {
   Timestamp,
   doc,
-  getFirestore,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -74,17 +73,17 @@ const orderRecord = (overrides = {}) => ({
 
 async function seedSlip() {
   await testEnv.withSecurityRulesDisabled(async (context) => {
-    const db = getFirestore(context)
+    const db = context.firestore()
     await setDoc(doc(db, 'users', uid), { uid })
     await setDoc(doc(db, 'topupSlipRequests', requestId), slipRecord())
   })
 }
 
 function playerDb() {
-  return getFirestore(testEnv.authenticatedContext(uid, {
+  return testEnv.authenticatedContext(uid, {
     email: 'player@example.com',
     email_verified: true,
-  }))
+  }).firestore()
 }
 
 async function claimSlip(db) {
@@ -139,9 +138,9 @@ test('rejects a manual-GM order whose diamond amount differs from the approved s
 })
 
 test('rejects another account from claiming the approved slip', async () => {
-  const otherDb = getFirestore(testEnv.authenticatedContext('otheruser123', {
+  const otherDb = testEnv.authenticatedContext('otheruser123', {
     email: 'other@example.com',
     email_verified: true,
-  }))
+  }).firestore()
   await assertFails(claimSlip(otherDb))
 })
