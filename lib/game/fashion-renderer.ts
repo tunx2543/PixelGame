@@ -618,6 +618,52 @@ export function drawHeroDrawableWithFashion(opts: {
     return
   }
 
+  const isCanonicalHeroSheet = Boolean(jobId && resolveHeroSheetSpec(jobId))
+  if (isCanonicalHeroSheet) {
+    // Canonical 15 classes use the 3D-inspired Premium Stylized Fantasy HD sheets:
+    // keep their custom armor, hair, headgear, and weapons intact while still rendering wings & aura FX.
+    const wingsAndAuraOnly: FashionLoadout | null = loadout
+      ? { aura: loadout.aura ?? null, wings: loadout.wings ?? null }
+      : null
+
+    if (wingsAndAuraOnly && (wingsAndAuraOnly.aura || wingsAndAuraOnly.wings)) {
+      drawCharacterFashionLayers({
+        ctx,
+        loadout: wingsAndAuraOnly,
+        phase: 'behind',
+        dir,
+        action,
+        frame,
+        dx,
+        dy,
+        dw,
+        dh,
+        alpha,
+        timeSec,
+      })
+    }
+
+    drawBase()
+
+    if (wingsAndAuraOnly && wingsAndAuraOnly.wings) {
+      drawCharacterFashionLayers({
+        ctx,
+        loadout: wingsAndAuraOnly,
+        phase: 'overBack',
+        dir,
+        action,
+        frame,
+        dx,
+        dy,
+        dw,
+        dh,
+        alpha,
+        timeSec,
+      })
+    }
+    return
+  }
+
   drawCharacterFashionLayers({
     ctx,
     loadout,

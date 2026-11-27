@@ -364,7 +364,7 @@ export interface SheetFrameDrawSpec {
   footPadFrac?: number
 }
 
-export const HERO_ASSET_REVISION = 'hd15-v1'
+export const HERO_ASSET_REVISION = 'hd15-v2'
 export const HERO_CACHE_VERSION_KEY = 'pixel-quest-hero-asset-version'
 
 export function withHeroAssetRevision(url: string): string {

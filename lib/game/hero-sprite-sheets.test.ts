@@ -265,3 +265,64 @@ test('resolveHumanDrawable enforces HD hero sheets across all 15 classes & alias
   }
 })
 
+test('drawHeroDrawableWithFashion preserves canonical 15-class HD sprite sheet even when costume and hair fashion items are equipped', async () => {
+  const { drawHeroDrawableWithFashion } = await import('./fashion-renderer')
+  assert.notEqual(HERO_ASSET_REVISION, 'hd15-v1')
+
+  const mockCtx = {
+    save() {},
+    restore() {},
+    translate() {},
+    rotate() {},
+    scale() {},
+    drawImage() {},
+    globalAlpha: 1,
+    imageSmoothingEnabled: true,
+  } as unknown as CanvasRenderingContext2D
+
+  const fakeImg = { complete: true, naturalWidth: 1008, naturalHeight: 6144 } as unknown as HTMLImageElement
+  let baseCalled = 0
+
+  drawHeroDrawableWithFashion({
+    ctx: mockCtx,
+    jobId: 'the_king',
+    drawable: {
+      width: 168,
+      height: 192,
+      hdScale: 4,
+      sheetId: 'the_king',
+      sheetSpec: {
+        image: fakeImg,
+        sx: 0,
+        sy: 0,
+        sw: 168,
+        sh: 192,
+        flipX: false,
+        hdScale: 4,
+        sheetId: 'the_king',
+        anchorX: 0.5,
+        anchorY: 178 / 192,
+      },
+    },
+    loadout: {
+      costume: 'costume_royal_knight',
+      hair: 'hair_crimson_spike',
+      hat: 'hat_valkyrie_crown',
+      wings: 'wing_anim_inferno_phoenix',
+    },
+    dir: 'down',
+    action: 'idle',
+    frame: 0,
+    dx: 0,
+    dy: 0,
+    dw: 48,
+    dh: 55,
+    drawBase: () => {
+      baseCalled += 1
+    },
+  })
+
+  assert.equal(baseCalled, 1)
+})
+
+
