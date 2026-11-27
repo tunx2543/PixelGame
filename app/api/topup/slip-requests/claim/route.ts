@@ -97,7 +97,7 @@ export async function POST(req: Request) {
   }
 
   const cloudflareRuntime = isCloudflareWorkersRuntime()
-  const bearer = (req.headers.get('authorization') ?? '').replace(/^Bearer\\s+/i, '').trim()
+  const bearer = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '').trim()
   const verifiedSlip = bearer
     ? await fetchApprovedFirestoreSlip(requestId, bearer, auth.actor.uid)
     : null
