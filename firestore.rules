@@ -342,9 +342,9 @@ service cloud.firestore {
             (
               data.source != 'promptpay_manual_gm' ||
               (
-                existsAfter(/databases/$(database)/documents/users/$(request.auth.uid)/characters/$(characterId)/topupOrders/$(('ORD-' + data.requestId.replace('TX-', '')))) &&
-                getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/characters/$(characterId)/topupOrders/$(('ORD-' + data.requestId.replace('TX-', '')))).data.totalDiamonds == data.amount &&
-                getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/characters/$(characterId)/topupOrders/$(('ORD-' + data.requestId.replace('TX-', '')))).data.txId == data.txId
+                existsAfter(/databases/$(database)/documents/users/$(request.auth.uid)/characters/$(characterId)/topupOrders/$(data.requestId)) &&
+                getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/characters/$(characterId)/topupOrders/$(data.requestId)).data.totalDiamonds == data.amount &&
+                getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/characters/$(characterId)/topupOrders/$(data.requestId)).data.txId == data.txId
               )
             ) &&
             (data.type != 'earn' || data.serverVerified == true || data.amount <= 5000)
