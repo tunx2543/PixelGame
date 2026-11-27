@@ -15,7 +15,8 @@ import {
 } from '@/lib/game/models-2d'
 import { getPetVisualTierLabel } from '@/lib/game/pet-follow'
 import type { SpriteAction } from '@/lib/game/sprites'
-import { getSkillIconPath, getSkillVfxSpec, resolveRebirthAuraSpec } from '@/lib/game/vfx-specs'
+import { getClassCombatVfxProfile, resolveSkillCombatTier } from '@/lib/game/combat-vfx-system'
+import { getBasicAttackVfxSpec, getSkillIconPath, getSkillVfxSpec, resolveRebirthAuraSpec } from '@/lib/game/vfx-specs'
 import { formatNum } from './format'
 import { SkillVfxPreview } from './skill-vfx-preview'
 import { SpriteModelCanvas, type PreviewAction } from './sprite-model-canvas'
@@ -198,8 +199,10 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
     mountModels.find((entry) => entry.mount.id === selectedMountId) ?? mountModels[0]
   const selectedPetEntry =
     petModels.find((entry) => entry.pet.id === selectedPetId) ?? petModels[0]
-  const activeJobSkill =
-    selectedJobEntry.job.skills.find((s) => s.id === selectedSkillId) ?? selectedJobEntry.job.skills[0] ?? null
+  const isBasicSelected = selectedSkillId === 'basic'
+  const activeJobSkill = isBasicSelected
+    ? null
+    : (selectedJobEntry.job.skills.find((s) => s.id === selectedSkillId) ?? selectedJobEntry.job.skills[0] ?? null)
   const activeRebirthSpec = resolveRebirthAuraSpec(previewRebirth)
 
   const rotateDir = () => {
@@ -468,10 +471,36 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
               </div>
 
               <div className="flex flex-wrap items-center gap-1.5">
+                {(() => {
+                  const basicSpec = getBasicAttackVfxSpec(selectedJobEntry.job.id)
+                  const basicProfile = getClassCombatVfxProfile(selectedJobEntry.job.id)
+                  return (
+                    <button
+                      type="button"
+                      aria-pressed={isBasicSelected}
+                      onClick={() => {
+                        setSelectedSkillId('basic')
+                        setVfxNonce((n) => n + 1)
+                      }}
+                      className={`flex items-center gap-1.5 border px-2 py-1 text-[11px] transition-colors ${
+                        isBasicSelected
+                          ? 'border-primary bg-primary/15 text-foreground'
+                          : 'border-border bg-background hover:border-primary/60'
+                      }`}
+                    >
+                      <img src={basicSpec.iconPath} alt="" width={16} height={16} className="size-4 shrink-0 rounded-[3px]" />
+                      <span className="font-semibold" style={{ color: basicSpec.primaryColor }}>
+                        Basic: {basicProfile.basic.name}
+                      </span>
+                      <span className="text-[9px] uppercase text-muted-foreground">Basic</span>
+                    </button>
+                  )
+                })()}
                 {selectedJobEntry.job.skills.length > 0 ? (
                   selectedJobEntry.job.skills.map((s) => {
                     const vfx = getSkillVfxSpec(s.id, s.color, s.kind, selectedJobEntry.job.weaponTypes[0])
-                    const isPicked = activeJobSkill?.id === s.id
+                    const isPicked = !isBasicSelected && activeJobSkill?.id === s.id
+                    const tier = resolveSkillCombatTier(s.id)
                     return (
                       <button
                         key={s.id}
@@ -491,6 +520,13 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                         <span className="font-semibold" style={{ color: vfx.primaryColor }}>
                           {s.name}
                         </span>
+                        <span
+                          className={`px-1 text-[9px] font-bold uppercase ${
+                            tier === 'ultimate' ? 'bg-amber-500/20 text-amber-300' : 'bg-sky-500/15 text-sky-300'
+                          }`}
+                        >
+                          {tier === 'ultimate' ? 'ULT' : 'SP'}
+                        </span>
                         <span className="text-[10px] text-muted-foreground tabular-nums">
                           ({s.mp}MP · {s.mult}x)
                         </span>
@@ -507,43 +543,63 @@ export function ModelGalleryView({ compact = false }: { compact?: boolean }) {
                 </span>
               </div>
 
-              {selectedJobEntry.job.skills.length > 0 && activeJobSkill && (() => {
-                const activeSpec = getSkillVfxSpec(
-                  activeJobSkill.id,
-                  activeJobSkill.color,
-                  activeJobSkill.kind,
-                  selectedJobEntry.job.weaponTypes[0],
-                )
+              {selectedJobEntry.job.skills.length > 0 && (() => {
+                const basicSpec = getBasicAttackVfxSpec(selectedJobEntry.job.id)
+                const profile = getClassCombatVfxProfile(selectedJobEntry.job.id)
+                const activeSpec = isBasicSelected || !activeJobSkill
+                  ? basicSpec
+                  : getSkillVfxSpec(
+                      activeJobSkill.id,
+                      activeJobSkill.color,
+                      activeJobSkill.kind,
+                      selectedJobEntry.job.weaponTypes[0],
+                    )
+                const previewTitle = isBasicSelected || !activeJobSkill
+                  ? `Basic Attack — ${profile.basic.name}`
+                  : activeJobSkill.name
+                const previewTier = isBasicSelected || !activeJobSkill ? 'basic' : resolveSkillCombatTier(activeJobSkill.id)
                 return (
                   <div className="mt-2 grid gap-2.5 border border-border/70 bg-[#0a0d1c]/70 p-2.5 sm:grid-cols-[17rem_1fr] sm:items-center">
                     <SkillVfxPreview
                       jobId={selectedJobEntry.job.id}
-                      skillId={activeJobSkill.id}
+                      skillId={isBasicSelected ? null : (activeJobSkill?.id ?? null)}
                       rebirthCount={previewRebirth}
                       playNonce={vfxNonce}
                       width={272}
                       height={116}
-                      label={`ตัวอย่างเอฟเฟคสกิล ${activeJobSkill.name}`}
+                      label={`ตัวอย่างเอฟเฟค ${previewTitle}`}
                     />
                     <div className="flex flex-col gap-1 text-[11px]">
                       <div className="flex flex-wrap items-center justify-between gap-1.5">
-                        <p className="font-bold text-foreground">{activeJobSkill.name}</p>
-                        {activeJobSkill.tag && (
-                          <span className="text-[10px] font-semibold text-amber-300/90">{activeJobSkill.tag}</span>
-                        )}
+                        <p className="font-bold text-foreground">{previewTitle}</p>
+                        <span className="text-[10px] font-semibold text-amber-300/90">
+                          {previewTier === 'basic'
+                            ? `Basic (${profile.basic.durationSec}s)`
+                            : previewTier === 'ultimate'
+                              ? `Ultimate (${profile.ultimate.durationSec}s)`
+                              : `Special (${profile.special.durationSec}s)`}
+                        </span>
                       </div>
-                      <p className="font-mono text-[10px] text-sky-300 tabular-nums">
-                        {activeJobSkill.mp} MP · CD {activeJobSkill.cooldown}s ·{' '}
-                        {activeJobSkill.mult > 0 ? `${activeJobSkill.mult}x` : 'ฟื้นฟู/บัฟ'}
-                        {(activeJobSkill.radius ?? 0) > 0 ? ` · รัศมี ${activeJobSkill.radius}px` : ' · เป้าหมายเดี่ยว'}
-                        {(activeJobSkill.hits ?? 1) > 1 ? ` · ${activeJobSkill.hits} ฮิต` : ''}
-                      </p>
-                      {activeJobSkill.effectSummary && (
-                        <p className="text-[10.5px] font-semibold text-emerald-300">
-                          ผลสกิล: {activeJobSkill.effectSummary}
+                      {activeJobSkill && !isBasicSelected ? (
+                        <>
+                          <p className="font-mono text-[10px] text-sky-300 tabular-nums">
+                            {activeJobSkill.mp} MP · CD {activeJobSkill.cooldown}s ·{' '}
+                            {activeJobSkill.mult > 0 ? `${activeJobSkill.mult}x` : 'ฟื้นฟู/บัฟ'}
+                            {(activeJobSkill.radius ?? 0) > 0 ? ` · รัศมี ${activeJobSkill.radius}px` : ' · เป้าหมายเดี่ยว'}
+                            {(activeJobSkill.hits ?? 1) > 1 ? ` · ${activeJobSkill.hits} ฮิต` : ''}
+                          </p>
+                          {activeJobSkill.effectSummary && (
+                            <p className="text-[10.5px] font-semibold text-emerald-300">
+                              ผลสกิล: {activeJobSkill.effectSummary}
+                            </p>
+                          )}
+                          <p className="text-[10.5px] leading-snug text-slate-200/90">{activeJobSkill.description}</p>
+                        </>
+                      ) : (
+                        <p className="text-[10.5px] leading-snug text-slate-200/90">
+                          {profile.basic.label} · ระยะ {selectedJobEntry.job.range}px · ASPD {selectedJobEntry.job.attackSpeed}s
                         </p>
                       )}
-                      <p className="text-[10.5px] leading-snug text-slate-200/90">{activeJobSkill.description}</p>
                       <p className="text-[10px]" style={{ color: activeSpec.primaryColor }}>
                         VFX: {activeSpec.effectLabel}
                       </p>

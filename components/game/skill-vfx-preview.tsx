@@ -2,6 +2,11 @@
 
 import { useEffect, useRef } from 'react'
 import { JOBS, normalizeJobId, type WeaponType } from '@/lib/game/data'
+import {
+  getClassCombatVfxProfile,
+  getCombatVfxDurationMs,
+  resolveSkillCombatTier,
+} from '@/lib/game/combat-vfx-system'
 import { preloadHeroSheet, subscribeSpriteSheetLoad } from '@/lib/game/sprite-sheets'
 import { drawResolvedDrawable, jobHumanColors, resolveHumanDrawable, resolveMonsterDrawable } from '@/lib/game/sprites'
 import { drawRebirthAura, drawStageSkillEffect } from '@/lib/game/vfx-canvas'
@@ -76,9 +81,16 @@ export function SkillVfxPreview({
       rafId = 0
       if (!isVisible) return
 
-      const { jobId: activeJobId, skillId: activeSkillId, rebirthCount: activeRebirth } = propsRef.current
-      const job = JOBS[normalizeJobId(activeJobId)]
+      const { jobId: activeJobId, skillId: rawSkillId, rebirthCount: activeRebirth } = propsRef.current
+      const canonicalJobId = normalizeJobId(activeJobId)
+      const job = JOBS[canonicalJobId]
       const weapon: WeaponType = job.weaponTypes[0] ?? 'stick'
+      const isBasicMode = rawSkillId === null || rawSkillId === 'basic'
+      const activeSkill = isBasicMode
+        ? null
+        : (job.skills.find((s) => s.id === rawSkillId) ?? job.skills[0] ?? null)
+      const effectiveSkillId = isBasicMode ? null : (activeSkill?.id ?? null)
+
       const w = canvas.width
       const h = canvas.height
       const floorY = Math.round(h * 0.8)
@@ -86,12 +98,12 @@ export function SkillVfxPreview({
       const enemyX = Math.round(w * 0.75)
 
       const timeSec = reducedMotion ? 0.8 : (now - startTime) / 1000
-      // Loop VFX softly every 2.2s if user leaves stage idle, or play immediately on click
+      const vfxDurationMs = getCombatVfxDurationMs(canonicalJobId, effectiveSkillId)
+      const loopCycleMs = Math.max(2000, vfxDurationMs + 900)
       const elapsedSinceTrigger = Math.max(0, now - vfxStartRef.current)
-      const loopMs = elapsedSinceTrigger <= 950 ? elapsedSinceTrigger : elapsedSinceTrigger % 2200
-      const vfxDurationMs = 820
+      const loopMs = elapsedSinceTrigger <= vfxDurationMs + 140 ? elapsedSinceTrigger : elapsedSinceTrigger % loopCycleMs
       const vfxActive = reducedMotion ? true : loopMs < vfxDurationMs
-      const vfxProgress = reducedMotion ? 0.42 : Math.min(1, loopMs / vfxDurationMs)
+      const vfxProgress = reducedMotion ? 0.45 : Math.min(1, loopMs / Math.max(1, vfxDurationMs))
 
       ctx.clearRect(0, 0, w, h)
       ctx.imageSmoothingEnabled = true
@@ -115,10 +127,10 @@ export function SkillVfxPreview({
         ctx.fillRect(gx, floorY - 7, 1, h - floorY + 7)
       }
 
-      const activeSkill = job.skills.find((s) => s.id === activeSkillId) ?? job.skills[0] ?? null
       const vfxSpec = activeSkill
         ? getSkillVfxSpec(activeSkill.id, activeSkill.color, activeSkill.kind, weapon)
         : null
+      const profile = getClassCombatVfxProfile(canonicalJobId)
 
       // Shadows
       ctx.fillStyle = 'rgba(0, 0, 0, 0.42)'
@@ -143,19 +155,21 @@ export function SkillVfxPreview({
       }
 
       // Hero sprite
-      const isHeroCasting = vfxActive && vfxProgress < 0.78
-      const heroSkillFrame = isHeroCasting ? Math.min(5, Math.floor((vfxProgress / 0.78) * 6)) : 0
+      const poseCutoff = isBasicMode ? 0.85 : 0.65
+      const isHeroCasting = vfxActive && vfxProgress < poseCutoff
+      const heroAction = isHeroCasting ? (isBasicMode ? 'attack' : 'skill') : 'idle'
+      const heroPoseFrame = isHeroCasting ? Math.min(isBasicMode ? 4 : 5, Math.floor((vfxProgress / poseCutoff) * (isBasicMode ? 5 : 6))) : 0
       const heroIdleFrame = Math.floor(timeSec * 3) % 4
-      const lungeX = isHeroCasting ? Math.round(Math.sin((vfxProgress / 0.78) * Math.PI) * 8) : 0
+      const lungeX = isHeroCasting ? Math.round(Math.sin((vfxProgress / poseCutoff) * Math.PI) * 8) : 0
       const heroDrawable = resolveHumanDrawable(
         jobHumanColors(job.id, job.colors, false),
         'right',
-        isHeroCasting ? heroSkillFrame : heroIdleFrame,
+        isHeroCasting ? heroPoseFrame : heroIdleFrame,
         weapon,
         job.colors.accent,
-        false,
-        isHeroCasting ? 'skill' : 'idle',
-        isHeroCasting ? heroSkillFrame : undefined,
+        isBasicMode && isHeroCasting,
+        heroAction,
+        isHeroCasting ? heroPoseFrame : undefined,
       )
       const isGmEpic = Boolean(heroDrawable.gmReady)
       const heroHd = heroDrawable.hdScale
@@ -179,8 +193,8 @@ export function SkillVfxPreview({
       }
 
       // Target training monster on right
-      const isHitFlash = vfxActive && vfxSpec?.style !== 'holy_heal' && vfxProgress > 0.2 && vfxProgress < 0.72
-      const enemyKnockX = isHitFlash ? Math.round(Math.sin((vfxProgress - 0.2) * Math.PI * 2) * 4) : 0
+      const isHitFlash = vfxActive && vfxSpec?.style !== 'holy_heal' && vfxProgress > 0.25 && vfxProgress < 0.78
+      const enemyKnockX = isHitFlash ? Math.round(Math.sin((vfxProgress - 0.25) * Math.PI * 2) * 4) : 0
       const enemyDrawable = resolveMonsterDrawable(
         'slime',
         '#f78087',
@@ -211,18 +225,19 @@ export function SkillVfxPreview({
       )
       ctx.restore()
 
-      // Skill VFX burst
+      // 6-phase Class Combat VFX burst
       if (vfxActive) {
         drawStageSkillEffect(ctx, {
+          jobId: canonicalJobId,
           heroX: heroX + lungeX,
           heroY: floorY - 30,
           enemyX: enemyX + enemyKnockX,
           enemyY: floorY - 22,
           floorY,
-          skillId: activeSkill?.id ?? null,
+          skillId: effectiveSkillId,
           weaponType: weapon,
           progress: vfxProgress,
-          color: activeSkill?.color ?? job.colors.accent,
+          color: vfxSpec?.primaryColor ?? profile.palette.primary,
         })
       }
 
@@ -247,6 +262,7 @@ export function SkillVfxPreview({
   }, [])
 
   const aura = resolveRebirthAuraSpec(rebirthCount)
+  const tier = skillId === null || skillId === 'basic' ? 'basic' : resolveSkillCombatTier(skillId)
 
   return (
     <canvas
@@ -256,6 +272,7 @@ export function SkillVfxPreview({
       data-testid="skill-vfx-stage"
       data-job={jobId}
       data-skill={skillId ?? 'basic'}
+      data-vfx-tier={tier}
       data-rebirth={rebirthCount}
       data-rebirth-style={aura.style}
       aria-label={label ?? `เวทีจำลองเอฟเฟคสกิลอาชีพ ${jobId}`}

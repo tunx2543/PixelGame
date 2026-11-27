@@ -1,4 +1,10 @@
-import type { WeaponType } from './data'
+import { normalizeJobId, type WeaponType } from './data'
+import {
+  drawClassCombatVfx,
+  getClassCombatVfxProfile,
+  resolveSkillCombatTier,
+  type CombatVfxTier,
+} from './combat-vfx-system'
 import {
   getSkillVfxSpec,
   resolveRebirthAuraSpec,
@@ -663,6 +669,7 @@ export function drawSpiritAwakeningAura(
 }
 
 export interface StageSkillVfxOptions {
+  jobId?: string
   heroX: number
   heroY: number
   enemyX: number
@@ -672,41 +679,64 @@ export interface StageSkillVfxOptions {
   weaponType: WeaponType
   progress: number
   color: string | null
+  disableGlow?: boolean
 }
 
 /**
- * Renders rich per-class / per-skill VFX on the 2D encounter / tower / preview stage.
+ * Renders rich per-class / per-skill 6-phase VFX on the 2D encounter / tower / preview stage.
  */
 export function drawStageSkillEffect(
   ctx: CanvasRenderingContext2D,
   opts: StageSkillVfxOptions,
 ) {
-  const { heroX, enemyX, enemyY, floorY, skillId, weaponType, progress, color } = opts
+  const { jobId, heroX, enemyX, enemyY, floorY, skillId, weaponType, progress, color, disableGlow } = opts
   const k = Math.max(0, Math.min(1, progress))
-  const alpha = Math.max(0, 1 - Math.pow(k, 1.35))
+  const alpha = Math.max(0, 1 - Math.pow(k, 1.8))
 
   if (!skillId) {
-    drawBasicWeaponSlash(ctx, enemyX - 10, enemyY, weaponType, k, color || '#ffd60a')
+    const resolvedJob = normalizeJobId(jobId ?? 'novice')
+    drawClassCombatVfx(ctx, {
+      jobId: resolvedJob,
+      tier: 'basic',
+      skillId: null,
+      sourceX: heroX + 18,
+      sourceY: floorY - 36,
+      targetX: enemyX - 8,
+      targetY: enemyY,
+      floorY,
+      scale: 2.1,
+      progress: k,
+      alpha,
+      disableGlow,
+    })
     return
   }
 
   const spec = getSkillVfxSpec(skillId, color || '#ffd60a', undefined, weaponType)
-  drawStyleEffect(ctx, {
-    style: spec.style,
-    primaryColor: color || spec.primaryColor,
-    secondaryColor: spec.secondaryColor,
+  const resolvedJob = normalizeJobId(jobId ?? spec.jobId)
+  const tier = resolveSkillCombatTier(skillId)
+  const isSelfHeal = spec.style === 'holy_heal'
+
+  drawClassCombatVfx(ctx, {
+    jobId: resolvedJob,
+    tier,
+    skillId,
     sourceX: heroX + 18,
     sourceY: floorY - 38,
-    targetX: spec.style === 'holy_heal' ? heroX : enemyX - 8,
-    targetY: spec.style === 'holy_heal' ? floorY - 26 : enemyY,
+    targetX: isSelfHeal ? heroX : enemyX - 8,
+    targetY: isSelfHeal ? floorY - 26 : enemyY,
     floorY,
-    scale: 2.2,
+    scale: tier === 'ultimate' ? 2.35 : 2.15,
     progress: k,
     alpha,
+    disableGlow,
   })
 }
 
 export interface OverworldSkillVfxOptions {
+  jobId?: string
+  vfxTier?: CombatVfxTier
+  skillId?: string | null
   style: SkillVfxStyle
   primaryColor: string
   secondaryColor?: string
@@ -721,13 +751,31 @@ export interface OverworldSkillVfxOptions {
 }
 
 /**
- * Renders rich per-class / per-skill VFX in the overworld tile canvas (`renderer.ts`).
+ * Renders rich per-class / per-skill 6-phase VFX in the overworld tile canvas (`renderer.ts`).
  */
 export function drawOverworldSkillEffect(
   ctx: CanvasRenderingContext2D,
   opts: OverworldSkillVfxOptions,
 ) {
   const scale = Math.max(0.75, opts.radius / 26)
+  if (opts.jobId) {
+    const tier = opts.vfxTier ?? (opts.skillId ? resolveSkillCombatTier(opts.skillId) : 'basic')
+    drawClassCombatVfx(ctx, {
+      jobId: opts.jobId,
+      tier,
+      skillId: opts.skillId,
+      sourceX: opts.sourceX ?? opts.targetX - 18,
+      sourceY: opts.sourceY ?? opts.targetY,
+      targetX: opts.targetX,
+      targetY: opts.targetY,
+      floorY: opts.targetY + 8,
+      scale,
+      progress: opts.progress,
+      alpha: opts.alpha,
+      disableGlow: opts.disableGlow,
+    })
+    return
+  }
   drawStyleEffect(ctx, {
     style: opts.style,
     primaryColor: opts.primaryColor,
@@ -742,6 +790,97 @@ export function drawOverworldSkillEffect(
     alpha: opts.alpha,
     disableGlow: opts.disableGlow,
   })
+}
+
+export interface OverworldProjectileOptions {
+  x: number
+  y: number
+  tx?: number
+  ty?: number
+  size: number
+  color: string
+  secondaryColor?: string
+  jobId?: string
+  aoe?: number
+  timeSec?: number
+  disableGlow?: boolean
+}
+
+/**
+ * Renders stylized class-distinct projectiles in the overworld tile canvas (`renderer.ts`).
+ */
+export function drawOverworldProjectile(
+  ctx: CanvasRenderingContext2D,
+  opts: OverworldProjectileOptions,
+) {
+  const { x, y, tx, ty, size, color, secondaryColor, jobId, aoe = 0, timeSec = 0, disableGlow } = opts
+  const profile = jobId ? getClassCombatVfxProfile(jobId) : null
+  const primary = profile?.palette.primary ?? color
+  const secondary = profile?.palette.secondary ?? secondaryColor ?? '#ffffff'
+  const angle = tx !== undefined && ty !== undefined ? Math.atan2(ty - y, tx - x) : 0
+  const r = Math.max(2.4, aoe > 0 ? size + 1.4 : size)
+
+  ctx.save()
+  if (!disableGlow) {
+    ctx.shadowColor = primary
+    ctx.shadowBlur = aoe > 0 ? 7 : 5
+  }
+
+  if (profile?.jobId === 'archer') {
+    ctx.translate(x, y)
+    ctx.rotate(angle)
+    ctx.strokeStyle = secondary
+    ctx.lineWidth = 1.8
+    ctx.beginPath()
+    ctx.moveTo(-11, 0)
+    ctx.lineTo(4, 0)
+    ctx.stroke()
+    ctx.fillStyle = primary
+    ctx.beginPath()
+    ctx.moveTo(7, 0)
+    ctx.lineTo(2, -2.5)
+    ctx.lineTo(2, 2.5)
+    ctx.closePath()
+    ctx.fill()
+  } else if (profile?.jobId === 'nekobaku') {
+    ctx.translate(x, y)
+    ctx.rotate(timeSec * 12)
+    ctx.fillStyle = primary
+    ctx.beginPath()
+    ctx.arc(0, 0.8, r * 0.95, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = secondary
+    ctx.fillRect(-r * 0.3, -r * 1.15, r * 0.6, r * 0.5)
+  } else if (profile?.jobId === 'merchant') {
+    ctx.translate(x, y)
+    ctx.scale(Math.max(0.35, Math.abs(Math.cos(timeSec * 14))), 1)
+    ctx.fillStyle = primary
+    ctx.beginPath()
+    ctx.arc(0, 0, r, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = secondary
+    ctx.lineWidth = 1
+    ctx.stroke()
+  } else {
+    const grad = ctx.createRadialGradient(x, y, 0.5, x, y, r * 2.1)
+    grad.addColorStop(0, '#ffffff')
+    grad.addColorStop(0.45, primary)
+    grad.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = grad
+    ctx.beginPath()
+    ctx.arc(x, y, r * 2.1, 0, Math.PI * 2)
+    ctx.fill()
+    if (tx !== undefined && ty !== undefined) {
+      ctx.strokeStyle = secondary
+      ctx.lineWidth = Math.max(1.2, r * 0.6)
+      ctx.globalAlpha = 0.72
+      ctx.beginPath()
+      ctx.moveTo(x - Math.cos(angle) * 9, y - Math.sin(angle) * 9)
+      ctx.lineTo(x, y)
+      ctx.stroke()
+    }
+  }
+  ctx.restore()
 }
 
 function drawBasicWeaponSlash(

@@ -177,7 +177,17 @@ import {
   recordDailyMissionProgress,
 } from './daily-missions'
 import { pickNewerSave } from './save-sync'
-import { getSkillVfxSpec, resolveRebirthAuraSpec, type SkillVfxStyle } from './vfx-specs'
+import {
+  getClassCombatVfxProfile,
+  globalCombatParticlePool,
+  type CombatVfxTier,
+} from './combat-vfx-system'
+import {
+  getBasicAttackVfxSpec,
+  getSkillVfxSpec,
+  resolveRebirthAuraSpec,
+  type SkillVfxStyle,
+} from './vfx-specs'
 import {
   BESTIARY_TIERS,
   CRAFT_RECIPES,
@@ -808,6 +818,9 @@ export interface Effect {
   secondaryColor?: string
   sourceX?: number
   sourceY?: number
+  jobId?: string
+  vfxTier?: CombatVfxTier
+  skillId?: string
 }
 
 interface Projectile {
@@ -826,6 +839,8 @@ interface Projectile {
   ty?: number
   vfxStyle?: SkillVfxStyle
   secondaryColor?: string
+  jobId?: string
+  vfxTier?: CombatVfxTier
 }
 
 export type PanelId =
@@ -2023,7 +2038,12 @@ function addFloat(
   })
 }
 
+const MAX_ACTIVE_EFFECTS = 48
+
 function addEffect(e: Omit<Effect, 'life'>) {
+  if (game.effects.length >= MAX_ACTIVE_EFFECTS) {
+    game.effects.shift()
+  }
   game.effects.push({ ...e, life: e.max })
 }
 
@@ -4115,6 +4135,8 @@ function shoot(
   skillId?: string,
   vfxStyle?: SkillVfxStyle,
   secondaryColor?: string,
+  jobId?: string,
+  vfxTier?: CombatVfxTier,
 ) {
   const p = player()
   game.projectiles.push({
@@ -4132,6 +4154,8 @@ function shoot(
     ty: t.y - 8,
     vfxStyle,
     secondaryColor,
+    jobId,
+    vfxTier,
   })
 }
 
@@ -4139,6 +4163,7 @@ export function basicAttack() {
   const p = game.p
   if (!p || game.attackCd > 0 || game.panel) return
   const job = currentJob()
+  const basicVfx = getBasicAttackVfxSpec(job.id)
   const atkRange = getJobBasicAttackRange(job)
   const t = nearestMonster(atkRange)
   game.attackCd = job.attackSpeed
@@ -4153,16 +4178,64 @@ export function basicAttack() {
             : game.facing === 'up'
               ? { x: 0, y: -18, angle: Math.PI * 1.05 }
               : { x: 0, y: 4, angle: Math.PI * 0.05 }
-      addEffect({ type: 'slash', x: p.x + fxOffset.x, y: p.y + fxOffset.y, r: 9, color: '#cbd5e1', max: 0.14, angle: fxOffset.angle })
+      addEffect({
+        type: 'slash',
+        x: p.x + fxOffset.x,
+        y: p.y + fxOffset.y,
+        sourceX: p.x,
+        sourceY: p.y - 8,
+        r: 14,
+        color: basicVfx.primaryColor,
+        secondaryColor: basicVfx.secondaryColor,
+        max: basicVfx.durationSec,
+        angle: fxOffset.angle,
+        vfxStyle: basicVfx.style,
+        jobId: basicVfx.jobId,
+        vfxTier: 'basic',
+      })
     }
     return
   }
   faceToward(t.x, t.y)
   if (job.ranged) {
-    shoot(t, [1], projectileColor(job), 2.2)
+    shoot(
+      t,
+      [1],
+      basicVfx.primaryColor || projectileColor(job),
+      2.4,
+      0,
+      0,
+      undefined,
+      basicVfx.style,
+      basicVfx.secondaryColor,
+      basicVfx.jobId,
+      'basic',
+    )
   } else {
     damageMonster(t, 1)
-    addEffect({ type: 'slash', x: t.x, y: t.y - 8, r: 11, color: '#ffffff', max: 0.18, angle: Math.random() * Math.PI })
+    addEffect({
+      type: 'slash',
+      x: t.x,
+      y: t.y - 8,
+      sourceX: p.x,
+      sourceY: p.y - 8,
+      r: 15,
+      color: basicVfx.primaryColor,
+      secondaryColor: basicVfx.secondaryColor,
+      max: basicVfx.durationSec,
+      angle: Math.random() * Math.PI,
+      vfxStyle: basicVfx.style,
+      jobId: basicVfx.jobId,
+      vfxTier: 'basic',
+    })
+    globalCombatParticlePool.spawnClassBurst({
+      jobId: basicVfx.jobId,
+      tier: 'basic',
+      x: t.x,
+      y: t.y - 8,
+      radius: 16,
+      count: 6,
+    })
   }
 }
 
@@ -4181,6 +4254,7 @@ export function castSkill(index: number, silent = false): boolean {
   const skillLevel = p.skillLevels?.[canonicalSkillId] ?? p.skillLevels?.[skill.id] ?? 1
   const skillMult = skill.mult * (1 + (skillLevel - 1) * 0.08)
   const vfx = getSkillVfxSpec(canonicalSkillId, skill.color, skill.kind, job.weaponTypes[0])
+  const fxJobId = getClassCombatVfxProfile(job.id).jobId
   if (skillCooldown(skill) > 0) return false
   if (p.mp < skill.mp) {
     if (!silent) warn('MP ไม่พอ!')
@@ -4205,11 +4279,23 @@ export function castSkill(index: number, silent = false): boolean {
       type: 'ring',
       x: p.x,
       y: p.y - 6,
+      sourceX: p.x,
+      sourceY: p.y - 6,
       r: 34,
       color: vfx.primaryColor,
       secondaryColor: vfx.secondaryColor,
-      max: 0.65,
+      max: vfx.durationSec,
       vfxStyle: vfx.style,
+      jobId: fxJobId,
+      vfxTier: vfx.tier,
+      skillId: canonicalSkillId,
+    })
+    globalCombatParticlePool.spawnClassBurst({
+      jobId: fxJobId,
+      tier: vfx.tier,
+      x: p.x,
+      y: p.y - 10,
+      radius: 26,
     })
     addFloat(p.x, p.y - 30, `+${recovered} HP`, vfx.primaryColor)
     say('system', `${skill.name} ฟื้นฟู HP ${recovered}`)
@@ -4229,8 +4315,18 @@ export function castSkill(index: number, silent = false): boolean {
       r,
       color: vfx.primaryColor,
       secondaryColor: vfx.secondaryColor,
-      max: 0.55,
+      max: vfx.durationSec,
       vfxStyle: vfx.style,
+      jobId: fxJobId,
+      vfxTier: vfx.tier,
+      skillId: canonicalSkillId,
+    })
+    globalCombatParticlePool.spawnClassBurst({
+      jobId: fxJobId,
+      tier: vfx.tier,
+      x: p.x,
+      y: p.y - 8,
+      radius: r,
     })
     for (const m of game.monsters) if (!m.dead && Math.hypot(m.x - p.x, m.y - p.y) <= r) damageMonster(m, skillMult, skill.id)
   } else {
@@ -4248,18 +4344,21 @@ export function castSkill(index: number, silent = false): boolean {
     faceToward(t.x, t.y)
     if (skill.kind === 'single') {
       if (job.ranged) {
-        shoot(t, [skillMult], vfx.primaryColor, 4, 0, 0, skill.id, vfx.style, vfx.secondaryColor)
+        shoot(t, [skillMult], vfx.primaryColor, 4, 0, 0, skill.id, vfx.style, vfx.secondaryColor, fxJobId, vfx.tier)
         addEffect({
           type: 'burst',
           x: t.x,
           y: t.y - 8,
           sourceX: p.x,
           sourceY: p.y - 8,
-          r: 22,
+          r: 24,
           color: vfx.primaryColor,
           secondaryColor: vfx.secondaryColor,
-          max: 0.45,
+          max: vfx.durationSec,
           vfxStyle: vfx.style,
+          jobId: fxJobId,
+          vfxTier: vfx.tier,
+          skillId: canonicalSkillId,
         })
       } else {
         damageMonster(t, skillMult, skill.id)
@@ -4269,18 +4368,28 @@ export function castSkill(index: number, silent = false): boolean {
           y: t.y - 8,
           sourceX: p.x,
           sourceY: p.y - 8,
-          r: 20,
+          r: 24,
           color: vfx.primaryColor,
           secondaryColor: vfx.secondaryColor,
-          max: 0.36,
+          max: vfx.durationSec,
           angle: Math.random() * Math.PI,
           vfxStyle: vfx.style,
+          jobId: fxJobId,
+          vfxTier: vfx.tier,
+          skillId: canonicalSkillId,
+        })
+        globalCombatParticlePool.spawnClassBurst({
+          jobId: fxJobId,
+          tier: vfx.tier,
+          x: t.x,
+          y: t.y - 8,
+          radius: 24,
         })
       }
     } else if (skill.kind === 'multi') {
       const hits = skill.hits ?? 2
       if (job.ranged) {
-        for (let i = 0; i < hits; i++) shoot(t, [skillMult], vfx.primaryColor, 2.4, 0, i * 0.1, skill.id, vfx.style, vfx.secondaryColor)
+        for (let i = 0; i < hits; i++) shoot(t, [skillMult], vfx.primaryColor, 2.6, 0, i * 0.1, skill.id, vfx.style, vfx.secondaryColor, fxJobId, vfx.tier)
       } else {
         for (let i = 0; i < hits; i++) {
           damageMonster(t, skillMult, skill.id)
@@ -4292,16 +4401,26 @@ export function castSkill(index: number, silent = false): boolean {
         y: t.y - 8,
         sourceX: p.x,
         sourceY: p.y - 8,
-        r: 20,
+        r: 24,
         color: vfx.primaryColor,
         secondaryColor: vfx.secondaryColor,
-        max: 0.4,
+        max: vfx.durationSec,
         vfxStyle: vfx.style,
+        jobId: fxJobId,
+        vfxTier: vfx.tier,
+        skillId: canonicalSkillId,
+      })
+      globalCombatParticlePool.spawnClassBurst({
+        jobId: fxJobId,
+        tier: vfx.tier,
+        x: t.x,
+        y: t.y - 8,
+        radius: 26,
       })
     } else if (skill.kind === 'aoe-target') {
       const r = skill.radius ?? 48
       if (job.ranged) {
-        shoot(t, [skillMult], vfx.primaryColor, 4.2, r, 0, skill.id, vfx.style, vfx.secondaryColor)
+        shoot(t, [skillMult], vfx.primaryColor, 4.2, r, 0, skill.id, vfx.style, vfx.secondaryColor, fxJobId, vfx.tier)
       } else {
         addEffect({
           type: 'burst',
@@ -4312,8 +4431,18 @@ export function castSkill(index: number, silent = false): boolean {
           r,
           color: vfx.primaryColor,
           secondaryColor: vfx.secondaryColor,
-          max: 0.65,
+          max: vfx.durationSec,
           vfxStyle: vfx.style,
+          jobId: fxJobId,
+          vfxTier: vfx.tier,
+          skillId: canonicalSkillId,
+        })
+        globalCombatParticlePool.spawnClassBurst({
+          jobId: fxJobId,
+          tier: vfx.tier,
+          x: t.x,
+          y: t.y - 8,
+          radius: r,
         })
         for (const m of game.monsters) if (!m.dead && Math.hypot(m.x - t.x, m.y - t.y) <= r) damageMonster(m, skillMult, skill.id)
       }
@@ -4375,6 +4504,8 @@ export function triggerUltimateSkill() {
     warn(`เกจท่าไม้ตายยังไม่เต็ม (${Math.round(game.ultimateCharge)}%)`)
     return false
   }
+  const job = currentJob()
+  const profile = getClassCombatVfxProfile(job.id)
   const r = 110
   let hitCount = 0
   for (const m of game.monsters) {
@@ -4385,12 +4516,32 @@ export function triggerUltimateSkill() {
   }
   game.ultimateCharge = 0
   game.attackAnim = 0.45
-  game.skillAnim = 0.68
-  game.skillAnimMax = 0.68
-  game.skillVfxColor = '#fbbf24'
-  addEffect({ type: 'burst', x: p.x, y: p.y - 8, r, color: '#fbbf24', secondaryColor: '#f43f5e', vfxStyle: 'light_judgment', max: 0.9 })
-  addFloat(p.x, p.y - 36, 'ULTIMATE!', '#fbbf24', 15)
-  say('system', hitCount > 0 ? `★ ปลดปล่อยท่าไม้ตาย! โดนมอนสเตอร์ ${hitCount} ตัว` : '★ ปลดปล่อยท่าไม้ตายแห่งแสง!')
+  game.skillAnim = 0.72
+  game.skillAnimMax = 0.72
+  game.skillVfxColor = profile.palette.primary
+  addEffect({
+    type: 'burst',
+    x: p.x,
+    y: p.y - 8,
+    sourceX: p.x,
+    sourceY: p.y - 8,
+    r,
+    color: profile.palette.primary,
+    secondaryColor: profile.palette.secondary,
+    vfxStyle: 'light_judgment',
+    max: profile.ultimate.durationSec,
+    jobId: profile.jobId,
+    vfxTier: 'ultimate',
+  })
+  globalCombatParticlePool.spawnClassBurst({
+    jobId: profile.jobId,
+    tier: 'ultimate',
+    x: p.x,
+    y: p.y - 10,
+    radius: r * 0.75,
+  })
+  addFloat(p.x, p.y - 36, profile.ultimate.name.toUpperCase(), profile.palette.primary, 15)
+  say('system', hitCount > 0 ? `★ ปลดปล่อย ${profile.ultimate.name}! โดนมอนสเตอร์ ${hitCount} ตัว` : `★ ปลดปล่อย ${profile.ultimate.name}!`)
   notify()
   return true
 }
@@ -10846,6 +10997,7 @@ export function update(dt: number) {
   }
   for (const e of game.effects) e.life -= dt
   game.effects = game.effects.filter((e) => e.life > 0)
+  globalCombatParticlePool.update(dt)
   if (game.bubble && game.time > game.bubble.until) game.bubble = null
 
   game.regenT += dt
@@ -11141,6 +11293,9 @@ function updateProjectiles(dt: number) {
         }
       } else if (pr.aoe > 0) {
         const impactY = ty + 8
+        const fxDuration = pr.jobId
+          ? getClassCombatVfxProfile(pr.jobId)[pr.vfxTier ?? 'special'].durationSec
+          : 0.72
         addEffect({
           type: 'burst',
           x: tx,
@@ -11150,9 +11305,21 @@ function updateProjectiles(dt: number) {
           r: pr.aoe,
           color: pr.color,
           secondaryColor: pr.secondaryColor,
-          max: 0.65,
+          max: fxDuration,
           vfxStyle: pr.vfxStyle,
+          jobId: pr.jobId,
+          vfxTier: pr.vfxTier,
+          skillId: pr.skillId,
         })
+        if (pr.jobId) {
+          globalCombatParticlePool.spawnClassBurst({
+            jobId: pr.jobId,
+            tier: pr.vfxTier ?? 'special',
+            x: tx,
+            y: ty,
+            radius: pr.aoe,
+          })
+        }
         for (const m of game.monsters) {
           if (!m.dead && Math.hypot(m.x - tx, m.y - impactY) <= pr.aoe) {
             for (const mult of pr.mults) damageMonster(m, mult, pr.skillId)
@@ -11161,7 +11328,33 @@ function updateProjectiles(dt: number) {
       } else if (t && !t.dead) {
         for (const mult of pr.mults) damageMonster(t, mult, pr.skillId)
       }
-      addEffect({ type: 'spark', x: tx, y: ty, r: 6 + pr.size * 2, color: pr.color, max: 0.2 })
+      if (pr.jobId) {
+        addEffect({
+          type: 'spark',
+          x: tx,
+          y: ty,
+          sourceX: pr.x,
+          sourceY: pr.y,
+          r: 12 + pr.size * 2,
+          color: pr.color,
+          secondaryColor: pr.secondaryColor,
+          max: pr.vfxTier === 'basic' ? 0.3 : 0.45,
+          vfxStyle: pr.vfxStyle,
+          jobId: pr.jobId,
+          vfxTier: pr.vfxTier ?? 'basic',
+          skillId: pr.skillId,
+        })
+        globalCombatParticlePool.spawnClassBurst({
+          jobId: pr.jobId,
+          tier: pr.vfxTier ?? 'basic',
+          x: tx,
+          y: ty,
+          radius: 16,
+          count: pr.vfxTier === 'basic' ? 6 : 10,
+        })
+      } else {
+        addEffect({ type: 'spark', x: tx, y: ty, r: 6 + pr.size * 2, color: pr.color, max: 0.2 })
+      }
       continue
     }
     pr.x += ((tx - pr.x) / d) * step

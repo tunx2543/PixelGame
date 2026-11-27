@@ -43,7 +43,8 @@ import { preloadAllHeroSheets, preloadMountSpriteSheet, preloadPetSpriteSheet } 
 import { resolvePetAnimationFrame } from './pet-follow'
 import { TITLE_DEFS } from './rpg-systems'
 import { GATHERING_NODES, getWorldTimePhase, isRainbowNameColor, resolveAnimatedRainbowHex, sanitizeExtV2, sanitizeNameColor } from './extended-systems'
-import { drawOverworldSkillEffect, drawRebirthAura, drawSpiritAwakeningAura } from './vfx-canvas'
+import { globalCombatParticlePool, renderCombatParticlePool } from './combat-vfx-system'
+import { drawOverworldProjectile, drawOverworldSkillEffect, drawRebirthAura, drawSpiritAwakeningAura } from './vfx-canvas'
 import { getMenuIconCanvas, type MenuIconId } from './menu-icons'
 import { computeWorldFloatTransform } from './floating-damage'
 import {
@@ -1736,27 +1737,30 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
 
   for (const pr of game.projectiles) {
     if (pr.delay > 0) continue
-    ctx.save()
-    ctx.fillStyle = pr.color
-    ctx.globalAlpha = pr.aoe > 0 ? 0.55 : 0.42
-    const outer = pr.aoe > 0 ? pr.size + 1.5 : pr.size
-    ctx.beginPath()
-    ctx.arc(Math.round(pr.x), Math.round(pr.y), outer + 0.5, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.globalAlpha = 1
-    ctx.fillStyle = pr.color
-    ctx.fillRect(Math.round(pr.x - pr.size * 0.7), Math.round(pr.y - pr.size * 0.7), Math.max(2, Math.round(pr.size * 1.4)), Math.max(2, Math.round(pr.size * 1.4)))
-    ctx.fillStyle = '#ffffff'
-    ctx.fillRect(Math.round(pr.x), Math.round(pr.y), 1 + Math.floor(pr.size / 2), 1 + Math.floor(pr.size / 2))
-    ctx.restore()
+    drawOverworldProjectile(ctx, {
+      x: pr.x,
+      y: pr.y,
+      tx: pr.tx,
+      ty: pr.ty,
+      size: pr.size,
+      color: pr.color,
+      secondaryColor: pr.secondaryColor,
+      jobId: pr.jobId,
+      aoe: pr.aoe,
+      timeSec: t,
+      disableGlow,
+    })
   }
 
   for (const e of game.effects) {
     const k = 1 - e.life / e.max
     const alpha = Math.max(0, e.life / e.max)
-    if (e.vfxStyle) {
+    if (e.vfxStyle || e.jobId) {
       drawOverworldSkillEffect(ctx, {
-        style: e.vfxStyle,
+        jobId: e.jobId,
+        vfxTier: e.vfxTier,
+        skillId: e.skillId,
+        style: e.vfxStyle ?? 'heavy_cleave',
         primaryColor: e.color,
         secondaryColor: e.secondaryColor,
         sourceX: e.sourceX,
@@ -1814,6 +1818,8 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     }
     ctx.restore()
   }
+
+  renderCombatParticlePool(ctx, globalCombatParticlePool, disableGlow)
 
   // World-space World Boss pre-attack telegraph ring centered on boss (1.5s before map-wide attack)
   if (wbWarn.active && game.worldBossWarning) {

@@ -26,6 +26,7 @@ import { preloadHeroSheet } from '@/lib/game/sprite-sheets'
 import { sanitizeExtV2 } from '@/lib/game/extended-systems'
 import { sanitizePremiumState } from '@/lib/game/premium/wallet'
 import { getActivePetBonuses } from '@/lib/game/systems'
+import { getCombatVfxDurationMs } from '@/lib/game/combat-vfx-system'
 import { drawRebirthAura, drawStageSkillEffect } from '@/lib/game/vfx-canvas'
 
 export type StagePopup = FloatingDamagePopup
@@ -575,8 +576,12 @@ export function EncounterStageCanvas({
             }
             ctx.restore()
 
-            if (isPlayerAttacking) {
+            const vfxDurationMs = getCombatVfxDurationMs(job.id, pSkillId ?? null)
+            const pVfxAge = (now - pAtk) / Math.max(260, vfxDurationMs)
+            const isPlayerVfxActive = pAtk > 0 && pVfxAge >= 0 && pVfxAge < 1
+            if (isPlayerVfxActive) {
               drawStageSkillEffect(ctx, {
+                jobId: job.id,
                 heroX: heroX + heroLunge,
                 heroY: floorY,
                 enemyX: enemyX - 10,
@@ -584,7 +589,7 @@ export function EncounterStageCanvas({
                 floorY,
                 skillId: pSkillId ?? null,
                 weaponType,
-                progress: pAtkAge,
+                progress: pVfxAge,
                 color: pSkillCol || weaponColor || '#ffd60a',
               })
             }

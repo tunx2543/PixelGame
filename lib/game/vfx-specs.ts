@@ -192,6 +192,12 @@ export function resolveRebirthAuraSpec(rebirthCount = 0): RebirthAuraSpec {
   return REBIRTH_TIER_SPECS[tier] ?? REBIRTH_TIER_SPECS[6]
 }
 
+import {
+  getClassCombatVfxProfile,
+  resolveSkillCombatTier,
+  type CombatVfxTier,
+} from './combat-vfx-system'
+
 export type SkillVfxStyle =
   | 'heavy_cleave'
   | 'whirl_blades'
@@ -222,6 +228,9 @@ export type SkillVfxStyle =
 
 export interface SkillVfxSpec {
   skillId: string
+  jobId: JobId
+  tier: CombatVfxTier
+  durationSec: number
   style: SkillVfxStyle
   effectLabel: string
   primaryColor: string
@@ -229,454 +238,454 @@ export interface SkillVfxSpec {
   iconPath: string
 }
 
-const SKILL_VFX_TABLE: Record<string, Omit<SkillVfxSpec, 'skillId'>> = {
-  // ── 01. novice (Wayfarer ← Warrior: 4 matched icons) ──
+const SKILL_VFX_TABLE: Record<string, Omit<SkillVfxSpec, 'skillId' | 'jobId' | 'tier' | 'durationSec'>> = {
+  // ── 01. novice (Wayfarer: Silver, Sky Blue, White) ──
   power: {
     style: 'heavy_cleave',
-    effectLabel: 'ฟาดคมดาบเพลิงพิฆาตแนวหน้า',
-    primaryColor: '#fb7185',
-    secondaryColor: '#fde047',
+    effectLabel: 'Adventurer Strike ฟาดคลื่นแสงสีเงิน-ฟ้า',
+    primaryColor: '#38bdf8',
+    secondaryColor: '#e2e8f0',
     iconPath: '/assets/skills/novice/1.png',
   },
   'first-aid': {
     style: 'holy_heal',
-    effectLabel: 'ปะทุประกายชีพฟื้นฟูรอบกาย',
-    primaryColor: '#f97316',
-    secondaryColor: '#fef08a',
+    effectLabel: 'ประกายฟื้นฟูสีขาว-ฟ้าอ่อนรอบกาย',
+    primaryColor: '#e2e8f0',
+    secondaryColor: '#38bdf8',
     iconPath: '/assets/skills/novice/2.png',
   },
   'wayfarer-rush': {
     style: 'sniper_pierce',
-    effectLabel: 'พุ่งแทงคมดาบสายฟ้าผ่าแนวศัตรู',
-    primaryColor: '#ef4444',
-    secondaryColor: '#fde68a',
+    effectLabel: 'พุ่งฟาดคลื่นนักผจญภัยสีเงินฟ้า',
+    primaryColor: '#7dd3fc',
+    secondaryColor: '#ffffff',
     iconPath: '/assets/skills/novice/3.png',
   },
   'wayfarer-crescent': {
     style: 'iaijutsu_wave',
-    effectLabel: 'คลื่นดาบจันทราเสี้ยวสีชาด',
-    primaryColor: '#f43f5e',
+    effectLabel: 'Rising Courage ปลดปล่อยคลื่นพลังกล้าหาญรอบตัว',
+    primaryColor: '#38bdf8',
     secondaryColor: '#ffffff',
     iconPath: '/assets/skills/novice/4.png',
   },
 
-  // ── 02. swordsman (Vanguard ← Blade Master: 4 matched icons) ──
+  // ── 02. swordsman (Vanguard: Silver, Sky Blue, Royal Blue) ──
   bash: {
     style: 'heavy_cleave',
-    effectLabel: 'คู่คมดาบผ่าศัตรูแนวหน้า',
-    primaryColor: '#fb923c',
-    secondaryColor: '#fef08a',
+    effectLabel: 'Sword Slash ฟันดาบโค้งสีเงิน-ฟ้า',
+    primaryColor: '#38bdf8',
+    secondaryColor: '#cbd5e1',
     iconPath: '/assets/skills/swordsman/1.png',
   },
   whirl: {
     style: 'whirl_blades',
-    effectLabel: 'พายุใบมีดเพลิงหมุนรอบทิศ',
-    primaryColor: '#f97316',
-    secondaryColor: '#ffedd5',
+    effectLabel: 'Whirlwind Blade หมุนตัวฟันพายุคมดาบสีน้ำเงิน',
+    primaryColor: '#2563eb',
+    secondaryColor: '#38bdf8',
     iconPath: '/assets/skills/swordsman/2.png',
   },
   'vanguard-pierce': {
     style: 'holy_lance',
-    effectLabel: 'พุ่งทะลวงคมดาบแหวกอากาศ',
-    primaryColor: '#ef4444',
-    secondaryColor: '#fed7aa',
+    effectLabel: 'พุ่งทะลวงคมดาบแหวกอากาศสีฟ้าคราม',
+    primaryColor: '#60a5fa',
+    secondaryColor: '#e2e8f0',
     iconPath: '/assets/skills/swordsman/3.png',
   },
   'vanguard-breaker': {
-    style: 'fist_shockwave',
-    effectLabel: 'สับดาบหนักทลายเกราะและพื้นดิน',
-    primaryColor: '#f59e0b',
-    secondaryColor: '#ffffff',
+    style: 'holy_sword_beam',
+    effectLabel: 'Heaven Splitter อัญเชิญดาบพลังขนาดใหญ่ฟันลงพื้น',
+    primaryColor: '#2563eb',
+    secondaryColor: '#cbd5e1',
     iconPath: '/assets/skills/swordsman/4.png',
   },
 
-  // ── 03. mage (Arcanist ← Sorcerer: 4 matched icons) ──
+  // ── 03. mage (Arcanist: Violet, Blue, Cyan) ──
   firebolt: {
     style: 'fire_comet',
-    effectLabel: 'ดาวหางเวทอัคคีสีม่วงพุ่งปะทะ',
-    primaryColor: '#c084fc',
-    secondaryColor: '#f5d0fe',
+    effectLabel: 'Arcane Bolt ลูกพลังเวทม่วง-ฟ้าพุ่งปะทะ',
+    primaryColor: '#a855f7',
+    secondaryColor: '#22d3ee',
     iconPath: '/assets/skills/mage/1.png',
   },
   'arcane-ward': {
     style: 'arcane_rune_pulse',
-    effectLabel: 'วงแหวนอักขระเวทเรืองรองฟื้นชีพและเกราะ',
-    primaryColor: '#a855f7',
-    secondaryColor: '#e9d5ff',
+    effectLabel: 'วงเวทคริสตัลอาร์เคนม่วง-ฟ้า',
+    primaryColor: '#3b82f6',
+    secondaryColor: '#22d3ee',
     iconPath: '/assets/skills/mage/2.png',
   },
   meteor: {
     style: 'meteor_strike',
-    effectLabel: 'มหาอุกกาบาตอาร์เคนถล่มพื้นที่',
-    primaryColor: '#d946ef',
-    secondaryColor: '#fdf4ff',
+    effectLabel: 'Crystal Burst คริสตัลเวทระเบิดรอบเป้าหมาย',
+    primaryColor: '#a855f7',
+    secondaryColor: '#3b82f6',
     iconPath: '/assets/skills/mage/3.png',
   },
   'astral-nova': {
     style: 'arcane_rune_pulse',
-    effectLabel: 'ระเบิดวงเวทดาราแปดทิศ',
-    primaryColor: '#8b5cf6',
-    secondaryColor: '#f0abfc',
+    effectLabel: 'Astral Tempest มหาพายุวงเวทดาราจักรม่วง-ฟ้า',
+    primaryColor: '#a855f7',
+    secondaryColor: '#22d3ee',
     iconPath: '/assets/skills/mage/4.png',
   },
 
-  // ── 04. archer (Windstalker ← Ranger: 4 matched icons) ──
+  // ── 04. archer (Windstalker: Emerald Green, Light Green) ──
   double: {
     style: 'arrow_barrage',
-    effectLabel: 'ชุดศรวายุมรกตยิงซ้อนความเร็วสูง',
-    primaryColor: '#4ade80',
-    secondaryColor: '#ecfccb',
+    effectLabel: 'Multi Arrow ยิงธนูสายลมมรกตต่อเนื่อง',
+    primaryColor: '#10b981',
+    secondaryColor: '#86efac',
     iconPath: '/assets/skills/archer/1.png',
   },
   rain: {
     style: 'arrow_rain',
-    effectLabel: 'ห่าฝนธนูพฤกษาโปรยจากฟ้า',
-    primaryColor: '#22c55e',
-    secondaryColor: '#bbf7d0',
+    effectLabel: 'Celestial Rain เรียกห่าฝนธนูมรกตจากฟากฟ้า',
+    primaryColor: '#10b981',
+    secondaryColor: '#ecfccb',
     iconPath: '/assets/skills/archer/2.png',
   },
   'wind-snipe': {
     style: 'sniper_pierce',
-    effectLabel: 'ศรเล็งเป้าเจาะเกราะทะลุคลื่นลม',
-    primaryColor: '#a3e635',
-    secondaryColor: '#ffffff',
+    effectLabel: 'ศรสายลมทะลวงวิถีสีเขียวมรกต',
+    primaryColor: '#34d399',
+    secondaryColor: '#ecfccb',
     iconPath: '/assets/skills/archer/3.png',
   },
   'gale-volley': {
-    style: 'arrow_rain',
-    effectLabel: 'ระดมยิงศรพายุหมุนรอบจุดปะทะ',
+    style: 'arrow_barrage',
+    effectLabel: 'Multi Arrow ระดมศรวายุสีเขียวอ่อน',
     primaryColor: '#10b981',
-    secondaryColor: '#d9f99d',
+    secondaryColor: '#86efac',
     iconPath: '/assets/skills/archer/4.png',
   },
 
-  // ── 05. cleric (Luminary ← Holy Priest: 4 matched icons) ──
+  // ── 05. cleric (Luminary: White, Gold, Yellow) ──
   'grace-heal': {
     style: 'holy_heal',
-    effectLabel: 'รัศมีแสงทิพย์เยียวยาชีวิต',
+    effectLabel: 'Sacred Heal วงเวทแสงทองฟื้นฟูศักดิ์สิทธิ์',
     primaryColor: '#fde047',
-    secondaryColor: '#fef9c3',
+    secondaryColor: '#ffffff',
     iconPath: '/assets/skills/cleric/1.png',
   },
   'holy-bolt': {
     style: 'holy_lance',
-    effectLabel: 'ศาสตรากางเขนทองพุ่งพิพากษา',
-    primaryColor: '#fbbf24',
+    effectLabel: 'Holy Light ศาสตราแสงทองพุ่งพิพากษา',
+    primaryColor: '#f59e0b',
     secondaryColor: '#ffffff',
     iconPath: '/assets/skills/cleric/2.png',
   },
   'radiant-cross': {
     style: 'light_judgment',
-    effectLabel: 'กางเขนแสงคู่ฟาดสยบความมืด',
-    primaryColor: '#facc15',
-    secondaryColor: '#fef08a',
+    effectLabel: 'กางเขนแสงทองคำชำระล้างศัตรู',
+    primaryColor: '#fde047',
+    secondaryColor: '#f59e0b',
     iconPath: '/assets/skills/cleric/3.png',
   },
   sanctuary: {
     style: 'sanctuary_circle',
-    effectLabel: 'มหาอาคมเขตศักดิ์สิทธิ์ฟื้นฟูและพิฆาต',
-    primaryColor: '#fde047',
-    secondaryColor: '#86efac',
+    effectLabel: 'Divine Judgment ลำแสงมหาพิพากษาจากฟากฟ้า',
+    primaryColor: '#f59e0b',
+    secondaryColor: '#ffffff',
     iconPath: '/assets/skills/cleric/4.png',
   },
 
-  // ── 06. merchant (Goldweaver — 6 non-matching: LEGACY icons ONLY) ──
+  // ── 06. merchant (Goldweaver: Gold, Yellow, Orange) ──
   'gold-strike': {
     style: 'heavy_cleave',
-    effectLabel: 'ฟาดอาคมเหรียญทองมั่งคั่ง',
+    effectLabel: 'Coin Strike ฟาดพลังเหรียญทอง',
     primaryColor: '#fbbf24',
     secondaryColor: '#fef08a',
     iconPath: '/images/skills/whirl.png',
   },
   'cart-strike': {
     style: 'whirl_blades',
-    effectLabel: 'รถเข็นทองพุ่งกวาดศัตรูเป็นวงกว้าง',
-    primaryColor: '#f59e0b',
-    secondaryColor: '#fde68a',
+    effectLabel: 'Golden Explosion ระเบิดเหรียญทองคำกระจาย',
+    primaryColor: '#f97316',
+    secondaryColor: '#fef08a',
     iconPath: '/images/skills/whirl.png',
   },
   'golden-barrier': {
     style: 'holy_heal',
-    effectLabel: 'โล่ทองคำคุ้มภัยและฟื้นฟูพลังกาย',
-    primaryColor: '#fde047',
-    secondaryColor: '#fef3c7',
+    effectLabel: 'โล่ประกายทองคำคุ้มภัยและฟื้นฟู',
+    primaryColor: '#fbbf24',
+    secondaryColor: '#f97316',
     iconPath: '/images/skills/ice-wall.png',
   },
   'prosperity-rain': {
     style: 'coin_rain',
-    effectLabel: 'ห่าฝนเหรียญทองคำโปรยถล่มศัตรู',
+    effectLabel: 'Treasure Storm พายุเหรียญทองและหีบสมบัติระเบิด',
     primaryColor: '#fbbf24',
-    secondaryColor: '#ffffff',
+    secondaryColor: '#f97316',
     iconPath: '/images/skills/rain.png',
   },
 
-  // ── 07. thief (Nightveil ← Shadow Thief: 4 matched icons) ──
+  // ── 07. thief (Nightveil: Black, Violet, Deep Purple) ──
   dblatk: {
     style: 'twin_slash',
-    effectLabel: 'มีดเงาคู่วาบฟันซ้อนฉับไว',
-    primaryColor: '#c084fc',
-    secondaryColor: '#f5d0fe',
+    effectLabel: 'Shadow Dagger มีดเงาสีม่วง-ดำฟันซ้อน',
+    primaryColor: '#a855f7',
+    secondaryColor: '#581c87',
     iconPath: '/assets/skills/thief/1.png',
   },
   backstab: {
     style: 'shadow_backstab',
-    effectLabel: 'ลอบแทงจุดตายจากมุมอับเงา',
+    effectLabel: 'Phantom Dash พุ่งแทงผ่านเป้าหมายทิ้งร่างเงา',
     primaryColor: '#a855f7',
-    secondaryColor: '#fb7185',
+    secondaryColor: '#e9d5ff',
     iconPath: '/assets/skills/thief/2.png',
   },
   'shadow-mark': {
     style: 'shadow_skull_mist',
-    effectLabel: 'ประทับตราหัวกะโหลกเงาสาปรอบทิศ',
-    primaryColor: '#9333ea',
-    secondaryColor: '#e9d5ff',
+    effectLabel: 'ประทับตราเงารัตติกาลม่วงทมิฬ',
+    primaryColor: '#7e22ce',
+    secondaryColor: '#c084fc',
     iconPath: '/assets/skills/thief/3.png',
   },
   'veil-execution': {
     style: 'shadow_vortex',
-    effectLabel: 'พายุเงาสังหารผ่ามิติรัตติกาล',
-    primaryColor: '#7e22ce',
-    secondaryColor: '#f43f5e',
+    effectLabel: 'Shadow Execution ร่างเงาสี่ทิศพุ่งประหารพร้อมกัน',
+    primaryColor: '#a855f7',
+    secondaryColor: '#18181b',
     iconPath: '/assets/skills/thief/4.png',
   },
 
-  // ── 08. kensei (Shinkage ← Iaijutsu Master: 4 matched icons) ──
+  // ── 08. kensei (Shinkage: Red, White, Soft Pink) ──
   'kensei-flash': {
     style: 'iaijutsu_wave',
-    effectLabel: 'ฟันวาบคลื่นดาบครามสามจังหวะ',
-    primaryColor: '#38bdf8',
-    secondaryColor: '#e0f2fe',
+    effectLabel: 'Katana Slash ฟันคาตานะสีแดง-ขาวรวดเดียวสามจังหวะ',
+    primaryColor: '#ef4444',
+    secondaryColor: '#ffffff',
     iconPath: '/assets/skills/kensei/1.png',
   },
   iaijutsu: {
     style: 'iaijutsu_wave',
-    effectLabel: 'ชักดาบปลิดชีพในชั่วพริบตา',
-    primaryColor: '#0ea5e9',
-    secondaryColor: '#ffffff',
+    effectLabel: 'Cross Blade ฟันไขว้รูปตัว X แดงขาวพร้อมกลีบแสงชมพู',
+    primaryColor: '#ef4444',
+    secondaryColor: '#f9a8d4',
     iconPath: '/assets/skills/kensei/2.png',
   },
   'spirit-thrust': {
     style: 'sniper_pierce',
-    effectLabel: 'แทงทะลวงจิตวิญญาณวายุคราม',
-    primaryColor: '#60a5fa',
-    secondaryColor: '#bae6fd',
+    effectLabel: 'แทงคาตานะแสงขาว-แดงฉับไว',
+    primaryColor: '#ffffff',
+    secondaryColor: '#f9a8d4',
     iconPath: '/assets/skills/kensei/3.png',
   },
   bladestorm: {
     style: 'whirl_blades',
-    effectLabel: 'พายุคมดาบ Shinkage กวาดล้างรอบทิศ',
-    primaryColor: '#0284c7',
-    secondaryColor: '#e0f2fe',
+    effectLabel: 'Thousand Petals ระดมฟันคาตานะกลางพายุกลีบเรืองแสง',
+    primaryColor: '#ef4444',
+    secondaryColor: '#f9a8d4',
     iconPath: '/assets/skills/kensei/4.png',
   },
 
-  // ── 09. iron_fist (Titanfist — 6 non-matching: LEGACY icons ONLY) ──
+  // ── 09. iron_fist (Titanfist: Orange, Red, Gold) ──
   'flash-smash': {
     style: 'fist_shockwave',
-    effectLabel: 'พุ่งกระแทกหมัดอัคคี Titanfist',
-    primaryColor: '#fb923c',
-    secondaryColor: '#ffedd5',
+    effectLabel: 'Meteor Fist หมัดเพลิงส้มแดงพุ่งกระแทก',
+    primaryColor: '#f97316',
+    secondaryColor: '#fbbf24',
     iconPath: '/images/skills/whirl.png',
   },
   'quake-hammer': {
     style: 'fist_shockwave',
-    effectLabel: 'ทุบปฐพีคลื่นสั่นสะเทือนรอบทิศ',
-    primaryColor: '#f59e0b',
-    secondaryColor: '#fef3c7',
+    effectLabel: 'Earthbreaker ทุบพื้นแยกปฐพีคลื่นแมกมาส้มทอง',
+    primaryColor: '#dc2626',
+    secondaryColor: '#fbbf24',
     iconPath: '/images/skills/meteor.png',
   },
   'iron-will': {
     style: 'holy_heal',
-    effectLabel: 'จิตวิญญาณเหล็กกล้าฟื้นพลังชีวิต',
-    primaryColor: '#fed7aa',
-    secondaryColor: '#fef08a',
+    effectLabel: 'ปราณหมัดเหล็กฟื้นพลังกายสีส้มทอง',
+    primaryColor: '#fbbf24',
+    secondaryColor: '#f97316',
     iconPath: '/images/skills/thunderstorm.png',
   },
   'titan-combo': {
     style: 'fist_shockwave',
-    effectLabel: 'รัวหมัดไททันปะทุคลื่นกระแทกต่อเนื่อง',
-    primaryColor: '#ea580c',
-    secondaryColor: '#fde047',
+    effectLabel: 'คอมโบหมัดไททันปะทุคลื่นไฟส้มแดง',
+    primaryColor: '#f97316',
+    secondaryColor: '#dc2626',
     iconPath: '/images/skills/firebolt.png',
   },
 
-  // ── 10. wicked_necromancer (Grimcaller ← Necromancer: 4 matched icons) ──
+  // ── 10. wicked_necromancer (Grimcaller: Purple, Black, Dark Blue) ──
   'black-cat-hex': {
     style: 'shadow_skull_mist',
-    effectLabel: 'เรียกวิญญาณกะโหลกทมิฬพุ่งสาป',
-    primaryColor: '#c084fc',
-    secondaryColor: '#f5d0fe',
+    effectLabel: 'Dark Soul ลูกพลังวิญญาณม่วงดำจากคัมภีร์มนตร์ดำ',
+    primaryColor: '#9333ea',
+    secondaryColor: '#1e3a8a',
     iconPath: '/assets/skills/wicked_necromancer/1.png',
   },
   'lower-resist': {
     style: 'arcane_rune_pulse',
-    effectLabel: 'เสาวิญญาณต้องสาปทลายเกราะต้านทาน',
-    primaryColor: '#a855f7',
-    secondaryColor: '#e9d5ff',
+    effectLabel: 'Soul Prison วงเวทคำสาปขังวิญญาณและเงาแมวดำ',
+    primaryColor: '#9333ea',
+    secondaryColor: '#d8b4fe',
     iconPath: '/assets/skills/wicked_necromancer/2.png',
   },
   'soul-shroud': {
     style: 'holy_heal',
-    effectLabel: 'ม่านวิญญาณดูดซับพลังชีวิตและฟื้นฟู',
-    primaryColor: '#d946ef',
-    secondaryColor: '#bae6fd',
+    effectLabel: 'ม่านวิญญาณอเวจีสีม่วง-น้ำเงินเข้ม',
+    primaryColor: '#a855f7',
+    secondaryColor: '#1e3a8a',
     iconPath: '/assets/skills/wicked_necromancer/3.png',
   },
   'abyss-requiem': {
     style: 'shadow_skull_mist',
-    effectLabel: 'พายุหัวกะโหลกอเวจีคร่ำครวญรอบทิศ',
-    primaryColor: '#e879f9',
-    secondaryColor: '#7e22ce',
+    effectLabel: "Reaper's Domain ฝูงวิญญาณมืดและเงาปีศาจโจมตีรอบอาณาเขต",
+    primaryColor: '#9333ea',
+    secondaryColor: '#1e3a8a',
     iconPath: '/assets/skills/wicked_necromancer/4.png',
   },
 
-  // ── 11. the_king (High Sovereign — 6 non-matching: LEGACY icons ONLY) ──
+  // ── 11. the_king (High Sovereign: Gold, White, Crimson Red) ──
   'dividend-yield': {
     style: 'holy_heal',
-    effectLabel: 'ละอองทองปันผลฟื้นฟูชีวิตและพลังเวท',
-    primaryColor: '#fde047',
-    secondaryColor: '#dcfce7',
+    effectLabel: 'รัศมีราชวงศ์ทอง-ขาวฟื้นฟูพลังกาย',
+    primaryColor: '#fbbf24',
+    secondaryColor: '#ffffff',
     iconPath: '/images/skills/thunderstorm.png',
   },
   'candle-storm': {
     style: 'coin_rain',
-    effectLabel: 'พายุตลาดและฝนทองคำถล่มรอบพื้นที่',
-    primaryColor: '#34d399',
-    secondaryColor: '#fde047',
+    effectLabel: "King's Authority คลื่นอำนาจราชวงศ์ทอง-แดง",
+    primaryColor: '#fbbf24',
+    secondaryColor: '#dc2626',
     iconPath: '/images/skills/thunderstorm.png',
   },
   'stop-loss': {
     style: 'fire_comet',
-    effectLabel: 'ลำแสงตัดขาดทุนสังหารเป้าหมายเดี่ยว',
-    primaryColor: '#fb7185',
-    secondaryColor: '#fde047',
+    effectLabel: 'คมแสงพิพากษาราชันย์สีแดง-ทอง',
+    primaryColor: '#dc2626',
+    secondaryColor: '#fbbf24',
     iconPath: '/images/skills/firebolt.png',
   },
   'sovereign-decree': {
     style: 'holy_sword_beam',
-    effectLabel: 'ดาบราชโองการทองคำพิพากษารอบทิศ',
+    effectLabel: 'Imperial Judgment ดาบราชันย์ยักษ์สีทอง-แดงฟันจากฟ้า',
     primaryColor: '#fbbf24',
-    secondaryColor: '#ffffff',
+    secondaryColor: '#dc2626',
     iconPath: '/images/skills/meteor.png',
   },
 
-  // ── 12. sinister (Dreadfang ← Demonist: 4 matched icons) ──
+  // ── 12. sinister (Dreadfang: Black, Red, Crimson) ──
   'sinister-cross': {
     style: 'twin_slash',
-    effectLabel: 'กงเล็บโลหิตฟาดไขว้ฉับไว',
-    primaryColor: '#fb7185',
-    secondaryColor: '#fecdd3',
+    effectLabel: 'Demon Claw กรงเล็บปีศาจดำ-แดงฟาดไขว้',
+    primaryColor: '#dc2626',
+    secondaryColor: '#9f1239',
     iconPath: '/assets/skills/sinister/1.png',
   },
   'reaper-ambush': {
     style: 'demon_pentagram',
-    effectLabel: 'หนามนรกทมิฬพุ่งเสียบจากใต้พิภพ',
-    primaryColor: '#e11d48',
+    effectLabel: 'Abyss Burst ระเบิดพลังอสูรสีแดงทมิฬ',
+    primaryColor: '#9f1239',
     secondaryColor: '#fda4af',
     iconPath: '/assets/skills/sinister/2.png',
   },
   'demon-spike': {
     style: 'demon_pentagram',
-    effectLabel: 'ตราดาวห้าแฉกอสูรปะทุคลั่ง',
-    primaryColor: '#be123c',
-    secondaryColor: '#fda4af',
+    effectLabel: 'Abyss Burst ตราดาวห้าแฉกอสูรปะทุออกรอบทิศ',
+    primaryColor: '#dc2626',
+    secondaryColor: '#09090b',
     iconPath: '/assets/skills/sinister/3.png',
   },
   'crimson-eclipse': {
     style: 'shadow_vortex',
-    effectLabel: 'จันทราคราสสีเลือดกวาดล้างรอบทิศ',
-    primaryColor: '#f43f5e',
-    secondaryColor: '#c084fc',
+    effectLabel: 'Infernal Awakening ร่างออร่าปีศาจและคลื่นเพลิงโลหิต',
+    primaryColor: '#dc2626',
+    secondaryColor: '#9f1239',
     iconPath: '/assets/skills/sinister/4.png',
   },
 
-  // ── 13. templar (Aegis Knight — 6 non-matching: LEGACY icons ONLY) ──
+  // ── 13. templar (Aegis Knight: White, Silver, Gold) ──
   'holy-strike': {
     style: 'holy_cleave',
-    effectLabel: 'กางเขนแสงพิฆาตฟาดศัตรูตรงหน้า',
-    primaryColor: '#ffe08a',
-    secondaryColor: '#fffbeb',
+    effectLabel: 'Holy Shield Strike ฟาดโล่และดาบแสงขาว-ทอง',
+    primaryColor: '#ffffff',
+    secondaryColor: '#fbbf24',
     iconPath: '/images/skills/thunderstorm.png',
   },
   'aegis-sanctuary': {
     style: 'sanctuary_circle',
-    effectLabel: 'วงเวทโล่แสงพิทักษ์ฟื้นฟูและสะท้อนพลัง',
-    primaryColor: '#93c5fd',
-    secondaryColor: '#fde047',
+    effectLabel: 'Sacred Barrier โดมโล่แสงศักดิ์สิทธิ์สีขาว-เงิน-ทอง',
+    primaryColor: '#e2e8f0',
+    secondaryColor: '#fbbf24',
     iconPath: '/images/skills/ice-wall.png',
   },
   'templar-bastion': {
     style: 'holy_heal',
-    effectLabel: 'ป้อมปราการศักดิ์สิทธิ์ฟื้นฟูและเสริมแกร่ง',
-    primaryColor: '#fde047',
-    secondaryColor: '#bbf7d0',
+    effectLabel: 'ปราการโล่ศักดิ์สิทธิ์ฟื้นฟูและคุ้มกัน',
+    primaryColor: '#ffffff',
+    secondaryColor: '#fbbf24',
     iconPath: '/images/skills/thunderstorm.png',
   },
   'aegis-judgment': {
     style: 'aegis_shield_slam',
-    effectLabel: 'กระแทกโล่แสงทองคำทลายรอบทิศ',
-    primaryColor: '#60a5fa',
-    secondaryColor: '#fef08a',
+    effectLabel: 'Aegis Dominion วงแหวนปราการยักษ์กระแทกศัตรู',
+    primaryColor: '#fbbf24',
+    secondaryColor: '#ffffff',
     iconPath: '/images/skills/whirl.png',
   },
 
-  // ── 14. nekobaku (Pawchemist — 6 non-matching: LEGACY icons ONLY) ──
+  // ── 14. nekobaku (Pawchemist: Pink, Cyan/Blue, Purple) ──
   'fizz-flask': {
     style: 'alchemy_flask_burst',
-    effectLabel: 'ขวดยาฟ้าซ่าระเบิดฟองแร่ธาตุเป็นพื้นที่',
+    effectLabel: 'Alchemy Bomb ขวดยาเล่นแร่แปรธาตุระเบิดฟองหลากสี',
     primaryColor: '#38bdf8',
-    secondaryColor: '#e0f2fe',
+    secondaryColor: '#f472b6',
     iconPath: '/images/skills/firebolt.png',
   },
   'tar-flask': {
     style: 'alchemy_flask_burst',
-    effectLabel: 'ขวดน้ำมันดินระเบิดเพลิงเผาไหม้',
-    primaryColor: '#fb923c',
-    secondaryColor: '#fef08a',
+    effectLabel: 'Alchemy Bomb ขวดเคมีชมพู-ม่วงจุดระเบิด',
+    primaryColor: '#f472b6',
+    secondaryColor: '#a855f7',
     iconPath: '/images/skills/meteor.png',
   },
   'neko-barrage': {
     style: 'arrow_rain',
-    effectLabel: 'กระหน่ำขวดเคมี Pawchemist ต่อเนื่อง',
+    effectLabel: 'Mad Alchemist กระหน่ำขวดยาระเบิดลูกโซ่ชมพู-ฟ้า-ม่วง',
     primaryColor: '#f472b6',
-    secondaryColor: '#fde047',
+    secondaryColor: '#38bdf8',
     iconPath: '/images/skills/rain.png',
   },
   'catnip-tonic': {
     style: 'holy_heal',
-    effectLabel: 'น้ำยาแคทนิปฟื้นฟู HP เฉียบพลัน',
-    primaryColor: '#ec4899',
-    secondaryColor: '#fbcfe8',
+    effectLabel: 'น้ำยาแคตนิปฟื้นฟูประกายชมพู-ฟ้า',
+    primaryColor: '#f472b6',
+    secondaryColor: '#38bdf8',
     iconPath: '/images/skills/ice-wall.png',
   },
 
-  // ── 15. mamushi (Venomblade — 6 non-matching: LEGACY icons ONLY) ──
+  // ── 15. mamushi (Venomblade: Toxic Green, Purple, Black) ──
   'viper-fang': {
     style: 'venom_fang_strike',
-    effectLabel: 'เขี้ยวอสรพิษมรกตกัดเจาะเกราะ',
-    primaryColor: '#4ade80',
-    secondaryColor: '#dcfce7',
+    effectLabel: 'Serpent Fang เขี้ยวอสรพิษพิษเขียว-ม่วง',
+    primaryColor: '#22c55e',
+    secondaryColor: '#9333ea',
     iconPath: '/images/skills/rain.png',
   },
   'bouncing-shuriken': {
     style: 'arrow_barrage',
-    effectLabel: 'ดาวกระจายอาบพิษสะท้อนชิ่งศัตรู',
-    primaryColor: '#86efac',
+    effectLabel: 'ชูริเคนอาบพิษสีเขียวมรกต-ม่วง',
+    primaryColor: '#22c55e',
     secondaryColor: '#bef264',
     iconPath: '/images/skills/shadow.png',
   },
   'venom-overload': {
     style: 'venom_fang_strike',
-    effectLabel: 'หมอกพิษคลั่งระเบิดเป็นวงกว้าง',
-    primaryColor: '#a3e635',
-    secondaryColor: '#4ade80',
+    effectLabel: 'หมอกพิษคลั่งระเบิดละอองเขียว-ม่วง',
+    primaryColor: '#22c55e',
+    secondaryColor: '#9333ea',
     iconPath: '/images/skills/ice-wall.png',
   },
   'shadow-serpent': {
     style: 'shadow_vortex',
-    effectLabel: 'อสรพิษเงาพุ่งพันธนาการและปะทุพิษ',
+    effectLabel: 'Toxic Dominion พื้นที่หมอกพิษและอสรพิษเงายักษ์',
     primaryColor: '#22c55e',
-    secondaryColor: '#c084fc',
+    secondaryColor: '#9333ea',
     iconPath: '/images/skills/shadow.png',
   },
 
@@ -692,14 +701,14 @@ const SKILL_VFX_TABLE: Record<string, Omit<SkillVfxSpec, 'skillId'>> = {
     style: 'light_judgment',
     effectLabel: 'เสาแสงสวรรค์คู่ทลายศัตรู',
     primaryColor: '#fef08a',
-    secondaryColor: '#93c5fd',
+    secondaryColor: '#ffffff',
     iconPath: '/images/skills/thunderstorm.png',
   },
   'sacred-aegis': {
     style: 'holy_heal',
     effectLabel: 'อาคมโล่แสงฟื้นฟูชีวิต',
     primaryColor: '#fef08a',
-    secondaryColor: '#86efac',
+    secondaryColor: '#ffffff',
     iconPath: '/images/skills/thunderstorm.png',
   },
   blizzard: {
@@ -712,15 +721,15 @@ const SKILL_VFX_TABLE: Record<string, Omit<SkillVfxSpec, 'skillId'>> = {
   sniper: {
     style: 'sniper_pierce',
     effectLabel: 'ลำแสงศรทองทะลวงมิติ',
-    primaryColor: '#ffd60a',
-    secondaryColor: '#fffbeb',
+    primaryColor: '#10b981',
+    secondaryColor: '#86efac',
     iconPath: '/images/skills/rain.png',
   },
   shadow: {
     style: 'shadow_vortex',
     effectLabel: 'วังวนเงาอเวจีผ่ามิติ',
-    primaryColor: '#c084fc',
-    secondaryColor: '#f43f5e',
+    primaryColor: '#a855f7',
+    secondaryColor: '#581c87',
     iconPath: '/images/skills/shadow.png',
   },
 }
@@ -815,6 +824,47 @@ export function getJobSkillVfxSpecs(jobId: string): SkillVfxSpec[] {
     .map(([skillId]) => getSkillVfxSpec(skillId))
 }
 
+export function getBasicAttackVfxSpec(jobId: string): SkillVfxSpec {
+  const canonicalJob = normalizeJobId(jobId)
+  const profile = getClassCombatVfxProfile(canonicalJob)
+  const basicStyle: SkillVfxStyle =
+    canonicalJob === 'mage'
+      ? 'fire_comet'
+      : canonicalJob === 'archer'
+        ? 'arrow_barrage'
+        : canonicalJob === 'cleric'
+          ? 'holy_lance'
+          : canonicalJob === 'thief'
+            ? 'twin_slash'
+            : canonicalJob === 'kensei'
+              ? 'iaijutsu_wave'
+              : canonicalJob === 'iron_fist'
+                ? 'fist_shockwave'
+                : canonicalJob === 'wicked_necromancer'
+                  ? 'shadow_skull_mist'
+                  : canonicalJob === 'sinister'
+                    ? 'twin_slash'
+                    : canonicalJob === 'templar'
+                      ? 'aegis_shield_slam'
+                      : canonicalJob === 'nekobaku'
+                        ? 'alchemy_flask_burst'
+                        : canonicalJob === 'mamushi'
+                          ? 'venom_fang_strike'
+                          : 'heavy_cleave'
+
+  return {
+    skillId: `basic:${canonicalJob}`,
+    jobId: canonicalJob,
+    tier: 'basic',
+    durationSec: profile.basic.durationSec,
+    style: basicStyle,
+    effectLabel: `${profile.basic.name}: ${profile.basic.label}`,
+    primaryColor: profile.palette.primary,
+    secondaryColor: profile.palette.secondary,
+    iconPath: renderSkillIconBmpDataUrl(basicStyle, profile.palette.primary, profile.palette.secondary),
+  }
+}
+
 export function getSkillVfxSpec(
   skillId: string,
   fallbackColor = '#ffd60a',
@@ -824,8 +874,14 @@ export function getSkillVfxSpec(
   const canonicalSkillId = normalizeSkillId(skillId)
   const entry = SKILL_VFX_TABLE[canonicalSkillId] ?? SKILL_VFX_TABLE[skillId]
   if (entry) {
+    const ownerJob = JOB_SKILL_VFX_OWNER[canonicalSkillId] ?? 'novice'
+    const tier = resolveSkillCombatTier(canonicalSkillId)
+    const profile = getClassCombatVfxProfile(ownerJob)
     return {
       skillId,
+      jobId: ownerJob,
+      tier,
+      durationSec: profile[tier].durationSec,
       ...entry,
       iconPath: renderSkillIconBmpDataUrl(entry.style, entry.primaryColor, entry.secondaryColor),
     }
@@ -846,6 +902,9 @@ export function getSkillVfxSpec(
                 : 'heavy_cleave'
   return {
     skillId,
+    jobId: 'novice',
+    tier: 'special',
+    durationSec: 0.8,
     style,
     effectLabel: 'พลังโจมตีประจำสายอาชีพ',
     primaryColor: fallbackColor,
