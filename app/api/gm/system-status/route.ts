@@ -37,11 +37,11 @@ export async function GET(req: Request) {
 
   const warnings: string[] = []
   if (!premiumTxSecretConfigured) {
-    warnings.push('PREMIUM_TX_SECRET is not configured — isolate fallback HMAC key will reset across Workers isolates.')
+    warnings.push('PREMIUM_TX_SECRET is not configured — premium actions that require server signatures are disabled on Cloudflare until this secret is set; no isolate-local fallback is used.')
   }
   if (isCloudflareWorkers) {
     warnings.push(
-      'Running on Cloudflare Workers stateless isolates — global stores (GM events, redeem codes, slip queue, Stripe webhooks) use in-isolate/ephemeral cache until external KV/Durable Object/Firestore Admin bindings are configured.',
+      'Running on Cloudflare Workers stateless isolates — legacy server-side stores for GM events, redeem-code management, merchant QR settings, and Stripe webhook fulfillment remain isolate-local. Manual slip requests and GM review use the Firestore client persistence path.',
     )
   }
 
