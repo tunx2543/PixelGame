@@ -8,3 +8,6 @@ coverage/
 !.env.example
 
 .data/
+.open-next/
+.wrangler/
+.dev.vars*
