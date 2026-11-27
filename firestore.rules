@@ -3479,6 +3479,7 @@ service cloud.firestore {
             existing().status == 'approved' &&
             existing().claimed == false &&
             // A slip can only be finalized after its deterministic order is durably created.
+            exists(/databases/$(database)/documents/users/$(request.auth.uid)/characters/$(existing().characterId)/topupOrders/$(('ORD-' + requestId))) &&
             isMatchingManualTopupOrder(requestId, existing().characterId, existing()) &&
             incoming().claimed == true &&
             incoming().status == 'approved' &&
