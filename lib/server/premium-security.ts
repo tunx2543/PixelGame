@@ -5,7 +5,7 @@ import { getPremiumProduct } from '@/lib/game/premium/catalog'
 import { VIP_TIERS, getEffectiveVipBonuses, getVipTierDef } from '@/lib/game/premium/vip'
 import type { PremiumProduct, VipState, VipTierId } from '@/lib/game/premium/types'
 import { BP_MAX_LEVEL, BP_PREMIUM_DIAMOND_COST, BATTLE_PASS_TIERS } from '@/lib/game/extended-systems'
-import { getGlobalSingleton, getRuntimeEnv } from './runtime-store'
+import { getGlobalSingleton, getRuntimeEnv, isCloudflareWorkersRuntime } from './runtime-store'
 
 export interface VerifiedActor {
   uid: string
@@ -154,8 +154,17 @@ export function isPersistentPremiumSecretConfigured(): boolean {
 }
 
 function txSecret(): string {
-  const configured = getRuntimeEnv('PREMIUM_TX_SECRET')
+  const configured = getRuntimeEnv('PREMIUM_TX_SECRET')?.trim()
   if (configured) return configured
+
+  // Cloudflare Workers can serve requests from different isolates. An isolate-local
+  // random key would make signatures unverifiable across requests and restarts.
+  // Fail closed on Workers until the operator configures a stable secret.
+  if (isCloudflareWorkersRuntime()) {
+    throw new Error('PREMIUM_TX_SECRET must be configured for Cloudflare Workers')
+  }
+
+  // Keep the legacy non-Workers fallback for existing Render/local deployments.
   const fallbackSlot = getGlobalSingleton<{ value: string | null }>('pixelquest.ephemeralTxSecret', () => ({
     value: null,
   }))
