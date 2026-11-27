@@ -9204,36 +9204,24 @@ export async function reviewSlipRequestAction(
   decision: 'approved' | 'rejected',
   reviewNote?: string,
 ): Promise<{ ok: boolean; message: string; request?: TopupSlipRequestRecord }> {
-  let fsOk = false
-  let fsError: string | null = null
-  if (firebaseAuth.currentUser && isCurrentAccountGm()) {
-    try {
-      await reviewTopupSlipRequest(requestId, decision, reviewNote)
-      fsOk = true
-    } catch (err) {
-      fsError = formatReadableTopupError(err, 'อัปเดตสถานะสลิปบน Firestore ไม่สำเร็จ')
-    }
+  if (!firebaseAuth.currentUser || !isCurrentAccountGm()) {
+    return { ok: false, message: 'กรุณาเข้าสู่ระบบบัญชี GM ก่อนดำเนินการ' }
   }
-
-  const res = await callPremiumApi<{
-    request: TopupSlipRequestRecord
-    message: string
-  }>('/api/topup/slip-requests/review', { requestId, decision, reviewNote })
-
-  if (fsOk) {
+  try {
+    await reviewTopupSlipRequest(requestId, decision, reviewNote)
     return {
       ok: true,
-      request: res.data?.request,
       message:
         decision === 'approved'
           ? `อนุมัติคำขอ ${requestId} บน Firestore แล้ว`
           : `ปฏิเสธคำขอ ${requestId} บน Firestore แล้ว`,
     }
+  } catch (err) {
+    return {
+      ok: false,
+      message: formatReadableTopupError(err, 'อัปเดตสถานะสลิปบน Firestore ไม่สำเร็จ'),
+    }
   }
-  if (!res.ok || !res.data) {
-    return { ok: false, message: fsError || res.message || 'อัปเดตสถานะสลิปไม่สำเร็จ' }
-  }
-  return { ok: true, message: res.data.message, request: res.data.request }
 }
 
 export async function submitManualTopupSlipAction(
@@ -9312,8 +9300,8 @@ export async function submitManualTopupSlipAction(
         slipNote,
         slipHash: savedReq.slipHash ?? slipHash,
       })
-    } catch {
-      // Server store still holds request even if Firestore rules reject or offline
+    } catch (err) {
+      throw new Error(formatReadableTopupError(err, 'บันทึกคำขอสลิปลง Firestore ไม่สำเร็จ จึงยังไม่ถือว่าส่งคำขอสำเร็จ'))
     }
 
     say('system', `ส่งสลิปเติมเงิน ${pkg.name} (฿${pkg.priceThb}) แล้ว — รอแอดมินตรวจสอบ`)
@@ -9358,11 +9346,10 @@ export async function claimApprovedManualTopupAction(
     try {
       await markTopupSlipRequestClaimed(req.requestId)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : ''
-      if (msg.includes('รับเพชรจากคำขอนี้ไปแล้ว') || msg.includes('ยังไม่ได้รับการอนุมัติ')) {
-        return { ok: false, message: msg }
+      return {
+        ok: false,
+        message: formatReadableTopupError(err, 'ยืนยันการรับเพชรใน Firestore ไม่สำเร็จ จึงยังไม่ได้รับเพชร'),
       }
-      // If document only existed in server volatile store, proceed with server-signed order
     }
 
     return await applyVerifiedTopupAction(res.data.order)
