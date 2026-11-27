@@ -8,7 +8,6 @@ const appHost = (() => {
 })()
 
 const nextConfig = {
-  output: 'standalone',
   allowedDevOrigins: [
     '**.run.app',
     '*.run.app',
@@ -17,9 +16,6 @@ const nextConfig = {
     '127.0.0.1',
     ...appHost,
   ],
-  typescript: {
-    ignoreBuildErrors: true,
-  },
   images: {
     unoptimized: true,
   },
