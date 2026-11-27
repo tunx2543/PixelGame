@@ -34,7 +34,7 @@ jobs:
           node-version: 22
 
       - name: Install isolated emulator test tools
-        run: npm install --no-save --package-lock=false firebase-tools @firebase/rules-unit-testing firebase
+        run: npm install --no-save --package-lock=false --legacy-peer-deps firebase-tools @firebase/rules-unit-testing firebase
 
       - name: Compile rules and run authorization tests in Firestore Emulator
         run: npx firebase emulators:exec --only firestore --project demo-pixelgame-firestore-rules "node --test tests/firestore-rules.test.mjs"
