@@ -339,6 +339,14 @@ service cloud.firestore {
                 data.serverSignature.size() >= 16
               )
             ) &&
+            (
+              data.source != 'promptpay_manual_gm' ||
+              (
+                existsAfter(/databases/$(database)/documents/users/$(request.auth.uid)/characters/$(characterId)/topupOrders/$(('ORD-' + data.requestId.replace('TX-', '')))) &&
+                getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/characters/$(characterId)/topupOrders/$(('ORD-' + data.requestId.replace('TX-', '')))).data.totalDiamonds == data.amount &&
+                getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/characters/$(characterId)/topupOrders/$(('ORD-' + data.requestId.replace('TX-', '')))).data.txId == data.txId
+              )
+            ) &&
             (data.type != 'earn' || data.serverVerified == true || data.amount <= 5000)
           )
         ) &&
@@ -490,7 +498,7 @@ service cloud.firestore {
 
     function isMatchingManualTopupOrder(requestId, characterId, slip) {
       let orderPath = /databases/$(database)/documents/users/$(request.auth.uid)/characters/$(characterId)/topupOrders/$(('ORD-' + requestId));
-      let orderData = get(orderPath).data;
+      let orderData = getAfter(orderPath).data;
       return orderData != null &&
         orderData.ownerId == request.auth.uid &&
         orderData.gatewayRef == requestId &&
@@ -2536,7 +2544,7 @@ service cloud.firestore {
               incoming().saveData.premium.topupOrders[0] is map &&
               'orderId' in incoming().saveData.premium.topupOrders[0] &&
               isValidId(incoming().saveData.premium.topupOrders[0].orderId) &&
-              exists(/databases/$(database)/documents/users/$(userId)/characters/$(characterId)/topupOrders/$(incoming().saveData.premium.topupOrders[0].orderId)) &&
+              existsAfter(/databases/$(database)/documents/users/$(userId)/characters/$(characterId)/topupOrders/$(incoming().saveData.premium.topupOrders[0].orderId)) &&
               (
                 !('premium' in existing().saveData) ||
                 !(existing().saveData.premium is map) ||
@@ -2548,7 +2556,7 @@ service cloud.firestore {
                 existing().saveData.premium.topupOrders[0].orderId != incoming().saveData.premium.topupOrders[0].orderId
               ) &&
               incoming().diamonds <= existing().diamonds + 5000 +
-                get(/databases/$(database)/documents/users/$(userId)/characters/$(characterId)/topupOrders/$(incoming().saveData.premium.topupOrders[0].orderId)).data.totalDiamonds
+                getAfter(/databases/$(database)/documents/users/$(userId)/characters/$(characterId)/topupOrders/$(incoming().saveData.premium.topupOrders[0].orderId)).data.totalDiamonds
             )
           ) &&
           incoming().id == existing().id &&
@@ -3479,7 +3487,7 @@ service cloud.firestore {
             existing().status == 'approved' &&
             existing().claimed == false &&
             // A slip can only be finalized after its deterministic order is durably created.
-            exists(/databases/$(database)/documents/users/$(request.auth.uid)/characters/$(existing().characterId)/topupOrders/$(('ORD-' + requestId))) &&
+            existsAfter(/databases/$(database)/documents/users/$(request.auth.uid)/characters/$(existing().characterId)/topupOrders/$(('ORD-' + requestId))) &&
             isMatchingManualTopupOrder(requestId, existing().characterId, existing()) &&
             incoming().claimed == true &&
             incoming().status == 'approved' &&
