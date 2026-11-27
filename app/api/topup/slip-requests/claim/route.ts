@@ -1,14 +1,8 @@
 import { NextResponse } from 'next/server'
 import firebaseConfig from '@/firebase-applet-config.json'
 import { getTopupPackage, isValidTopupPackageReward, type TopupOrderRecord } from '@/lib/game/premium/topup'
-import { claimServerRequestId, isPersistentPremiumSecretConfigured, resolveActorFromRequest, signPremiumTx } from '@/lib/server/premium-security'
+import { isPersistentPremiumSecretConfigured, resolveActorFromRequest, signPremiumTx } from '@/lib/server/premium-security'
 import { isCloudflareWorkersRuntime } from '@/lib/server/runtime-store'
-import {
-  claimPersistentSlipHash,
-  getStoredSlipRequest,
-  isPersistentSlipHashUsed,
-  markStoredSlipRequestClaimed,
-} from '@/lib/server/topup-store'
 
 interface FirestoreSlipFields {
   ownerId?: { stringValue?: string }
@@ -102,68 +96,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, message: 'ไม่พบรหัสคำขอ' }, { status: 400 })
   }
 
-  let verifiedSlip: {
-    characterId: string
-    packageId: string
-    packageName: string
-    amountThb: number
-    baseDiamonds: number
-    bonusDiamonds: number
-    totalDiamonds: number
-    vipExpGranted: number
-    slipHash?: string | null
-    createdAtMs: number
-  } | null = null
-
   const cloudflareRuntime = isCloudflareWorkersRuntime()
-  const existing = cloudflareRuntime ? null : getStoredSlipRequest(requestId)
-  if (existing) {
-    if (existing.ownerId !== auth.actor.uid) {
-      return NextResponse.json({ ok: false, message: 'ไม่พบคำขอสลิปของบัญชีนี้' }, { status: 404 })
-    }
-    if (existing.status !== 'approved') {
-      return NextResponse.json({ ok: false, message: 'คำขอนี้ยังไม่ได้รับการอนุมัติ' }, { status: 400 })
-    }
-    if (existing.claimed) {
-      return NextResponse.json({ ok: false, message: 'รับเพชรจากคำขอนี้ไปแล้ว' }, { status: 409 })
-    }
-    if (
-      !isValidTopupPackageReward(
-        existing.packageId,
-        existing.amountThb,
-        existing.baseDiamonds,
-        existing.bonusDiamonds,
-        existing.vipExpGranted,
-      )
-    ) {
-      return NextResponse.json({ ok: false, message: 'ข้อมูลแพ็กเกจของคำขอสลิปไม่ถูกต้อง' }, { status: 400 })
-    }
-    verifiedSlip = { ...existing, createdAtMs: Number(existing.createdAtMs ?? 0) }
-  } else {
-    const bearer = (req.headers.get('authorization') ?? '').slice(7).trim()
-    const fsSlip = bearer ? await fetchApprovedFirestoreSlip(requestId, bearer, auth.actor.uid) : null
-    if (!fsSlip) {
-      return NextResponse.json({ ok: false, message: 'ไม่พบคำขอสลิปที่อนุมัติแล้วของบัญชีนี้' }, { status: 404 })
-    }
-    verifiedSlip = fsSlip
-  }
-
-  if (!cloudflareRuntime && verifiedSlip.slipHash && isPersistentSlipHashUsed(verifiedSlip.slipHash) && !existing) {
-    return NextResponse.json({ ok: false, message: 'สลิปนี้ถูกใช้รับเพชรไปแล้ว' }, { status: 409 })
-  }
-
-  if (!cloudflareRuntime && !claimServerRequestId(`SLIPCLAIM:${requestId}`, auth.actor.uid)) {
-    return NextResponse.json({ ok: false, message: 'คำขอนี้กำลังดำเนินการหรือถูกรับไปแล้ว' }, { status: 409 })
-  }
-
-  if (existing) {
-    const claimedReq = markStoredSlipRequestClaimed(requestId, auth.actor.uid)
-    if (!claimedReq) {
-      return NextResponse.json({ ok: false, message: 'ไม่สามารถยืนยันการรับเพชรได้' }, { status: 409 })
-    }
-  }
-  if (!cloudflareRuntime && verifiedSlip.slipHash) {
-    claimPersistentSlipHash(verifiedSlip.slipHash)
+  const bearer = (req.headers.get('authorization') ?? '').replace(/^Bearer\\s+/i, '').trim()
+  const verifiedSlip = bearer
+    ? await fetchApprovedFirestoreSlip(requestId, bearer, auth.actor.uid)
+    : null
+  if (!verifiedSlip) {
+    return NextResponse.json(
+      { ok: false, message: 'ไม่พบคำขอสลิปที่อนุมัติแล้วของบัญชีนี้ หรือสลิปถูกรับเพชรไปแล้ว' },
+      { status: 404 },
+    )
   }
 
   if (cloudflareRuntime && !isPersistentPremiumSecretConfigured()) {
