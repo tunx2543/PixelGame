@@ -1,0 +1,40 @@
+name: Firestore Rules Emulator Tests
+
+on:
+  push:
+    branches:
+      - backup/pre-cloudflare-migration
+    paths:
+      - "firestore.rules"
+      - "firebase.json"
+      - "tests/firestore-rules.test.mjs"
+      - ".github/workflows/firestore-rules-check.yml"
+  pull_request:
+    paths:
+      - "firestore.rules"
+      - "firebase.json"
+      - "tests/firestore-rules.test.mjs"
+      - ".github/workflows/firestore-rules-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  firestore-rules:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install isolated emulator test tools
+        run: npm install --no-save --package-lock=false firebase-tools @firebase/rules-unit-testing firebase
+
+      - name: Compile rules and run authorization tests in Firestore Emulator
+        run: npx firebase emulators:exec --only firestore --project demo-pixelgame-firestore-rules "node --test tests/firestore-rules.test.mjs"
