@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import firebaseConfig from '@/firebase-applet-config.json'
 import { getTopupPackage, isValidTopupPackageReward, type TopupOrderRecord } from '@/lib/game/premium/topup'
-import { claimServerRequestId, makeServerTxId, resolveActorFromRequest, signPremiumTx } from '@/lib/server/premium-security'
+import { claimServerRequestId, isPersistentPremiumSecretConfigured, makeServerTxId, resolveActorFromRequest, signPremiumTx } from '@/lib/server/premium-security'
+import { isCloudflareWorkersRuntime } from '@/lib/server/runtime-store'
 import {
   claimPersistentSlipHash,
   getStoredSlipRequest,
@@ -110,7 +111,8 @@ export async function POST(req: Request) {
     slipHash?: string | null
   } | null = null
 
-  const existing = getStoredSlipRequest(requestId)
+  const cloudflareRuntime = isCloudflareWorkersRuntime()
+  const existing = cloudflareRuntime ? null : getStoredSlipRequest(requestId)
   if (existing) {
     if (existing.ownerId !== auth.actor.uid) {
       return NextResponse.json({ ok: false, message: 'ไม่พบคำขอสลิปของบัญชีนี้' }, { status: 404 })
@@ -142,11 +144,11 @@ export async function POST(req: Request) {
     verifiedSlip = fsSlip
   }
 
-  if (verifiedSlip.slipHash && isPersistentSlipHashUsed(verifiedSlip.slipHash) && !existing) {
+  if (!cloudflareRuntime && verifiedSlip.slipHash && isPersistentSlipHashUsed(verifiedSlip.slipHash) && !existing) {
     return NextResponse.json({ ok: false, message: 'สลิปนี้ถูกใช้รับเพชรไปแล้ว' }, { status: 409 })
   }
 
-  if (!claimServerRequestId(`SLIPCLAIM:${requestId}`, auth.actor.uid)) {
+  if (!cloudflareRuntime && !claimServerRequestId(`SLIPCLAIM:${requestId}`, auth.actor.uid)) {
     return NextResponse.json({ ok: false, message: 'คำขอนี้กำลังดำเนินการหรือถูกรับไปแล้ว' }, { status: 409 })
   }
 
@@ -156,8 +158,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, message: 'ไม่สามารถยืนยันการรับเพชรได้' }, { status: 409 })
     }
   }
-  if (verifiedSlip.slipHash) {
+  if (!cloudflareRuntime && verifiedSlip.slipHash) {
     claimPersistentSlipHash(verifiedSlip.slipHash)
+  }
+
+  if (cloudflareRuntime && !isPersistentPremiumSecretConfigured()) {
+    return NextResponse.json(
+      { ok: false, message: 'เซิร์ฟเวอร์ยังไม่ได้ตั้งค่า PREMIUM_TX_SECRET จึงไม่สามารถออกคำสั่งรับเพชรอย่างปลอดภัยได้' },
+      { status: 503 },
+    )
   }
 
   const orderId = makeServerTxId('ORD')
