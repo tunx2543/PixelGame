@@ -3467,6 +3467,13 @@ service cloud.firestore {
             existing().ownerId == request.auth.uid &&
             existing().status == 'approved' &&
             existing().claimed == false &&
+            // A slip can only be finalized after its deterministic order is durably created.
+            exists(/databases/$(database)/documents/users/$(request.auth.uid)/characters/$(existing().characterId)/topupOrders/$(('ORD-' + requestId))) &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)/characters/$(existing().characterId)/topupOrders/$(('ORD-' + requestId))).data.ownerId == request.auth.uid &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)/characters/$(existing().characterId)/topupOrders/$(('ORD-' + requestId))).data.gatewayRef == requestId &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)/characters/$(existing().characterId)/topupOrders/$(('ORD-' + requestId))).data.provider == 'promptpay_manual_gm' &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)/characters/$(existing().characterId)/topupOrders/$(('ORD-' + requestId))).data.packageId == existing().packageId &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)/characters/$(existing().characterId)/topupOrders/$(('ORD-' + requestId))).data.totalDiamonds == existing().totalDiamonds &&
             incoming().claimed == true &&
             incoming().status == 'approved' &&
             incoming().claimedAtMs is int &&
