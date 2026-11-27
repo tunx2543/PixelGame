@@ -10,12 +10,15 @@ import {
   getDocs,
   getDocsFromServer,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
   where,
 } from 'firebase/firestore'
 import type { SaveData } from '@/lib/game/engine'
+import type { TopupOrderRecord } from '@/lib/game/premium/topup'
+import type { DiamondTransaction } from '@/lib/game/premium/types'
 import { normalizeJobId } from '@/lib/game/data'
 import { sanitizeRpgExt } from '@/lib/game/rpg-systems'
 import {
@@ -516,6 +519,180 @@ export async function saveUserCharacter(userId: string, characterId: string, sav
       inFlightCharacterSave.delete(queueKey)
     }
   }
+}
+
+export async function commitManualTopupClaimToCloud(input: {
+  userId: string
+  characterId: string
+  requestId: string
+  save: SaveData
+  order: TopupOrderRecord
+  transaction: DiamondTransaction
+}): Promise<'credited' | 'duplicate'> {
+  const currentUser = auth.currentUser
+  if (!currentUser || currentUser.uid !== input.userId || !currentUser.emailVerified) {
+    throw new Error('กรุณาเข้าสู่ระบบด้วยบัญชีที่ยืนยันอีเมลแล้ว')
+  }
+
+  const identity = await ensureUserProfile(currentUser)
+  const safeId = sanitizeSafeId(input.characterId, 'slot_1', 64)
+  const requestId = sanitizeSafeId(input.requestId, '', 64)
+  const order = input.order
+  const ledger = input.transaction
+  if (!requestId || order.provider !== 'promptpay_manual_gm' ||
+      order.gatewayRef !== requestId || order.orderId !== `ORD-${requestId}` ||
+      order.txId !== `TX-${requestId}`) {
+    throw new Error('ข้อมูลอ้างอิงรายการเติมเงินไม่ถูกต้อง')
+  }
+  if (!order.serverVerified || !order.serverSignature ||
+      ledger.serverVerified !== true || ledger.serverSignature !== order.serverSignature ||
+      ledger.requestId !== order.orderId || ledger.txId !== order.txId ||
+      ledger.type !== 'earn' || ledger.source !== 'promptpay_manual_gm' ||
+      ledger.amount !== order.totalDiamonds ||
+      ledger.balanceAfter !== ledger.balanceBefore + ledger.amount ||
+      ledger.actorUid !== input.userId) {
+    throw new Error('ข้อมูลยอดเพชรและลายเซ็นรายการเติมเงินไม่ตรงกัน')
+  }
+
+  const payload = sanitizeCharacterPayload(input.userId, safeId, {
+    ...input.save,
+    gameUid: identity.gameUid,
+    uid: identity.isGm ? 0 : Number(identity.gameUid),
+    gm: identity.isGm,
+  })
+  const premium = payload.saveData.premium
+  if (!premium ||
+      !premium.wallet.processedRequestIds.includes(order.orderId) ||
+      premium.topupOrders[0]?.orderId !== order.orderId ||
+      payload.diamonds !== ledger.balanceAfter) {
+    throw new Error('ข้อมูลเซฟตัวละครยังไม่ตรงกับรายการเติมเงิน')
+  }
+
+  const characterRef = doc(db, 'users', input.userId, 'characters', safeId)
+  const slipRef = doc(db, 'topupSlipRequests', requestId)
+  const orderRef = doc(db, 'users', input.userId, 'characters', safeId, 'topupOrders', order.orderId)
+  const transactionRef = doc(db, 'users', input.userId, 'characters', safeId, 'diamondTransactions', ledger.txId)
+
+  return runTransaction(db, async (transaction) => {
+    const [characterSnap, slipSnap, orderSnap, ledgerSnap] = await Promise.all([
+      transaction.get(characterRef),
+      transaction.get(slipRef),
+      transaction.get(orderRef),
+      transaction.get(transactionRef),
+    ])
+    if (!characterSnap.exists()) throw new Error('ไม่พบข้อมูลตัวละครบน Cloud Save กรุณาเข้าเกมใหม่แล้วลองอีกครั้ง')
+    if (!slipSnap.exists()) throw new Error('ไม่พบคำขอสลิปใน Firestore')
+
+    const slip = slipSnap.data()
+    if (slip.ownerId !== input.userId || slip.characterId !== safeId ||
+        slip.packageId !== order.packageId || Number(slip.amountThb) !== order.amountThb ||
+        Number(slip.totalDiamonds) !== order.totalDiamonds ||
+        Number(slip.vipExpGranted) !== order.vipExpGranted ||
+        slip.status !== 'approved') {
+      throw new Error('ข้อมูลสลิปที่อนุมัติไม่ตรงกับคำสั่งเติมเงิน')
+    }
+
+    const existingOrder = orderSnap.exists() ? orderSnap.data() : null
+    if (existingOrder && (
+      existingOrder.ownerId !== input.userId ||
+      existingOrder.gatewayRef !== requestId ||
+      existingOrder.totalDiamonds !== order.totalDiamonds ||
+      existingOrder.txId !== order.txId
+    )) {
+      throw new Error('พบ Order เดิมที่มีข้อมูลไม่ตรงกัน กรุณาติดต่อ GM')
+    }
+    const existingLedger = ledgerSnap.exists() ? ledgerSnap.data() : null
+    if (existingLedger && (
+      existingLedger.ownerId !== input.userId ||
+      existingLedger.requestId !== order.orderId ||
+      existingLedger.amount !== ledger.amount ||
+      existingLedger.balanceAfter !== ledger.balanceAfter
+    )) {
+      throw new Error('พบประวัติเพชรเดิมที่มีข้อมูลไม่ตรงกัน กรุณาติดต่อ GM')
+    }
+
+    const cloudCharacter = characterSnap.data()
+    const cloudSave = cloudCharacter.saveData as SaveData | undefined
+    const cloudPremium = cloudSave?.premium
+    const cloudHasOrder = Boolean(cloudPremium?.topupOrders?.some((item) => item.orderId === order.orderId))
+    const cloudHasRequest = Boolean(cloudPremium?.wallet?.processedRequestIds?.includes(order.orderId))
+    const alreadySaved = Number(cloudCharacter.diamonds) === ledger.balanceAfter && cloudHasOrder && cloudHasRequest
+
+    if (slip.claimed === true) {
+      if (alreadySaved && orderSnap.exists() && ledgerSnap.exists()) return 'duplicate'
+      throw new Error('สลิปนี้ถูกปิดรายการไปแล้ว แต่ข้อมูลยอดเพชรยังไม่ครบ กรุณาติดต่อ GM')
+    }
+    if (Number(cloudCharacter.diamonds) !== ledger.balanceBefore && !alreadySaved) {
+      throw new Error('ยอดเพชรบน Cloud Save เปลี่ยนไปแล้ว กรุณาโหลดตัวละครใหม่ก่อนรับเพชร')
+    }
+
+    if (!orderSnap.exists()) {
+      transaction.set(orderRef, {
+        orderId: order.orderId,
+        ownerId: input.userId,
+        characterId: safeId,
+        packageId: order.packageId,
+        packageName: order.packageName,
+        provider: order.provider,
+        gatewayRef: requestId,
+        amountThb: order.amountThb,
+        baseDiamonds: order.baseDiamonds,
+        bonusDiamonds: order.bonusDiamonds,
+        totalDiamonds: order.totalDiamonds,
+        vipExpGranted: order.vipExpGranted,
+        status: 'credited',
+        txId: order.txId,
+        serverVerified: true,
+        serverSignature: order.serverSignature,
+        createdAtMs: order.createdAtMs,
+        createdAt: serverTimestamp(),
+      })
+    }
+    if (!ledgerSnap.exists()) {
+      transaction.set(transactionRef, {
+        txId: ledger.txId,
+        requestId: ledger.requestId,
+        ownerId: input.userId,
+        characterId: safeId,
+        type: ledger.type,
+        source: ledger.source,
+        amount: ledger.amount,
+        balanceBefore: ledger.balanceBefore,
+        balanceAfter: ledger.balanceAfter,
+        productId: ledger.productId ?? null,
+        itemId: ledger.itemId ?? null,
+        note: String(ledger.note || 'Manual GM top-up').slice(0, 180),
+        actorUid: input.userId,
+        isGm: false,
+        serverVerified: true,
+        serverSignature: ledger.serverSignature ?? null,
+        createdAtMs: ledger.createdAtMs,
+        createdAt: serverTimestamp(),
+      })
+    }
+    if (!alreadySaved) {
+      transaction.update(characterRef, {
+        name: payload.name,
+        jobId: payload.jobId,
+        level: payload.level,
+        exp: payload.exp,
+        hp: payload.hp,
+        mp: payload.mp,
+        gold: payload.gold,
+        diamonds: payload.diamonds,
+        mapId: payload.mapId,
+        playTime: payload.playTime,
+        saveData: payload.saveData,
+        updatedAt: serverTimestamp(),
+      })
+    }
+    transaction.update(slipRef, {
+      claimed: true,
+      claimedAtMs: Date.now(),
+      updatedAt: serverTimestamp(),
+    })
+    return alreadySaved ? 'duplicate' : 'credited'
+  })
 }
 
 export async function deleteUserCharacter(userId: string, characterId: string): Promise<void> {
