@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { isCloudflareWorkersRuntime } from '@/lib/server/runtime-store'
 import { isTopupAdminEmail, normalizeGameUidInput } from '@/lib/game/permissions'
 import { calculateTopupReward, getTopupPackage, type TopupSlipRequestRecord } from '@/lib/game/premium/topup'
-import { makeServerTxId, resolveActorFromRequest } from '@/lib/server/premium-security'
+import { resolveActorFromRequest } from '@/lib/server/premium-security'
 import {
   addStoredSlipRequest,
   isPersistentSlipHashUsed,
