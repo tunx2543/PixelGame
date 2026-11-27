@@ -30,6 +30,9 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Audit duplicate and outdated image/model assets
+        run: bun run assets:audit
+
       - name: TypeScript check
         run: bun run lint
 
