@@ -596,18 +596,33 @@ export async function commitManualTopupClaimToCloud(input: {
     const existingOrder = orderSnap.exists() ? orderSnap.data() : null
     if (existingOrder && (
       existingOrder.ownerId !== input.userId ||
+      existingOrder.characterId !== safeId ||
+      existingOrder.packageId !== order.packageId ||
+      existingOrder.provider !== order.provider ||
       existingOrder.gatewayRef !== requestId ||
+      existingOrder.amountThb !== order.amountThb ||
+      existingOrder.baseDiamonds !== order.baseDiamonds ||
+      existingOrder.bonusDiamonds !== order.bonusDiamonds ||
       existingOrder.totalDiamonds !== order.totalDiamonds ||
-      existingOrder.txId !== order.txId
+      existingOrder.vipExpGranted !== order.vipExpGranted ||
+      existingOrder.status !== 'credited' ||
+      existingOrder.txId !== order.txId ||
+      existingOrder.serverSignature !== order.serverSignature
     )) {
       throw new Error('พบ Order เดิมที่มีข้อมูลไม่ตรงกัน กรุณาติดต่อ GM')
     }
     const existingLedger = ledgerSnap.exists() ? ledgerSnap.data() : null
     if (existingLedger && (
       existingLedger.ownerId !== input.userId ||
+      existingLedger.characterId !== safeId ||
       existingLedger.requestId !== order.orderId ||
+      existingLedger.txId !== order.txId ||
+      existingLedger.type !== 'earn' ||
+      existingLedger.source !== 'promptpay_manual_gm' ||
       existingLedger.amount !== ledger.amount ||
-      existingLedger.balanceAfter !== ledger.balanceAfter
+      existingLedger.balanceBefore !== ledger.balanceBefore ||
+      existingLedger.balanceAfter !== ledger.balanceAfter ||
+      existingLedger.serverSignature !== ledger.serverSignature
     )) {
       throw new Error('พบประวัติเพชรเดิมที่มีข้อมูลไม่ตรงกัน กรุณาติดต่อ GM')
     }
@@ -622,6 +637,9 @@ export async function commitManualTopupClaimToCloud(input: {
     if (slip.claimed === true) {
       if (alreadySaved && orderSnap.exists() && ledgerSnap.exists()) return 'duplicate'
       throw new Error('สลิปนี้ถูกปิดรายการไปแล้ว แต่ข้อมูลยอดเพชรยังไม่ครบ กรุณาติดต่อ GM')
+    }
+    if (slip.claimed !== false && slip.claimed !== true) {
+      throw new Error('สถานะสลิปไม่ถูกต้อง กรุณาติดต่อ GM')
     }
     if (Number(cloudCharacter.diamonds) !== ledger.balanceBefore && !alreadySaved) {
       throw new Error('ยอดเพชรบน Cloud Save เปลี่ยนไปแล้ว กรุณาโหลดตัวละครใหม่ก่อนรับเพชร')
