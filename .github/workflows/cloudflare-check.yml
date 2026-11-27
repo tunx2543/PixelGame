@@ -33,10 +33,12 @@ jobs:
       - name: TypeScript check
         run: bun run lint
 
-      - name: Run automated tests
-        run: bun test
-
       - name: Build Next.js for Cloudflare Workers
         run: bun run cf:build
         env:
           NEXT_TELEMETRY_DISABLED: "1"
+
+      # Run the broader legacy suite after the deployment build so stale test
+      # fixtures cannot prevent us from seeing whether the Cloudflare build works.
+      - name: Run automated tests
+        run: bun test
