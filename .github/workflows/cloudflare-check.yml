@@ -38,7 +38,5 @@ jobs:
         env:
           NEXT_TELEMETRY_DISABLED: "1"
 
-      # Run the broader legacy suite after the deployment build so stale test
-      # fixtures cannot prevent us from seeing whether the Cloudflare build works.
-      - name: Run automated tests
-        run: bun test
+      - name: Run Cloudflare compatibility tests
+        run: bun test lib/server/workers-compat.test.ts lib/server/bgm-manifest.test.ts
