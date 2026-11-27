@@ -12,6 +12,7 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
+  writeBatch,
 } from 'firebase/firestore'
 
 const projectId = 'demo-pixelgame-firestore-rules'
@@ -168,4 +169,19 @@ test('allows only one of two simultaneous claim attempts', async () => {
   const results = await Promise.allSettled([claimSlip(db), claimSlip(db)])
   assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1)
   assert.equal(results.filter((result) => result.status === 'rejected').length, 1)
+})
+
+test('allows the matching order and slip claim in one atomic Firestore batch', async () => {
+  const db = playerDb()
+  const batch = writeBatch(db)
+  batch.set(
+    doc(db, 'users', uid, 'characters', characterId, 'topupOrders', orderId),
+    orderRecord(),
+  )
+  batch.update(doc(db, 'topupSlipRequests', requestId), {
+    claimed: true,
+    claimedAtMs: 1700000001000,
+    updatedAt: serverTimestamp(),
+  })
+  await assertSucceeds(batch.commit())
 })
