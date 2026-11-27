@@ -540,6 +540,7 @@ export async function commitManualTopupClaimToCloud(input: {
   const order = input.order
   const ledger = input.transaction
   if (!requestId || order.provider !== 'promptpay_manual_gm' ||
+      order.characterId !== safeId || ledger.characterId !== safeId ||
       order.gatewayRef !== requestId || order.orderId !== `ORD-${requestId}` ||
       order.txId !== `TX-${requestId}`) {
     throw new Error('ข้อมูลอ้างอิงรายการเติมเงินไม่ถูกต้อง')
