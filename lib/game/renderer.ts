@@ -39,7 +39,7 @@ import {
   resolveMountAnimationState,
   type MountDef,
 } from './mounts'
-import { preloadMountSpriteSheet, preloadPetSpriteSheet } from './sprite-sheets'
+import { preloadAllHeroSheets, preloadMountSpriteSheet, preloadPetSpriteSheet } from './sprite-sheets'
 import { resolvePetAnimationFrame } from './pet-follow'
 import { TITLE_DEFS } from './rpg-systems'
 import { GATHERING_NODES, getWorldTimePhase, isRainbowNameColor, resolveAnimatedRainbowHex, sanitizeExtV2, sanitizeNameColor } from './extended-systems'
@@ -1319,6 +1319,7 @@ export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dp
     equippedGemFashion: p.equippedGemFashion,
     extV2,
   })
+  preloadAllHeroSheets()
   preloadFashionLayers(localLoadout)
   ents.push({
     y: p.y,

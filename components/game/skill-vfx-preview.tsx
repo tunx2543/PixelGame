@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { JOBS, normalizeJobId, type WeaponType } from '@/lib/game/data'
+import { preloadHeroSheet, subscribeSpriteSheetLoad } from '@/lib/game/sprite-sheets'
 import { drawResolvedDrawable, jobHumanColors, resolveHumanDrawable, resolveMonsterDrawable } from '@/lib/game/sprites'
 import { drawRebirthAura, drawStageSkillEffect } from '@/lib/game/vfx-canvas'
 import { getSkillVfxSpec, resolveRebirthAuraSpec } from '@/lib/game/vfx-specs'
@@ -36,6 +37,7 @@ export function SkillVfxPreview({
   // Restart the skill VFX burst whenever job, skill, or replay nonce updates
   useEffect(() => {
     vfxStartRef.current = typeof performance !== 'undefined' ? performance.now() : 0
+    preloadHeroSheet(normalizeJobId(jobId))
   }, [jobId, skillId, playNonce])
 
   useEffect(() => {
@@ -48,10 +50,12 @@ export function SkillVfxPreview({
       typeof window !== 'undefined' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
+    let cancelled = false
     let rafId = 0
     let isVisible = true
     const startTime = performance.now()
     if (!vfxStartRef.current) vfxStartRef.current = startTime
+    preloadHeroSheet(normalizeJobId(propsRef.current.jobId))
 
     const observer =
       typeof IntersectionObserver !== 'undefined'
@@ -222,14 +226,22 @@ export function SkillVfxPreview({
         })
       }
 
-      if (!reducedMotion && isVisible) {
+      if (!cancelled && !reducedMotion && isVisible) {
         rafId = requestAnimationFrame(render)
       }
     }
 
+    const unsubscribeSheetLoad = subscribeSpriteSheetLoad(() => {
+      if (!cancelled && isVisible && (reducedMotion || rafId === 0)) {
+        render(performance.now())
+      }
+    })
+
     rafId = requestAnimationFrame(render)
     return () => {
+      cancelled = true
       if (rafId) cancelAnimationFrame(rafId)
+      unsubscribeSheetLoad()
       observer?.disconnect()
     }
   }, [])

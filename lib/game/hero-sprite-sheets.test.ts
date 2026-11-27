@@ -2,14 +2,20 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
-import { JOBS } from './data'
+import { JOBS, normalizeJobId } from './data'
 import { getJobModelSpec } from './models-2d'
 import {
   HERO_ANIMATION_DEFS,
+  HERO_ASSET_REVISION,
   HERO_SPRITE_SHEETS,
   type HeroSheetId,
+  clearSpriteSheetRuntimeCache,
   getHeroSheetFrameSpec,
+  preloadAllHeroSheets,
+  resolveHeroSheetSpec,
+  withHeroAssetRevision,
 } from './sprite-sheets'
+import { jobHumanColors, resolveHumanDrawable } from './sprites'
 
 const EXPECTED_HERO_IDS: HeroSheetId[] = [
   'novice',
@@ -31,7 +37,19 @@ const EXPECTED_HERO_IDS: HeroSheetId[] = [
 
 const EXPECTED_DIRS = ['down', 'up', 'left', 'right'] as const
 
-test('all 15 player classes have valid 32x6 HD sprite sheet specs, individual frames, and metadata', () => {
+function readPngDimensions(absPath: string): { width: number; height: number; colorType: number } {
+  const buf = fs.readFileSync(absPath)
+  assert.ok(buf.length >= 26, `PNG too small: ${absPath}`)
+  assert.equal(buf.subarray(0, 8).toString('hex'), '89504e470d0a1a0a', `Invalid PNG header: ${absPath}`)
+  assert.equal(buf.subarray(12, 16).toString('ascii'), 'IHDR', `Missing IHDR: ${absPath}`)
+  return {
+    width: buf.readUInt32BE(16),
+    height: buf.readUInt32BE(20),
+    colorType: buf[25],
+  }
+}
+
+test('all 15 player classes have valid 32x6 HD sprite sheet specs, layered PNGs, individual frames, and metadata', () => {
   assert.deepEqual(Object.keys(HERO_SPRITE_SHEETS).sort(), [...EXPECTED_HERO_IDS].sort())
   assert.deepEqual(Object.keys(JOBS).sort(), [...EXPECTED_HERO_IDS].sort())
 
@@ -58,11 +76,24 @@ test('all 15 player classes have valid 32x6 HD sprite sheet specs, individual fr
       }
     }
 
-    // Verify disk artifacts exist for sheet, body_sheet, portrait, and metadata
+    // Verify disk artifacts exist with exact 1008x6144 atlas & 168x192 portrait PNG dimensions
     const dirPath = path.join(process.cwd(), 'public', 'assets', 'hd', 'characters', id)
-    for (const requiredFile of ['sheet.png', 'body_sheet.png', 'portrait.png', 'metadata.json']) {
-      assert.ok(fs.existsSync(path.join(dirPath, requiredFile)), `missing ${requiredFile} for ${id}`)
+    for (const sheetFile of ['sheet.png', 'body_sheet.png', 'armor_sheet.png', 'hair_sheet.png', 'weapon_sheet.png']) {
+      const sheetPath = path.join(dirPath, sheetFile)
+      assert.ok(fs.existsSync(sheetPath), `missing ${sheetFile} for ${id}`)
+      const dims = readPngDimensions(sheetPath)
+      assert.equal(dims.width, 1008, `${id}/${sheetFile} width`)
+      assert.equal(dims.height, 6144, `${id}/${sheetFile} height`)
+      assert.equal(dims.colorType, 6, `${id}/${sheetFile} RGBA`)
     }
+
+    const portraitPath = path.join(dirPath, 'portrait.png')
+    assert.ok(fs.existsSync(portraitPath), `missing portrait.png for ${id}`)
+    const portraitDims = readPngDimensions(portraitPath)
+    assert.equal(portraitDims.width, 168, `${id}/portrait.png width`)
+    assert.equal(portraitDims.height, 192, `${id}/portrait.png height`)
+
+    assert.ok(fs.existsSync(path.join(dirPath, 'metadata.json')), `missing metadata.json for ${id}`)
     const metadata = JSON.parse(fs.readFileSync(path.join(dirPath, 'metadata.json'), 'utf8'))
     assert.equal(metadata.jobId, id)
     assert.equal(metadata.frameWidth, 168)
@@ -81,11 +112,15 @@ test('all 15 player classes have valid 32x6 HD sprite sheet specs, individual fr
 
 test('getHeroSheetFrameSpec resolves dedicated directional rows without horizontal flip and supports blink', () => {
   const prevImage = globalThis.Image
+  clearSpriteSheetRuntimeCache()
   class MockImage {
     complete = true
     naturalWidth = 1008
     naturalHeight = 6144
     src = ''
+    decoding = 'async'
+    onload: (() => void) | null = null
+    onerror: (() => void) | null = null
   }
   ;(globalThis as unknown as { Image: typeof MockImage }).Image = MockImage
 
@@ -99,6 +134,10 @@ test('getHeroSheetFrameSpec resolves dedicated directional rows without horizont
         assert.equal(drawSpec.sw, 168)
         assert.equal(drawSpec.sh, 192)
         assert.equal(drawSpec.sx, lastFrame * 168)
+        assert.ok(
+          drawSpec.image.src.includes(`v=${HERO_ASSET_REVISION}`),
+          `expected revision query param on ${drawSpec.image.src}`,
+        )
       }
     }
 
@@ -108,6 +147,7 @@ test('getHeroSheetFrameSpec resolves dedicated directional rows without horizont
     assert.equal(blinkSpec.sx, 2 * 168)
     assert.equal(blinkSpec.sy, 0)
   } finally {
+    clearSpriteSheetRuntimeCache()
     if (prevImage) {
       ;(globalThis as unknown as { Image: typeof prevImage }).Image = prevImage
     } else {
@@ -115,3 +155,113 @@ test('getHeroSheetFrameSpec resolves dedicated directional rows without horizont
     }
   }
 })
+
+test('resolveHumanDrawable enforces HD hero sheets across all 15 classes & aliases and never falls back to legacy Chibi', () => {
+  const prevImage = globalThis.Image
+  const prevDocument = globalThis.document
+  let loadedFlag = false
+  const createdUrls: string[] = []
+
+  class MockAsyncImage {
+    decoding = 'async'
+    onload: (() => void) | null = null
+    onerror: (() => void) | null = null
+    private _src = ''
+    get src() {
+      return this._src
+    }
+    set src(value: string) {
+      this._src = value
+      createdUrls.push(value)
+    }
+    get complete() {
+      return loadedFlag
+    }
+    get naturalWidth() {
+      return loadedFlag ? 1008 : 0
+    }
+    get naturalHeight() {
+      return loadedFlag ? 6144 : 0
+    }
+  }
+
+  clearSpriteSheetRuntimeCache()
+  ;(globalThis as unknown as { Image: typeof MockAsyncImage }).Image = MockAsyncImage
+  ;(globalThis as unknown as { document: Record<string, unknown> }).document = {
+    createElement: () => {
+      throw new Error('Legacy canvas Chibi fallback should never execute for canonical 15 classes')
+    },
+  }
+
+  try {
+    // 1. Even while sheets are still asynchronously decoding, resolveHumanDrawable returns HD pending metadata (no legacy canvas!)
+    for (const id of EXPECTED_HERO_IDS) {
+      const job = JOBS[id]
+      const drawable = resolveHumanDrawable(jobHumanColors(id, job.colors, false), 'down', 0, job.weaponTypes[0])
+      assert.equal(drawable.width, 168)
+      assert.equal(drawable.height, 192)
+      assert.equal(drawable.hdScale, 4)
+      assert.equal(drawable.sheetId, id)
+      assert.equal(drawable.canvas, undefined)
+    }
+
+    // 2. Once images complete loading, all 15 classes & aliases resolve to sheetSpec with cache-busting revision
+    loadedFlag = true
+    preloadAllHeroSheets()
+    for (const id of EXPECTED_HERO_IDS) {
+      const job = JOBS[id]
+      const drawable = resolveHumanDrawable(jobHumanColors(id, job.colors, false), 'down', 0, job.weaponTypes[0])
+      assert.ok(drawable.sheetSpec, `expected sheetSpec for ${id}`)
+      assert.equal(drawable.sheetId, id)
+      assert.equal(drawable.canvas, undefined)
+      assert.ok(drawable.sheetSpec.image.src.endsWith(`/assets/hd/characters/${id}/sheet.png?v=${HERO_ASSET_REVISION}`))
+    }
+
+    const aliasPairs: Array<[string, HeroSheetId]> = [
+      ['wayfarer', 'novice'],
+      ['vanguard', 'swordsman'],
+      ['arcanist', 'mage'],
+      ['windstalker', 'archer'],
+      ['luminary', 'cleric'],
+      ['goldweaver', 'merchant'],
+      ['nightveil', 'thief'],
+      ['shinkage', 'kensei'],
+      ['titanfist', 'iron_fist'],
+      ['grimcaller', 'wicked_necromancer'],
+      ['high_sovereign', 'the_king'],
+      ['dreadfang', 'sinister'],
+      ['aegis_knight', 'templar'],
+      ['pawchemist', 'nekobaku'],
+      ['venomblade', 'mamushi'],
+      ['knight', 'templar'],
+      ['paladin', 'templar'],
+      ['wizard', 'mage'],
+      ['hunter', 'archer'],
+      ['assassin', 'sinister'],
+      ['gm', 'the_king'],
+    ]
+    for (const [alias, expected] of aliasPairs) {
+      assert.equal(normalizeJobId(alias), expected, `normalizeJobId(${alias})`)
+      assert.equal(resolveHeroSheetSpec(alias)?.id, expected, `resolveHeroSheetSpec(${alias})`)
+    }
+
+    assert.equal(
+      withHeroAssetRevision('/assets/hd/characters/novice/sheet.png'),
+      `/assets/hd/characters/novice/sheet.png?v=${HERO_ASSET_REVISION}`,
+    )
+    assert.ok(createdUrls.length >= 15)
+  } finally {
+    clearSpriteSheetRuntimeCache()
+    if (prevImage) {
+      ;(globalThis as unknown as { Image: typeof prevImage }).Image = prevImage
+    } else {
+      delete (globalThis as unknown as { Image?: unknown }).Image
+    }
+    if (prevDocument) {
+      ;(globalThis as unknown as { document: typeof prevDocument }).document = prevDocument
+    } else {
+      delete (globalThis as unknown as { document?: unknown }).document
+    }
+  }
+})
+

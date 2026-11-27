@@ -334,7 +334,7 @@ export function CharacterClassSelector({
             <div>
               <p className="text-xs font-bold text-primary">โมเดล 2D: {activeRole.thaiName}</p>
               <p className="text-[11px] text-muted-foreground">
-                อาวุธ: {activeRole.job.weaponTypes[0]} • Idle 4F / Walk 4F / Attack 4F / Skill 4F
+                อาวุธ: {activeRole.job.weaponTypes[0]} • Idle 4F / Walk 6F / Attack 5F / Skill 6F
               </p>
               <div className="mt-1.5 flex flex-wrap gap-1">
                 {(

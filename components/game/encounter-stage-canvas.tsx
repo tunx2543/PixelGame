@@ -22,6 +22,7 @@ import {
   drawHeroDrawableWithFashion,
   resolveFashionLoadoutFromSave,
 } from '@/lib/game/fashion-renderer'
+import { preloadHeroSheet } from '@/lib/game/sprite-sheets'
 import { sanitizeExtV2 } from '@/lib/game/extended-systems'
 import { sanitizePremiumState } from '@/lib/game/premium/wallet'
 import { getActivePetBonuses } from '@/lib/game/systems'
@@ -211,6 +212,10 @@ export function EncounterStageCanvas({
       stageEl.dataset.audioCues = recent.join(',')
     })
   }, [])
+
+  useEffect(() => {
+    preloadHeroSheet(normalizeJobId(save.jobId))
+  }, [save.jobId])
 
   useEffect(() => {
     let rafId = 0

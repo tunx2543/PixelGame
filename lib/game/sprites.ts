@@ -11,13 +11,6 @@ import {
   type PetModelSpec,
 } from './models-2d'
 import {
-  computeGmPoseSpec,
-  GM_CANVAS_SIZE,
-  GM_ROTATION_OFFSET,
-  getGmSpritePaths,
-  type GmAnimAction,
-} from './gm-sprite'
-import {
   drawMountLevelAndSkinFx,
   drawPetLevelAndStarFx,
   renderHdHumanSprite,
@@ -39,6 +32,7 @@ import {
   MOUNT_FOOT_PAD_FRAC,
   PET_FOOT_PAD_FRAC,
   preloadPetSpriteSheet,
+  resolveHeroSheetSpec,
   type SheetFrameDrawSpec,
 } from './sprite-sheets'
 
@@ -193,14 +187,7 @@ class PixelSurface {
 }
 
 const MAX_SPRITE_CACHE = 720
-const MAX_GM_CACHE = 48
 const cache = new Map<string, HTMLCanvasElement>()
-const gmOutfitCache = new Map<string, HTMLImageElement>()
-const gmEpicImageCache = new Map<string, HTMLImageElement>()
-const gmEpicFrameCache = new Map<string, HTMLCanvasElement>()
-const npcSpriteCache = new Map<string, HTMLImageElement>()
-const rebirthAuraCache = new Map<string, HTMLImageElement>()
-let gmEpicPreloaded = false
 
 function setBoundedCanvasCache(
   target: Map<string, HTMLCanvasElement>,
@@ -226,277 +213,6 @@ function setBoundedCanvasCache(
   }
 }
 
-function loadGmEpicImage(path: string): HTMLImageElement | null {
-  if (typeof Image === 'undefined') return null
-  if (!gmEpicPreloaded) {
-    gmEpicPreloaded = true
-    const paths = getGmSpritePaths()
-    for (const url of [...Object.values(paths.rotations), ...paths.walkSouth]) {
-      if (!gmEpicImageCache.has(url)) {
-        const img = new Image()
-        img.src = url
-        gmEpicImageCache.set(url, img)
-      }
-    }
-  }
-  let image = gmEpicImageCache.get(path)
-  if (!image) {
-    image = new Image()
-    image.src = path
-    gmEpicImageCache.set(path, image)
-  }
-  return image.complete && image.naturalWidth > 0 ? image : null
-}
-
-export function gmEpicSprite(
-  dir: Dir,
-  action: GmAnimAction,
-  frame: number,
-  skillColor?: string,
-): HTMLCanvasElement | null {
-  if (typeof document === 'undefined') return null
-  const pose = computeGmPoseSpec(dir, action, frame)
-  const paths = getGmSpritePaths()
-  const srcPath = pose.useWalkSouthSheet
-    ? paths.walkSouth[pose.walkSouthIndex]
-    : paths.rotations[pose.compass]
-  const srcImg = loadGmEpicImage(srcPath)
-  if (!srcImg) return null
-
-  const accentColor = skillColor ?? pose.secondaryAuraColor
-  const key = `gm-epic|${pose.dir}|${pose.action}|${pose.frame}|${accentColor}`
-  const cachedCanvas = gmEpicFrameCache.get(key)
-  if (cachedCanvas) {
-    if (cachedCanvas.width > 0 && cachedCanvas.height > 0) {
-      gmEpicFrameCache.delete(key)
-      gmEpicFrameCache.set(key, cachedCanvas)
-      return cachedCanvas
-    }
-    gmEpicFrameCache.delete(key)
-  }
-
-  const { c, ctx } = makeCanvas(GM_CANVAS_SIZE, GM_CANVAS_SIZE)
-  const cx = Math.round(GM_CANVAS_SIZE / 2)
-  const groundY = 39
-
-  // 1. Ground arcane sigil circle during skill cast
-  if (pose.ringRadius > 0) {
-    ctx.save()
-    const rx = pose.ringRadius
-    const ry = Math.max(4, Math.round(rx * 0.36))
-    ctx.strokeStyle = '#38bdf8'
-    ctx.lineWidth = 1.4
-    ctx.globalAlpha = 0.82
-    ctx.beginPath()
-    ctx.ellipse(cx, groundY, rx, ry, 0, 0, Math.PI * 2)
-    ctx.stroke()
-
-    ctx.strokeStyle = accentColor
-    ctx.lineWidth = 1
-    ctx.globalAlpha = 0.65
-    ctx.beginPath()
-    ctx.ellipse(cx, groundY, Math.max(4, rx * 0.65), Math.max(2, ry * 0.65), 0, 0, Math.PI * 2)
-    ctx.stroke()
-
-    for (let i = 0; i < 4; i++) {
-      const a = pose.ringPhase + (i * Math.PI) / 2
-      const rxDot = Math.round(cx + Math.cos(a) * rx)
-      const ryDot = Math.round(groundY + Math.sin(a) * ry)
-      ctx.fillStyle = i % 2 === 0 ? '#fde047' : '#67e8f9'
-      ctx.fillRect(rxDot - 1, ryDot - 1, 2, 2)
-    }
-    ctx.restore()
-  }
-
-  // 2. Celestial light pillar & holographic wing flare behind GM
-  if (pose.beamAlpha > 0) {
-    ctx.save()
-    const grad = ctx.createLinearGradient(cx, 2, cx, groundY + 2)
-    grad.addColorStop(0, 'rgba(253, 224, 71, 0)')
-    grad.addColorStop(0.35, 'rgba(56, 189, 248, 0.35)')
-    grad.addColorStop(0.8, 'rgba(253, 224, 71, 0.45)')
-    grad.addColorStop(1, 'rgba(253, 224, 71, 0)')
-    ctx.globalAlpha = pose.beamAlpha
-    ctx.fillStyle = grad
-    ctx.fillRect(cx - 8, 2, 16, groundY)
-    ctx.restore()
-  }
-
-  if (pose.wingFlare > 0.55) {
-    ctx.save()
-    ctx.globalAlpha = (pose.wingFlare - 0.5) * 0.72
-    ctx.fillStyle = '#38bdf8'
-    const wingY = 17 + pose.bodyDy
-    ctx.fillRect(cx - 17, wingY - 6, 4, 9)
-    ctx.fillRect(cx + 13, wingY - 6, 4, 9)
-    ctx.fillStyle = '#e0f2fe'
-    ctx.fillRect(cx - 18, wingY - 8, 2, 5)
-    ctx.fillRect(cx + 16, wingY - 8, 2, 5)
-    ctx.restore()
-  }
-
-  // 3. Draw GM sprite (real 8-frame walk south, or sliced stride / directional pose)
-  const ox = GM_ROTATION_OFFSET + Math.round(pose.bodyDx)
-  const oy = GM_ROTATION_OFFSET + Math.round(pose.bodyDy)
-
-  if (pose.action === 'attack' && (pose.frame === 1 || pose.frame === 2)) {
-    ctx.save()
-    ctx.globalAlpha = 0.3
-    const ghostX = ox - Math.sign(pose.bodyDx || 1) * 2
-    const ghostY = oy - Math.sign(pose.bodyDy || 0)
-    ctx.drawImage(srcImg, ghostX, ghostY)
-    ctx.restore()
-  }
-
-  if (pose.useWalkSouthSheet) {
-    ctx.drawImage(srcImg, 0, 0)
-  } else if (pose.action === 'walk') {
-    // Upper torso + crown + wings (rows 0..22)
-    ctx.drawImage(srcImg, 0, 0, 32, 22, ox, oy, 32, 22)
-    // Flowing cape hem (rows 22..26)
-    ctx.drawImage(srcImg, 0, 22, 32, 4, ox + pose.capeSwayX, oy + 22, 32, 4)
-    // Left half lower leg/boot stride (cols 0..16, rows 26..32)
-    ctx.drawImage(
-      srcImg,
-      0,
-      26,
-      16,
-      6,
-      ox + pose.leftFootDx,
-      oy + 26 + pose.leftFootDy,
-      16,
-      6,
-    )
-    // Right half lower leg/boot stride (cols 16..32, rows 26..32)
-    ctx.drawImage(
-      srcImg,
-      16,
-      26,
-      16,
-      6,
-      ox + 16 + pose.rightFootDx,
-      oy + 26 + pose.rightFootDy,
-      16,
-      6,
-    )
-    // Subtle stepping dust puff
-    if (pose.frame === 1 || pose.frame === 4) {
-      ctx.fillStyle = 'rgba(224, 242, 254, 0.55)'
-      const dustX = pose.dir === 'right' ? ox + 7 : pose.dir === 'left' ? ox + 22 : cx
-      ctx.fillRect(dustX, groundY - 1, 2, 1)
-    }
-  } else {
-    ctx.drawImage(srcImg, ox, oy)
-  }
-
-  // 4. Floating crown sparkle
-  if (pose.crownGlow >= 0.65) {
-    ctx.save()
-    ctx.fillStyle = '#fef08a'
-    const cyCrown = 7 + Math.round(pose.bodyDy)
-    ctx.fillRect(cx - 1, cyCrown, 2, 2)
-    ctx.fillStyle = '#ffffff'
-    ctx.fillRect(cx - 5, cyCrown + 1, 1, 1)
-    ctx.fillRect(cx + 4, cyCrown + 1, 1, 1)
-    ctx.restore()
-  }
-
-  // 5. Attack slash crescent & sovereign impact burst
-  if (pose.slashAlpha > 0) {
-    ctx.save()
-    const reach = 11
-    const fx =
-      cx +
-      pose.bodyDx +
-      (pose.dir === 'left' ? -reach : pose.dir === 'right' ? reach : 0)
-    const fy =
-      24 +
-      pose.bodyDy +
-      (pose.dir === 'up' ? -reach : pose.dir === 'down' ? reach : 0)
-
-    ctx.globalAlpha = pose.slashAlpha
-    ctx.strokeStyle = '#38bdf8'
-    ctx.lineWidth = 3
-    ctx.beginPath()
-    ctx.arc(cx + pose.bodyDx, 24 + pose.bodyDy, 14, pose.slashAngle - 0.95, pose.slashAngle + 0.95)
-    ctx.stroke()
-
-    ctx.strokeStyle = '#fde047'
-    ctx.lineWidth = 1.6
-    ctx.beginPath()
-    ctx.arc(cx + pose.bodyDx, 24 + pose.bodyDy, 15, pose.slashAngle - 0.85, pose.slashAngle + 0.85)
-    ctx.stroke()
-
-    if (pose.impactRadius > 0) {
-      ctx.fillStyle = '#ffffff'
-      ctx.fillRect(Math.round(fx - 1), Math.round(fy - 4), 2, 8)
-      ctx.fillRect(Math.round(fx - 4), Math.round(fy - 1), 8, 2)
-      ctx.fillStyle = accentColor
-      ctx.fillRect(Math.round(fx - 3), Math.round(fy - 3), 2, 2)
-      ctx.fillRect(Math.round(fx + 2), Math.round(fy + 2), 2, 2)
-    }
-    ctx.restore()
-  }
-
-  // 6. Skill cast orbiting mana orbs & rising crown starlight
-  if (pose.action === 'skill') {
-    ctx.save()
-    for (let i = 0; i < 3; i++) {
-      const a = pose.orbAngle + (i * Math.PI * 2) / 3
-      const oxDot = Math.round(cx + Math.cos(a) * 14)
-      const oyDot = Math.round(23 + pose.bodyDy + Math.sin(a) * 6)
-      ctx.fillStyle = i === 0 ? accentColor : i === 1 ? '#38bdf8' : '#fef08a'
-      ctx.fillRect(oxDot - 1, oyDot - 1, 3, 3)
-      ctx.fillStyle = '#ffffff'
-      ctx.fillRect(oxDot, oyDot, 1, 1)
-    }
-    ctx.restore()
-  }
-
-  c.dataset.gmReady = '1'
-  setBoundedCanvasCache(gmEpicFrameCache, key, c, MAX_GM_CACHE)
-  return c
-}
-
-export function rebirthAuraSprite(dir: Dir): HTMLImageElement | null {
-  const direction = dir === 'down' ? 'south' : dir === 'up' ? 'north' : dir === 'left' ? 'west' : 'east'
-  let image = rebirthAuraCache.get(direction)
-  if (!image) {
-    image = new Image()
-    image.crossOrigin = 'anonymous'
-    image.src = 'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/ground-sigil-jQzDvfBW2V54R6DRMeDoP55hG7byck.gif'
-    rebirthAuraCache.set(direction, image)
-  }
-  return image.complete && image.naturalWidth > 0 ? image : null
-}
-
-export function npcSprite(id: string): HTMLImageElement | null {
-  let image = npcSpriteCache.get(id)
-  if (!image) {
-    image = new Image()
-    image.crossOrigin = 'anonymous'
-    image.src = `/images/npcs/${id}.png`
-    npcSpriteCache.set(id, image)
-  }
-  return image.complete && image.naturalWidth > 0 ? image : null
-}
-
-type GmAnimation = 'idle' | 'walk' | 'attack'
-
-export function gmOutfitSprite(dir: Dir, animation: GmAnimation = 'idle'): HTMLImageElement | null {
-  const direction = dir === 'down' ? 'south' : dir === 'up' ? 'north' : dir === 'left' ? 'west' : 'east'
-  const key = `gm-${animation}-${direction}`
-  let image = gmOutfitCache.get(key)
-  if (!image) {
-    image = new Image()
-    image.crossOrigin = 'anonymous'
-    const useWalk = animation === 'walk' && direction === 'south'
-    const filename = animation === 'attack' ? `attack-${direction}.gif` : useWalk ? 'walk-south.gif' : `outfit-${direction}.png`
-    image.src = `/images/characters/gm/${filename}`
-    gmOutfitCache.set(key, image)
-  }
-  return image.complete && image.naturalWidth > 0 ? image : null
-}
 
 function cached(key: string, make: () => HTMLCanvasElement) {
   let c = cache.get(key)
@@ -602,12 +318,22 @@ export function resolveHumanDrawable(
 ): ResolvedDrawable {
   const requestedAction: SpriteAction = attacking ? 'attack' : actionOverride ?? (frame > 0 ? 'walk' : 'idle')
   if (typeof document !== 'undefined' && colors.jobId && !colors.skeleton && !colors.goblinEars) {
-    const sheetFrameIdx =
-      requestedAction === 'attack' || requestedAction === 'skill'
-        ? (attackFrameOverride ?? frame)
-        : frame
-    const spec = getHeroSheetFrameSpec(colors.jobId, dir, requestedAction, sheetFrameIdx)
-    if (spec) return sheetSpecToResolvedDrawable(spec)
+    const heroSpec = resolveHeroSheetSpec(colors.jobId)
+    if (heroSpec) {
+      const sheetFrameIdx =
+        requestedAction === 'attack' || requestedAction === 'skill'
+          ? (attackFrameOverride ?? frame)
+          : frame
+      const spec = getHeroSheetFrameSpec(colors.jobId, dir, requestedAction, sheetFrameIdx)
+      if (spec) return sheetSpecToResolvedDrawable(spec)
+      // Never fall back to the legacy procedural Chibi renderer for any of the 15 canonical player classes
+      return {
+        width: heroSpec.frameWidth,
+        height: heroSpec.frameHeight,
+        hdScale: heroSpec.hdScale,
+        sheetId: heroSpec.id,
+      }
+    }
   }
   return canvasToResolvedDrawable(
     humanSprite(colors, dir, frame, weapon, weaponColor, attacking, actionOverride, attackFrameOverride),
@@ -1278,12 +1004,21 @@ export function humanSprite(
   const requestedAction: SpriteAction = attacking ? 'attack' : actionOverride ?? (frame > 0 ? 'walk' : 'idle')
 
   if (typeof document !== 'undefined' && colors.jobId && !colors.skeleton && !colors.goblinEars) {
-    const sheetFrameIdx =
-      requestedAction === 'attack' || requestedAction === 'skill'
-        ? (attackFrameOverride ?? frame)
-        : frame
-    const sheetCanvas = getHeroSheetFrame(colors.jobId, dir, requestedAction, sheetFrameIdx)
-    if (sheetCanvas) return sheetCanvas
+    const heroSpec = resolveHeroSheetSpec(colors.jobId)
+    if (heroSpec) {
+      const sheetFrameIdx =
+        requestedAction === 'attack' || requestedAction === 'skill'
+          ? (attackFrameOverride ?? frame)
+          : frame
+      const sheetCanvas = getHeroSheetFrame(colors.jobId, dir, requestedAction, sheetFrameIdx)
+      if (sheetCanvas) return sheetCanvas
+      const pendingCanvas = document.createElement('canvas')
+      pendingCanvas.width = heroSpec.frameWidth
+      pendingCanvas.height = heroSpec.frameHeight
+      pendingCanvas.dataset.hdScale = String(heroSpec.hdScale)
+      pendingCanvas.dataset.sheetId = heroSpec.id
+      return pendingCanvas
+    }
   }
 
   const action: 'idle' | 'walk' | 'attack' =

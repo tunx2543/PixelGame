@@ -364,25 +364,127 @@ export interface SheetFrameDrawSpec {
   footPadFrac?: number
 }
 
+export const HERO_ASSET_REVISION = 'hd15-v1'
+export const HERO_CACHE_VERSION_KEY = 'pixel-quest-hero-asset-version'
+
+export function withHeroAssetRevision(url: string): string {
+  if (!url || url.startsWith('data:') || url.startsWith('blob:')) return url
+  const rev = encodeURIComponent(HERO_ASSET_REVISION)
+  const sep = url.includes('?') ? '&' : '?'
+  if (/[?&]v=/.test(url)) {
+    return url.replace(/([?&]v=)[^&]*/, `$1${rev}`)
+  }
+  return `${url}${sep}v=${rev}`
+}
+
 const MAX_SLICED_FRAMES = 48
 const sheetImageCache = new Map<string, HTMLImageElement>()
 const slicedFrameCache = new Map<string, HTMLCanvasElement>()
+const sheetLoadListeners = new Set<() => void>()
+let sheetLoadVersion = 0
 let sheetsPreloaded = false
+let heroSheetsPreloaded = false
+let heroCachePurged = false
+
+export function notifySpriteSheetLoad(): void {
+  sheetLoadVersion += 1
+  for (const listener of sheetLoadListeners) {
+    try {
+      listener()
+    } catch {
+      // Ignore subscriber errors during async sprite decode callbacks
+    }
+  }
+}
+
+export function subscribeSpriteSheetLoad(listener: () => void): () => void {
+  sheetLoadListeners.add(listener)
+  return () => {
+    sheetLoadListeners.delete(listener)
+  }
+}
+
+export function getSpriteSheetLoadVersion(): number {
+  return sheetLoadVersion
+}
+
+export function clearSpriteSheetRuntimeCache(): void {
+  sheetImageCache.clear()
+  for (const canvas of slicedFrameCache.values()) {
+    try {
+      canvas.width = 0
+      canvas.height = 0
+    } catch {
+      // ignore
+    }
+  }
+  slicedFrameCache.clear()
+  sheetsPreloaded = false
+  heroSheetsPreloaded = false
+}
+
+export function purgeStaleHeroClientCaches(force = false): boolean {
+  if (typeof window === 'undefined') return false
+  if (heroCachePurged && !force) return false
+  heroCachePurged = true
+  let purged = false
+  try {
+    const prevVersion = window.localStorage.getItem(HERO_CACHE_VERSION_KEY)
+    if (prevVersion !== HERO_ASSET_REVISION || force) {
+      clearSpriteSheetRuntimeCache()
+      window.localStorage.setItem(HERO_CACHE_VERSION_KEY, HERO_ASSET_REVISION)
+      purged = true
+    }
+  } catch {
+    // Ignore storage access errors in restricted environments
+  }
+  return purged
+}
+
+function resolveSheetSrc(sheetPath: string): string {
+  return sheetPath.startsWith('/assets/hd/characters/') ? withHeroAssetRevision(sheetPath) : sheetPath
+}
 
 function getSheetImage(sheetPath: string): HTMLImageElement | null {
   if (typeof Image === 'undefined') return null
   let img = sheetImageCache.get(sheetPath)
   if (!img) {
     img = new Image()
-    img.src = sheetPath
+    img.decoding = 'async'
+    img.onload = () => notifySpriteSheetLoad()
+    img.onerror = () => notifySpriteSheetLoad()
+    img.src = resolveSheetSrc(sheetPath)
     sheetImageCache.set(sheetPath, img)
   }
   return img.complete && img.naturalWidth > 0 ? img : null
 }
 
+export function isHeroSheetReady(jobId?: string | null): boolean {
+  const spec = resolveHeroSheetSpec(jobId)
+  if (!spec) return false
+  return getSheetImage(spec.sheetPath) !== null
+}
+
+export function preloadHeroSheet(jobId?: string | null): void {
+  const spec = resolveHeroSheetSpec(jobId)
+  if (!spec || typeof Image === 'undefined') return
+  purgeStaleHeroClientCaches()
+  getSheetImage(spec.sheetPath)
+}
+
+export function preloadAllHeroSheets(): void {
+  if (heroSheetsPreloaded || typeof Image === 'undefined') return
+  purgeStaleHeroClientCaches()
+  heroSheetsPreloaded = true
+  for (const spec of Object.values(HERO_SPRITE_SHEETS)) {
+    getSheetImage(spec.sheetPath)
+  }
+}
+
 export function preloadAllSpriteSheets(): void {
   if (sheetsPreloaded || typeof Image === 'undefined') return
   sheetsPreloaded = true
+  preloadAllHeroSheets()
   for (const spec of Object.values(NPC_SPRITE_SHEETS)) {
     getSheetImage(spec.sheetPath)
   }
@@ -394,6 +496,7 @@ export function preloadAllSpriteSheets(): void {
 export function preloadHeroLayerSheets(jobId?: string | null): void {
   const spec = resolveHeroSheetSpec(jobId)
   if (!spec || typeof Image === 'undefined') return
+  purgeStaleHeroClientCaches()
   for (const layer of ['full', 'body', 'armor', 'hair', 'weapon'] as const) {
     const file = HERO_LAYER_FILE_MAP[layer]
     const path = layer === 'full' ? spec.sheetPath : spec.sheetPath.replace(/\/sheet\.png$/, `/${file}`)

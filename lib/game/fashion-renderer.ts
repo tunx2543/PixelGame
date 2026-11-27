@@ -5,7 +5,11 @@ import {
   HERO_ANIMATION_DEFS,
   drawSheetFrameSpec,
   getHeroSheetFrameSpec,
+  notifySpriteSheetLoad,
   preloadHeroLayerSheets,
+  preloadHeroSheet,
+  resolveHeroSheetSpec,
+  withHeroAssetRevision,
 } from './sprite-sheets'
 import type { Dir, ResolvedDrawable, SpriteAction } from './sprites'
 
@@ -37,7 +41,10 @@ export function getFashionLayerImage(fashionId: string | null | undefined): HTML
   const cached = layerImageCache.get(fashionId)
   if (cached !== undefined) return cached
   const img = new Image()
-  img.src = assetSrc
+  img.decoding = 'async'
+  img.onload = () => notifySpriteSheetLoad()
+  img.onerror = () => notifySpriteSheetLoad()
+  img.src = withHeroAssetRevision(assetSrc)
   layerImageCache.set(fashionId, img)
   return img
 }
@@ -603,6 +610,12 @@ export function drawHeroDrawableWithFashion(opts: {
   const { ctx, jobId, drawable, loadout, dir, action, frame, dx, dy, dw, dh, alpha = 1, timeSec, drawBase } = opts
   if (loadout) {
     preloadFashionLayers(loadout)
+  }
+
+  // If this is a canonical player class whose HD sprite sheet is still loading, wait cleanly instead of drawing orphaned fashion layers
+  if (jobId && resolveHeroSheetSpec(jobId) && !drawable.sheetSpec && !drawable.canvas) {
+    preloadHeroSheet(jobId)
+    return
   }
 
   drawCharacterFashionLayers({

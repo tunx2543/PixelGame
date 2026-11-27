@@ -7,7 +7,13 @@ import { JOBS, MONSTERS, normalizeJobId, type WeaponType } from '@/lib/game/data
 import { getJobModelSpec, getMonsterModelSpec, getMountModelSpec, getPetModelSpec } from '@/lib/game/models-2d'
 import { getMountDef, getMountRiderSeatOffset, type MountAnimAction } from '@/lib/game/mounts'
 import { getPetVisualTier } from '@/lib/game/pet-follow'
-import { preloadHeroLayerSheets, preloadMountSpriteSheet, preloadPetSpriteSheet } from '@/lib/game/sprite-sheets'
+import {
+  preloadHeroLayerSheets,
+  preloadHeroSheet,
+  preloadMountSpriteSheet,
+  preloadPetSpriteSheet,
+  subscribeSpriteSheetLoad,
+} from '@/lib/game/sprite-sheets'
 import {
   canvasToResolvedDrawable,
   type Dir,
@@ -123,11 +129,13 @@ export function SpriteModelCanvas({
     const start = performance.now()
 
     if (mode === 'job') {
+      preloadHeroSheet(normalizeJobId(id))
       if (fashion) preloadFashionLayers(fashion)
       if (fashion?.costume || fashion?.hair) preloadHeroLayerSheets(normalizeJobId(id))
     }
     if (mode === 'mount') {
       preloadMountSpriteSheet(id)
+      if (showRider) preloadHeroSheet(normalizeJobId(riderJobId))
     }
     if (mode === 'pet') {
       preloadPetSpriteSheet(id)
@@ -630,6 +638,16 @@ export function SpriteModelCanvas({
       }
     }
 
+    const unsubscribeSheetLoad = subscribeSpriteSheetLoad(() => {
+      if (!cancelled && isVisible) {
+        lastSig = ''
+        lastDrawAt = 0
+        if (reducedMotion || rafId === 0) {
+          renderFrame(performance.now())
+        }
+      }
+    })
+
     if (reducedMotion && mode === 'job' && fashion) {
       for (const img of getEquippedFashionImages(fashion)) {
         if (!img.complete) {
@@ -651,6 +669,7 @@ export function SpriteModelCanvas({
     return () => {
       cancelled = true
       if (rafId) cancelAnimationFrame(rafId)
+      unsubscribeSheetLoad()
       observer?.disconnect()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
