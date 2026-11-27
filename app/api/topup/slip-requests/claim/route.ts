@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import firebaseConfig from '@/firebase-applet-config.json'
 import { getTopupPackage, isValidTopupPackageReward, type TopupOrderRecord } from '@/lib/game/premium/topup'
-import { claimServerRequestId, isPersistentPremiumSecretConfigured, makeServerTxId, resolveActorFromRequest, signPremiumTx } from '@/lib/server/premium-security'
+import { claimServerRequestId, isPersistentPremiumSecretConfigured, resolveActorFromRequest, signPremiumTx } from '@/lib/server/premium-security'
 import { isCloudflareWorkersRuntime } from '@/lib/server/runtime-store'
 import {
   claimPersistentSlipHash,
@@ -23,6 +23,7 @@ interface FirestoreSlipFields {
   status?: { stringValue?: string }
   claimed?: { booleanValue?: boolean }
   slipHash?: { stringValue?: string }
+  createdAtMs?: { integerValue?: string }
 }
 
 async function fetchApprovedFirestoreSlip(
@@ -39,6 +40,7 @@ async function fetchApprovedFirestoreSlip(
   totalDiamonds: number
   vipExpGranted: number
   slipHash?: string
+  createdAtMs: number
 } | null> {
   try {
     const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(firebaseConfig.projectId)}/databases/${encodeURIComponent(firebaseConfig.firestoreDatabaseId)}/documents/topupSlipRequests/${encodeURIComponent(requestId)}`
@@ -78,6 +80,7 @@ async function fetchApprovedFirestoreSlip(
       totalDiamonds,
       vipExpGranted,
       slipHash: f.slipHash?.stringValue,
+      createdAtMs: Number(f.createdAtMs?.integerValue ?? 0),
     }
   } catch {
     return null
@@ -95,7 +98,7 @@ export async function POST(req: Request) {
 
   const body = (await req.json().catch(() => null)) as { requestId?: unknown } | null
   const requestId = typeof body?.requestId === 'string' ? body.requestId.trim().replace(/[^a-zA-Z0-9_-]/g, '') : ''
-  if (!requestId) {
+  if (!requestId || requestId.length > 60) {
     return NextResponse.json({ ok: false, message: 'ไม่พบรหัสคำขอ' }, { status: 400 })
   }
 
@@ -109,6 +112,7 @@ export async function POST(req: Request) {
     totalDiamonds: number
     vipExpGranted: number
     slipHash?: string | null
+    createdAtMs: number
   } | null = null
 
   const cloudflareRuntime = isCloudflareWorkersRuntime()
@@ -134,7 +138,7 @@ export async function POST(req: Request) {
     ) {
       return NextResponse.json({ ok: false, message: 'ข้อมูลแพ็กเกจของคำขอสลิปไม่ถูกต้อง' }, { status: 400 })
     }
-    verifiedSlip = existing
+    verifiedSlip = { ...existing, createdAtMs: Number(existing.createdAtMs ?? 0) }
   } else {
     const bearer = (req.headers.get('authorization') ?? '').slice(7).trim()
     const fsSlip = bearer ? await fetchApprovedFirestoreSlip(requestId, bearer, auth.actor.uid) : null
@@ -169,9 +173,10 @@ export async function POST(req: Request) {
     )
   }
 
-  const orderId = makeServerTxId('ORD')
-  const txId = makeServerTxId('TOPTX')
-  const timestampMs = Date.now()
+  // Stable identifiers make retries and concurrent requests resolve to the same Firestore order.
+  const orderId = `ORD-${requestId}`
+  const txId = `TX-${requestId}`
+  const timestampMs = Math.max(0, Math.floor(verifiedSlip.createdAtMs || Date.now()))
   const serverSignature = signPremiumTx({
     txId,
     requestId: orderId,
