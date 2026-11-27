@@ -185,3 +185,75 @@ test('allows the matching order and slip claim in one atomic Firestore batch', a
   })
   await assertSucceeds(batch.commit())
 })
+
+test('allows an atomic character save, diamond ledger, order, and slip claim', async () => {
+  const db = playerDb()
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const adminDb = context.firestore()
+    await setDoc(doc(adminDb, 'users', uid, 'characters', characterId), {
+      id: characterId,
+      ownerId: uid,
+      name: 'Test Player',
+      jobId: 'swordsman',
+      level: 1,
+      exp: 0,
+      hp: 100,
+      mp: 20,
+      gold: 0,
+      diamonds: 50,
+      mapId: 'town',
+      playTime: 0,
+      saveData: {
+        diamonds: 50,
+        premium: { wallet: { processedRequestIds: [] }, topupOrders: [] },
+      },
+      createdAt: Timestamp.fromMillis(1700000000000),
+      updatedAt: Timestamp.fromMillis(1700000000000),
+    })
+  })
+
+  const txId = `TX-${requestId}`
+  const signature = 'test-signature-1234567890'
+  const batch = writeBatch(db)
+  batch.set(
+    doc(db, 'users', uid, 'characters', characterId, 'topupOrders', orderId),
+    orderRecord({ serverSignature: signature }),
+  )
+  batch.set(doc(db, 'users', uid, 'characters', characterId, 'diamondTransactions', txId), {
+    txId,
+    requestId: orderId,
+    ownerId: uid,
+    characterId,
+    type: 'earn',
+    source: 'promptpay_manual_gm',
+    amount: 100,
+    balanceBefore: 50,
+    balanceAfter: 150,
+    productId: 'topup_starter',
+    itemId: null,
+    note: 'Manual GM top-up',
+    actorUid: uid,
+    isGm: false,
+    serverVerified: true,
+    serverSignature: signature,
+    createdAtMs: 1700000000000,
+    createdAt: serverTimestamp(),
+  })
+  batch.update(doc(db, 'users', uid, 'characters', characterId), {
+    diamonds: 150,
+    saveData: {
+      diamonds: 150,
+      premium: {
+        wallet: { processedRequestIds: [orderId] },
+        topupOrders: [{ orderId }],
+      },
+    },
+    updatedAt: serverTimestamp(),
+  })
+  batch.update(doc(db, 'topupSlipRequests', requestId), {
+    claimed: true,
+    claimedAtMs: 1700000001000,
+    updatedAt: serverTimestamp(),
+  })
+  await assertSucceeds(batch.commit())
+})
