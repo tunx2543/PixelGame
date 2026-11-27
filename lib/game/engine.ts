@@ -32,6 +32,7 @@ import { GM_ACTIVE_SKILLS } from './gm-sprite'
 import { createClient } from '@/lib/supabase/client'
 import { auth as firebaseAuth } from '@/lib/firebase/client'
 import {
+  commitManualTopupClaimToCloud,
   deleteUserCharacter,
   ensureUserProfile,
   listUserCharacters,
@@ -649,6 +650,7 @@ export function commitDiamondDelta(
     actorUid?: string
     isGm?: boolean
     timestampMs?: number
+    persistLedger?: boolean
   },
 ): { ok: boolean; duplicate?: boolean; message: string; nextBalance: number; tx?: import('./premium/types').DiamondTransaction } {
   const prem = ensurePremiumState(p)
@@ -676,7 +678,7 @@ export function commitDiamondDelta(
   })
   if (!res.ok) return res
   p.diamonds = res.nextBalance
-  if (res.tx) {
+  if (res.tx && meta.persistLedger !== false) {
     persistLedgerAsync(res.tx, undefined)
   }
   return res
@@ -8576,22 +8578,62 @@ export async function applyVerifiedTopupAction(
 ): Promise<{ ok: boolean; duplicate?: boolean; message: string; order?: TopupOrderRecord }> {
   const p = player()
   const prem = ensurePremiumState(p)
+  const isManualSlip = order.provider === 'promptpay_manual_gm'
+  const fbUser = firebaseAuth.currentUser
+  const slotId = prem.wallet.characterId || getActiveCharacterSlot()
+
+  const persistManualCredit = async (ledger: import('./premium/types').DiamondTransaction) => {
+    if (!fbUser || !fbUser.emailVerified || !order.gatewayRef) {
+      throw new Error('กรุณาเข้าสู่ระบบด้วย Google ที่ยืนยันอีเมลแล้วก่อนรับเพชร')
+    }
+    return commitManualTopupClaimToCloud({
+      userId: fbUser.uid,
+      characterId: slotId,
+      requestId: order.gatewayRef,
+      save: p,
+      order,
+      transaction: ledger,
+    })
+  }
+
   const existingLocal = (prem.topupOrders ?? []).some(
     (o) => o.orderId === order.orderId || (order.gatewayRef && o.gatewayRef === order.gatewayRef),
   )
+  if (isManualSlip && (existingLocal || prem.wallet.processedRequestIds.includes(order.orderId))) {
+    const previousTx = prem.wallet.transactionHistory.find(
+      (tx) => tx.txId === order.txId || tx.requestId === order.orderId,
+    )
+    if (!previousTx) {
+      return { ok: false, duplicate: true, message: 'พบรายการเติมเงินเดิมในเซฟเครื่อง แต่ไม่พบประวัติเพชรที่ใช้กู้คืน กรุณาติดต่อ GM' }
+    }
+    try {
+      await persistManualCredit(previousTx)
+      p.savedAt = Date.now()
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(localSaveKey(), JSON.stringify(p))
+        game.lastSavedAt = Date.now()
+      }
+      return { ok: true, duplicate: true, order, message: 'ตรวจพบรายการเดิมและกู้คืนการบันทึกยอดเพชรเรียบร้อยแล้ว' }
+    } catch (error) {
+      return { ok: false, duplicate: true, message: formatReadableTopupError(error, 'กู้คืนรายการเติมเงินเดิมไม่สำเร็จ กรุณาลองใหม่') }
+    }
+  }
   if (existingLocal) {
     return { ok: false, duplicate: true, message: 'รายการเติมเงินนี้ถูกเติมเข้าตัวละครไปแล้ว' }
   }
 
-  const fbUser = firebaseAuth.currentUser
-  const slotId = prem.wallet.characterId || getActiveCharacterSlot()
-  if (fbUser && fbUser.emailVerified && order.gatewayRef) {
+  if (!isManualSlip && fbUser && fbUser.emailVerified && order.gatewayRef) {
     const alreadyInCloud = await isGatewayRefRecorded(fbUser.uid, slotId, order.gatewayRef).catch(() => false)
     if (alreadyInCloud) {
       return { ok: false, duplicate: true, message: 'รายการชำระเงินนี้ถูกบันทึกในบัญชีแล้ว' }
     }
   }
 
+  if (isManualSlip && (!fbUser || !fbUser.emailVerified)) {
+    return { ok: false, message: 'กรุณาเข้าสู่ระบบด้วย Google ที่ยืนยันอีเมลแล้วก่อนรับเพชร' }
+  }
+
+  const beforeCredit = isManualSlip ? (JSON.parse(JSON.stringify(p)) as SaveData) : null
   const txRes = commitDiamondDelta(p, order.totalDiamonds, {
     type: 'earn',
     source: order.provider,
@@ -8604,8 +8646,9 @@ export async function applyVerifiedTopupAction(
     serverVerified: Boolean(order.serverVerified),
     serverSignature: order.serverSignature ? order.serverSignature : undefined,
     timestampMs: order.createdAtMs,
+    persistLedger: !isManualSlip,
   })
-  if (!txRes.ok) {
+  if (!txRes.ok || !txRes.tx) {
     return { ok: false, duplicate: txRes.duplicate, message: txRes.message }
   }
 
@@ -8635,6 +8678,18 @@ export async function applyVerifiedTopupAction(
   activePrem.topupOrders.unshift(order)
   if (activePrem.topupOrders.length > 40) activePrem.topupOrders.length = 40
 
+  if (isManualSlip) {
+    try {
+      await persistManualCredit(txRes.tx)
+    } catch (error) {
+      if (beforeCredit) Object.assign(p, beforeCredit)
+      return {
+        ok: false,
+        message: formatReadableTopupError(error, 'บันทึกยอดเพชรแบบถาวรไม่สำเร็จ ระบบยังไม่ปิดสลิปและยังไม่ยืนยันการเติมเงิน กรุณาลองอีกครั้ง'),
+      }
+    }
+  }
+
   logPremiumAudit(p, {
     action: 'DIAMOND_EARN',
     txId: order.txId,
@@ -8642,7 +8697,7 @@ export async function applyVerifiedTopupAction(
     verifiedByServer: Boolean(order.serverVerified),
   })
 
-  if (fbUser && fbUser.emailVerified) {
+  if (fbUser && fbUser.emailVerified && !isManualSlip) {
     await recordTopupOrder(fbUser.uid, slotId, order).catch(() => {})
   }
 
@@ -8650,9 +8705,18 @@ export async function applyVerifiedTopupAction(
     'loot',
     `★ เติมเงินสำเร็จ! ${order.packageName} (฿${order.amountThb.toLocaleString()}) รับ +${order.totalDiamonds.toLocaleString()} D`,
   )
-  saveGame()
-  if (fbUser && fbUser.emailVerified) {
-    await flushCloudSave().catch(() => {})
+  if (isManualSlip) {
+    p.savedAt = Date.now()
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(localSaveKey(), JSON.stringify(p))
+      game.lastSavedAt = Date.now()
+    }
+    game.saveT = 0
+  } else {
+    saveGame()
+    if (fbUser && fbUser.emailVerified) {
+      await flushCloudSave().catch(() => {})
+    }
   }
   notify()
   return {
