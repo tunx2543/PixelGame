@@ -238,6 +238,8 @@ service cloud.firestore {
         data.playTime >= 0 &&
         data.saveData is map &&
         data.saveData.keys().size() <= 60 &&
+        (!('diamonds' in data.saveData) || data.saveData.diamonds == data.diamonds) &&
+        (!('gm' in data.saveData) || data.saveData.gm == false || isGmAccount()) &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
     }
@@ -315,8 +317,30 @@ service cloud.firestore {
         data.actorUid == request.auth.uid &&
         data.isGm is bool &&
         (
-          (!data.isGm && data.source != 'gm_grant') ||
-          isGmAccount()
+          isGmAccount() ||
+          (
+            !data.isGm &&
+            data.type != 'sandbox_grant' &&
+            !(data.source in ['gm_grant', 'gm_sandbox_console', 'sandbox_console', 'gm_dev_console', 'gm_chat_command']) &&
+            (
+              !(data.source in [
+                'vip_tier_reward',
+                'vip_daily_reward',
+                'topup_milestone',
+                'daily_topup_bonus',
+                'stripe_promptpay',
+                'stripe_checkout',
+                'promptpay_slip',
+                'promptpay_manual_gm'
+              ]) ||
+              (
+                data.serverVerified == true &&
+                data.serverSignature is string &&
+                data.serverSignature.size() >= 16
+              )
+            ) &&
+            (data.type != 'earn' || data.serverVerified == true || data.amount <= 5000)
+          )
         ) &&
         data.serverVerified is bool &&
         (data.serverSignature == null || (data.serverSignature is string && data.serverSignature.size() <= 64)) &&
@@ -373,12 +397,16 @@ service cloud.firestore {
           'PASS_CLAIM',
           'PASS_ARCHIVE_CLAIM',
           'STORAGE_EXPAND',
-          'FASHION_EQUIP'
+          'FASHION_EQUIP',
+          'TOPUP_MILESTONE_CLAIM',
+          'DAILY_TOPUP_CLAIM',
+          'WING_GACHA'
         ] &&
         isValidId(data.actorUid) &&
         data.actorUid == request.auth.uid &&
         data.actorRole in ['gm', 'player'] &&
         (data.actorRole == 'player' || isGmAccount()) &&
+        (data.action != 'SANDBOX_GRANT' || (isGmAccount() && data.actorRole == 'gm')) &&
         (data.txId == null || (isValidId(data.txId) && data.txId.size() <= 64)) &&
         data.details is string &&
         data.details.size() >= 1 &&
@@ -2474,6 +2502,7 @@ service cloud.firestore {
           isValidId(characterId) &&
           userId == request.auth.uid &&
           isValidCharacterSave(incoming(), characterId) &&
+          (isGmAccount() || incoming().diamonds <= 500) &&
           incoming().createdAt == request.time &&
           incoming().updatedAt == request.time &&
           isUserAccountOwner(userId);
@@ -2484,6 +2513,33 @@ service cloud.firestore {
           isValidId(characterId) &&
           userId == request.auth.uid &&
           isValidCharacterSave(incoming(), characterId) &&
+          (
+            isGmAccount() ||
+            incoming().diamonds <= existing().diamonds + 5000 ||
+            (
+              'premium' in incoming().saveData &&
+              incoming().saveData.premium is map &&
+              'topupOrders' in incoming().saveData.premium &&
+              incoming().saveData.premium.topupOrders is list &&
+              incoming().saveData.premium.topupOrders.size() > 0 &&
+              incoming().saveData.premium.topupOrders[0] is map &&
+              'orderId' in incoming().saveData.premium.topupOrders[0] &&
+              isValidId(incoming().saveData.premium.topupOrders[0].orderId) &&
+              exists(/databases/$(database)/documents/users/$(userId)/characters/$(characterId)/topupOrders/$(incoming().saveData.premium.topupOrders[0].orderId)) &&
+              (
+                !('premium' in existing().saveData) ||
+                !(existing().saveData.premium is map) ||
+                !('topupOrders' in existing().saveData.premium) ||
+                !(existing().saveData.premium.topupOrders is list) ||
+                existing().saveData.premium.topupOrders.size() == 0 ||
+                !(existing().saveData.premium.topupOrders[0] is map) ||
+                !('orderId' in existing().saveData.premium.topupOrders[0]) ||
+                existing().saveData.premium.topupOrders[0].orderId != incoming().saveData.premium.topupOrders[0].orderId
+              ) &&
+              incoming().diamonds <= existing().diamonds + 5000 +
+                get(/databases/$(database)/documents/users/$(userId)/characters/$(characterId)/topupOrders/$(incoming().saveData.premium.topupOrders[0].orderId)).data.totalDiamonds
+            )
+          ) &&
           incoming().id == existing().id &&
           incoming().ownerId == existing().ownerId &&
           incoming().createdAt == existing().createdAt &&

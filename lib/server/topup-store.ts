@@ -1,6 +1,12 @@
-import fs from 'node:fs'
-import path from 'node:path'
 import { formatPromptPayTarget, type PromptPayShopSettings, type TopupSlipRequestRecord } from '@/lib/game/premium/topup'
+import {
+  getDefaultStorePaths,
+  getGlobalSingleton,
+  isCloudflareWorkersRuntime,
+  readJsonStoreFile,
+  writeJsonStoreFile,
+  type StorePersistenceMode,
+} from './runtime-store'
 
 export interface PendingWebhookOrder {
   gatewayRef: string
@@ -28,9 +34,8 @@ interface TopupStoreData {
   stripeFulfillments?: PendingWebhookOrder[]
 }
 
-const PRIMARY_DIR = path.join(process.cwd(), '.data')
-const PRIMARY_FILE = path.join(PRIMARY_DIR, 'topup-store.json')
-const FALLBACK_FILE = '/tmp/pixelquest-topup-store.json'
+const { primaryDir: PRIMARY_DIR, primaryFile: PRIMARY_FILE, fallbackFile: FALLBACK_FILE } =
+  getDefaultStorePaths('topup-store.json')
 
 export const DEFAULT_MERCHANT_QR: PromptPayShopSettings = {
   settingId: 'promptpay',
@@ -43,61 +48,50 @@ export const DEFAULT_MERCHANT_QR: PromptPayShopSettings = {
   updatedAtMs: 1763400000000,
 }
 
-let memoryStore: TopupStoreData | null = null
+interface TopupStoreSlot {
+  data: TopupStoreData | null
+  mode: StorePersistenceMode
+}
 
-function resolveStorePath(): string {
-  try {
-    fs.mkdirSync(PRIMARY_DIR, { recursive: true })
-    fs.accessSync(PRIMARY_DIR, fs.constants.W_OK)
-    return PRIMARY_FILE
-  } catch {
-    return FALLBACK_FILE
-  }
+function getSlot(): TopupStoreSlot {
+  return getGlobalSingleton<TopupStoreSlot>('pixelquest.topupStore', () => ({
+    data: null,
+    mode: isCloudflareWorkersRuntime() ? 'isolate_memory_only' : 'durable_disk',
+  }))
+}
+
+export function getTopupStorePersistenceMode(): StorePersistenceMode {
+  return getSlot().mode
 }
 
 function readStore(): TopupStoreData {
-  if (memoryStore) return memoryStore
-  const candidates = [PRIMARY_FILE, FALLBACK_FILE]
-  for (const filePath of candidates) {
-    try {
-      if (fs.existsSync(filePath)) {
-        const raw = fs.readFileSync(filePath, 'utf8')
-        const parsed = JSON.parse(raw) as Partial<TopupStoreData>
-        memoryStore = {
-          merchantQr: parsed.merchantQr ?? DEFAULT_MERCHANT_QR,
-          slipRequests: Array.isArray(parsed.slipRequests) ? parsed.slipRequests.slice(0, 200) : [],
-          usedSlipRefs: Array.isArray(parsed.usedSlipRefs) ? parsed.usedSlipRefs.slice(-500) : [],
-          usedSlipHashes: Array.isArray(parsed.usedSlipHashes) ? parsed.usedSlipHashes.slice(-500) : [],
-          stripeFulfillments: Array.isArray(parsed.stripeFulfillments) ? parsed.stripeFulfillments.slice(-200) : [],
-        }
-        return memoryStore
-      }
-    } catch {
-      // Ignore corrupt/unreadable file and try fallback
+  const slot = getSlot()
+  if (slot.data) return slot.data
+  const parsed = readJsonStoreFile<Partial<TopupStoreData>>(PRIMARY_FILE, FALLBACK_FILE)
+  if (parsed) {
+    slot.data = {
+      merchantQr: parsed.merchantQr ?? DEFAULT_MERCHANT_QR,
+      slipRequests: Array.isArray(parsed.slipRequests) ? parsed.slipRequests.slice(0, 200) : [],
+      usedSlipRefs: Array.isArray(parsed.usedSlipRefs) ? parsed.usedSlipRefs.slice(-500) : [],
+      usedSlipHashes: Array.isArray(parsed.usedSlipHashes) ? parsed.usedSlipHashes.slice(-500) : [],
+      stripeFulfillments: Array.isArray(parsed.stripeFulfillments) ? parsed.stripeFulfillments.slice(-200) : [],
     }
+    return slot.data
   }
-  memoryStore = {
+  slot.data = {
     merchantQr: DEFAULT_MERCHANT_QR,
     slipRequests: [],
     usedSlipRefs: [],
     usedSlipHashes: [],
     stripeFulfillments: [],
   }
-  return memoryStore
+  return slot.data
 }
 
 function writeStore(next: TopupStoreData): void {
-  memoryStore = next
-  const target = resolveStorePath()
-  try {
-    fs.writeFileSync(target, JSON.stringify(next, null, 2), 'utf8')
-  } catch {
-    try {
-      fs.writeFileSync(FALLBACK_FILE, JSON.stringify(next, null, 2), 'utf8')
-    } catch {
-      // Memory store still holds current state
-    }
-  }
+  const slot = getSlot()
+  slot.data = next
+  slot.mode = writeJsonStoreFile(PRIMARY_DIR, PRIMARY_FILE, FALLBACK_FILE, JSON.stringify(next, null, 2))
 }
 
 export function isPersistentSlipRefUsed(transRef: string): boolean {

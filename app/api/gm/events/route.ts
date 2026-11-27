@@ -24,6 +24,12 @@ import {
   type GmDirectiveAction,
 } from '@/lib/server/gm-events-store'
 
+export const dynamic = 'force-dynamic'
+
+const NO_STORE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+}
+
 function sanitizeId(raw: unknown, prefix: string): string {
   if (typeof raw === 'string' && /^[a-zA-Z0-9_-]{4,64}$/.test(raw.trim())) {
     return raw.trim()
@@ -41,17 +47,20 @@ export async function GET(req: Request) {
   const sinceMs = Number.isFinite(sinceRaw) && sinceRaw > 0 ? sinceRaw : 0
 
   if (auth.actor.authMode !== 'firebase' || !auth.actor.emailVerified) {
-    return NextResponse.json({
-      ok: true,
-      announcements: [],
-      directives: [],
-      giftDrops: [],
-      serverRates: getEffectiveStoredServerRates(),
-      worldBossTest: getEffectiveStoredWorldBossTest(),
-      closedWorldBossCycles: getEffectiveClosedWorldBossCycles(),
-      festivalOverride: getEffectiveStoredFestivalOverride(),
-      serverTimeMs: Date.now(),
-    })
+    return NextResponse.json(
+      {
+        ok: true,
+        announcements: [],
+        directives: [],
+        giftDrops: [],
+        serverRates: getEffectiveStoredServerRates(),
+        worldBossTest: getEffectiveStoredWorldBossTest(),
+        closedWorldBossCycles: getEffectiveClosedWorldBossCycles(),
+        festivalOverride: getEffectiveStoredFestivalOverride(),
+        serverTimeMs: Date.now(),
+      },
+      { headers: NO_STORE_HEADERS },
+    )
   }
 
   const {
@@ -64,17 +73,20 @@ export async function GET(req: Request) {
     festivalOverride,
   } = getEventsForUser(auth.actor.uid, sinceMs)
 
-  return NextResponse.json({
-    ok: true,
-    announcements,
-    directives,
-    giftDrops,
-    serverRates,
-    worldBossTest,
-    closedWorldBossCycles,
-    festivalOverride,
-    serverTimeMs: Date.now(),
-  })
+  return NextResponse.json(
+    {
+      ok: true,
+      announcements,
+      directives,
+      giftDrops,
+      serverRates,
+      worldBossTest,
+      closedWorldBossCycles,
+      festivalOverride,
+      serverTimeMs: Date.now(),
+    },
+    { headers: NO_STORE_HEADERS },
+  )
 }
 
 export async function POST(req: Request) {

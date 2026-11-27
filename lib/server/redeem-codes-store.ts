@@ -1,5 +1,11 @@
-import fs from 'node:fs'
-import path from 'node:path'
+import {
+  getDefaultStorePaths,
+  getGlobalSingleton,
+  isCloudflareWorkersRuntime,
+  readJsonStoreFile,
+  writeJsonStoreFile,
+  type StorePersistenceMode,
+} from './runtime-store'
 
 export interface RedeemCodeServerRecord {
   code: string
@@ -34,11 +40,24 @@ interface RedeemStoreData {
   claimsByCode: Record<string, Record<string, RedeemClaimReceipt>>
 }
 
-const PRIMARY_DIR = path.join(process.cwd(), '.data')
-const PRIMARY_FILE = path.join(PRIMARY_DIR, 'redeem-codes.json')
-const FALLBACK_FILE = '/tmp/pixelquest-redeem-codes.json'
+const { primaryDir: PRIMARY_DIR, primaryFile: PRIMARY_FILE, fallbackFile: FALLBACK_FILE } =
+  getDefaultStorePaths('redeem-codes.json')
 
-let memoryStore: RedeemStoreData | null = null
+interface RedeemStoreSlot {
+  data: RedeemStoreData | null
+  mode: StorePersistenceMode
+}
+
+function getSlot(): RedeemStoreSlot {
+  return getGlobalSingleton<RedeemStoreSlot>('pixelquest.redeemCodesStore', () => ({
+    data: null,
+    mode: isCloudflareWorkersRuntime() ? 'isolate_memory_only' : 'durable_disk',
+  }))
+}
+
+export function getRedeemStorePersistenceMode(): StorePersistenceMode {
+  return getSlot().mode
+}
 
 export function normalizeRedeemCode(raw: string): string {
   return raw
@@ -48,54 +67,30 @@ export function normalizeRedeemCode(raw: string): string {
     .slice(0, 32)
 }
 
-function resolveStorePath(): string {
-  try {
-    fs.mkdirSync(PRIMARY_DIR, { recursive: true })
-    fs.accessSync(PRIMARY_DIR, fs.constants.W_OK)
-    return PRIMARY_FILE
-  } catch {
-    return FALLBACK_FILE
-  }
-}
-
 function readStore(): RedeemStoreData {
-  if (memoryStore) return memoryStore
-  for (const candidate of [PRIMARY_FILE, FALLBACK_FILE]) {
-    try {
-      if (fs.existsSync(candidate)) {
-        const parsed = JSON.parse(fs.readFileSync(candidate, 'utf8')) as Partial<RedeemStoreData>
-        memoryStore = {
-          codes: parsed.codes && typeof parsed.codes === 'object' ? parsed.codes : {},
-          claimsByCode:
-            parsed.claimsByCode && typeof parsed.claimsByCode === 'object' ? parsed.claimsByCode : {},
-        }
-        return memoryStore
-      }
-    } catch {
-      // Fallback
+  const slot = getSlot()
+  if (slot.data) return slot.data
+  const parsed = readJsonStoreFile<Partial<RedeemStoreData>>(PRIMARY_FILE, FALLBACK_FILE)
+  if (parsed) {
+    slot.data = {
+      codes: parsed.codes && typeof parsed.codes === 'object' ? parsed.codes : {},
+      claimsByCode:
+        parsed.claimsByCode && typeof parsed.claimsByCode === 'object' ? parsed.claimsByCode : {},
     }
+    return slot.data
   }
-  memoryStore = { codes: {}, claimsByCode: {} }
-  return memoryStore
+  slot.data = { codes: {}, claimsByCode: {} }
+  return slot.data
 }
 
 function writeStore(next: RedeemStoreData): void {
-  memoryStore = next
-  const payload = JSON.stringify(next, null, 2)
-  const target = resolveStorePath()
-  try {
-    fs.writeFileSync(target, payload, 'utf8')
-  } catch {
-    try {
-      fs.writeFileSync(FALLBACK_FILE, payload, 'utf8')
-    } catch {
-      // Keep memory cache active
-    }
-  }
+  const slot = getSlot()
+  slot.data = next
+  slot.mode = writeJsonStoreFile(PRIMARY_DIR, PRIMARY_FILE, FALLBACK_FILE, JSON.stringify(next, null, 2))
 }
 
 export function resetRedeemStoreMemoryCacheForTests(): void {
-  memoryStore = null
+  getSlot().data = null
 }
 
 export function listRedeemCodesFromStore(): RedeemCodeServerRecord[] {

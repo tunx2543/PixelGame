@@ -10,7 +10,13 @@ import {
   type TopupPackage,
   type TopupProvider,
 } from '@/lib/game/premium/topup'
-import { claimServerRequestId, makeServerTxId, signPremiumTx } from './premium-security'
+import {
+  claimServerRequestId,
+  isPersistentPremiumSecretConfigured,
+  makeServerTxId,
+  signPremiumTx,
+} from './premium-security'
+import { getRuntimeEnv } from './runtime-store'
 import { claimPersistentSlipRef, getStoredMerchantQr, isPersistentSlipRefUsed } from './topup-store'
 
 export interface TopupGatewayPublicConfig {
@@ -26,17 +32,15 @@ export interface TopupGatewayPublicConfig {
 }
 
 export function getStripeSecretKey(): string | null {
-  const k = process.env.STRIPE_SECRET_KEY?.trim()
-  return k ? k : null
+  return getRuntimeEnv('STRIPE_SECRET_KEY')
 }
 
 export function getStripeWebhookSecret(): string | null {
-  const k = process.env.STRIPE_WEBHOOK_SECRET?.trim()
-  return k ? k : null
+  return getRuntimeEnv('STRIPE_WEBHOOK_SECRET')
 }
 
 export function getPromptPayId(): string | null {
-  const envRaw = process.env.PROMPTPAY_ID?.trim()
+  const envRaw = getRuntimeEnv('PROMPTPAY_ID')
   if (envRaw && formatPromptPayTarget(envRaw)) return envRaw
   const stored = getStoredMerchantQr()
   if (stored?.enabled && stored.promptPayId && formatPromptPayTarget(stored.promptPayId)) {
@@ -46,14 +50,14 @@ export function getPromptPayId(): string | null {
 }
 
 export function getSlipOkConfig(): { apiKey: string; branchId: string } | null {
-  const apiKey = process.env.SLIPOK_API_KEY?.trim()
-  const branchId = process.env.SLIPOK_BRANCH_ID?.trim()
+  const apiKey = getRuntimeEnv('SLIPOK_API_KEY')
+  const branchId = getRuntimeEnv('SLIPOK_BRANCH_ID')
   if (!apiKey || !branchId) return null
   return { apiKey, branchId }
 }
 
 export function getEasySlipConfig(): { apiKey: string } | null {
-  const apiKey = process.env.EASYSLIP_API_KEY?.trim()
+  const apiKey = getRuntimeEnv('EASYSLIP_API_KEY')
   if (!apiKey) return null
   return { apiKey }
 }
@@ -91,8 +95,8 @@ export function getServerTopupDiagnostics() {
     easySlipConfigured: Boolean(getEasySlipConfig()),
     promptPayConfigured: Boolean(ppId),
     merchantQrReady: Boolean(ppId || (stored?.enabled && stored.customQrDataUrl)),
-    premiumSecretConfigured: Boolean(process.env.PREMIUM_TX_SECRET?.trim()),
-    appUrlConfigured: Boolean(process.env.NEXT_PUBLIC_APP_URL?.trim()),
+    premiumSecretConfigured: isPersistentPremiumSecretConfigured(),
+    appUrlConfigured: Boolean(getRuntimeEnv('NEXT_PUBLIC_APP_URL')),
   }
 }
 
@@ -226,7 +230,7 @@ export async function createStripeCheckoutSession(input: {
   const orderId = makeServerTxId('ORD')
   const reward = calculateTopupReward(pkg, input.isFirstPurchase)
 
-  const baseOrigin = (process.env.NEXT_PUBLIC_APP_URL?.trim() || input.originUrl).replace(/\/$/, '')
+  const baseOrigin = (getRuntimeEnv('NEXT_PUBLIC_APP_URL') || input.originUrl).replace(/\/$/, '')
   const successUrl = `${baseOrigin}/?topup_session_id={CHECKOUT_SESSION_ID}&topup_order=${encodeURIComponent(orderId)}`
   const cancelUrl = `${baseOrigin}/?topup_cancelled=1`
 

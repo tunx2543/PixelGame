@@ -1,5 +1,11 @@
-import fs from 'node:fs'
-import path from 'node:path'
+import {
+  getDefaultStorePaths,
+  getGlobalSingleton,
+  isCloudflareWorkersRuntime,
+  readJsonStoreFile,
+  writeJsonStoreFile,
+  type StorePersistenceMode,
+} from './runtime-store'
 import {
   buildVersionPayload,
   sanitizeReleaseNote,
@@ -11,63 +17,53 @@ interface PatchNotesStoreData {
   customNotes: ReleaseNote[]
 }
 
-const PRIMARY_DIR = path.join(process.cwd(), '.data')
-const PRIMARY_FILE = path.join(PRIMARY_DIR, 'patch-notes.json')
-const FALLBACK_FILE = '/tmp/pixelquest-patch-notes.json'
+const { primaryDir: PRIMARY_DIR, primaryFile: PRIMARY_FILE, fallbackFile: FALLBACK_FILE } =
+  getDefaultStorePaths('patch-notes.json')
 
-let memoryStore: PatchNotesStoreData | null = null
+interface PatchNotesSlot {
+  data: PatchNotesStoreData | null
+  mode: StorePersistenceMode
+}
 
-function resolveStorePath(): string {
-  try {
-    fs.mkdirSync(PRIMARY_DIR, { recursive: true })
-    fs.accessSync(PRIMARY_DIR, fs.constants.W_OK)
-    return PRIMARY_FILE
-  } catch {
-    return FALLBACK_FILE
-  }
+function getSlot(): PatchNotesSlot {
+  return getGlobalSingleton<PatchNotesSlot>('pixelquest.patchNotesStore', () => ({
+    data: null,
+    mode: isCloudflareWorkersRuntime() ? 'isolate_memory_only' : 'durable_disk',
+  }))
+}
+
+export function getPatchNotesStorePersistenceMode(): StorePersistenceMode {
+  return getSlot().mode
 }
 
 function readStore(): PatchNotesStoreData {
-  if (memoryStore) return memoryStore
-  for (const candidate of [PRIMARY_FILE, FALLBACK_FILE]) {
-    try {
-      if (fs.existsSync(candidate)) {
-        const parsed = JSON.parse(fs.readFileSync(candidate, 'utf8')) as Partial<PatchNotesStoreData>
-        const clean = Array.isArray(parsed.customNotes)
-          ? parsed.customNotes.map((n) => sanitizeReleaseNote(n)).filter((n): n is ReleaseNote => Boolean(n))
-          : []
-        memoryStore = { customNotes: clean }
-        return memoryStore
-      }
-    } catch {
-      // Try fallback
-    }
+  const slot = getSlot()
+  if (slot.data) return slot.data
+  const parsed = readJsonStoreFile<Partial<PatchNotesStoreData>>(PRIMARY_FILE, FALLBACK_FILE)
+  if (parsed) {
+    const clean = Array.isArray(parsed.customNotes)
+      ? parsed.customNotes.map((n) => sanitizeReleaseNote(n)).filter((n): n is ReleaseNote => Boolean(n))
+      : []
+    slot.data = { customNotes: clean }
+    return slot.data
   }
-  memoryStore = { customNotes: [] }
-  return memoryStore
+  slot.data = { customNotes: [] }
+  return slot.data
 }
 
 function writeStore(next: PatchNotesStoreData): void {
+  const slot = getSlot()
   const clean = next.customNotes
     .map((n) => sanitizeReleaseNote(n))
     .filter((n): n is ReleaseNote => Boolean(n))
     .slice(-30)
-  memoryStore = { customNotes: clean }
-  const target = resolveStorePath()
-  const payload = JSON.stringify(memoryStore, null, 2)
-  try {
-    fs.writeFileSync(target, payload, 'utf8')
-  } catch {
-    try {
-      fs.writeFileSync(FALLBACK_FILE, payload, 'utf8')
-    } catch {
-      // Keep memory cache active
-    }
-  }
+  slot.data = { customNotes: clean }
+  const payload = JSON.stringify(slot.data, null, 2)
+  slot.mode = writeJsonStoreFile(PRIMARY_DIR, PRIMARY_FILE, FALLBACK_FILE, payload)
 }
 
 export function resetPatchNotesMemoryCacheForTests(): void {
-  memoryStore = null
+  getSlot().data = null
 }
 
 export function listCustomPatchNotes(): ReleaseNote[] {

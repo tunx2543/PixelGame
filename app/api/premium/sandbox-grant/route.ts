@@ -7,7 +7,6 @@ import {
 } from '@/lib/server/premium-security'
 
 export const SANDBOX_TEST_PRESETS = [500, 2000, 10000, 50000] as const
-const MAX_SANDBOX_GRANT = 100_000
 const MAX_GM_GRANT = 1_000_000
 
 export async function POST(req: Request) {
@@ -15,6 +14,20 @@ export async function POST(req: Request) {
     const auth = await resolveActorFromRequest(req)
     if (!('actor' in auth)) {
       return NextResponse.json({ ok: false, message: auth.message }, { status: auth.status })
+    }
+
+    if (auth.actor.authMode !== 'firebase' || !auth.actor.emailVerified) {
+      return NextResponse.json(
+        { ok: false, message: 'ต้องเข้าสู่ระบบด้วยบัญชี GM ที่ยืนยันอีเมลแล้วเท่านั้น' },
+        { status: 401 },
+      )
+    }
+
+    if (!auth.actor.isGm) {
+      return NextResponse.json(
+        { ok: false, message: 'เฉพาะบัญชี GM ที่ได้รับอนุญาตเท่านั้นที่ใช้งาน Sandbox Test Console ได้' },
+        { status: 403 },
+      )
     }
 
     const body = (await req.json().catch(() => null)) as {
@@ -28,19 +41,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, message: 'ข้อมูลคำขอไม่ถูกต้อง' }, { status: 400 })
     }
 
-    const mode = body.mode === 'gm' ? 'gm' : 'sandbox'
-    if (mode === 'gm' && !auth.actor.isGm) {
-      return NextResponse.json(
-        { ok: false, message: 'เฉพาะบัญชี GM ที่ยืนยันอีเมลแล้วเท่านั้นที่เสกเพชรแบบ GM ได้' },
-        { status: 403 },
-      )
-    }
-
     const amount = Math.floor(Number(body.amount) || 0)
-    const cap = mode === 'gm' ? MAX_GM_GRANT : MAX_SANDBOX_GRANT
-    if (!Number.isSafeInteger(amount) || amount < 1 || amount > cap) {
+    if (!Number.isSafeInteger(amount) || amount < 1 || amount > MAX_GM_GRANT) {
       return NextResponse.json(
-        { ok: false, message: `จำนวนเพชรทดลองต้องอยู่ระหว่าง 1 – ${cap.toLocaleString()} D` },
+        { ok: false, message: `จำนวนเพชร GM Sandbox ต้องอยู่ระหว่าง 1 – ${MAX_GM_GRANT.toLocaleString()} D` },
         { status: 400 },
       )
     }
@@ -63,7 +67,7 @@ export async function POST(req: Request) {
 
     const txId = makeServerTxId('SBTX')
     const timestampMs = Date.now()
-    const source = mode === 'gm' ? 'gm_grant' : 'sandbox_console'
+    const source = body.mode === 'gm' ? 'gm_grant' : 'gm_sandbox_console'
     const serverSignature = signPremiumTx({
       txId,
       requestId,
@@ -81,13 +85,13 @@ export async function POST(req: Request) {
       txId,
       requestId,
       actorUid: auth.actor.uid,
-      isGm: auth.actor.isGm,
+      isGm: true,
       source,
       amount,
       timestampMs,
       serverVerified: true,
       serverSignature,
-      message: `เติมเพชรทดลอง Sandbox +${amount.toLocaleString()} D สำเร็จ (ไม่ใช่เงินจริง)`,
+      message: `เติมเพชร GM Sandbox +${amount.toLocaleString()} D สำเร็จ`,
     })
   } catch {
     return NextResponse.json({ ok: false, message: 'เกิดข้อผิดพลาดระหว่างตรวจสอบการเติมเพชรทดลอง' }, { status: 500 })

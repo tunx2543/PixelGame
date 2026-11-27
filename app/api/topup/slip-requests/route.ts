@@ -10,6 +10,12 @@ import {
   listStoredSlipRequestsForOwner,
 } from '@/lib/server/topup-store'
 
+export const dynamic = 'force-dynamic'
+
+const NO_STORE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+}
+
 function computeDataUrlSha256(dataUrl: string): string {
   const commaIdx = dataUrl.indexOf(',')
   const payload = commaIdx !== -1 ? dataUrl.slice(commaIdx + 1) : dataUrl
@@ -22,15 +28,18 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, message: auth.message }, { status: auth.status })
   }
   if (auth.actor.authMode !== 'firebase' || !auth.actor.emailVerified) {
-    return NextResponse.json({ ok: true, isAdmin: false, myRequests: [], adminQueue: [] })
+    return NextResponse.json({ ok: true, isAdmin: false, myRequests: [], adminQueue: [] }, { headers: NO_STORE_HEADERS })
   }
   const isAdmin = isTopupAdminEmail(auth.actor.email)
-  return NextResponse.json({
-    ok: true,
-    isAdmin,
-    myRequests: listStoredSlipRequestsForOwner(auth.actor.uid),
-    adminQueue: isAdmin ? listAllStoredSlipRequests(50) : [],
-  })
+  return NextResponse.json(
+    {
+      ok: true,
+      isAdmin,
+      myRequests: listStoredSlipRequestsForOwner(auth.actor.uid),
+      adminQueue: isAdmin ? listAllStoredSlipRequests(50) : [],
+    },
+    { headers: NO_STORE_HEADERS },
+  )
 }
 
 export async function POST(req: Request) {

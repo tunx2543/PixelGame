@@ -5,6 +5,7 @@ import { getPremiumProduct } from '@/lib/game/premium/catalog'
 import { VIP_TIERS, getEffectiveVipBonuses, getVipTierDef } from '@/lib/game/premium/vip'
 import type { PremiumProduct, VipState, VipTierId } from '@/lib/game/premium/types'
 import { BP_MAX_LEVEL, BP_PREMIUM_DIAMOND_COST, BATTLE_PASS_TIERS } from '@/lib/game/extended-systems'
+import { getGlobalSingleton, getRuntimeEnv } from './runtime-store'
 
 export interface VerifiedActor {
   uid: string
@@ -17,11 +18,14 @@ export interface VerifiedActor {
 const GOOGLE_CERTS_URL =
   'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com'
 
-let certCache: { certs: Record<string, string>; expiresAtMs: number } | null = null
+interface CertCacheSlot {
+  entry: { certs: Record<string, string>; expiresAtMs: number } | null
+}
 
 async function getGooglePublicCerts(): Promise<Record<string, string>> {
-  if (certCache && Date.now() < certCache.expiresAtMs) {
-    return certCache.certs
+  const slot = getGlobalSingleton<CertCacheSlot>('pixelquest.firebaseCertCache', () => ({ entry: null }))
+  if (slot.entry && Date.now() < slot.entry.expiresAtMs) {
+    return slot.entry.certs
   }
   const res = await fetch(GOOGLE_CERTS_URL, { cache: 'no-store' })
   if (!res.ok) {
@@ -31,7 +35,7 @@ async function getGooglePublicCerts(): Promise<Record<string, string>> {
   const maxAgeMatch = /max-age=(\d+)/i.exec(cacheHeader)
   const ttlSec = maxAgeMatch ? Math.max(60, Math.min(3600, Number(maxAgeMatch[1]))) : 300
   const certs = (await res.json()) as Record<string, string>
-  certCache = { certs, expiresAtMs: Date.now() + ttlSec * 1000 }
+  slot.entry = { certs, expiresAtMs: Date.now() + ttlSec * 1000 }
   return certs
 }
 
@@ -145,8 +149,178 @@ export async function resolveActorFromRequest(
   }
 }
 
+export function isPersistentPremiumSecretConfigured(): boolean {
+  return Boolean(getRuntimeEnv('PREMIUM_TX_SECRET'))
+}
+
 function txSecret(): string {
-  return process.env.PREMIUM_TX_SECRET || `sandbox:${firebaseConfig.projectId}`
+  const configured = getRuntimeEnv('PREMIUM_TX_SECRET')
+  if (configured) return configured
+  const fallbackSlot = getGlobalSingleton<{ value: string | null }>('pixelquest.ephemeralTxSecret', () => ({
+    value: null,
+  }))
+  if (!fallbackSlot.value) {
+    fallbackSlot.value = crypto.randomBytes(32).toString('hex')
+  }
+  return fallbackSlot.value
+}
+
+export function extractBearerToken(req: Request): string | null {
+  const authHeader = req.headers.get('authorization') ?? ''
+  if (!authHeader.startsWith('Bearer ')) return null
+  const token = authHeader.slice(7).trim()
+  return token || null
+}
+
+interface FirestoreRestValue {
+  stringValue?: string
+  integerValue?: string
+  doubleValue?: number
+  booleanValue?: boolean
+  nullValue?: null
+  mapValue?: { fields?: Record<string, FirestoreRestValue> }
+  arrayValue?: { values?: FirestoreRestValue[] }
+}
+
+function decodeFirestoreRestValue(val: FirestoreRestValue | undefined): unknown {
+  if (!val || typeof val !== 'object') return undefined
+  if ('stringValue' in val) return String(val.stringValue ?? '')
+  if ('integerValue' in val) return Number(val.integerValue ?? 0)
+  if ('doubleValue' in val) return Number(val.doubleValue ?? 0)
+  if ('booleanValue' in val) return Boolean(val.booleanValue)
+  if ('nullValue' in val) return null
+  if ('mapValue' in val) {
+    const out: Record<string, unknown> = {}
+    const fields = val.mapValue?.fields ?? {}
+    for (const [k, v] of Object.entries(fields)) {
+      out[k] = decodeFirestoreRestValue(v)
+    }
+    return out
+  }
+  if ('arrayValue' in val) {
+    return (val.arrayValue?.values ?? []).map((item) => decodeFirestoreRestValue(item))
+  }
+  return undefined
+}
+
+export interface AuthoritativeCharacterSnapshot {
+  exists: boolean
+  diamonds: number
+  vip?: VipState
+  purchaseCounts: Record<string, number>
+  totalTopupThb: number
+  claimedTopupMilestones: string[]
+  lastDailyTopupDate: string
+  claimedDailyTopupDate: string
+  battlePass?: {
+    level: number
+    premiumUnlocked: boolean
+    claimedFree: number[]
+    claimedPrem: number[]
+  }
+}
+
+export async function fetchAuthoritativeCharacterState(
+  uid: string,
+  characterId: string,
+  bearerToken: string,
+): Promise<AuthoritativeCharacterSnapshot | null> {
+  const safeCharId = characterId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || 'slot_1'
+  const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(firebaseConfig.projectId)}/databases/${encodeURIComponent(firebaseConfig.firestoreDatabaseId)}/documents/users/${encodeURIComponent(uid)}/characters/${encodeURIComponent(safeCharId)}`
+  try {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${bearerToken}` },
+      cache: 'no-store',
+    })
+    if (res.status === 404) {
+      return {
+        exists: false,
+        diamonds: 0,
+        purchaseCounts: {},
+        totalTopupThb: 0,
+        claimedTopupMilestones: [],
+        lastDailyTopupDate: '',
+        claimedDailyTopupDate: '',
+      }
+    }
+    if (!res.ok) return null
+    const doc = (await res.json().catch(() => null)) as {
+      fields?: Record<string, FirestoreRestValue>
+    } | null
+    if (!doc?.fields) return null
+
+    const topDiamonds = Number(decodeFirestoreRestValue(doc.fields.diamonds) ?? 0)
+    const saveData = (decodeFirestoreRestValue(doc.fields.saveData) ?? {}) as Record<string, unknown>
+    const saveDiamonds = Number(saveData.diamonds ?? topDiamonds)
+    const diamonds = Math.max(0, Math.floor(Math.min(topDiamonds, saveDiamonds)))
+
+    const prem = (saveData.premium && typeof saveData.premium === 'object' ? saveData.premium : {}) as Record<
+      string,
+      unknown
+    >
+    const rawCounts =
+      prem.purchaseCounts && typeof prem.purchaseCounts === 'object'
+        ? (prem.purchaseCounts as Record<string, unknown>)
+        : {}
+    const purchaseCounts: Record<string, number> = {}
+    for (const [k, v] of Object.entries(rawCounts)) {
+      const n = Math.max(0, Math.floor(Number(v) || 0))
+      if (n > 0) purchaseCounts[k] = n
+    }
+
+    const rawVip = prem.vip && typeof prem.vip === 'object' ? (prem.vip as Record<string, unknown>) : null
+    const vip: VipState | undefined = rawVip
+      ? {
+          vipLevel: Math.max(0, Math.min(5, Math.floor(Number(rawVip.vipLevel ?? 0) || 0))) as VipTierId,
+          vipExp: Math.max(0, Math.floor(Number(rawVip.vipExp ?? 0) || 0)),
+          expiresAtMs:
+            typeof rawVip.expiresAtMs === 'number' && Number.isFinite(rawVip.expiresAtMs)
+              ? rawVip.expiresAtMs
+              : null,
+          claimedTierRewards: Array.isArray(rawVip.claimedTierRewards)
+            ? rawVip.claimedTierRewards.filter((n): n is VipTierId => typeof n === 'number' && n >= 1 && n <= 5)
+            : [],
+          lastDailyClaimDate: typeof rawVip.lastDailyClaimDate === 'string' ? rawVip.lastDailyClaimDate : '',
+        }
+      : undefined
+
+    const extV2 = (saveData.extV2 && typeof saveData.extV2 === 'object' ? saveData.extV2 : {}) as Record<
+      string,
+      unknown
+    >
+    const rawBp =
+      extV2.battlePass && typeof extV2.battlePass === 'object'
+        ? (extV2.battlePass as Record<string, unknown>)
+        : null
+    const battlePass = rawBp
+      ? {
+          level: Math.max(1, Math.floor(Number(rawBp.level ?? 1) || 1)),
+          premiumUnlocked: Boolean(rawBp.premiumUnlocked),
+          claimedFree: Array.isArray(rawBp.claimedFree)
+            ? rawBp.claimedFree.filter((n): n is number => typeof n === 'number')
+            : [],
+          claimedPrem: Array.isArray(rawBp.claimedPrem)
+            ? rawBp.claimedPrem.filter((n): n is number => typeof n === 'number')
+            : [],
+        }
+      : undefined
+
+    return {
+      exists: true,
+      diamonds,
+      vip,
+      purchaseCounts,
+      totalTopupThb: Math.max(0, Math.floor(Number(prem.totalTopupThb ?? 0) || 0)),
+      claimedTopupMilestones: Array.isArray(prem.claimedTopupMilestones)
+        ? prem.claimedTopupMilestones.filter((s): s is string => typeof s === 'string')
+        : [],
+      lastDailyTopupDate: typeof prem.lastDailyTopupDate === 'string' ? prem.lastDailyTopupDate : '',
+      claimedDailyTopupDate: typeof prem.claimedDailyTopupDate === 'string' ? prem.claimedDailyTopupDate : '',
+      battlePass,
+    }
+  } catch {
+    return null
+  }
 }
 
 export function signPremiumTx(payload: {
@@ -172,16 +346,34 @@ export function signPremiumTx(payload: {
   return crypto.createHmac('sha256', txSecret()).update(canonical).digest('hex').slice(0, 32)
 }
 
+export function verifyPremiumTxSignature(
+  payload: Parameters<typeof signPremiumTx>[0],
+  signature: string | null | undefined,
+): boolean {
+  if (!signature || typeof signature !== 'string' || !/^[a-f0-9]{32}$/i.test(signature)) {
+    return false
+  }
+  const expected = signPremiumTx(payload)
+  try {
+    return crypto.timingSafeEqual(Buffer.from(expected, 'utf8'), Buffer.from(signature.toLowerCase(), 'utf8'))
+  } catch {
+    return false
+  }
+}
+
 export function makeServerTxId(prefix = 'SVTX'): string {
   return `${prefix}-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(5).toString('hex').toUpperCase()}`
 }
 
 // Bounded in-memory server replay protection across requests in the running instance
 const RECENT_REQUEST_TTL_MS = 15 * 60 * 1000
-const processedServerRequests = new Map<string, number>()
 
 export function claimServerRequestId(requestId: string, actorUid: string): boolean {
   if (!requestId || requestId.length < 4 || requestId.length > 96) return false
+  const processedServerRequests = getGlobalSingleton<Map<string, number>>(
+    'pixelquest.processedServerRequests',
+    () => new Map<string, number>(),
+  )
   const now = Date.now()
   if (processedServerRequests.size > 4000) {
     for (const [k, exp] of processedServerRequests.entries()) {

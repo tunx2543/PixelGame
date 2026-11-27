@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import {
   claimServerRequestId,
+  extractBearerToken,
+  fetchAuthoritativeCharacterState,
   makeServerTxId,
   resolveActorFromRequest,
   signPremiumTx,
@@ -13,6 +15,13 @@ export async function POST(req: Request) {
     const auth = await resolveActorFromRequest(req)
     if (!('actor' in auth)) {
       return NextResponse.json({ ok: false, message: auth.message }, { status: auth.status })
+    }
+
+    if (auth.actor.authMode === 'firebase' && !auth.actor.emailVerified) {
+      return NextResponse.json(
+        { ok: false, message: 'กรุณายืนยันอีเมลก่อนทำรายการร้านค้าพรีเมียม' },
+        { status: 401 },
+      )
     }
 
     const body = (await req.json().catch(() => null)) as {
@@ -33,6 +42,33 @@ export async function POST(req: Request) {
       typeof body.characterId === 'string' && body.characterId.trim()
         ? body.characterId.trim().slice(0, 64)
         : 'slot_1'
+
+    let currentDiamonds = Math.max(0, Math.floor(Number(body.currentDiamonds ?? 0) || 0))
+    let previousPurchaseCount = Math.max(0, Math.floor(Number(body.previousPurchaseCount ?? 0) || 0))
+    let vipState = body.vip
+
+    if (auth.actor.authMode === 'firebase') {
+      const bearerToken = extractBearerToken(req)
+      const authoritative = bearerToken
+        ? await fetchAuthoritativeCharacterState(auth.actor.uid, characterId, bearerToken)
+        : null
+      if (!authoritative) {
+        return NextResponse.json(
+          { ok: false, message: 'ไม่สามารถตรวจสอบข้อมูลตัวละครจากฐานข้อมูลกลางได้ กรุณาลองใหม่อีกครั้ง' },
+          { status: 503 },
+        )
+      }
+      if (authoritative.exists) {
+        currentDiamonds = authoritative.diamonds
+        previousPurchaseCount = authoritative.purchaseCounts[body.productId] ?? 0
+        vipState = authoritative.vip
+      } else {
+        currentDiamonds = 0
+        previousPurchaseCount = 0
+        vipState = undefined
+      }
+    }
+
     const requestId =
       typeof body.requestId === 'string' && body.requestId.trim()
         ? body.requestId.trim().slice(0, 96)
@@ -48,9 +84,9 @@ export async function POST(req: Request) {
     const check = verifyCatalogPurchase({
       productId: body.productId,
       qty: Number(body.qty ?? 1),
-      currentDiamonds: Number(body.currentDiamonds ?? 0),
-      previousPurchaseCount: Math.max(0, Math.floor(Number(body.previousPurchaseCount ?? 0) || 0)),
-      vip: body.vip,
+      currentDiamonds,
+      previousPurchaseCount,
+      vip: vipState,
     })
 
     if (!check.ok || !check.product || check.totalCost === undefined || check.nextDiamonds === undefined) {
@@ -60,16 +96,19 @@ export async function POST(req: Request) {
     const txId = makeServerTxId('PRTX')
     const receiptId = makeServerTxId('RCPT')
     const timestampMs = Date.now()
-    const serverSignature = signPremiumTx({
-      txId,
-      requestId,
-      actorUid: auth.actor.uid,
-      characterId,
-      amount: check.totalCost,
-      type: 'spend',
-      source: 'premium_shop',
-      timestampMs,
-    })
+    const isServerSigned = auth.actor.authMode === 'firebase'
+    const serverSignature = isServerSigned
+      ? signPremiumTx({
+          txId,
+          requestId,
+          actorUid: auth.actor.uid,
+          characterId,
+          amount: check.totalCost,
+          type: 'spend',
+          source: 'premium_shop',
+          timestampMs,
+        })
+      : null
 
     return NextResponse.json({
       ok: true,
@@ -84,7 +123,7 @@ export async function POST(req: Request) {
       totalCost: check.totalCost,
       nextDiamonds: check.nextDiamonds,
       timestampMs,
-      serverVerified: true,
+      serverVerified: isServerSigned,
       serverSignature,
       message: `ยืนยันการซื้อ ${check.product.name} สำเร็จ`,
     })

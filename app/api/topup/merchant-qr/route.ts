@@ -4,6 +4,8 @@ import { formatPromptPayTarget } from '@/lib/game/premium/topup'
 import { resolveActorFromRequest } from '@/lib/server/premium-security'
 import { getStoredMerchantQr, saveStoredMerchantQr } from '@/lib/server/topup-store'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(req: Request) {
   const auth = await resolveActorFromRequest(req)
   if (!('actor' in auth)) {
@@ -11,16 +13,23 @@ export async function GET(req: Request) {
   }
   const stored = getStoredMerchantQr()
   const isAdmin = Boolean(auth.actor.emailVerified && isTopupAdminEmail(auth.actor.email))
-  return NextResponse.json({
-    ok: true,
-    isAdmin,
-    settings: stored
-      ? {
-          ...stored,
-          promptPayId: isAdmin ? stored.promptPayId : '',
-        }
-      : null,
-  })
+  return NextResponse.json(
+    {
+      ok: true,
+      isAdmin,
+      settings: stored
+        ? {
+            ...stored,
+            promptPayId: isAdmin ? stored.promptPayId : '',
+          }
+        : null,
+    },
+    {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+      },
+    },
+  )
 }
 
 export async function POST(req: Request) {

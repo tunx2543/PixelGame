@@ -1,5 +1,11 @@
-import fs from 'node:fs'
-import path from 'node:path'
+import {
+  getDefaultStorePaths,
+  getGlobalSingleton,
+  isCloudflareWorkersRuntime,
+  readJsonStoreFile,
+  writeJsonStoreFile,
+  type StorePersistenceMode,
+} from './runtime-store'
 import {
   DEFAULT_SERVER_RATES,
   getEffectiveServerRates,
@@ -77,12 +83,28 @@ interface GmEventsStoreData {
   festivalOverride: FestivalOverrideState | null
 }
 
-const PRIMARY_DIR = path.join(process.cwd(), '.data')
-const PRIMARY_FILE = path.join(PRIMARY_DIR, 'gm-events.json')
-const FALLBACK_FILE = '/tmp/pixelquest-gm-events.json'
+const { primaryDir: PRIMARY_DIR, primaryFile: PRIMARY_FILE, fallbackFile: FALLBACK_FILE } =
+  getDefaultStorePaths('gm-events.json')
 
-let memoryStore: GmEventsStoreData | null = null
-const worldNewsRateLimits = new Map<string, number>()
+interface GmEventsSlot {
+  data: GmEventsStoreData | null
+  mode: StorePersistenceMode
+}
+
+function getSlot(): GmEventsSlot {
+  return getGlobalSingleton<GmEventsSlot>('pixelquest.gmEventsStore', () => ({
+    data: null,
+    mode: isCloudflareWorkersRuntime() ? 'isolate_memory_only' : 'durable_disk',
+  }))
+}
+
+function getWorldNewsRateLimits(): Map<string, number> {
+  return getGlobalSingleton<Map<string, number>>('pixelquest.worldNewsRateLimits', () => new Map())
+}
+
+export function getGmEventsStorePersistenceMode(): StorePersistenceMode {
+  return getSlot().mode
+}
 
 function sanitizeClosedCycles(raw: unknown): string[] {
   if (!Array.isArray(raw)) return []
@@ -93,16 +115,6 @@ function sanitizeClosedCycles(raw: unknown): string[] {
     }
   }
   return [...seen].slice(-24)
-}
-
-function resolveStorePath(): string {
-  try {
-    fs.mkdirSync(PRIMARY_DIR, { recursive: true })
-    fs.accessSync(PRIMARY_DIR, fs.constants.W_OK)
-    return PRIMARY_FILE
-  } catch {
-    return FALLBACK_FILE
-  }
 }
 
 function pruneStore(data: GmEventsStoreData, nowMs = Date.now()): GmEventsStoreData {
@@ -131,32 +143,25 @@ function pruneStore(data: GmEventsStoreData, nowMs = Date.now()): GmEventsStoreD
 }
 
 function readStore(): GmEventsStoreData {
-  if (memoryStore) {
-    memoryStore = pruneStore(memoryStore)
-    return memoryStore
+  const slot = getSlot()
+  if (slot.data) {
+    slot.data = pruneStore(slot.data)
+    return slot.data
   }
-  const candidates = [PRIMARY_FILE, FALLBACK_FILE]
-  for (const filePath of candidates) {
-    try {
-      if (fs.existsSync(filePath)) {
-        const raw = fs.readFileSync(filePath, 'utf8')
-        const parsed = JSON.parse(raw) as Partial<GmEventsStoreData>
-        memoryStore = pruneStore({
-          announcements: Array.isArray(parsed.announcements) ? parsed.announcements : [],
-          directives: Array.isArray(parsed.directives) ? parsed.directives : [],
-          giftDrops: Array.isArray(parsed.giftDrops) ? parsed.giftDrops : [],
-          serverRates: sanitizeServerRates(parsed.serverRates),
-          worldBossTest: sanitizeWorldBossTestState(parsed.worldBossTest),
-          closedWorldBossCycles: sanitizeClosedCycles(parsed.closedWorldBossCycles),
-          festivalOverride: sanitizeFestivalOverrideState(parsed.festivalOverride),
-        })
-        return memoryStore
-      }
-    } catch {
-      // Ignore unreadable store and fallback
-    }
+  const parsed = readJsonStoreFile<Partial<GmEventsStoreData>>(PRIMARY_FILE, FALLBACK_FILE)
+  if (parsed) {
+    slot.data = pruneStore({
+      announcements: Array.isArray(parsed.announcements) ? parsed.announcements : [],
+      directives: Array.isArray(parsed.directives) ? parsed.directives : [],
+      giftDrops: Array.isArray(parsed.giftDrops) ? parsed.giftDrops : [],
+      serverRates: sanitizeServerRates(parsed.serverRates),
+      worldBossTest: sanitizeWorldBossTestState(parsed.worldBossTest),
+      closedWorldBossCycles: sanitizeClosedCycles(parsed.closedWorldBossCycles),
+      festivalOverride: sanitizeFestivalOverrideState(parsed.festivalOverride),
+    })
+    return slot.data
   }
-  memoryStore = {
+  slot.data = {
     announcements: [],
     directives: [],
     giftDrops: [],
@@ -165,29 +170,22 @@ function readStore(): GmEventsStoreData {
     closedWorldBossCycles: [],
     festivalOverride: null,
   }
-  return memoryStore
+  return slot.data
 }
 
 function writeStore(next: GmEventsStoreData): void {
+  const slot = getSlot()
   const pruned = pruneStore(next)
-  memoryStore = pruned
-  const target = resolveStorePath()
-  try {
-    fs.writeFileSync(target, JSON.stringify(pruned, null, 2), 'utf8')
-  } catch {
-    try {
-      fs.writeFileSync(FALLBACK_FILE, JSON.stringify(pruned, null, 2), 'utf8')
-    } catch {
-      // Memory cache stays active
-    }
-  }
+  slot.data = pruned
+  slot.mode = writeJsonStoreFile(PRIMARY_DIR, PRIMARY_FILE, FALLBACK_FILE, JSON.stringify(pruned, null, 2))
 }
 
 export function resetGmEventsMemoryCacheForTests(): void {
-  memoryStore = null
+  getSlot().data = null
 }
 
 export function canPublishWorldNews(uid: string, cooldownMs = 4_000): boolean {
+  const worldNewsRateLimits = getWorldNewsRateLimits()
   const now = Date.now()
   if (worldNewsRateLimits.size > 2000) {
     for (const [k, t] of worldNewsRateLimits.entries()) {

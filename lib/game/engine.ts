@@ -7840,13 +7840,16 @@ export async function sandboxGrantDiamondsAction(
   requestId?: string,
 ): Promise<{ ok: boolean; message: string; balance?: number; txId?: string }> {
   const p = player()
+  if (!p.gm || !isCurrentAccountGm()) {
+    return { ok: false, message: 'เฉพาะบัญชี GM ที่ได้รับอนุญาตเท่านั้นที่ใช้งาน Sandbox Test Console ได้' }
+  }
   const safeAmount = Math.floor(Number(amount) || 0)
   const reqId = requestId || generateUniqueTxId('SBREQ')
   if (inFlightPremiumLocks.has('sandbox_grant') || inFlightPremiumLocks.has(reqId)) {
     return { ok: false, message: 'กำลังดำเนินการเติมเพชรทดลองอยู่ กรุณารอสักครู่' }
   }
-  if (safeAmount < 1 || safeAmount > 100_000) {
-    return { ok: false, message: 'ระบุจำนวนเพชรทดลองระหว่าง 1 – 100,000 D' }
+  if (safeAmount < 1 || safeAmount > 1_000_000) {
+    return { ok: false, message: 'ระบุจำนวนเพชรทดลองระหว่าง 1 – 1,000,000 D' }
   }
 
   inFlightPremiumLocks.add('sandbox_grant')
@@ -7858,10 +7861,11 @@ export async function sandboxGrantDiamondsAction(
       requestId: string
       actorUid: string
       isGm: boolean
+      source?: string
       amount: number
       timestampMs: number
       serverVerified: boolean
-      serverSignature: string
+      serverSignature: string | null
       message: string
     }>('/api/premium/sandbox-grant', {
       amount: safeAmount,
@@ -7876,14 +7880,14 @@ export async function sandboxGrantDiamondsAction(
 
     const txRes = commitDiamondDelta(p, apiRes.data.amount, {
       type: 'sandbox_grant',
-      source: 'sandbox_console',
-      note: `เติมเพชรทดลอง Sandbox +${apiRes.data.amount.toLocaleString()} D (ไม่ใช่เงินจริง)`,
+      source: apiRes.data.source || 'gm_sandbox_console',
+      note: `GM Sandbox Console +${apiRes.data.amount.toLocaleString()} D`,
       requestId: apiRes.data.requestId,
       txId: apiRes.data.txId,
       actorUid: apiRes.data.actorUid,
       isGm: apiRes.data.isGm,
-      serverVerified: apiRes.data.serverVerified,
-      serverSignature: apiRes.data.serverSignature,
+      serverVerified: Boolean(apiRes.data.serverVerified),
+      serverSignature: apiRes.data.serverSignature ?? undefined,
       timestampMs: apiRes.data.timestampMs,
     })
 
@@ -7894,10 +7898,11 @@ export async function sandboxGrantDiamondsAction(
     logPremiumAudit(p, {
       action: 'SANDBOX_GRANT',
       txId: txRes.tx?.txId,
-      details: `Sandbox Test Console เติม +${apiRes.data.amount.toLocaleString()} D (คงเหลือ ${p.diamonds.toLocaleString()} D)`,
-      verifiedByServer: true,
+      details: `GM Sandbox Test Console เติม +${apiRes.data.amount.toLocaleString()} D (คงเหลือ ${p.diamonds.toLocaleString()} D)`,
+      verifiedByServer: Boolean(apiRes.data.serverVerified),
+      actorRole: 'gm',
     })
-    say('loot', `★ [Sandbox] เติมเพชรทดลอง +${apiRes.data.amount.toLocaleString()} D (คงเหลือ ${p.diamonds.toLocaleString()} D)`)
+    say('loot', `★ [GM Sandbox] เติมเพชรทดลอง +${apiRes.data.amount.toLocaleString()} D (คงเหลือ ${p.diamonds.toLocaleString()} D)`)
     saveGame()
     notify()
     return { ok: true, message: apiRes.data.message, balance: p.diamonds, txId: txRes.tx?.txId }
@@ -7966,6 +7971,9 @@ export async function purchasePremiumProductAction(
   inFlightPremiumLocks.add(lockKey)
   inFlightPremiumLocks.add(reqId)
   try {
+    if (firebaseAuth.currentUser?.emailVerified) {
+      await flushCloudSave().catch(() => {})
+    }
     const apiRes = await callPremiumApi<{
       txId: string
       receiptId: string
@@ -7977,7 +7985,7 @@ export async function purchasePremiumProductAction(
       nextDiamonds: number
       timestampMs: number
       serverVerified: boolean
-      serverSignature: string
+      serverSignature: string | null
       message: string
     }>('/api/premium/purchase', {
       productId: product.productId,
@@ -7994,6 +8002,7 @@ export async function purchasePremiumProductAction(
     }
 
     const totalCost = apiRes.data.totalCost
+    const isServerVerified = Boolean(apiRes.data.serverVerified)
     const txRes = commitDiamondDelta(p, -totalCost, {
       type: 'spend',
       source: 'premium_shop',
@@ -8004,8 +8013,8 @@ export async function purchasePremiumProductAction(
       txId: apiRes.data.txId,
       actorUid: apiRes.data.actorUid,
       isGm: apiRes.data.isGm,
-      serverVerified: apiRes.data.serverVerified,
-      serverSignature: apiRes.data.serverSignature,
+      serverVerified: isServerVerified,
+      serverSignature: apiRes.data.serverSignature ?? undefined,
       timestampMs: apiRes.data.timestampMs,
     })
 
@@ -8133,14 +8142,14 @@ export async function purchasePremiumProductAction(
       totalPaid: totalCost,
       purchasedAtMs: apiRes.data.timestampMs,
       status: 'completed',
-      serverVerified: true,
+      serverVerified: Boolean(apiRes.data.serverVerified),
     }
     appendPurchaseReceipt(activePrem, receipt)
     logPremiumAudit(p, {
       action: 'PREMIUM_PURCHASE',
       txId: txRes.tx.txId,
       details: `ซื้อ ${product.name} x${safeQty} (-${totalCost.toLocaleString()} D) · ใบเสร็จ ${receipt.receiptId}`,
-      verifiedByServer: true,
+      verifiedByServer: Boolean(apiRes.data.serverVerified),
     })
 
     say('loot', `★ ซื้อ ${product.name} x${safeQty} สำเร็จ (-${totalCost.toLocaleString()} D)`)
@@ -8167,6 +8176,9 @@ export async function claimVipTierRewardAction(
 
   inFlightPremiumLocks.add(lockKey)
   try {
+    if (firebaseAuth.currentUser?.emailVerified) {
+      await flushCloudSave().catch(() => {})
+    }
     const apiRes = await callPremiumApi<{
       txId: string
       requestId: string
@@ -8175,7 +8187,7 @@ export async function claimVipTierRewardAction(
       diamondDelta: number
       timestampMs: number
       serverVerified: boolean
-      serverSignature: string
+      serverSignature: string | null
       message: string
     }>('/api/premium/claim', {
       claimType: 'vip_tier',
@@ -8191,6 +8203,7 @@ export async function claimVipTierRewardAction(
     const def = getVipTierDef(tierLevel as VipTierId)
     if (!def) return { ok: false, message: 'ไม่พบระดับ VIP' }
 
+    const isServerVerified = Boolean(apiRes.data.serverVerified)
     prem.vip.claimedTierRewards.push(def.level)
     p.gold += def.tierReward.gold
     if (def.tierReward.enhanceStones > 0) addItem('enhance_stone', def.tierReward.enhanceStones)
@@ -8205,8 +8218,8 @@ export async function claimVipTierRewardAction(
         txId: apiRes.data.txId,
         actorUid: apiRes.data.actorUid,
         isGm: apiRes.data.isGm,
-        serverVerified: true,
-        serverSignature: apiRes.data.serverSignature,
+        serverVerified: isServerVerified,
+        serverSignature: apiRes.data.serverSignature ?? undefined,
         timestampMs: apiRes.data.timestampMs,
       })
     }
@@ -8214,7 +8227,7 @@ export async function claimVipTierRewardAction(
       action: 'VIP_CLAIM_TIER',
       txId: apiRes.data.txId,
       details: `รับรางวัล ${def.name}: ${def.tierReward.label}`,
-      verifiedByServer: true,
+      verifiedByServer: isServerVerified,
     })
     say('loot', `★ รับรางวัล ${def.name} สำเร็จ: ${def.tierReward.label}`)
     saveGame()
@@ -8235,6 +8248,9 @@ export async function claimVipDailyRewardAction(requestId?: string): Promise<{ o
   }
   inFlightPremiumLocks.add('vip_daily')
   try {
+    if (firebaseAuth.currentUser?.emailVerified) {
+      await flushCloudSave().catch(() => {})
+    }
     const apiRes = await callPremiumApi<{
       txId: string
       requestId: string
@@ -8243,7 +8259,7 @@ export async function claimVipDailyRewardAction(requestId?: string): Promise<{ o
       diamondDelta: number
       timestampMs: number
       serverVerified: boolean
-      serverSignature: string
+      serverSignature: string | null
       message: string
     }>('/api/premium/claim', {
       claimType: 'vip_daily',
@@ -8256,6 +8272,7 @@ export async function claimVipDailyRewardAction(requestId?: string): Promise<{ o
     if (!apiRes.ok || !apiRes.data) {
       return { ok: false, message: apiRes.message || 'ไม่สามารถรับรางวัล VIP รายวันได้' }
     }
+    const isServerVerified = Boolean(apiRes.data.serverVerified)
     const bonuses = getEffectiveVipBonuses(prem.vip)
     const def = bonuses.tierDef ?? VIP_TIERS[0]
     prem.vip.lastDailyClaimDate = today
@@ -8270,8 +8287,8 @@ export async function claimVipDailyRewardAction(requestId?: string): Promise<{ o
         txId: apiRes.data.txId,
         actorUid: apiRes.data.actorUid,
         isGm: apiRes.data.isGm,
-        serverVerified: true,
-        serverSignature: apiRes.data.serverSignature,
+        serverVerified: isServerVerified,
+        serverSignature: apiRes.data.serverSignature ?? undefined,
         timestampMs: apiRes.data.timestampMs,
       })
     }
@@ -8279,7 +8296,7 @@ export async function claimVipDailyRewardAction(requestId?: string): Promise<{ o
       action: 'VIP_CLAIM_DAILY',
       txId: apiRes.data.txId,
       details: `รับรางวัลรายวัน ${def.name}: ${def.dailyReward.label}`,
-      verifiedByServer: true,
+      verifiedByServer: isServerVerified,
     })
     say('loot', `★ รับรางวัลรายวัน ${def.name}: ${def.dailyReward.label}`)
     saveGame()
@@ -8626,7 +8643,7 @@ export async function applyVerifiedTopupAction(
   })
 
   if (fbUser && fbUser.emailVerified) {
-    void recordTopupOrder(fbUser.uid, slotId, order).catch(() => {})
+    await recordTopupOrder(fbUser.uid, slotId, order).catch(() => {})
   }
 
   say(
@@ -8634,6 +8651,9 @@ export async function applyVerifiedTopupAction(
     `★ เติมเงินสำเร็จ! ${order.packageName} (฿${order.amountThb.toLocaleString()}) รับ +${order.totalDiamonds.toLocaleString()} D`,
   )
   saveGame()
+  if (fbUser && fbUser.emailVerified) {
+    await flushCloudSave().catch(() => {})
+  }
   notify()
   return {
     ok: true,
@@ -8840,6 +8860,9 @@ export async function claimTopupMilestoneAction(milestoneId: string): Promise<{ 
   }
   inFlightPremiumLocks.add(lockKey)
   try {
+    if (firebaseAuth.currentUser?.emailVerified) {
+      await flushCloudSave().catch(() => {})
+    }
     const reqId = generateUniqueTxId('MILESTONE')
     const apiRes = await callPremiumApi<{
       txId: string
@@ -8849,7 +8872,7 @@ export async function claimTopupMilestoneAction(milestoneId: string): Promise<{ 
       diamondDelta: number
       timestampMs: number
       serverVerified: boolean
-      serverSignature: string
+      serverSignature: string | null
       message: string
     }>('/api/premium/claim', {
       claimType: 'topup_milestone',
@@ -8885,8 +8908,8 @@ export async function claimTopupMilestoneAction(milestoneId: string): Promise<{ 
         txId: apiRes.data.txId,
         actorUid: apiRes.data.actorUid,
         isGm: apiRes.data.isGm,
-        serverVerified: true,
-        serverSignature: apiRes.data.serverSignature,
+        serverVerified: Boolean(apiRes.data.serverVerified),
+        serverSignature: apiRes.data.serverSignature ?? undefined,
         timestampMs: apiRes.data.timestampMs,
       })
     }
@@ -8894,7 +8917,7 @@ export async function claimTopupMilestoneAction(milestoneId: string): Promise<{ 
       action: 'TOPUP_MILESTONE_CLAIM',
       txId: apiRes.data.txId,
       details: `รับรางวัลเติมสะสม ฿${tier.thresholdThb}: ${tier.rewardLabel}`,
-      verifiedByServer: true,
+      verifiedByServer: Boolean(apiRes.data.serverVerified),
     })
     say('loot', `★ รับรางวัลเติมสะสม ฿${tier.thresholdThb.toLocaleString()} สำเร็จ: ${tier.rewardLabel}`)
     saveGame()
@@ -8921,6 +8944,9 @@ export async function claimDailyTopupBonusAction(): Promise<{ ok: boolean; messa
   }
   inFlightPremiumLocks.add(lockKey)
   try {
+    if (firebaseAuth.currentUser?.emailVerified) {
+      await flushCloudSave().catch(() => {})
+    }
     const reqId = generateUniqueTxId('DTOPUP')
     const apiRes = await callPremiumApi<{
       txId: string
@@ -8930,7 +8956,7 @@ export async function claimDailyTopupBonusAction(): Promise<{ ok: boolean; messa
       diamondDelta: number
       timestampMs: number
       serverVerified: boolean
-      serverSignature: string
+      serverSignature: string | null
       message: string
     }>('/api/premium/claim', {
       claimType: 'daily_topup',
@@ -8961,8 +8987,8 @@ export async function claimDailyTopupBonusAction(): Promise<{ ok: boolean; messa
         txId: apiRes.data.txId,
         actorUid: apiRes.data.actorUid,
         isGm: apiRes.data.isGm,
-        serverVerified: true,
-        serverSignature: apiRes.data.serverSignature,
+        serverVerified: Boolean(apiRes.data.serverVerified),
+        serverSignature: apiRes.data.serverSignature ?? undefined,
         timestampMs: apiRes.data.timestampMs,
       })
     }
@@ -8970,7 +8996,7 @@ export async function claimDailyTopupBonusAction(): Promise<{ ok: boolean; messa
       action: 'DAILY_TOPUP_CLAIM',
       txId: apiRes.data.txId,
       details: `รับโบนัสเติมเงินรายวัน (${today}): ${DAILY_TOPUP_BONUS.label}`,
-      verifiedByServer: true,
+      verifiedByServer: Boolean(apiRes.data.serverVerified),
     })
     say('loot', `★ รับโบนัสเติมเงินรายวันสำเร็จ: ${DAILY_TOPUP_BONUS.label}`)
     saveGame()

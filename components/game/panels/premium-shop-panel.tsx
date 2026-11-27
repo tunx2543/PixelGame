@@ -62,6 +62,7 @@ import {
   fetchTopupGatewayConfig,
   getInventoryCapacityBreakdown,
   getStorageCapacityBreakdown,
+  isCurrentAccountGm,
   isNearTownNpcRole,
   openPanel,
   purchasePremiumProductAction,
@@ -503,7 +504,13 @@ export function PremiumShopPanel() {
     setConfirmQty(1)
   }
 
+  const canUseGmSandbox = Boolean(p.gm && isCurrentAccountGm() && isTopupAdminUser(fbUser))
+
   const handleSandboxGrant = async (amount: number) => {
+    if (!canUseGmSandbox) {
+      setNotice({ ok: false, text: 'เฉพาะบัญชี GM ที่ได้รับอนุญาตเท่านั้นที่ใช้งาน Sandbox Test Console ได้' })
+      return
+    }
     if (inFlight) return
     setInFlight(true)
     try {
@@ -1855,55 +1862,59 @@ export function PremiumShopPanel() {
             )}
           </div>
 
-          {/* Secondary Developer Sandbox Console */}
-          <details className="border-2 border-border bg-muted/30 p-3">
-            <summary className="flex cursor-pointer items-center justify-between text-xs font-bold text-muted-foreground hover:text-foreground">
-              <span className="inline-flex items-center gap-1.5">
-                <FlaskConical className="size-3.5 text-cyan-300" aria-hidden />
-                Sandbox Test Console (เติมเพชรจำลองสำหรับทดสอบระบบ)
-              </span>
-              <span className="border border-border bg-background px-1.5 py-0.5 text-[9px]">DEV / SANDBOX</span>
-            </summary>
-            <div className="mt-3 space-y-2.5 border-t border-border/60 pt-3">
-              <p className="text-[11px] leading-relaxed text-muted-foreground">
-                เครื่องมือทดสอบระบบร้านค้าและ VIP ด้วยเพชรจำลอง (ไม่ใช่เงินจริง)
-              </p>
-              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-                {SANDBOX_PRESETS.map((amt) => (
-                  <PxButton
-                    key={amt}
-                    variant="secondary"
-                    disabled={inFlight}
-                    onClick={() => void handleSandboxGrant(amt)}
-                    className="py-1.5 text-[11px] tabular-nums"
-                  >
-                    +{formatNum(amt)} D
+          {/* GM-Only Sandbox Test Console */}
+          {canUseGmSandbox && (
+            <details className="border-2 border-border bg-muted/30 p-3">
+              <summary className="flex cursor-pointer items-center justify-between text-xs font-bold text-muted-foreground hover:text-foreground">
+                <span className="inline-flex items-center gap-1.5">
+                  <FlaskConical className="size-3.5 text-cyan-300" aria-hidden />
+                  Sandbox Test Console (เติมเพชรจำลองสำหรับทดสอบระบบ)
+                </span>
+                <span className="border border-amber-400/40 bg-amber-950/40 px-1.5 py-0.5 text-[9px] text-amber-200">
+                  GM ONLY · SANDBOX
+                </span>
+              </summary>
+              <div className="mt-3 space-y-2.5 border-t border-border/60 pt-3">
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  เครื่องมือทดสอบระบบร้านค้าและ VIP สำหรับบัญชี GM ที่ยืนยันสิทธิ์แล้วเท่านั้น (ไม่ใช่เงินจริง)
+                </p>
+                <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                  {SANDBOX_PRESETS.map((amt) => (
+                    <PxButton
+                      key={amt}
+                      variant="secondary"
+                      disabled={inFlight}
+                      onClick={() => void handleSandboxGrant(amt)}
+                      className="py-1.5 text-[11px] tabular-nums"
+                    >
+                      +{formatNum(amt)} D
+                    </PxButton>
+                  ))}
+                </div>
+                <form
+                  className="flex gap-1.5"
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    void handleSandboxGrant(Number(customDiamonds) || 0)
+                  }}
+                >
+                  <input
+                    type="number"
+                    min={1}
+                    max={1000000}
+                    value={customDiamonds}
+                    onChange={(e) => setCustomDiamonds(e.target.value)}
+                    aria-label="จำนวนเพชรทดลอง"
+                    className="min-w-0 flex-1 border border-border bg-background px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-cyan-400"
+                  />
+                  <PxButton type="submit" variant="secondary" disabled={inFlight}>
+                    <Gem className="mr-1 inline size-3.5" aria-hidden />
+                    เติมเพชรทดลอง
                   </PxButton>
-                ))}
+                </form>
               </div>
-              <form
-                className="flex gap-1.5"
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  void handleSandboxGrant(Number(customDiamonds) || 0)
-                }}
-              >
-                <input
-                  type="number"
-                  min={1}
-                  max={100000}
-                  value={customDiamonds}
-                  onChange={(e) => setCustomDiamonds(e.target.value)}
-                  aria-label="จำนวนเพชรทดลอง"
-                  className="min-w-0 flex-1 border border-border bg-background px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-cyan-400"
-                />
-                <PxButton type="submit" variant="secondary" disabled={inFlight}>
-                  <Gem className="mr-1 inline size-3.5" aria-hidden />
-                  เติมเพชรทดลอง
-                </PxButton>
-              </form>
-            </div>
-          </details>
+            </details>
+          )}
         </div>
       )}
 
