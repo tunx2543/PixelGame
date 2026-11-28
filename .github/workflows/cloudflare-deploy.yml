@@ -1,9 +1,6 @@
 name: Deploy Pixel Quest to Cloudflare Workers
 
 on:
-  push:
-    branches:
-      - fix/runtime-stability-backup-20261128
   workflow_dispatch:
 
 permissions:
