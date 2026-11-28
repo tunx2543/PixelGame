@@ -1,0 +1,15 @@
+project_id = "fzyvkuvndeinywphtior"
+
+[api]
+enabled = true
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+major_version = 17
+
+[auth]
+enabled = true
+site_url = "https://pixelgame.ffsmilepay53.workers.dev"
+additional_redirect_urls = ["https://pixelgame.ffsmilepay53.workers.dev/**"]
