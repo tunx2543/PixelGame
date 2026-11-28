@@ -1,5 +1,6 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { onAuthStateChanged, type User } from 'firebase/auth'
@@ -40,7 +41,6 @@ import {
   type CloudCharacterRecord,
   type UserAccountIdentity,
 } from '@/lib/firebase/characters'
-import { syncLatestMonsterAssetsAndFirestore } from '@/lib/firebase/monster-sync'
 import { PERMANENT_GM_UID } from '@/lib/game/permissions'
 import { JOBS, normalizeJobId } from '@/lib/game/data'
 import { MODEL_DIRS, type ModelDir } from '@/lib/game/models-2d'
@@ -75,13 +75,18 @@ import { resolveFashionLoadoutFromSave } from '@/lib/game/fashion-renderer'
 import { syncBgmContext } from '@/lib/game/bgm'
 import { MAPS } from '@/lib/game/maps'
 import { cn } from '@/lib/utils'
-import { AccountPanel } from './account-panel'
 import { BgmQuickControl } from './bgm-quick-control'
 import { formatNum } from './format'
 import { GameArtIcon } from './game-badge-icon'
-import { SettingsPanel } from './panels/settings-panel'
 import { PWAInstallButton } from './pwa-controls'
-import { SpriteModelCanvas, type PreviewAction } from './sprite-model-canvas'
+import type { PreviewAction } from './sprite-model-canvas'
+
+const AccountPanel = dynamic(() => import('./account-panel').then((m) => m.AccountPanel), { ssr: false })
+const SettingsPanel = dynamic(() => import('./panels/settings-panel').then((m) => m.SettingsPanel), { ssr: false })
+const SpriteModelCanvas = dynamic(
+  () => import('./sprite-model-canvas').then((m) => m.SpriteModelCanvas),
+  { ssr: false },
+)
 
 const KEY_ART_SRC = '/assets/aistudio/file_00000000bb9c82119bd394ecb0bb0ae8_68fc9e57.png'
 
@@ -117,7 +122,7 @@ export function TitleScreen() {
   const [selectedSlotForNew, setSelectedSlotForNew] = useState<CharacterSlotId>('slot_1')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [copiedCid, setCopiedCid] = useState(false)
-  const [isLoadingSave, setIsLoadingSave] = useState(true)
+  const [isLoadingSave, setIsLoadingSave] = useState(() => Boolean(auth.currentUser))
   const [importingKey, setImportingKey] = useState<string | null>(null)
   const [cloudError, setCloudError] = useState('')
   const [authBusy, setAuthBusy] = useState(false)
@@ -136,64 +141,58 @@ export function TitleScreen() {
   const refreshCharacters = useCallback(async (currentUser: User | null) => {
     setConfirmDeleteId(null)
     setCloudError('')
-    void syncLatestMonsterAssetsAndFirestore()
     if (!currentUser) {
+      setAccountIdentity(null)
+      setGameAccountIdentity(null)
+      setActiveCharacterSlot('slot_1')
+      setCloudChars([])
+      setRecoverableSaves([])
+      setGuestSave(readSave())
+      setSelectedSlotId('slot_1')
       setIsLoadingSave(false)
-    } else {
-      setIsLoadingSave(true)
+      return
     }
+
+    setIsLoadingSave(true)
     try {
       await flushCloudSave()
-      if (currentUser) {
-        const [identity, list] = currentUser.emailVerified
-          ? await Promise.all([
-              ensureUserProfile(currentUser),
-              listAccountCharacters({ skipProfileSync: true }),
-            ])
-          : [await ensureUserProfile(currentUser), []]
-        setAccountIdentity(identity)
-        const parsedUid = Number(identity.gameUid)
-        const numericUid = identity.isGm
-          ? PERMANENT_GM_UID
-          : Number.isSafeInteger(parsedUid)
-            ? parsedUid
-            : undefined
-        setGameAccountIdentity(currentUser.uid, numericUid, identity.gameUid, identity.isGm)
-        if (list.length === 0) {
-          const migrated = await loadCloudGame()
-          if (migrated) {
-            const updatedList = await listAccountCharacters({ skipProfileSync: true })
-            setCloudChars(updatedList)
-            setRecoverableSaves(computeRecoverables(currentUser.uid, updatedList))
-            if (updatedList[0]) setSelectedSlotId(updatedList[0].id as CharacterSlotId)
-          } else {
-            setCloudChars([])
-            setRecoverableSaves(computeRecoverables(currentUser.uid, []))
-            setSelectedSlotForNew('slot_1')
-          }
+      const [identity, list] = currentUser.emailVerified
+        ? await Promise.all([
+            ensureUserProfile(currentUser),
+            listAccountCharacters({ skipProfileSync: true }),
+          ])
+        : [await ensureUserProfile(currentUser), []]
+      setAccountIdentity(identity)
+      const parsedUid = Number(identity.gameUid)
+      const numericUid = identity.isGm
+        ? PERMANENT_GM_UID
+        : Number.isSafeInteger(parsedUid)
+          ? parsedUid
+          : undefined
+      setGameAccountIdentity(currentUser.uid, numericUid, identity.gameUid, identity.isGm)
+      if (list.length === 0) {
+        const migrated = await loadCloudGame()
+        if (migrated) {
+          const updatedList = await listAccountCharacters({ skipProfileSync: true })
+          setCloudChars(updatedList)
+          setRecoverableSaves(computeRecoverables(currentUser.uid, updatedList))
+          if (updatedList[0]) setSelectedSlotId(updatedList[0].id as CharacterSlotId)
         } else {
-          setCloudChars(list)
-          setRecoverableSaves(computeRecoverables(currentUser.uid, list))
-          setSelectedSlotId((prev) =>
-            list.some((c) => c.id === prev) ? prev : (list[0].id as CharacterSlotId),
-          )
+          setCloudChars([])
+          setRecoverableSaves(computeRecoverables(currentUser.uid, []))
+          setSelectedSlotForNew('slot_1')
         }
       } else {
-        setAccountIdentity(null)
-        setGameAccountIdentity(null)
-        setActiveCharacterSlot('slot_1')
-        setCloudChars([])
-        setRecoverableSaves([])
-        const local = await loadCloudGame()
-        setGuestSave(local)
-        setSelectedSlotId('slot_1')
+        setCloudChars(list)
+        setRecoverableSaves(computeRecoverables(currentUser.uid, list))
+        setSelectedSlotId((prev) =>
+          list.some((c) => c.id === prev) ? prev : (list[0].id as CharacterSlotId),
+        )
       }
     } catch (error) {
       console.error('Failed to load cloud characters:', error)
-      if (currentUser) {
-        const reason = error instanceof Error && !error.message.startsWith('{') ? error.message : ''
-        setCloudError(reason || 'ไม่สามารถโหลดข้อมูลตัวละครจากคลาวด์ได้ กรุณาลองใหม่อีกครั้ง')
-      }
+      const reason = error instanceof Error && !error.message.startsWith('{') ? error.message : ''
+      setCloudError(reason || 'ไม่สามารถโหลดข้อมูลตัวละครจากคลาวด์ได้ กรุณาลองใหม่อีกครั้ง')
       const fallback = readSave()
       setGuestSave(fallback)
       setSelectedSlotId('slot_1')
@@ -204,25 +203,14 @@ export function TitleScreen() {
 
   useEffect(() => {
     let active = true
-    let resolvedAuth = false
-    const authFallbackTimer = window.setTimeout(() => {
-      if (!active || resolvedAuth) return
-      const fallback = readSave()
-      setGuestSave(fallback)
-      setIsLoadingSave(false)
-    }, 1800)
-
     const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
       if (!active) return
-      resolvedAuth = true
-      window.clearTimeout(authFallbackTimer)
       setUser(nextUser)
       setAuthError('')
       void refreshCharacters(nextUser)
     })
     return () => {
       active = false
-      window.clearTimeout(authFallbackTimer)
       unsubscribe()
     }
   }, [refreshCharacters])

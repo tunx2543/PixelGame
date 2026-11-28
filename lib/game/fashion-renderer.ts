@@ -38,6 +38,13 @@ export function getFashionLayerImage(fashionId: string | null | undefined): HTML
   const def = getFashionItemDef(fashionId)
   const assetSrc = def?.wingAnimSheetAsset ?? def?.wingSpriteAsset ?? def?.layerSheetAsset
   if (!assetSrc) return null
+  if (
+    typeof window !== 'undefined' &&
+    (assetSrc.startsWith('/assets/fashion/layers/') || assetSrc.startsWith('/assets/fashion/wings/')) &&
+    !(window as unknown as { __ENABLE_EXTERNAL_HD_SHEETS__?: boolean }).__ENABLE_EXTERNAL_HD_SHEETS__
+  ) {
+    return null
+  }
   const cached = layerImageCache.get(fashionId)
   if (cached !== undefined) return cached
   const img = new Image()

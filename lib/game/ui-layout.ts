@@ -8,6 +8,7 @@ export type HotkeyPreset = 'f-keys' | 'legacy-1-3'
 export type GraphicsQuality = 'high' | 'medium' | 'low'
 export type FpsLimit = 0 | 30 | 60
 export type ResolutionScale = 1 | 0.85 | 0.7
+export type RenderEngine = 'fast' | 'hd'
 
 export interface WindowLayoutRect {
   x: number
@@ -36,6 +37,7 @@ export interface UiPreferences {
   compactHud: boolean
   autoHideCombatHud: boolean
   graphicsQuality: GraphicsQuality
+  renderEngine: RenderEngine
   fpsLimit: FpsLimit
   resolutionScale: ResolutionScale
   reduceParticles: boolean
@@ -103,6 +105,7 @@ const DEFAULT_PREFERENCES: UiPreferences = {
   hotkeyPreset: 'f-keys',
   compactHud: false,
   autoHideCombatHud: true,
+  renderEngine: 'fast',
   ...GRAPHICS_QUALITY_PRESETS.high,
 }
 
@@ -297,7 +300,11 @@ export function initUiLayoutBridge() {
         preferences?: Partial<UiPreferences>
       }
       if (parsed.preferences && typeof parsed.preferences === 'object') {
-        state.preferences = { ...DEFAULT_PREFERENCES, ...parsed.preferences }
+        const merged = { ...DEFAULT_PREFERENCES, ...parsed.preferences }
+        if (parsed.preferences.renderEngine !== 'fast' && parsed.preferences.renderEngine !== 'hd') {
+          merged.renderEngine = 'fast'
+        }
+        state.preferences = merged
       }
       if (parsed.layouts && typeof parsed.layouts === 'object') {
         const clean: Record<string, WindowLayoutRect> = {}

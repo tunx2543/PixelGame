@@ -60,6 +60,12 @@ import { EQUIPMENT_RARITY_META, resolveEffectiveRarity } from './mmo-systems'
 import { resolveItemVfxSpec } from './item-vfx'
 import { resolveItemImagePath } from './items'
 import { evaluateWorldBossMapFx, evaluateWorldBossWarning } from './world-boss-fx'
+import {
+  getFastCameraState,
+  getFastLastRenderCam,
+  renderFastWorld,
+  resolveEffectiveRenderEngine,
+} from './fast-renderer'
 
 const itemAssetImageCache = new Map<string, HTMLImageElement>()
 
@@ -131,8 +137,11 @@ export function screenToWorld(cssX: number, cssY: number, cssW: number, cssH: nu
   const safeH = Math.max(1, cssH)
   const zoom = computeCameraZoom(safeW, safeH, game.cameraZoomScale)
   const mapId = currentMap().id
-  const camX = lastRenderCam.mapId === mapId ? lastRenderCam.x : cameraState.x
-  const camY = lastRenderCam.mapId === mapId ? lastRenderCam.y : cameraState.y
+  const useFast = resolveEffectiveRenderEngine(getUiPreferences()) === 'fast'
+  const activeLastCam = useFast ? getFastLastRenderCam() : lastRenderCam
+  const activeCamState = useFast ? getFastCameraState() : cameraState
+  const camX = activeLastCam.mapId === mapId ? activeLastCam.x : activeCamState.x
+  const camY = activeLastCam.mapId === mapId ? activeLastCam.y : activeCamState.y
   return {
     x: camX + cssX / zoom,
     y: camY + cssY / zoom,
@@ -266,9 +275,13 @@ function monsterFacing(
 export function render(ctx: CanvasRenderingContext2D, cw: number, ch: number, dpr: number, font: string) {
   const p = game.p
   if (!p) return
+  const uiPrefs = getUiPreferences()
+  if (resolveEffectiveRenderEngine(uiPrefs) === 'fast') {
+    renderFastWorld(ctx, cw, ch, dpr, font)
+    return
+  }
   const map = currentMap()
   preloadMapCatalogSprites(map.id)
-  const uiPrefs = getUiPreferences()
   const lowQuality = uiPrefs.graphicsQuality === 'low'
   const reduceParticles = uiPrefs.reduceParticles || lowQuality
   const disableGlow = uiPrefs.disableShadowsAndGlow || lowQuality

@@ -20,7 +20,6 @@ import {
 import { getMountVisualTier } from './mounts'
 import { getPetVisualTier } from './pet-follow'
 import { getCatalogMonsterAtlas, hasCatalogMonsterAtlas } from './catalog-sprites'
-import { buildHdMapCanvas } from './hd-tiles'
 import {
   drawSheetFrameSpec,
   getHeroSheetFrame,
@@ -2558,7 +2557,15 @@ function tileCanvas(tile: number, base: number, variant: number) {
 }
 
 export function mapCanvas(map: MapDef) {
-  return buildHdMapCanvas(map)
+  const { c, ctx } = makeCanvas(map.width * TILE, map.height * TILE)
+  for (let ty = 0; ty < map.height; ty++) {
+    for (let tx = 0; tx < map.width; tx++) {
+      const tile = map.tiles[ty * map.width + tx]
+      const variant = (tx * 7 + ty * 13) % 4
+      ctx.drawImage(tileCanvas(tile, T.GRASS, variant), tx * TILE, ty * TILE)
+    }
+  }
+  return c
 }
 
 export function mapObjectSprite(kind: MapObjectKind, frame = 0, variant = 0): HTMLCanvasElement {

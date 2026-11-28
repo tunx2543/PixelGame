@@ -445,8 +445,14 @@ function resolveSheetSrc(sheetPath: string): string {
   return sheetPath.startsWith('/assets/hd/characters/') ? withHeroAssetRevision(sheetPath) : sheetPath
 }
 
+function shouldSkipUnbundledSheetFetch(sheetPath: string): boolean {
+  if (typeof window === 'undefined') return false
+  if (!sheetPath.startsWith('/assets/hd/')) return false
+  return !(window as unknown as { __ENABLE_EXTERNAL_HD_SHEETS__?: boolean }).__ENABLE_EXTERNAL_HD_SHEETS__
+}
+
 function getSheetImage(sheetPath: string): HTMLImageElement | null {
-  if (typeof Image === 'undefined') return null
+  if (typeof Image === 'undefined' || shouldSkipUnbundledSheetFetch(sheetPath)) return null
   let img = sheetImageCache.get(sheetPath)
   if (!img) {
     img = new Image()

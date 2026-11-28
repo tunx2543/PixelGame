@@ -1,5 +1,6 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { GripHorizontal, Maximize2, Minimize2, Minus, X } from 'lucide-react'
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { closePanel, type PanelId } from '@/lib/game/engine'
@@ -8,38 +9,47 @@ import { cn } from '@/lib/utils'
 import { formatNum } from '../format'
 import { WindowManager } from '../window-manager'
 import { useWindowContext } from '../window-context'
-import { EnhancePanel } from './enhance-panel'
-import { GachaPanel } from './gacha-panel'
-import { WingGachaPanel } from './wing-gacha-panel'
-import { GemShopPanel } from './gem-shop-panel'
-import { FriendsPanel } from './friends-panel'
-import { GmSummonPanel } from './gm-summon-panel'
-import { DevToolsPanel } from './dev-tools-panel'
-import { PartyPanel } from './party-panel'
-import { RebirthPanel } from './rebirth-panel'
-import { SettingsPanel } from './settings-panel'
-import { ShopPanel } from './shop-panel'
-import { StoragePanel } from './storage-panel'
-import { TradePanel } from './trade-panel'
-import { PetsPanel } from './pets-panel'
-import { QuestsPanel } from './quests-panel'
-import { CraftPanel } from './craft-panel'
-import { CodexPanel } from './codex-panel'
-import { GuildBossPanel } from './guild-boss-panel'
-import { ArenaPanel } from './arena-panel'
-import { DungeonPanel } from './dungeon-panel'
-import { MarketPanel } from './market-panel'
-import { MailPanel } from './mail-panel'
-import { PassPanel } from './pass-panel'
-import { LifeSkillsPanel } from './lifeskills-panel'
-import { WardrobePanel } from './wardrobe-panel'
-import { GuidePanel } from './guide-panel'
-import { RedeemCodePanel } from './redeem-code-panel'
-import { TreasureChestPanel } from './treasure-chest-panel'
-import { EventsPanel } from './events-panel'
-import { ActivitiesPanel } from './activities-panel'
-import { ModelGalleryView } from '../model-gallery-view'
-import { AsuraCharacterHub } from './asura-character-hub'
+
+function PanelLoadingFallback() {
+  return (
+    <div className="pixel-panel flex min-h-40 items-center justify-center p-6 text-xs text-muted-foreground">
+      กำลังเปิดหน้าต่าง...
+    </div>
+  )
+}
+
+const EnhancePanel = dynamic(() => import('./enhance-panel').then((m) => m.EnhancePanel), { ssr: false, loading: PanelLoadingFallback })
+const GachaPanel = dynamic(() => import('./gacha-panel').then((m) => m.GachaPanel), { ssr: false, loading: PanelLoadingFallback })
+const WingGachaPanel = dynamic(() => import('./wing-gacha-panel').then((m) => m.WingGachaPanel), { ssr: false, loading: PanelLoadingFallback })
+const GemShopPanel = dynamic(() => import('./gem-shop-panel').then((m) => m.GemShopPanel), { ssr: false, loading: PanelLoadingFallback })
+const FriendsPanel = dynamic(() => import('./friends-panel').then((m) => m.FriendsPanel), { ssr: false, loading: PanelLoadingFallback })
+const GmSummonPanel = dynamic(() => import('./gm-summon-panel').then((m) => m.GmSummonPanel), { ssr: false, loading: PanelLoadingFallback })
+const DevToolsPanel = dynamic(() => import('./dev-tools-panel').then((m) => m.DevToolsPanel), { ssr: false, loading: PanelLoadingFallback })
+const PartyPanel = dynamic(() => import('./party-panel').then((m) => m.PartyPanel), { ssr: false, loading: PanelLoadingFallback })
+const RebirthPanel = dynamic(() => import('./rebirth-panel').then((m) => m.RebirthPanel), { ssr: false, loading: PanelLoadingFallback })
+const SettingsPanel = dynamic(() => import('./settings-panel').then((m) => m.SettingsPanel), { ssr: false, loading: PanelLoadingFallback })
+const ShopPanel = dynamic(() => import('./shop-panel').then((m) => m.ShopPanel), { ssr: false, loading: PanelLoadingFallback })
+const StoragePanel = dynamic(() => import('./storage-panel').then((m) => m.StoragePanel), { ssr: false, loading: PanelLoadingFallback })
+const TradePanel = dynamic(() => import('./trade-panel').then((m) => m.TradePanel), { ssr: false, loading: PanelLoadingFallback })
+const PetsPanel = dynamic(() => import('./pets-panel').then((m) => m.PetsPanel), { ssr: false, loading: PanelLoadingFallback })
+const QuestsPanel = dynamic(() => import('./quests-panel').then((m) => m.QuestsPanel), { ssr: false, loading: PanelLoadingFallback })
+const CraftPanel = dynamic(() => import('./craft-panel').then((m) => m.CraftPanel), { ssr: false, loading: PanelLoadingFallback })
+const CodexPanel = dynamic(() => import('./codex-panel').then((m) => m.CodexPanel), { ssr: false, loading: PanelLoadingFallback })
+const GuildBossPanel = dynamic(() => import('./guild-boss-panel').then((m) => m.GuildBossPanel), { ssr: false, loading: PanelLoadingFallback })
+const ArenaPanel = dynamic(() => import('./arena-panel').then((m) => m.ArenaPanel), { ssr: false, loading: PanelLoadingFallback })
+const DungeonPanel = dynamic(() => import('./dungeon-panel').then((m) => m.DungeonPanel), { ssr: false, loading: PanelLoadingFallback })
+const MarketPanel = dynamic(() => import('./market-panel').then((m) => m.MarketPanel), { ssr: false, loading: PanelLoadingFallback })
+const MailPanel = dynamic(() => import('./mail-panel').then((m) => m.MailPanel), { ssr: false, loading: PanelLoadingFallback })
+const PassPanel = dynamic(() => import('./pass-panel').then((m) => m.PassPanel), { ssr: false, loading: PanelLoadingFallback })
+const LifeSkillsPanel = dynamic(() => import('./lifeskills-panel').then((m) => m.LifeSkillsPanel), { ssr: false, loading: PanelLoadingFallback })
+const WardrobePanel = dynamic(() => import('./wardrobe-panel').then((m) => m.WardrobePanel), { ssr: false, loading: PanelLoadingFallback })
+const GuidePanel = dynamic(() => import('./guide-panel').then((m) => m.GuidePanel), { ssr: false, loading: PanelLoadingFallback })
+const RedeemCodePanel = dynamic(() => import('./redeem-code-panel').then((m) => m.RedeemCodePanel), { ssr: false, loading: PanelLoadingFallback })
+const TreasureChestPanel = dynamic(() => import('./treasure-chest-panel').then((m) => m.TreasureChestPanel), { ssr: false, loading: PanelLoadingFallback })
+const EventsPanel = dynamic(() => import('./events-panel').then((m) => m.EventsPanel), { ssr: false, loading: PanelLoadingFallback })
+const ActivitiesPanel = dynamic(() => import('./activities-panel').then((m) => m.ActivitiesPanel), { ssr: false, loading: PanelLoadingFallback })
+const ModelGalleryView = dynamic(() => import('../model-gallery-view').then((m) => m.ModelGalleryView), { ssr: false, loading: PanelLoadingFallback })
+const AsuraCharacterHub = dynamic(() => import('./asura-character-hub').then((m) => m.AsuraCharacterHub), { ssr: false, loading: PanelLoadingFallback })
 
 export function renderPanelById(id: PanelId, g: ReturnType<typeof useGame>): ReactNode {
   switch (id) {

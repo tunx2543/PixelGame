@@ -23,6 +23,7 @@ import {
   type FpsLimit,
   type GraphicsQuality,
   type HotkeyPreset,
+  type RenderEngine,
   type ResolutionScale,
 } from '@/lib/game/ui-layout'
 import { useGame } from '@/lib/game/use-game'
@@ -282,12 +283,47 @@ export function SettingsPanel({ onClose }: { onClose?: () => void } = {}) {
               กราฟิก & ลดอาการหน่วง (Graphics & Performance)
             </h3>
             <span className="rounded border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+              {layout.preferences.renderEngine === 'hd' ? 'Classic HD' : 'Fast 2D'} ·{' '}
               {layout.preferences.graphicsQuality === 'high'
                 ? 'คุณภาพสูง'
                 : layout.preferences.graphicsQuality === 'medium'
                   ? 'กลาง · สมดุลลื่น'
                   : 'ประหยัด · ลดแลคสูงสุด'}
             </span>
+          </div>
+
+          <div>
+            <p className="mb-1.5 font-semibold text-foreground">เอนจินเรนเดอร์ในเกม (Render Engine)</p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {(
+                [
+                  ['fast', 'Sprite Runner 2D (ใหม่ · เปิดไว ลื่นมาก)', 'รันเกมด้วยเอนจิน Sprite แยกอิสระ โหลดเปิดเกมเร็ว ไม่ดึง renderer เดิม'],
+                  ['hd', 'Classic HD (แบบเดิม · โหลดเสริม)', 'โหลดตัวเรนเดอร์แบบเดิมเสริมเมื่อเลือกใช้งาน (ใช้ทรัพยากรสูงกว่า)'],
+                ] as Array<[RenderEngine, string, string]>
+              ).map(([engineId, label, desc]) => {
+                const active = (layout.preferences.renderEngine ?? 'fast') === engineId
+                return (
+                  <button
+                    key={engineId}
+                    type="button"
+                    onClick={() => {
+                      updateUiPref('renderEngine', engineId)
+                      setStatusMsg(`เปลี่ยนตัวเรนเดอร์เป็น "${label}" แล้ว`)
+                    }}
+                    className={`pixel-btn p-2 text-left transition-colors ${
+                      active
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-background/70 text-foreground hover:bg-secondary'
+                    }`}
+                  >
+                    <p className="font-bold">{label}</p>
+                    <p className={`mt-0.5 text-[10px] ${active ? 'opacity-90' : 'text-muted-foreground'}`}>
+                      {desc}
+                    </p>
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
           <div>

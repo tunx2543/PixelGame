@@ -1,28 +1,8 @@
 import { T, TILE, type MapDef } from './maps'
 import { getHdImage, getHdTileLoadVersion, HD_TILE, preloadTileAssets, type HdAssetKey } from './hd-assets'
 
-// Tiles that represent vertical 3D objects/buildings/trees rendered in the depth-sorted entity & overhead pass.
-// On Layer 0 (ground canvas), we paint clean underlying terrain beneath them so characters can walk behind & in front!
-export const LAYERED_PROP_TILES = new Set<number>([
-  T.TREE,
-  T.PINE,
-  T.BUSH,
-  T.ROCK,
-  T.CRYSTAL,
-  T.FENCE,
-  T.SIGN,
-  T.FOUNTAIN,
-])
-
-export const TOWN_BUILDING_TILE_MASK = new Set<number>([
-  T.WALL,
-  T.WINDOW,
-  T.DOOR,
-  T.ROOF_RED,
-  T.ROOF_BLUE,
-  T.ROOF_PURPLE,
-  T.ROOF_GREEN,
-])
+import { LAYERED_PROP_TILES, TOWN_BUILDING_TILE_MASK } from './map-decor-meta'
+export { LAYERED_PROP_TILES, TOWN_BUILDING_TILE_MASK }
 
 function tileRng(seed: number) {
   let a = (seed | 0) + 1
