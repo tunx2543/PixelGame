@@ -11,8 +11,9 @@ This branch builds the Supabase Auth foundation. It does **not** switch the live
 - Current `public.character_save` rows: 0
 - Identity bridge migration `firebase_to_supabase_identity_bridge` is applied and committed.
 - GM profile hardening migration `lock_gm_profile_to_trusted_provisioning` is applied and committed.
+- GM auto-provision trigger `on_auth_user_pixelquest_gm_profile` is applied and verified on `auth.users`.
 - The only configured GM/top-up administrator email is `ffsmilepay53@gmail.com`; permanent GM Game UID remains `0000` (numeric UID 0).
-- The GM role and reserved UID cannot be self-assigned by an authenticated browser client. A trusted server/service-role provisioning path must assign the GM profile after Supabase verifies the exact email.
+- Once that exact email signs in through Supabase and Supabase marks the email verified, a database trigger provisions the GM profile with role `gm` and Game UID `0000`. Browser clients cannot self-assign GM privileges or reserve that UID.
 - Existing game still has Firebase Auth and Firestore dependencies across character saves, social features, presence, chat, mail, parties, trading, GM tools, premium shop, top-ups and payment verification.
 
 ## Migration rules
@@ -30,7 +31,7 @@ This branch builds the Supabase Auth foundation. It does **not** switch the live
 - Added `auth_user_id` to `public.user_profile` and `owner_auth_id` to `public.character_save`.
 - Added owner-scoped RLS policies for profile and character read/write/delete.
 - Restricted browser profile insert/update to the signed-in user's own ordinary player profile, matching the verified JWT email, with `role='player'` and Game UID other than `0000`.
-- The GM profile must be provisioned only by trusted server/service-role code. The browser cannot grant itself GM privileges or reserve UID `0000`.
+- Added a security-definer trigger that creates/updates the GM profile only for the exact verified GM email. The trigger is not executable by browser roles.
 - The new mapping and owner columns are nullable so the empty Supabase project can accept the migration without fabricating users or changing old IDs.
 - Existing user/profile/character tables remain empty; no Firebase data has been imported.
 
