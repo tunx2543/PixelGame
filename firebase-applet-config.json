@@ -1,11 +1,11 @@
 {
-  "projectId": "key-generator-xzbz0",
-  "appId": "1:865463380742:web:b6ef3268afc342ef91cc87",
-  "apiKey": "AIzaSyCsHXwafX7s7CMsXRbUIynI-5-Dohije8Q",
-  "authDomain": "key-generator-xzbz0.firebaseapp.com",
-  "firestoreDatabaseId": "(default)",
-  "storageBucket": "key-generator-xzbz0.firebasestorage.app",
-  "messagingSenderId": "865463380742",
+  "projectId": "gen-lang-client-0916809921",
+  "appId": "1:194721012139:web:8d4e0e6687c4c8288edaee",
+  "apiKey": "AIzaSyCPiIfWkVr6qwvpnyzokoSI75YHmFSsfQQ",
+  "authDomain": "gen-lang-client-0916809921.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-pixelgame-202f940e-b62c-41a3-a300-bb9e8bb1a4f2",
+  "storageBucket": "gen-lang-client-0916809921.firebasestorage.app",
+  "messagingSenderId": "194721012139",
   "measurementId": "",
   "recaptchaSiteKey": ""
 }
