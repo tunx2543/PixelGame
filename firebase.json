@@ -1,5 +1,8 @@
 {
-  "firestore": {
-    "rules": "firestore.rules"
-  }
+  "firestore": [
+    {
+      "database": "ai-studio-pixelgame-202f940e-b62c-41a3-a300-bb9e8bb1a4f2",
+      "rules": "firestore.rules"
+    }
+  ]
 }
