@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { addItem, game, notify, saveGame } from '@/lib/game/engine'
+import { addItem, commitDiamondDelta, game, notify, saveGame } from '@/lib/game/engine'
 import { ITEMS } from '@/lib/game/data'
 
 const CHECKIN_KEY = 'pixel-quest-checkin-v2'
@@ -61,7 +61,14 @@ export function CheckinModal({ onClose }: { onClose: () => void }) {
       if (!picked || !addItem(picked.id)) return
       resultText = `${current.label}: ${picked.name}`
     }
-    game.p.diamonds = (game.p.diamonds ?? 0) + (current.diamonds ?? 0)
+    if ((current.diamonds ?? 0) > 0) {
+      const txRes = commitDiamondDelta(game.p, current.diamonds ?? 0, {
+        source: 'daily_checkin',
+        note: `หอรางวัลประจำวัน (${localDateKey()})`,
+        requestId: `CHECKIN-${localDateKey()}`,
+      })
+      if (!txRes.ok && !txRes.duplicate) return
+    }
     game.p.gold += current.gold ?? 0
     window.localStorage.setItem(CHECKIN_KEY, localDateKey())
     setClaimed(true)

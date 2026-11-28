@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server'
-import { makeServerTxId, resolveActorFromRequest, signPremiumTx } from '@/lib/server/premium-security'
+import {
+  checkServerRateLimit,
+  deriveGuestFingerprint,
+  makeServerTxId,
+  resolveActorFromRequest,
+  signPremiumTx,
+} from '@/lib/server/premium-security'
 import {
   claimRedeemCodeInStore,
   deleteRedeemCodeFromStore,
@@ -56,15 +62,28 @@ export async function POST(req: Request) {
         ? body.playerName.trim().slice(0, 40)
         : 'นักผจญภัย'
     const gameUid = typeof body.gameUid === 'string' ? body.gameUid.trim() : '1000'
-    const rawGuestKey =
+    const rawGuestHint =
       typeof body.guestClientId === 'string'
         ? body.guestClientId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64)
         : ''
+    const guestFingerprint = deriveGuestFingerprint(req, rawGuestHint)
 
     const claimKey =
       auth.actor.authMode === 'firebase' && auth.actor.emailVerified
         ? `fb:${auth.actor.uid}`
-        : `guest:${rawGuestKey || 'default'}`
+        : `guest:${guestFingerprint}`
+
+    const rateKey = `redeem:${claimKey}`
+    if (!checkServerRateLimit(rateKey, 12, 60_000)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          errorCode: 'rate_limited',
+          message: 'ส่งคำขอแลกโค้ดถี่เกินไป กรุณารอ 1 นาทีแล้วลองใหม่อีกครั้ง',
+        },
+        { status: 429, headers: NO_STORE_HEADERS },
+      )
+    }
 
     const claimRes = claimRedeemCodeInStore({
       code: rawCode,

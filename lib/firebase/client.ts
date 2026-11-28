@@ -28,7 +28,7 @@ function createFirestoreInstance(): Firestore {
       return initializeFirestore(
         app,
         {
-          experimentalForceLongPolling: true,
+          experimentalAutoDetectLongPolling: true,
         },
         databaseId,
       )
@@ -160,7 +160,7 @@ if (typeof window !== 'undefined') {
   const scheduleConnectionCheck = () => {
     setTimeout(() => {
       void testConnection()
-    }, 600)
+    }, 1500)
   }
   if (document.readyState === 'complete') {
     scheduleConnectionCheck()

@@ -65,7 +65,12 @@ import {
   type SaveData,
 } from '@/lib/game/engine'
 import { useGame } from '@/lib/game/use-game'
-import { openChangelogModal, useVersionUpdate } from '@/lib/game/use-version-update'
+import {
+  applyGameUpdateReload,
+  claimAutoReloadTarget,
+  openChangelogModal,
+  useVersionUpdate,
+} from '@/lib/game/use-version-update'
 import { resolveFashionLoadoutFromSave } from '@/lib/game/fashion-renderer'
 import { syncBgmContext } from '@/lib/game/bgm'
 import { MAPS } from '@/lib/game/maps'
@@ -92,10 +97,12 @@ function WindChimeSelectionAura() {
 export function TitleScreen() {
   const { kickedNotice } = useGame()
   const versionInfo = useVersionUpdate()
-  const [user, setUser] = useState<User | null>(null)
+  const [user, setUser] = useState<User | null>(() => auth.currentUser)
   const [accountIdentity, setAccountIdentity] = useState<UserAccountIdentity | null>(null)
   const [cloudChars, setCloudChars] = useState<CloudCharacterRecord[]>([])
-  const [guestSave, setGuestSave] = useState<SaveData | null>(null)
+  const [guestSave, setGuestSave] = useState<SaveData | null>(() =>
+    typeof window !== 'undefined' && !auth.currentUser ? readSave() : null,
+  )
   const [recoverableSaves, setRecoverableSaves] = useState<RecoverableLocalSave[]>([])
   const [selectedSlotId, setSelectedSlotId] = useState<CharacterSlotId>('slot_1')
 
@@ -127,13 +134,23 @@ export function TitleScreen() {
   }
 
   const refreshCharacters = useCallback(async (currentUser: User | null) => {
-    setIsLoadingSave(true)
     setConfirmDeleteId(null)
     setCloudError('')
+    void syncLatestMonsterAssetsAndFirestore()
+    if (!currentUser) {
+      setIsLoadingSave(false)
+    } else {
+      setIsLoadingSave(true)
+    }
     try {
-      await Promise.all([flushCloudSave(), syncLatestMonsterAssetsAndFirestore()])
+      await flushCloudSave()
       if (currentUser) {
-        const identity = await ensureUserProfile(currentUser)
+        const [identity, list] = currentUser.emailVerified
+          ? await Promise.all([
+              ensureUserProfile(currentUser),
+              listAccountCharacters({ skipProfileSync: true }),
+            ])
+          : [await ensureUserProfile(currentUser), []]
         setAccountIdentity(identity)
         const parsedUid = Number(identity.gameUid)
         const numericUid = identity.isGm
@@ -142,11 +159,10 @@ export function TitleScreen() {
             ? parsedUid
             : undefined
         setGameAccountIdentity(currentUser.uid, numericUid, identity.gameUid, identity.isGm)
-        const list = await listAccountCharacters()
         if (list.length === 0) {
           const migrated = await loadCloudGame()
           if (migrated) {
-            const updatedList = await listAccountCharacters()
+            const updatedList = await listAccountCharacters({ skipProfileSync: true })
             setCloudChars(updatedList)
             setRecoverableSaves(computeRecoverables(currentUser.uid, updatedList))
             if (updatedList[0]) setSelectedSlotId(updatedList[0].id as CharacterSlotId)
@@ -194,7 +210,7 @@ export function TitleScreen() {
       const fallback = readSave()
       setGuestSave(fallback)
       setIsLoadingSave(false)
-    }, 3500)
+    }, 1800)
 
     const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
       if (!active) return
@@ -241,6 +257,32 @@ export function TitleScreen() {
     if (params.get('autostart') === '1') return
     syncBgmContext({ screen: 'login' })
   }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !versionInfo.updateAvailable) return
+    if (continueOpen || createOpen || settingsOpen || accountModalOpen || authBusy) return
+    const host = window.location.hostname
+    if (host === 'localhost' || host === '127.0.0.1') return
+    const signature = [
+      versionInfo.remoteVersion ?? versionInfo.currentVersion,
+      versionInfo.remoteBuildId ?? '',
+      versionInfo.remoteDeployVersionId ?? '',
+    ].join(':')
+    if (claimAutoReloadTarget(signature)) {
+      void applyGameUpdateReload()
+    }
+  }, [
+    accountModalOpen,
+    authBusy,
+    continueOpen,
+    createOpen,
+    settingsOpen,
+    versionInfo.currentVersion,
+    versionInfo.remoteBuildId,
+    versionInfo.remoteDeployVersionId,
+    versionInfo.remoteVersion,
+    versionInfo.updateAvailable,
+  ])
 
   const hasAutoStartedRef = useRef(false)
 

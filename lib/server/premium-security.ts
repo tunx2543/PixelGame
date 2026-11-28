@@ -5,7 +5,15 @@ import { getPremiumProduct } from '@/lib/game/premium/catalog'
 import { VIP_TIERS, getEffectiveVipBonuses, getVipTierDef } from '@/lib/game/premium/vip'
 import type { PremiumProduct, VipState, VipTierId } from '@/lib/game/premium/types'
 import { BP_MAX_LEVEL, BP_PREMIUM_DIAMOND_COST, BATTLE_PASS_TIERS } from '@/lib/game/extended-systems'
-import { getGlobalSingleton, getRuntimeEnv } from './runtime-store'
+import { getGlobalSingleton, getRuntimeEnv, type StorePersistenceMode } from './runtime-store'
+import {
+  checkDurableRateLimit,
+  claimDurableLock,
+  detectDurableBackendMode,
+  hasRemoteDurableBackend,
+  mutateDurableNamespace,
+  readDurableNamespace,
+} from './durable-store'
 
 export interface VerifiedActor {
   uid: string
@@ -153,6 +161,10 @@ export function isPersistentPremiumSecretConfigured(): boolean {
   return Boolean(getRuntimeEnv('PREMIUM_TX_SECRET'))
 }
 
+export function isDurableTxSecretReady(): boolean {
+  return Boolean(getRuntimeEnv('PREMIUM_TX_SECRET')) || hasRemoteDurableBackend()
+}
+
 function txSecret(): string {
   const configured = getRuntimeEnv('PREMIUM_TX_SECRET')
   if (configured) return configured
@@ -163,6 +175,129 @@ function txSecret(): string {
     fallbackSlot.value = crypto.randomBytes(32).toString('hex')
   }
   return fallbackSlot.value
+}
+
+export async function resolveDurableTxSecret(): Promise<{
+  secret: string
+  persistent: boolean
+  mode: StorePersistenceMode
+}> {
+  const configured = getRuntimeEnv('PREMIUM_TX_SECRET')
+  if (configured) {
+    return {
+      secret: configured,
+      persistent: true,
+      mode: detectDurableBackendMode(),
+    }
+  }
+
+  if (hasRemoteDurableBackend()) {
+    const slot = getGlobalSingleton<{ entry: { mode: string; secret: string } | null }>(
+      'pixelquest.durableTxSecretSlot',
+      () => ({ entry: null }),
+    )
+    const activeMode = detectDurableBackendMode()
+    if (slot.entry && slot.entry.mode === activeMode && slot.entry.secret) {
+      return { secret: slot.entry.secret, persistent: true, mode: activeMode }
+    }
+
+    const readRes = await readDurableNamespace<{ txSecret?: string }>('system-secrets', () => ({}))
+    if (typeof readRes.data?.txSecret === 'string' && readRes.data.txSecret.length >= 32) {
+      slot.entry = { mode: readRes.mode, secret: readRes.data.txSecret }
+      return { secret: readRes.data.txSecret, persistent: true, mode: readRes.mode }
+    }
+
+    const candidateSecret = crypto.randomBytes(32).toString('hex')
+    const writeRes = await mutateDurableNamespace<{ txSecret?: string }, string>({
+      namespace: 'system-secrets',
+      fallbackInit: () => ({}),
+      mutator: (current) => {
+        if (typeof current?.txSecret === 'string' && current.txSecret.length >= 32) {
+          return { next: current, changed: false, result: current.txSecret }
+        }
+        return {
+          next: { ...current, txSecret: candidateSecret },
+          changed: true,
+          result: candidateSecret,
+        }
+      },
+      onCommitLocal: () => activeMode,
+    })
+    slot.entry = { mode: writeRes.mode, secret: writeRes.result }
+    return { secret: writeRes.result, persistent: true, mode: writeRes.mode }
+  }
+
+  return {
+    secret: txSecret(),
+    persistent: false,
+    mode: detectDurableBackendMode(),
+  }
+}
+
+export function isValidCharacterIdFormat(raw: unknown): raw is string {
+  return typeof raw === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(raw.trim())
+}
+
+function buildGuestMaterial(req: Request, clientHint?: string): string {
+  const cfIp = (req.headers.get('cf-connecting-ip') ?? '').trim()
+  const forwardedFor = (req.headers.get('x-forwarded-for') ?? '').split(',')[0]?.trim() ?? ''
+  const realIp = (req.headers.get('x-real-ip') ?? '').trim()
+  const clientIp = cfIp || forwardedFor || realIp
+  const userAgent = (req.headers.get('user-agent') ?? '').trim().slice(0, 160)
+  const cleanHint =
+    typeof clientHint === 'string' ? clientHint.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) : ''
+  // When behind Cloudflare / reverse proxy (real IP present), bind claim identity to IP + UA so
+  // rotating localStorage guestClientId cannot bypass once-per-guest redeem limits.
+  return clientIp
+    ? `ip:${clientIp}|ua:${userAgent}`
+    : `ua:${userAgent}|hint:${cleanHint || 'anon'}`
+}
+
+export function deriveGuestFingerprint(req: Request, clientHint?: string): string {
+  return crypto.createHmac('sha256', txSecret()).update(buildGuestMaterial(req, clientHint)).digest('hex').slice(0, 24)
+}
+
+export async function deriveGuestFingerprintDurable(req: Request, clientHint?: string): Promise<string> {
+  const { secret } = await resolveDurableTxSecret()
+  return crypto.createHmac('sha256', secret).update(buildGuestMaterial(req, clientHint)).digest('hex').slice(0, 24)
+}
+
+export function checkServerRateLimit(key: string, maxRequests: number, windowMs: number): boolean {
+  const cleanKey = key.slice(0, 128)
+  if (!cleanKey || maxRequests < 1 || windowMs < 1000) return false
+  const buckets = getGlobalSingleton<Map<string, number[]>>(
+    'pixelquest.rateLimitBuckets',
+    () => new Map<string, number[]>(),
+  )
+  const now = Date.now()
+  if (buckets.size > 4000) {
+    for (const [k, stamps] of buckets.entries()) {
+      if (stamps.length === 0 || stamps[stamps.length - 1]! + windowMs <= now) {
+        buckets.delete(k)
+      }
+    }
+  }
+  const existing = buckets.get(cleanKey) ?? []
+  const recent = existing.filter((t) => now - t < windowMs)
+  if (recent.length >= maxRequests) {
+    buckets.set(cleanKey, recent)
+    return false
+  }
+  recent.push(now)
+  buckets.set(cleanKey, recent)
+  return true
+}
+
+export async function checkDurableServerRateLimit(
+  key: string,
+  maxRequests: number,
+  windowMs: number,
+): Promise<boolean> {
+  const cleanKey = key.slice(0, 128)
+  if (!cleanKey || maxRequests < 1 || windowMs < 1000) return false
+  return checkDurableRateLimit(cleanKey, maxRequests, windowMs, () =>
+    checkServerRateLimit(cleanKey, maxRequests, windowMs),
+  )
 }
 
 export function extractBearerToken(req: Request): string | null {
@@ -220,6 +355,62 @@ export interface AuthoritativeCharacterSnapshot {
   }
 }
 
+interface AuthoritativeTopupOrdersSummary {
+  totalAmountThb: number
+  latestCreatedAtMs: number
+  totalOrders: number
+}
+
+async function fetchAuthoritativeTopupOrdersSummary(
+  uid: string,
+  safeCharId: string,
+  bearerToken: string,
+): Promise<AuthoritativeTopupOrdersSummary | null> {
+  const baseUrl = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(firebaseConfig.projectId)}/databases/${encodeURIComponent(firebaseConfig.firestoreDatabaseId)}/documents/users/${encodeURIComponent(uid)}/characters/${encodeURIComponent(safeCharId)}/topupOrders`
+  let pageToken = ''
+  let totalAmountThb = 0
+  let latestCreatedAtMs = 0
+  let totalOrders = 0
+
+  try {
+    for (let page = 0; page < 5; page++) {
+      const url = pageToken
+        ? `${baseUrl}?pageSize=100&pageToken=${encodeURIComponent(pageToken)}`
+        : `${baseUrl}?pageSize=100`
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${bearerToken}` },
+        cache: 'no-store',
+      })
+      if (res.status === 404) {
+        return { totalAmountThb: 0, latestCreatedAtMs: 0, totalOrders: 0 }
+      }
+      if (!res.ok) return null
+      const json = (await res.json().catch(() => null)) as {
+        documents?: Array<{ fields?: Record<string, FirestoreRestValue> }>
+        nextPageToken?: string
+      } | null
+      if (!json) return null
+      const docs = Array.isArray(json.documents) ? json.documents : []
+      for (const item of docs) {
+        const fields = item.fields
+        if (!fields) continue
+        const status = String(decodeFirestoreRestValue(fields.status) ?? '')
+        if (status && status !== 'credited') continue
+        const amt = Math.max(0, Math.floor(Number(decodeFirestoreRestValue(fields.amountThb) ?? 0) || 0))
+        const createdAtMs = Math.max(0, Math.floor(Number(decodeFirestoreRestValue(fields.createdAtMs) ?? 0) || 0))
+        totalAmountThb += amt
+        totalOrders += 1
+        if (createdAtMs > latestCreatedAtMs) latestCreatedAtMs = createdAtMs
+      }
+      if (!json.nextPageToken) break
+      pageToken = json.nextPageToken
+    }
+    return { totalAmountThb, latestCreatedAtMs, totalOrders }
+  } catch {
+    return null
+  }
+}
+
 export async function fetchAuthoritativeCharacterState(
   uid: string,
   characterId: string,
@@ -228,10 +419,13 @@ export async function fetchAuthoritativeCharacterState(
   const safeCharId = characterId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || 'slot_1'
   const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(firebaseConfig.projectId)}/databases/${encodeURIComponent(firebaseConfig.firestoreDatabaseId)}/documents/users/${encodeURIComponent(uid)}/characters/${encodeURIComponent(safeCharId)}`
   try {
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${bearerToken}` },
-      cache: 'no-store',
-    })
+    const [res, ordersSummary] = await Promise.all([
+      fetch(url, {
+        headers: { Authorization: `Bearer ${bearerToken}` },
+        cache: 'no-store',
+      }),
+      fetchAuthoritativeTopupOrdersSummary(uid, safeCharId, bearerToken),
+    ])
     if (res.status === 404) {
       return {
         exists: false,
@@ -305,22 +499,66 @@ export async function fetchAuthoritativeCharacterState(
         }
       : undefined
 
+    const savedTotalTopupThb = Math.max(0, Math.floor(Number(prem.totalTopupThb ?? 0) || 0))
+    const verifiedTotalTopupThb =
+      ordersSummary !== null ? Math.min(savedTotalTopupThb, ordersSummary.totalAmountThb) : savedTotalTopupThb
+
+    const rawLastDaily = typeof prem.lastDailyTopupDate === 'string' ? prem.lastDailyTopupDate : ''
+    let verifiedLastDaily = rawLastDaily
+    if (ordersSummary !== null) {
+      if (ordersSummary.totalOrders === 0 || ordersSummary.latestCreatedAtMs <= 0) {
+        verifiedLastDaily = ''
+      } else if (/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(rawLastDaily)) {
+        const parsedDateNoonUtc = Date.parse(`${rawLastDaily}T12:00:00Z`)
+        if (
+          !Number.isFinite(parsedDateNoonUtc) ||
+          Math.abs(parsedDateNoonUtc - ordersSummary.latestCreatedAtMs) > 36 * 60 * 60 * 1000
+        ) {
+          verifiedLastDaily = ''
+        }
+      } else {
+        verifiedLastDaily = ''
+      }
+    }
+
     return {
       exists: true,
       diamonds,
       vip,
       purchaseCounts,
-      totalTopupThb: Math.max(0, Math.floor(Number(prem.totalTopupThb ?? 0) || 0)),
+      totalTopupThb: verifiedTotalTopupThb,
       claimedTopupMilestones: Array.isArray(prem.claimedTopupMilestones)
         ? prem.claimedTopupMilestones.filter((s): s is string => typeof s === 'string')
         : [],
-      lastDailyTopupDate: typeof prem.lastDailyTopupDate === 'string' ? prem.lastDailyTopupDate : '',
+      lastDailyTopupDate: verifiedLastDaily,
       claimedDailyTopupDate: typeof prem.claimedDailyTopupDate === 'string' ? prem.claimedDailyTopupDate : '',
       battlePass,
     }
   } catch {
     return null
   }
+}
+
+function canonicalPremiumTx(payload: {
+  txId: string
+  requestId: string
+  actorUid: string
+  characterId: string
+  amount: number
+  type: string
+  source: string
+  timestampMs: number
+}): string {
+  return [
+    payload.txId,
+    payload.requestId,
+    payload.actorUid,
+    payload.characterId,
+    payload.type,
+    payload.source,
+    String(payload.amount),
+    String(payload.timestampMs),
+  ].join('|')
 }
 
 export function signPremiumTx(payload: {
@@ -333,17 +571,12 @@ export function signPremiumTx(payload: {
   source: string
   timestampMs: number
 }): string {
-  const canonical = [
-    payload.txId,
-    payload.requestId,
-    payload.actorUid,
-    payload.characterId,
-    payload.type,
-    payload.source,
-    String(payload.amount),
-    String(payload.timestampMs),
-  ].join('|')
-  return crypto.createHmac('sha256', txSecret()).update(canonical).digest('hex').slice(0, 32)
+  return crypto.createHmac('sha256', txSecret()).update(canonicalPremiumTx(payload)).digest('hex').slice(0, 32)
+}
+
+export async function signPremiumTxDurable(payload: Parameters<typeof signPremiumTx>[0]): Promise<string> {
+  const { secret } = await resolveDurableTxSecret()
+  return crypto.createHmac('sha256', secret).update(canonicalPremiumTx(payload)).digest('hex').slice(0, 32)
 }
 
 export function verifyPremiumTxSignature(
@@ -354,6 +587,21 @@ export function verifyPremiumTxSignature(
     return false
   }
   const expected = signPremiumTx(payload)
+  try {
+    return crypto.timingSafeEqual(Buffer.from(expected, 'utf8'), Buffer.from(signature.toLowerCase(), 'utf8'))
+  } catch {
+    return false
+  }
+}
+
+export async function verifyPremiumTxSignatureDurable(
+  payload: Parameters<typeof signPremiumTx>[0],
+  signature: string | null | undefined,
+): Promise<boolean> {
+  if (!signature || typeof signature !== 'string' || !/^[a-f0-9]{32}$/i.test(signature)) {
+    return false
+  }
+  const expected = await signPremiumTxDurable(payload)
   try {
     return crypto.timingSafeEqual(Buffer.from(expected, 'utf8'), Buffer.from(signature.toLowerCase(), 'utf8'))
   } catch {
@@ -387,6 +635,17 @@ export function claimServerRequestId(requestId: string, actorUid: string): boole
   }
   processedServerRequests.set(key, now + RECENT_REQUEST_TTL_MS)
   return true
+}
+
+export async function claimDurableServerRequestId(
+  requestId: string,
+  actorUid: string,
+  ttlMs = RECENT_REQUEST_TTL_MS,
+): Promise<boolean> {
+  if (!requestId || requestId.length < 4 || requestId.length > 96) return false
+  return claimDurableLock(`req:${actorUid}:${requestId}`, actorUid, ttlMs, () =>
+    claimServerRequestId(requestId, actorUid),
+  )
 }
 
 export interface PurchaseVerificationInput {

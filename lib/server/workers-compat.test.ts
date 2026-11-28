@@ -111,4 +111,17 @@ describe('Phase 3 Cloudflare Workers Runtime Compatibility', () => {
     assert.equal(guestSysRes.status, 403)
     assert.ok((guestSysRes.headers.get('cache-control') ?? '').includes('no-store'))
   })
+
+  it('exposes CF_VERSION_METADATA.id and buildId from /api/version for real-time deploy detection', async () => {
+    ;(globalThis as Record<PropertyKey, unknown>)[CF_CONTEXT_SYMBOL] = {
+      env: {
+        CF_VERSION_METADATA: { id: 'cf-deploy-uuid-123' },
+      },
+    }
+    const res = await getVersion()
+    assert.equal(res.status, 200)
+    const body = (await res.json()) as { buildId?: string; deployVersionId?: string | null }
+    assert.equal(typeof body.buildId, 'string')
+    assert.equal(body.deployVersionId, 'cf-deploy-uuid-123')
+  })
 })

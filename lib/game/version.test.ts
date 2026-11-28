@@ -6,6 +6,7 @@ import {
   compareSemver,
   getLatestReleaseNote,
   getVersionPayload,
+  hasRemoteBuildUpdate,
   hasRemoteUpdate,
   isVersionUnseen,
 } from './version'
@@ -28,6 +29,49 @@ test('hasRemoteUpdate only triggers when remote version is strictly newer', () =
   assert.equal(hasRemoteUpdate('1.4.0', '1.4.1'), true)
   assert.equal(hasRemoteUpdate('1.4.0', 'v1.5.0'), true)
   assert.equal(hasRemoteUpdate('1.4.0', '2.0.0'), true)
+})
+
+test('hasRemoteBuildUpdate detects real-time code deployments via buildId or Cloudflare deployVersionId', () => {
+  assert.equal(
+    hasRemoteBuildUpdate({
+      clientVersion: '1.4.2',
+      remoteVersion: '1.4.2',
+      clientBuildId: 'dev-local',
+      remoteBuildId: 'build-abc',
+    }),
+    false,
+  )
+  assert.equal(
+    hasRemoteBuildUpdate({
+      clientVersion: '1.4.2',
+      remoteVersion: '1.4.2',
+      clientBuildId: 'build-1',
+      remoteBuildId: 'build-1',
+      initialDeployVersionId: 'cf-ver-1',
+      remoteDeployVersionId: 'cf-ver-1',
+    }),
+    false,
+  )
+  assert.equal(
+    hasRemoteBuildUpdate({
+      clientVersion: '1.4.2',
+      remoteVersion: '1.4.2',
+      clientBuildId: 'build-1',
+      remoteBuildId: 'build-2',
+    }),
+    true,
+  )
+  assert.equal(
+    hasRemoteBuildUpdate({
+      clientVersion: '1.4.2',
+      remoteVersion: '1.4.2',
+      clientBuildId: 'build-1',
+      remoteBuildId: 'build-1',
+      initialDeployVersionId: 'cf-ver-1',
+      remoteDeployVersionId: 'cf-ver-2',
+    }),
+    true,
+  )
 })
 
 test('isVersionUnseen detects first launch and newer client builds', () => {

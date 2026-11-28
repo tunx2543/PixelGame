@@ -4,7 +4,26 @@ import path from 'node:path'
 const CF_CONTEXT_SYMBOL = Symbol.for('__cloudflare-context__')
 const SINGLETON_MAP_SYMBOL = Symbol.for('pixelquest.runtime.singletons')
 
-export type StorePersistenceMode = 'durable_disk' | 'ephemeral_tmp' | 'isolate_memory_only'
+export type StorePersistenceMode =
+  | 'durable_d1'
+  | 'durable_kv'
+  | 'durable_do'
+  | 'durable_redis'
+  | 'durable_firestore'
+  | 'durable_disk'
+  | 'ephemeral_tmp'
+  | 'isolate_memory_only'
+
+export function isDurablePersistenceMode(mode: StorePersistenceMode): boolean {
+  return (
+    mode === 'durable_d1' ||
+    mode === 'durable_kv' ||
+    mode === 'durable_do' ||
+    mode === 'durable_redis' ||
+    mode === 'durable_firestore' ||
+    mode === 'durable_disk'
+  )
+}
 
 export interface StoreFsOps {
   existsSync: (p: string) => boolean
@@ -30,6 +49,14 @@ export function isCloudflareWorkersRuntime(): boolean {
   if (typeof (g as { WebSocketPair?: unknown }).WebSocketPair !== 'undefined') return true
   if (typeof navigator !== 'undefined' && navigator.userAgent === 'Cloudflare-Workers') return true
   return false
+}
+
+export function getRuntimeBinding<T = unknown>(key: string): T | null {
+  const cfCtx = (globalThis as Record<PropertyKey, unknown>)[CF_CONTEXT_SYMBOL] as
+    | { env?: Record<string, unknown> }
+    | undefined
+  const val = cfCtx?.env?.[key]
+  return val !== undefined && val !== null ? (val as T) : null
 }
 
 export function getRuntimeEnv(key: string): string | null {

@@ -30,6 +30,7 @@ function formatSeasonCountdown(endAtMs: number): string {
 export function PassPanel() {
   const { p } = useGame()
   const [notice, setNotice] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
   if (!p) return null
 
   const extV2 = sanitizeExtV2(p.extV2)
@@ -37,22 +38,28 @@ export function PassPanel() {
   const expiredArchive = bp.expiredArchive ?? []
   const pct = bp.level >= BP_MAX_LEVEL ? 100 : Math.min(100, Math.round((bp.exp / BP_EXP_PER_LEVEL) * 100))
 
-  const handleClaimAll = () => {
-    let claimed = 0
-    for (const tier of BATTLE_PASS_TIERS) {
-      if (tier.level > bp.level) break
-      if (!bp.claimedFree.includes(tier.level)) {
-        if (claimBattlePassTierAction(tier.level, 'free').ok) claimed += 1
+  const handleClaimAll = async () => {
+    if (busy) return
+    setBusy(true)
+    try {
+      let claimed = 0
+      for (const tier of BATTLE_PASS_TIERS) {
+        if (tier.level > bp.level) break
+        if (!bp.claimedFree.includes(tier.level)) {
+          if ((await claimBattlePassTierAction(tier.level, 'free')).ok) claimed += 1
+        }
+        if (bp.premiumUnlocked && !bp.claimedPrem.includes(tier.level)) {
+          if ((await claimBattlePassTierAction(tier.level, 'prem')).ok) claimed += 1
+        }
       }
-      if (bp.premiumUnlocked && !bp.claimedPrem.includes(tier.level)) {
-        if (claimBattlePassTierAction(tier.level, 'prem').ok) claimed += 1
+      if (claimed > 0) {
+        playQuestClaimSfx(true)
+        setNotice(`รับรางวัล Battle Pass ทั้งหมด ${claimed} ช่องสำเร็จ!`)
+      } else {
+        setNotice('ไม่มีรางวัลที่รับได้ในขณะนี้')
       }
-    }
-    if (claimed > 0) {
-      playQuestClaimSfx(true)
-      setNotice(`รับรางวัล Battle Pass ทั้งหมด ${claimed} ช่องสำเร็จ!`)
-    } else {
-      setNotice('ไม่มีรางวัลที่รับได้ในขณะนี้')
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -80,17 +87,23 @@ export function PassPanel() {
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
-          <PxButton variant="accent" onClick={handleClaimAll}>
+          <PxButton variant="accent" disabled={busy} onClick={() => { void handleClaimAll() }}>
             รับทั้งหมดที่ปลดล็อก
           </PxButton>
           {!bp.premiumUnlocked ? (
             <PxButton
               variant="primary"
-              disabled={p.diamonds < BP_PREMIUM_DIAMOND_COST}
-              onClick={() => {
-                const res = unlockBattlePassPremiumAction()
-                if (res.ok) playQuestClaimSfx(true)
-                setNotice(res.message)
+              disabled={busy || p.diamonds < BP_PREMIUM_DIAMOND_COST}
+              onClick={async () => {
+                if (busy) return
+                setBusy(true)
+                try {
+                  const res = await unlockBattlePassPremiumAction()
+                  if (res.ok) playQuestClaimSfx(true)
+                  setNotice(res.message)
+                } finally {
+                  setBusy(false)
+                }
               }}
             >
               <span className="flex items-center gap-1 tabular-nums">
@@ -159,11 +172,17 @@ export function PassPanel() {
                   </span>
                 ) : (
                   <PxButton
-                    disabled={!unlocked}
-                    onClick={() => {
-                      const res = claimBattlePassTierAction(tier.level, 'free')
-                      if (res.ok) playQuestClaimSfx(false)
-                      setNotice(res.message)
+                    disabled={!unlocked || busy}
+                    onClick={async () => {
+                      if (busy) return
+                      setBusy(true)
+                      try {
+                        const res = await claimBattlePassTierAction(tier.level, 'free')
+                        if (res.ok) playQuestClaimSfx(false)
+                        setNotice(res.message)
+                      } finally {
+                        setBusy(false)
+                      }
                     }}
                     className="px-2 py-1 text-[10px]"
                   >
@@ -183,11 +202,17 @@ export function PassPanel() {
                 ) : (
                   <PxButton
                     variant="accent"
-                    disabled={!unlocked}
-                    onClick={() => {
-                      const res = claimBattlePassTierAction(tier.level, 'prem')
-                      if (res.ok) playQuestClaimSfx(false)
-                      setNotice(res.message)
+                    disabled={!unlocked || busy}
+                    onClick={async () => {
+                      if (busy) return
+                      setBusy(true)
+                      try {
+                        const res = await claimBattlePassTierAction(tier.level, 'prem')
+                        if (res.ok) playQuestClaimSfx(false)
+                        setNotice(res.message)
+                      } finally {
+                        setBusy(false)
+                      }
                     }}
                     className="px-2 py-1 text-[10px]"
                   >

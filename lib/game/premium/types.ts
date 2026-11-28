@@ -252,4 +252,5 @@ export interface PremiumState {
   claimedTopupMilestones?: string[]
   lastDailyTopupDate?: string | null
   claimedDailyTopupDate?: string | null
+  claimedRedeemCodes?: string[]
 }

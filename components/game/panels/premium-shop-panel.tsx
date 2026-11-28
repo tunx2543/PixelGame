@@ -2149,10 +2149,16 @@ export function PremiumShopPanel() {
                 <PxButton
                   variant="primary"
                   disabled={(p.diamonds ?? 0) < BP_PREMIUM_DIAMOND_COST || inFlight}
-                  onClick={() => {
-                    const res = unlockBattlePassPremiumAction()
-                    if (res.ok) playQuestClaimSfx(true)
-                    setNotice({ ok: res.ok, text: res.message })
+                  onClick={async () => {
+                    if (inFlight) return
+                    setInFlight(true)
+                    try {
+                      const res = await unlockBattlePassPremiumAction()
+                      if (res.ok) playQuestClaimSfx(true)
+                      setNotice({ ok: res.ok, text: res.message })
+                    } finally {
+                      setInFlight(false)
+                    }
                   }}
                 >
                   ปลดล็อก Premium Pass ({BP_PREMIUM_DIAMOND_COST} D)
@@ -2234,12 +2240,18 @@ export function PremiumShopPanel() {
                       <span className="text-[10px] text-emerald-300">รับแล้ว</span>
                     ) : (
                       <PxButton
-                        disabled={!unlocked}
+                        disabled={!unlocked || inFlight}
                         className="px-2 py-0.5 text-[10px]"
-                        onClick={() => {
-                          const res = claimBattlePassTierAction(tier.level, 'free')
-                          if (res.ok) playQuestClaimSfx(false)
-                          setNotice({ ok: res.ok, text: res.message })
+                        onClick={async () => {
+                          if (inFlight) return
+                          setInFlight(true)
+                          try {
+                            const res = await claimBattlePassTierAction(tier.level, 'free')
+                            if (res.ok) playQuestClaimSfx(false)
+                            setNotice({ ok: res.ok, text: res.message })
+                          } finally {
+                            setInFlight(false)
+                          }
                         }}
                       >
                         รับ
@@ -2255,12 +2267,18 @@ export function PremiumShopPanel() {
                     ) : (
                       <PxButton
                         variant="accent"
-                        disabled={!unlocked}
+                        disabled={!unlocked || inFlight}
                         className="px-2 py-0.5 text-[10px]"
-                        onClick={() => {
-                          const res = claimBattlePassTierAction(tier.level, 'prem')
-                          if (res.ok) playQuestClaimSfx(false)
-                          setNotice({ ok: res.ok, text: res.message })
+                        onClick={async () => {
+                          if (inFlight) return
+                          setInFlight(true)
+                          try {
+                            const res = await claimBattlePassTierAction(tier.level, 'prem')
+                            if (res.ok) playQuestClaimSfx(false)
+                            setNotice({ ok: res.ok, text: res.message })
+                          } finally {
+                            setInFlight(false)
+                          }
                         }}
                       >
                         รับ

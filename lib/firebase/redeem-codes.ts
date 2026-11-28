@@ -393,10 +393,10 @@ export async function claimRedeemCodeEverywhere(
   } | null
 
   if (res.ok && json?.ok && json.record) {
-    // Best-effort Firestore mirror if signed-in user and doc exists in Firestore
+    // Ensure Firestore redeem claim doc exists before character save writes claimedRedeemCodes
     const user = auth.currentUser
     if (user && user.emailVerified) {
-      void claimRedeemCodeInFirestore(code, playerInfo).catch(() => {})
+      await claimRedeemCodeInFirestore(code, playerInfo).catch(() => {})
     }
     return {
       ...json.record,

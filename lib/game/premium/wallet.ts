@@ -61,6 +61,7 @@ export function createDefaultPremiumState(characterId = 'slot_1', initialBalance
     claimedTopupMilestones: [],
     lastDailyTopupDate: null,
     claimedDailyTopupDate: null,
+    claimedRedeemCodes: [],
   }
 }
 
@@ -181,6 +182,9 @@ export function sanitizePremiumState(
     typeof obj.claimedDailyTopupDate === 'string' && /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(obj.claimedDailyTopupDate)
       ? obj.claimedDailyTopupDate
       : null
+  const claimedRedeemCodes = Array.isArray(obj.claimedRedeemCodes)
+    ? [...new Set(obj.claimedRedeemCodes.filter((c): c is string => typeof c === 'string' && /^[A-Z0-9_-]{4,32}$/.test(c)))].slice(-60)
+    : []
 
   return {
     version: 1,
@@ -197,6 +201,7 @@ export function sanitizePremiumState(
     claimedTopupMilestones,
     lastDailyTopupDate,
     claimedDailyTopupDate,
+    claimedRedeemCodes,
   }
 }
 

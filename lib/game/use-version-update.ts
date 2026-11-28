@@ -3,10 +3,12 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import {
   GAME_BUILD_DATE,
+  GAME_BUILD_ID,
   GAME_CHANGELOG,
   GAME_RELEASE_TITLE,
   GAME_VERSION,
   LOCAL_SEEN_VERSION_KEY,
+  hasRemoteBuildUpdate,
   hasRemoteUpdate,
   isVersionUnseen,
   type ReleaseNote,
@@ -15,9 +17,13 @@ import {
 
 export interface VersionUpdateState {
   currentVersion: string
+  currentBuildId: string
   buildDate: string
   releaseTitle: string
   remoteVersion: string | null
+  remoteBuildId: string | null
+  remoteDeployVersionId: string | null
+  buildUpdateDetected: boolean
   remoteReleaseTitle: string | null
   changelog: ReleaseNote[]
   updateAvailable: boolean
@@ -34,9 +40,13 @@ export interface VersionUpdateState {
 
 const INITIAL_STATE: VersionUpdateState = {
   currentVersion: GAME_VERSION,
+  currentBuildId: GAME_BUILD_ID,
   buildDate: GAME_BUILD_DATE,
   releaseTitle: GAME_RELEASE_TITLE,
   remoteVersion: null,
+  remoteBuildId: null,
+  remoteDeployVersionId: null,
+  buildUpdateDetected: false,
   remoteReleaseTitle: null,
   changelog: GAME_CHANGELOG,
   updateAvailable: false,
@@ -56,9 +66,11 @@ const listeners = new Set<() => void>()
 let initialized = false
 let inFlightCheck: Promise<boolean> | null = null
 let lastCheckAttemptMs = 0
+let initialDeployVersionId: string | null = null
 
-const AUTO_CHECK_INTERVAL_MS = 180_000
-const AUTO_CHECK_THROTTLE_MS = 45_000
+const AUTO_CHECK_INTERVAL_MS = 45_000
+const AUTO_CHECK_THROTTLE_MS = 15_000
+const AUTO_RELOAD_GUARD_KEY = 'pixelquest_auto_reloaded_build'
 
 function emit(patch: Partial<VersionUpdateState>) {
   state = { ...state, ...patch }
@@ -167,7 +179,26 @@ export async function checkForGameUpdates(manual = false): Promise<boolean> {
       }
       const payload = (await res.json()) as VersionPayload
       const remoteVersion = typeof payload.version === 'string' ? payload.version.trim() : GAME_VERSION
-      const hasNewer = hasRemoteUpdate(GAME_VERSION, remoteVersion) || state.swUpdateReady
+      const remoteBuildId = typeof payload.buildId === 'string' && payload.buildId.trim() ? payload.buildId.trim() : null
+      const remoteDeployVersionId =
+        typeof payload.deployVersionId === 'string' && payload.deployVersionId.trim()
+          ? payload.deployVersionId.trim()
+          : null
+
+      if (!initialDeployVersionId && remoteDeployVersionId) {
+        initialDeployVersionId = remoteDeployVersionId
+      }
+
+      const semverNewer = hasRemoteUpdate(GAME_VERSION, remoteVersion)
+      const buildNewer = hasRemoteBuildUpdate({
+        clientVersion: GAME_VERSION,
+        remoteVersion,
+        clientBuildId: GAME_BUILD_ID,
+        remoteBuildId,
+        initialDeployVersionId,
+        remoteDeployVersionId,
+      })
+      const hasNewer = buildNewer || state.swUpdateReady
       const remoteNotes = Array.isArray(payload.changelog) && payload.changelog.length > 0
         ? payload.changelog
         : GAME_CHANGELOG
@@ -175,6 +206,9 @@ export async function checkForGameUpdates(manual = false): Promise<boolean> {
       emit({
         checking: false,
         remoteVersion,
+        remoteBuildId,
+        remoteDeployVersionId,
+        buildUpdateDetected: buildNewer && !semverNewer,
         remoteReleaseTitle: payload.title || GAME_RELEASE_TITLE,
         changelog: remoteNotes,
         updateAvailable: hasNewer,
@@ -182,7 +216,9 @@ export async function checkForGameUpdates(manual = false): Promise<boolean> {
         lastCheckedAt: Date.now(),
         checkError: null,
         checkStatusText: hasNewer
-          ? `พบเวอร์ชั่นใหม่ v${remoteVersion} พร้อมอัปเดตแล้ว!`
+          ? semverNewer
+            ? `พบเวอร์ชั่นใหม่ v${remoteVersion} พร้อมอัปเดตแล้ว!`
+            : 'พบโค้ดเกมอัปเดตใหม่บนเซิร์ฟเวอร์ พร้อมรีโหลดทันที!'
           : `คุณกำลังใช้งานเวอร์ชั่นล่าสุด (v${GAME_VERSION})`,
       })
       return hasNewer
@@ -200,6 +236,18 @@ export async function checkForGameUpdates(manual = false): Promise<boolean> {
   })()
 
   return inFlightCheck
+}
+
+export function claimAutoReloadTarget(targetSignature: string): boolean {
+  if (typeof window === 'undefined' || !targetSignature) return false
+  try {
+    const prev = window.sessionStorage.getItem(AUTO_RELOAD_GUARD_KEY)
+    if (prev === targetSignature) return false
+    window.sessionStorage.setItem(AUTO_RELOAD_GUARD_KEY, targetSignature)
+    return true
+  } catch {
+    return false
+  }
 }
 
 export async function applyGameUpdateReload() {

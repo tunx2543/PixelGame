@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import {
   claimServerRequestId,
+  isValidCharacterIdFormat,
   makeServerTxId,
   resolveActorFromRequest,
   signPremiumTx,
@@ -41,6 +42,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, message: 'ข้อมูลคำขอไม่ถูกต้อง' }, { status: 400 })
     }
 
+    if (body.mode !== undefined && body.mode !== 'sandbox' && body.mode !== 'gm') {
+      return NextResponse.json({ ok: false, message: 'โหมดคำขอ Sandbox ไม่ถูกต้อง' }, { status: 400 })
+    }
+
+    if (body.characterId !== undefined && !isValidCharacterIdFormat(body.characterId)) {
+      return NextResponse.json({ ok: false, message: 'รหัสตัวละครไม่ถูกต้อง' }, { status: 400 })
+    }
+
     const amount = Math.floor(Number(body.amount) || 0)
     if (!Number.isSafeInteger(amount) || amount < 1 || amount > MAX_GM_GRANT) {
       return NextResponse.json(
@@ -49,10 +58,9 @@ export async function POST(req: Request) {
       )
     }
 
-    const characterId =
-      typeof body.characterId === 'string' && body.characterId.trim()
-        ? body.characterId.trim().slice(0, 64)
-        : 'slot_1'
+    const characterId = isValidCharacterIdFormat(body.characterId)
+      ? body.characterId.trim()
+      : 'slot_1'
     const requestId =
       typeof body.requestId === 'string' && body.requestId.trim()
         ? body.requestId.trim().slice(0, 96)

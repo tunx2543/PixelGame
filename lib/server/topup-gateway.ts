@@ -11,13 +11,23 @@ import {
   type TopupProvider,
 } from '@/lib/game/premium/topup'
 import {
+  claimDurableServerRequestId,
   claimServerRequestId,
+  isDurableTxSecretReady,
   isPersistentPremiumSecretConfigured,
   makeServerTxId,
   signPremiumTx,
+  signPremiumTxDurable,
 } from './premium-security'
 import { getRuntimeEnv } from './runtime-store'
-import { claimPersistentSlipRef, getStoredMerchantQr, isPersistentSlipRefUsed } from './topup-store'
+import {
+  claimPersistentSlipRef,
+  claimPersistentSlipRefDurable,
+  getStoredMerchantQr,
+  getStoredMerchantQrDurable,
+  isPersistentSlipRefUsed,
+  isPersistentSlipRefUsedDurable,
+} from './topup-store'
 
 export interface TopupGatewayPublicConfig {
   stripeEnabled: boolean
@@ -43,6 +53,16 @@ export function getPromptPayId(): string | null {
   const envRaw = getRuntimeEnv('PROMPTPAY_ID')
   if (envRaw && formatPromptPayTarget(envRaw)) return envRaw
   const stored = getStoredMerchantQr()
+  if (stored?.enabled && stored.promptPayId && formatPromptPayTarget(stored.promptPayId)) {
+    return stored.promptPayId
+  }
+  return null
+}
+
+export async function getPromptPayIdDurable(bearerToken?: string | null): Promise<string | null> {
+  const envRaw = getRuntimeEnv('PROMPTPAY_ID')
+  if (envRaw && formatPromptPayTarget(envRaw)) return envRaw
+  const stored = await getStoredMerchantQrDurable(bearerToken)
   if (stored?.enabled && stored.promptPayId && formatPromptPayTarget(stored.promptPayId)) {
     return stored.promptPayId
   }
@@ -85,6 +105,37 @@ export function getTopupGatewayPublicConfig(): TopupGatewayPublicConfig {
   }
 }
 
+export async function getTopupGatewayPublicConfigDurable(
+  bearerToken?: string | null,
+): Promise<TopupGatewayPublicConfig> {
+  const stored = await getStoredMerchantQrDurable(bearerToken)
+  const envRaw = getRuntimeEnv('PROMPTPAY_ID')
+  const ppId =
+    envRaw && formatPromptPayTarget(envRaw)
+      ? envRaw
+      : stored?.enabled && stored.promptPayId && formatPromptPayTarget(stored.promptPayId)
+        ? stored.promptPayId
+        : null
+  const slipOk = getSlipOkConfig()
+  const easySlip = getEasySlipConfig()
+  const hasCustomQr = Boolean(stored?.enabled && stored.customQrDataUrl)
+  const hasDefaultScbQr = Boolean(
+    hasCustomQr && stored?.customQrDataUrl?.includes('Moment_1794989254278_6a17875f'),
+  )
+  const slipProvider: 'slipok' | 'easyslip' | null = slipOk ? 'slipok' : easySlip ? 'easyslip' : null
+  return {
+    stripeEnabled: Boolean(getStripeSecretKey()),
+    slipVerifyEnabled: Boolean((ppId || hasCustomQr) && slipProvider),
+    slipProvider,
+    promptPayQrEnabled: Boolean(ppId || hasCustomQr),
+    promptPayMaskedId: ppId ? maskPromptPayId(ppId) : hasDefaultScbQr ? 'xxx-xxx-6682 (SCB)' : null,
+    merchantAccountName: stored?.enabled ? stored.accountName : null,
+    merchantCustomQrUrl: hasCustomQr ? (stored?.customQrDataUrl ?? null) : null,
+    currency: 'THB',
+    packages: TOPUP_PACKAGES,
+  }
+}
+
 export function getServerTopupDiagnostics() {
   const ppId = getPromptPayId()
   const stored = getStoredMerchantQr()
@@ -96,6 +147,21 @@ export function getServerTopupDiagnostics() {
     promptPayConfigured: Boolean(ppId),
     merchantQrReady: Boolean(ppId || (stored?.enabled && stored.customQrDataUrl)),
     premiumSecretConfigured: isPersistentPremiumSecretConfigured(),
+    appUrlConfigured: Boolean(getRuntimeEnv('NEXT_PUBLIC_APP_URL')),
+  }
+}
+
+export async function getServerTopupDiagnosticsDurable(bearerToken?: string | null) {
+  const stored = await getStoredMerchantQrDurable(bearerToken)
+  const ppId = await getPromptPayIdDurable(bearerToken)
+  return {
+    stripeConfigured: Boolean(getStripeSecretKey()),
+    stripeWebhookConfigured: Boolean(getStripeWebhookSecret()),
+    slipOkConfigured: Boolean(getSlipOkConfig()),
+    easySlipConfigured: Boolean(getEasySlipConfig()),
+    promptPayConfigured: Boolean(ppId),
+    merchantQrReady: Boolean(ppId || (stored?.enabled && stored.customQrDataUrl)),
+    premiumSecretConfigured: isDurableTxSecretReady(),
     appUrlConfigured: Boolean(getRuntimeEnv('NEXT_PUBLIC_APP_URL')),
   }
 }
@@ -273,6 +339,139 @@ export async function createStripeCheckoutSession(input: {
   }
 }
 
+export async function verifyAndFulfillStripePaymentDurable(input: {
+  uid: string
+  paymentIntentId?: string
+  sessionId?: string
+}): Promise<
+  | { ok: true; paid: false; status: string; message: string }
+  | { ok: true; paid: true; order: TopupOrderRecord; message: string }
+  | { ok: false; status: number; message: string }
+> {
+  if (!input.paymentIntentId && !input.sessionId) {
+    return { ok: false, status: 400, message: 'ต้องระบุ paymentIntentId หรือ sessionId' }
+  }
+
+  let provider: TopupProvider = 'stripe_promptpay'
+  let gatewayRef = ''
+  let isPaid = false
+  let paymentStatusText = 'pending'
+  let amountSatang = 0
+  let currency = ''
+  let meta: Record<string, string> = {}
+
+  if (input.sessionId) {
+    provider = 'stripe_checkout'
+    const session = await stripeRequest<StripeCheckoutSessionResponse>(
+      `/checkout/sessions/${encodeURIComponent(input.sessionId)}`,
+      'GET',
+    )
+    gatewayRef = session.id
+    paymentStatusText = session.payment_status || session.status
+    isPaid = session.payment_status === 'paid'
+    amountSatang = Number(session.amount_total ?? 0)
+    currency = String(session.currency ?? '').toLowerCase()
+    meta = session.metadata ?? {}
+  } else if (input.paymentIntentId) {
+    provider = 'stripe_promptpay'
+    const pi = await stripeRequest<StripePaymentIntentResponse>(
+      `/payment_intents/${encodeURIComponent(input.paymentIntentId)}`,
+      'GET',
+    )
+    gatewayRef = pi.id
+    paymentStatusText = pi.status
+    isPaid = pi.status === 'succeeded'
+    amountSatang = Number(pi.amount_received ?? pi.amount ?? 0)
+    currency = String(pi.currency ?? '').toLowerCase()
+    meta = pi.metadata ?? {}
+  }
+
+  if (meta.uid && meta.uid !== input.uid) {
+    return { ok: false, status: 403, message: 'รายการชำระเงินนี้ไม่ได้เป็นของบัญชีผู้เล่นปัจจุบัน' }
+  }
+
+  if (!isPaid) {
+    return {
+      ok: true,
+      paid: false,
+      status: paymentStatusText,
+      message: 'ยังไม่ได้รับยอดชำระเงินจากธนาคาร (รอสแกนหรือกำลังดำเนินการ)',
+    }
+  }
+
+  const pkg = getTopupPackage(meta.packageId || '')
+  if (!pkg) {
+    return { ok: false, status: 400, message: 'ข้อมูลแพ็กเกจในรายการชำระเงินไม่ถูกต้อง' }
+  }
+  if (currency !== 'thb' || amountSatang < pkg.priceThb * 100) {
+    return { ok: false, status: 400, message: 'ยอดเงินที่ชำระไม่ตรงตามราคาแพ็กเกจ' }
+  }
+  if (meta.fulfilled === 'true') {
+    return { ok: false, status: 409, message: 'รายการชำระเงินนี้ถูกเติมเพชรเข้าตัวละครไปแล้ว' }
+  }
+  if (!(await claimDurableServerRequestId(`STRIPE:${gatewayRef}`, input.uid))) {
+    return { ok: false, status: 409, message: 'รายการชำระเงินนี้ถูกประมวลผลซ้ำ' }
+  }
+
+  const orderId = meta.orderId || makeServerTxId('ORD')
+  const characterId = meta.characterId || 'slot_1'
+  const baseDiamonds = Math.max(pkg.baseDiamonds, Math.floor(Number(meta.baseDiamonds) || pkg.baseDiamonds))
+  const bonusDiamonds = Math.max(0, Math.floor(Number(meta.bonusDiamonds) || pkg.bonusDiamonds))
+  const totalDiamonds = baseDiamonds + bonusDiamonds
+  const vipExpGranted = Math.max(0, Math.floor(Number(meta.vipExp) || pkg.vipExp))
+  const txId = makeServerTxId('TOPTX')
+  const timestampMs = Date.now()
+
+  const markParams = new URLSearchParams()
+  markParams.set('metadata[fulfilled]', 'true')
+  markParams.set('metadata[fulfilled_tx]', txId)
+  markParams.set('metadata[fulfilled_at]', String(timestampMs))
+  await stripeRequest(
+    input.sessionId
+      ? `/checkout/sessions/${encodeURIComponent(gatewayRef)}`
+      : `/payment_intents/${encodeURIComponent(gatewayRef)}`,
+    'POST',
+    markParams,
+  )
+
+  const serverSignature = await signPremiumTxDurable({
+    txId,
+    requestId: orderId,
+    actorUid: input.uid,
+    characterId,
+    amount: totalDiamonds,
+    type: 'earn',
+    source: provider,
+    timestampMs,
+  })
+
+  const order: TopupOrderRecord = {
+    orderId,
+    characterId,
+    packageId: pkg.packageId,
+    packageName: pkg.name,
+    provider,
+    gatewayRef,
+    amountThb: pkg.priceThb,
+    baseDiamonds,
+    bonusDiamonds,
+    totalDiamonds,
+    vipExpGranted,
+    status: 'credited',
+    txId,
+    serverVerified: true,
+    serverSignature,
+    createdAtMs: timestampMs,
+  }
+
+  return {
+    ok: true,
+    paid: true,
+    order,
+    message: `ยืนยันการชำระเงิน ฿${pkg.priceThb.toLocaleString()} สำเร็จ! รับ +${totalDiamonds.toLocaleString()} D`,
+  }
+}
+
 export async function verifyAndFulfillStripePayment(input: {
   uid: string
   paymentIntentId?: string
@@ -438,6 +637,195 @@ export function verifyStripeWebhookSignature(rawBody: string, sigHeader: string 
       return false
     }
   })
+}
+
+export async function verifyBankSlipWithSlipOkDurable(input: {
+  uid: string
+  characterId: string
+  packageId: string
+  isFirstPurchase: boolean
+  imageBytes: Uint8Array
+  fileName: string
+  mimeType: string
+  bearerToken?: string | null
+}): Promise<{ ok: true; order: TopupOrderRecord; message: string } | { ok: false; status: number; message: string }> {
+  const slipOk = getSlipOkConfig()
+  const easySlip = getEasySlipConfig()
+  const ppId = await getPromptPayIdDurable(input.bearerToken)
+  const stored = await getStoredMerchantQrDurable(input.bearerToken)
+  const hasCustomQr = Boolean(stored?.enabled && stored.customQrDataUrl)
+  const hasDefaultScbQr = Boolean(
+    hasCustomQr && stored?.customQrDataUrl?.includes('Moment_1794989254278_6a17875f'),
+  )
+
+  if (!slipOk && !easySlip) {
+    return {
+      ok: false,
+      status: 503,
+      message: 'ระบบตรวจสลิปอัตโนมัติยังไม่ได้ตั้งค่า SLIPOK_API_KEY / SLIPOK_BRANCH_ID หรือ EASYSLIP_API_KEY บนเซิร์ฟเวอร์',
+    }
+  }
+  if (!ppId && !hasCustomQr) {
+    return {
+      ok: false,
+      status: 503,
+      message: 'ร้านค้ายังไม่ได้ตั้งค่า PROMPTPAY_ID หรือรูป QR รับเงิน',
+    }
+  }
+
+  const pkg = getTopupPackage(input.packageId)
+  if (!pkg) {
+    return { ok: false, status: 400, message: 'ไม่พบแพ็กเกจเติมเงินที่เลือก' }
+  }
+
+  const blob = new Blob([Buffer.from(input.imageBytes)], { type: input.mimeType || 'image/jpeg' })
+  let transRef = ''
+  let paidAmount = 0
+  let receiverVal = ''
+
+  if (slipOk) {
+    const form = new FormData()
+    form.append('files', blob, input.fileName || 'slip.jpg')
+    form.append('log', 'true')
+    form.append('amount', String(pkg.priceThb))
+
+    const res = await fetch(`https://api.slipok.com/api/line/apikey/${encodeURIComponent(slipOk.branchId)}`, {
+      method: 'POST',
+      headers: {
+        'x-authorization': slipOk.apiKey,
+      },
+      body: form,
+      cache: 'no-store',
+    })
+
+    const json = (await res.json().catch(() => null)) as {
+      success?: boolean
+      message?: string
+      data?: {
+        transRef?: string
+        amount?: number
+        receiver?: { proxy?: { value?: string }; account?: { value?: string } }
+      }
+    } | null
+
+    if (!res.ok || !json?.success || !json.data?.transRef) {
+      return {
+        ok: false,
+        status: 400,
+        message: json?.message || 'ตรวจสลิปไม่ผ่าน หรือสลิปนี้ถูกใช้งานไปแล้ว',
+      }
+    }
+    transRef = json.data.transRef.trim().slice(0, 120)
+    paidAmount = Number(json.data.amount ?? 0)
+    receiverVal = (json.data.receiver?.proxy?.value || json.data.receiver?.account?.value || '').replace(/\D/g, '')
+  } else if (easySlip) {
+    const form = new FormData()
+    form.append('file', blob, input.fileName || 'slip.jpg')
+
+    const res = await fetch('https://developer.easyslip.com/api/v1/verify', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${easySlip.apiKey}`,
+      },
+      body: form,
+      cache: 'no-store',
+    })
+
+    const json = (await res.json().catch(() => null)) as {
+      status?: number
+      message?: string
+      data?: {
+        transRef?: string
+        amount?: { amount?: number }
+        receiver?: {
+          account?: {
+            proxy?: { account?: string }
+            bank?: { account?: string }
+          }
+        }
+      }
+    } | null
+
+    if (!res.ok || json?.status !== 200 || !json.data?.transRef) {
+      return {
+        ok: false,
+        status: 400,
+        message: json?.message || 'EasySlip ตรวจสลิปไม่ผ่าน กรุณาตรวจสอบรูปสลิปอีกครั้ง',
+      }
+    }
+    transRef = json.data.transRef.trim().slice(0, 120)
+    paidAmount = Number(json.data.amount?.amount ?? 0)
+    receiverVal = (
+      json.data.receiver?.account?.proxy?.account ||
+      json.data.receiver?.account?.bank?.account ||
+      ''
+    ).replace(/\D/g, '')
+  }
+
+  if (!Number.isFinite(paidAmount) || paidAmount < pkg.priceThb) {
+    return {
+      ok: false,
+      status: 400,
+      message: `ยอดโอนในสลิป (${paidAmount} บาท) น้อยกว่าราคาแพ็กเกจ (${pkg.priceThb} บาท)`,
+    }
+  }
+
+  const expectedDigits = ppId ? ppId.replace(/\D/g, '') : hasDefaultScbQr ? '6682' : ''
+  if (receiverVal && expectedDigits.length >= 4 && !receiverVal.endsWith(expectedDigits.slice(-4))) {
+    return {
+      ok: false,
+      status: 400,
+      message: 'บัญชีผู้รับเงินในสลิปไม่ตรงกับบัญชีร้านค้า',
+    }
+  }
+
+  if (
+    (await isPersistentSlipRefUsedDurable(transRef)) ||
+    !(await claimDurableServerRequestId(`SLIP:${transRef}`, input.uid)) ||
+    !(await claimPersistentSlipRefDurable(transRef))
+  ) {
+    return { ok: false, status: 409, message: 'สลิปนี้ถูกใช้เติมเงินไปแล้ว (ป้องกันสลิปซ้ำ)' }
+  }
+
+  const reward = calculateTopupReward(pkg, input.isFirstPurchase)
+  const orderId = makeServerTxId('ORD')
+  const txId = makeServerTxId('TOPTX')
+  const timestampMs = Date.now()
+  const serverSignature = await signPremiumTxDurable({
+    txId,
+    requestId: orderId,
+    actorUid: input.uid,
+    characterId: input.characterId,
+    amount: reward.totalDiamonds,
+    type: 'earn',
+    source: 'promptpay_slip',
+    timestampMs,
+  })
+
+  const order: TopupOrderRecord = {
+    orderId,
+    characterId: input.characterId,
+    packageId: pkg.packageId,
+    packageName: pkg.name,
+    provider: 'promptpay_slip',
+    gatewayRef: transRef,
+    amountThb: pkg.priceThb,
+    baseDiamonds: reward.baseDiamonds,
+    bonusDiamonds: reward.bonusDiamonds,
+    totalDiamonds: reward.totalDiamonds,
+    vipExpGranted: reward.vipExp,
+    status: 'credited',
+    txId,
+    serverVerified: true,
+    serverSignature,
+    createdAtMs: timestampMs,
+  }
+
+  return {
+    ok: true,
+    order,
+    message: `ตรวจสลิปสำเร็จ (Ref: ${transRef})! รับ +${reward.totalDiamonds.toLocaleString()} D`,
+  }
 }
 
 export async function verifyBankSlipWithSlipOk(input: {

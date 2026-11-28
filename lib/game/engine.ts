@@ -29,9 +29,10 @@ import {
 } from './wing-gacha'
 import type { Dir } from './sprites'
 import { GM_ACTIVE_SKILLS } from './gm-sprite'
-import { createClient } from '@/lib/supabase/client'
+import { createClient, isSupabaseConfigured } from '@/lib/supabase/client'
 import { auth as firebaseAuth } from '@/lib/firebase/client'
 import {
+  commitAtomicTopupToCloud,
   deleteUserCharacter,
   ensureUserProfile,
   listUserCharacters,
@@ -343,7 +344,6 @@ import {
   getPromptPayShopSettings,
   listAllTopupSlipRequestsForGm,
   listMyTopupSlipRequests,
-  markTopupSlipRequestClaimed,
   reviewTopupSlipRequest,
   savePromptPayShopSettings,
   submitManualTopupSlipRequest,
@@ -353,7 +353,6 @@ import {
   isGatewayRefRecorded,
   recordDiamondTransaction,
   recordPremiumAuditLog,
-  recordTopupOrder,
 } from '@/lib/firebase/premium-ledger'
 
 if (typeof window !== 'undefined') {
@@ -633,6 +632,13 @@ function persistLedgerAsync(tx?: import('./premium/types').DiamondTransaction, a
   }
 }
 
+const GM_ONLY_DIAMOND_SOURCES = new Set([
+  'gm_sandbox_console',
+  'gm_grant',
+  'gm_dev_console',
+  'gm_chat_command',
+])
+
 export function commitDiamondDelta(
   p: SaveData,
   delta: number,
@@ -649,6 +655,7 @@ export function commitDiamondDelta(
     actorUid?: string
     isGm?: boolean
     timestampMs?: number
+    skipCloudPersist?: boolean
   },
 ): { ok: boolean; duplicate?: boolean; message: string; nextBalance: number; tx?: import('./premium/types').DiamondTransaction } {
   const prem = ensurePremiumState(p)
@@ -659,13 +666,21 @@ export function commitDiamondDelta(
   const txType: DiamondTxType = meta.type ?? (safeDelta > 0 ? 'earn' : 'spend')
   const amount = Math.abs(safeDelta)
   const fbUser = firebaseAuth.currentUser
+  const verifiedGm = Boolean(p.gm && isCurrentAccountGm() && isGmAccountUser(fbUser))
+  if (!verifiedGm && (txType === 'sandbox_grant' || GM_ONLY_DIAMOND_SOURCES.has(meta.source))) {
+    return {
+      ok: false,
+      message: 'เฉพาะบัญชี GM ที่ยืนยันสิทธิ์แล้วเท่านั้นที่ดำเนินการ Sandbox/GM Grant ได้',
+      nextBalance: p.diamonds ?? 0,
+    }
+  }
   const res = applyDiamondTransaction(prem, p.diamonds ?? 0, {
     type: txType,
     amount,
     source: meta.source,
     note: meta.note,
     actorUid: meta.actorUid ?? fbUser?.uid ?? 'guest',
-    isGm: meta.isGm ?? Boolean(p.gm && isCurrentAccountGm()),
+    isGm: Boolean((meta.isGm ?? verifiedGm) && verifiedGm),
     requestId: meta.requestId,
     txId: meta.txId,
     productId: meta.productId,
@@ -676,7 +691,7 @@ export function commitDiamondDelta(
   })
   if (!res.ok) return res
   p.diamonds = res.nextBalance
-  if (res.tx) {
+  if (res.tx && !meta.skipCloudPersist) {
     persistLedgerAsync(res.tx, undefined)
   }
   return res
@@ -687,11 +702,14 @@ function logPremiumAudit(
   entry: Omit<AuditLogEntry, 'logId' | 'createdAtMs' | 'characterId' | 'actorUid' | 'actorRole'> & {
     actorUid?: string
     actorRole?: 'gm' | 'player'
+    skipCloudPersist?: boolean
   },
 ) {
   const prem = ensurePremiumState(p)
   const fbUser = firebaseAuth.currentUser
-  const actorRole: 'gm' | 'player' = entry.actorRole ?? (p.gm && isCurrentAccountGm() ? 'gm' : 'player')
+  const verifiedGm = Boolean(p.gm && isCurrentAccountGm() && isGmAccountUser(fbUser))
+  const requestedRole: 'gm' | 'player' = entry.actorRole ?? (verifiedGm ? 'gm' : 'player')
+  const actorRole: 'gm' | 'player' = requestedRole === 'gm' && verifiedGm ? 'gm' : 'player'
   const log = appendAuditLog(prem, {
     action: entry.action,
     characterId: prem.wallet.characterId || getActiveCharacterSlot(),
@@ -701,7 +719,9 @@ function logPremiumAudit(
     details: entry.details,
     verifiedByServer: entry.verifiedByServer,
   })
-  persistLedgerAsync(undefined, log)
+  if (!entry.skipCloudPersist) {
+    persistLedgerAsync(undefined, log)
+  }
   return log
 }
 
@@ -3581,10 +3601,10 @@ export function claimServerGiftDropAction(drop: ServerGiftDropRecord): { ok: boo
       source: 'gm_server_gift',
       note: `รับรางวัลเซิร์ฟเวอร์: ${drop.subject}`,
       requestId: drop.dropId,
-      isGm: true,
+      isGm: isCurrentAccountGm(),
     })
   }
-  p.claimedGiftDropIds = [...claimed.slice(-39), drop.dropId]
+  p.claimedGiftDropIds = [...claimed.filter((id) => id !== drop.dropId).slice(-39), drop.dropId]
   saveGame()
   notify()
   return { ok: true, message: `รับของขวัญทั้งเซิร์ฟ "${drop.subject}" เข้าตัวละครเรียบร้อย!` }
@@ -4975,18 +4995,27 @@ export function devAddGold(amount: number) {
 
 export function devAddDiamonds(amount: number) {
   const p = player()
-  if (!p.gm || !isCurrentAccountGm()) return
+  if (!p.gm || !isCurrentAccountGm() || !isGmAccountUser(firebaseAuth.currentUser)) return
   const delta = Math.floor(amount)
   if (!Number.isFinite(delta) || delta === 0) return
+  if (delta > 0) {
+    void sandboxGrantDiamondsAction(delta, undefined, 'gm').then((res) => {
+      if (!res.ok) {
+        say('error', res.message)
+        notify()
+      }
+    })
+    return
+  }
   commitDiamondDelta(p, delta, {
-    type: delta >= 0 ? 'sandbox_grant' : 'spend',
+    type: 'spend',
     source: 'gm_dev_console',
-    note: `[DEV Console] ปรับเพชร ${delta >= 0 ? `+${delta}` : delta}`,
+    note: `[DEV Console] ปรับเพชร ${delta}`,
     isGm: true,
   })
   logPremiumAudit(p, {
-    action: delta >= 0 ? 'SANDBOX_GRANT' : 'DIAMOND_SPEND',
-    details: `[DEV Console] ปรับเพชร ${delta >= 0 ? `+${delta}` : delta} (คงเหลือ ${p.diamonds.toLocaleString()} D)`,
+    action: 'DIAMOND_SPEND',
+    details: `[DEV Console] ปรับเพชร ${delta} (คงเหลือ ${p.diamonds.toLocaleString()} D)`,
     verifiedByServer: false,
     actorRole: 'gm',
   })
@@ -6617,32 +6646,88 @@ export function evolveCombatPetAction(petId: string): { ok: boolean; message: st
   return { ok: true, message: `${def.name} วิวัฒนาการเป็น ${entry.stars}★ สำเร็จ! (2★+ ปลดล็อกเก็บของอัตโนมัติ)` }
 }
 
-export function unlockBattlePassPremiumAction(): { ok: boolean; message: string } {
+export async function unlockBattlePassPremiumAction(
+  requestId?: string,
+): Promise<{ ok: boolean; message: string }> {
   const p = player()
   const extV2 = sanitizeExtV2(p.extV2)
   if (extV2.battlePass.premiumUnlocked) return { ok: false, message: 'เปิดใช้งาน Premium Pass แล้ว' }
-  const txRes = commitDiamondDelta(p, -BP_PREMIUM_DIAMOND_COST, {
-    type: 'spend',
-    source: 'battle_pass_unlock',
-    note: `ปลดล็อก Aurora Premium Battle Pass (${extV2.battlePass.seasonId})`,
-  })
-  if (!txRes.ok) {
+  if ((p.diamonds ?? 0) < BP_PREMIUM_DIAMOND_COST) {
     return { ok: false, message: `เพชรไม่พอ (ต้องการ ${BP_PREMIUM_DIAMOND_COST} เพชร)` }
   }
-  extV2.battlePass.premiumUnlocked = true
-  p.extV2 = extV2
-  logPremiumAudit(p, {
-    action: 'PASS_UNLOCK',
-    txId: txRes.tx?.txId,
-    details: `ปลดล็อก Premium Battle Pass (-${BP_PREMIUM_DIAMOND_COST} D)`,
-    verifiedByServer: false,
-  })
-  saveGame()
-  notify()
-  return { ok: true, message: 'ปลดล็อก Aurora Premium Battle Pass สำเร็จ!' }
+  const lockKey = 'bp_unlock'
+  const reqId = requestId || generateUniqueTxId('BPUNLOCK')
+  if (inFlightPremiumLocks.has(lockKey) || inFlightPremiumLocks.has(reqId)) {
+    return { ok: false, message: 'กำลังดำเนินการปลดล็อก Premium Pass อยู่' }
+  }
+  inFlightPremiumLocks.add(lockKey)
+  inFlightPremiumLocks.add(reqId)
+  try {
+    const prem = ensurePremiumState(p)
+    if (firebaseAuth.currentUser?.emailVerified) {
+      await flushCloudSave().catch(() => {})
+    }
+    const apiRes = await callPremiumApi<{
+      txId: string
+      requestId: string
+      actorUid: string
+      isGm: boolean
+      diamondDelta: number
+      timestampMs: number
+      serverVerified: boolean
+      serverSignature: string | null
+      message: string
+    }>('/api/premium/claim', {
+      claimType: 'unlock_pass',
+      characterId: prem.wallet.characterId,
+      requestId: reqId,
+      bpLevel: extV2.battlePass.level,
+      premiumUnlocked: extV2.battlePass.premiumUnlocked,
+      claimedFree: extV2.battlePass.claimedFree,
+      claimedPrem: extV2.battlePass.claimedPrem,
+      currentDiamonds: p.diamonds ?? 0,
+    })
+    if (!apiRes.ok || !apiRes.data) {
+      return { ok: false, message: apiRes.message || `เพชรไม่พอ (ต้องการ ${BP_PREMIUM_DIAMOND_COST} เพชร)` }
+    }
+    const txRes = commitDiamondDelta(p, apiRes.data.diamondDelta, {
+      type: 'spend',
+      source: 'battle_pass_unlock',
+      note: `ปลดล็อก Aurora Premium Battle Pass (${extV2.battlePass.seasonId})`,
+      requestId: apiRes.data.requestId,
+      txId: apiRes.data.txId,
+      actorUid: apiRes.data.actorUid,
+      isGm: apiRes.data.isGm,
+      serverVerified: Boolean(apiRes.data.serverVerified),
+      serverSignature: apiRes.data.serverSignature ?? undefined,
+      timestampMs: apiRes.data.timestampMs,
+    })
+    if (!txRes.ok) {
+      return { ok: false, message: txRes.message }
+    }
+    const latestExtV2 = sanitizeExtV2(p.extV2)
+    latestExtV2.battlePass.premiumUnlocked = true
+    p.extV2 = latestExtV2
+    logPremiumAudit(p, {
+      action: 'PASS_UNLOCK',
+      txId: txRes.tx?.txId,
+      details: `ปลดล็อก Premium Battle Pass (${apiRes.data.diamondDelta} D)`,
+      verifiedByServer: Boolean(apiRes.data.serverVerified),
+    })
+    saveGame()
+    notify()
+    return { ok: true, message: 'ปลดล็อก Aurora Premium Battle Pass สำเร็จ!' }
+  } finally {
+    inFlightPremiumLocks.delete(lockKey)
+    inFlightPremiumLocks.delete(reqId)
+  }
 }
 
-export function claimBattlePassTierAction(level: number, track: 'free' | 'prem'): { ok: boolean; message: string } {
+export async function claimBattlePassTierAction(
+  level: number,
+  track: 'free' | 'prem',
+  requestId?: string,
+): Promise<{ ok: boolean; message: string }> {
   const p = player()
   const extV2 = sanitizeExtV2(p.extV2)
   const bp = extV2.battlePass
@@ -6653,30 +6738,86 @@ export function claimBattlePassTierAction(level: number, track: 'free' | 'prem')
   const list = track === 'free' ? bp.claimedFree : bp.claimedPrem
   if (list.includes(level)) return { ok: false, message: 'รับรางวัลขั้นนี้ไปแล้ว' }
 
-  const reward = track === 'free' ? tier.freeReward : tier.premReward
-  list.push(level)
-  if (reward.gold) p.gold += reward.gold
-  if (reward.diamonds) {
-    commitDiamondDelta(p, reward.diamonds, {
-      source: 'battle_pass_claim',
-      note: `Battle Pass Lv.${level} (${track})`,
+  const lockKey = `bp_claim:${level}:${track}`
+  const reqId = requestId || generateUniqueTxId('BPCLAIM')
+  if (inFlightPremiumLocks.has(lockKey) || inFlightPremiumLocks.has(reqId)) {
+    return { ok: false, message: 'กำลังดำเนินการรับรางวัลอยู่' }
+  }
+  inFlightPremiumLocks.add(lockKey)
+  inFlightPremiumLocks.add(reqId)
+  try {
+    const prem = ensurePremiumState(p)
+    if (firebaseAuth.currentUser?.emailVerified) {
+      await flushCloudSave().catch(() => {})
+    }
+    const apiRes = await callPremiumApi<{
+      txId: string
+      requestId: string
+      actorUid: string
+      isGm: boolean
+      diamondDelta: number
+      timestampMs: number
+      serverVerified: boolean
+      serverSignature: string | null
+      message: string
+    }>('/api/premium/claim', {
+      claimType: 'claim_tier',
+      characterId: prem.wallet.characterId,
+      requestId: reqId,
+      level,
+      track,
+      bpLevel: bp.level,
+      premiumUnlocked: bp.premiumUnlocked,
+      claimedFree: bp.claimedFree,
+      claimedPrem: bp.claimedPrem,
+      currentDiamonds: p.diamonds ?? 0,
     })
+    if (!apiRes.ok || !apiRes.data) {
+      return { ok: false, message: apiRes.message || 'ไม่สามารถรับรางวัล Battle Pass ได้' }
+    }
+
+    const latestExtV2 = sanitizeExtV2(p.extV2)
+    const latestBp = latestExtV2.battlePass
+    const latestList = track === 'free' ? latestBp.claimedFree : latestBp.claimedPrem
+    if (latestList.includes(level)) {
+      return { ok: false, message: 'รับรางวัลขั้นนี้ไปแล้ว' }
+    }
+    const reward = track === 'free' ? tier.freeReward : tier.premReward
+    latestList.push(level)
+    if (reward.gold) p.gold += reward.gold
+    if (apiRes.data.diamondDelta > 0) {
+      commitDiamondDelta(p, apiRes.data.diamondDelta, {
+        source: 'battle_pass_claim',
+        note: `Battle Pass Lv.${level} (${track})`,
+        requestId: apiRes.data.requestId,
+        txId: apiRes.data.txId,
+        actorUid: apiRes.data.actorUid,
+        isGm: apiRes.data.isGm,
+        serverVerified: Boolean(apiRes.data.serverVerified),
+        serverSignature: apiRes.data.serverSignature ?? undefined,
+        timestampMs: apiRes.data.timestampMs,
+      })
+    }
+    if (reward.stones) addItem('enhance_stone', reward.stones)
+    if (reward.itemId) addItem(reward.itemId, reward.qty ?? 1)
+    if ('cosmeticId' in reward && reward.cosmeticId && !latestExtV2.unlockedCosmetics.includes(reward.cosmeticId)) {
+      latestExtV2.unlockedCosmetics.push(reward.cosmeticId)
+    }
+    p.extV2 = latestExtV2
+    logPremiumAudit(p, {
+      action: 'PASS_CLAIM',
+      txId: apiRes.data.txId,
+      details: `รับรางวัล Battle Pass Lv.${level} (${track}): ${reward.label}`,
+      verifiedByServer: Boolean(apiRes.data.serverVerified),
+    })
+    saveGame()
+    notify()
+    say('loot', `รับรางวัล Battle Pass Lv.${level}: ${reward.label}`)
+    return { ok: true, message: `รับ ${reward.label} สำเร็จ!` }
+  } finally {
+    inFlightPremiumLocks.delete(lockKey)
+    inFlightPremiumLocks.delete(reqId)
   }
-  if (reward.stones) addItem('enhance_stone', reward.stones)
-  if (reward.itemId) addItem(reward.itemId, reward.qty ?? 1)
-  if ('cosmeticId' in reward && reward.cosmeticId && !extV2.unlockedCosmetics.includes(reward.cosmeticId)) {
-    extV2.unlockedCosmetics.push(reward.cosmeticId)
-  }
-  p.extV2 = extV2
-  logPremiumAudit(p, {
-    action: 'PASS_CLAIM',
-    details: `รับรางวัล Battle Pass Lv.${level} (${track}): ${reward.label}`,
-    verifiedByServer: false,
-  })
-  saveGame()
-  notify()
-  say('loot', `รับรางวัล Battle Pass Lv.${level}: ${reward.label}`)
-  return { ok: true, message: `รับ ${reward.label} สำเร็จ!` }
 }
 
 export function claimExpiredPassArchiveAction(archiveId?: string): { ok: boolean; message: string; count: number } {
@@ -7838,9 +7979,10 @@ async function callPremiumApi<T extends Record<string, unknown>>(
 export async function sandboxGrantDiamondsAction(
   amount: number,
   requestId?: string,
+  mode: 'sandbox' | 'gm' = 'sandbox',
 ): Promise<{ ok: boolean; message: string; balance?: number; txId?: string }> {
   const p = player()
-  if (!p.gm || !isCurrentAccountGm()) {
+  if (!p.gm || !isCurrentAccountGm() || !isGmAccountUser(firebaseAuth.currentUser)) {
     return { ok: false, message: 'เฉพาะบัญชี GM ที่ได้รับอนุญาตเท่านั้นที่ใช้งาน Sandbox Test Console ได้' }
   }
   const safeAmount = Math.floor(Number(amount) || 0)
@@ -7871,7 +8013,7 @@ export async function sandboxGrantDiamondsAction(
       amount: safeAmount,
       characterId: prem.wallet.characterId,
       requestId: reqId,
-      mode: 'sandbox',
+      mode,
     })
 
     if (!apiRes.ok || !apiRes.data) {
@@ -8484,9 +8626,10 @@ export function rollWingGachaAction(
   const prem = ensurePremiumState(p)
   const gachaUnlockedIds = prem.fashion.gachaUnlockedIds ?? []
 
+  const beforeDiamonds = p.diamonds ?? 0
   const result = executeWingGachaBatch({
     gold: p.gold,
-    diamonds: p.diamonds ?? 0,
+    diamonds: beforeDiamonds,
     unlockedIds: prem.fashion.unlockedIds,
     gachaUnlockedIds,
     currency,
@@ -8499,10 +8642,23 @@ export function rollWingGachaAction(
     return result
   }
 
+  const spentDiamonds = Math.max(0, beforeDiamonds - result.nextDiamonds)
+  if (spentDiamonds > 0) {
+    const txRes = commitDiamondDelta(p, -spentDiamonds, {
+      type: 'spend',
+      source: 'wing_gacha',
+      note: `สุ่มตู้ปีก ${count} ครั้ง (-${spentDiamonds.toLocaleString()} D)`,
+    })
+    if (!txRes.ok) {
+      say('error', txRes.message)
+      notify()
+      return { ...result, ok: false, error: txRes.message }
+    }
+  }
   p.gold = result.nextGold
-  p.diamonds = result.nextDiamonds
-  prem.fashion.unlockedIds = result.unlockedIds
-  prem.fashion.gachaUnlockedIds = result.gachaUnlockedIds
+  const activePrem = ensurePremiumState(p)
+  activePrem.fashion.unlockedIds = result.unlockedIds
+  activePrem.fashion.gachaUnlockedIds = result.gachaUnlockedIds
 
   if (result.totalDuplicateStones > 0) {
     addItem('enhance_stone', result.totalDuplicateStones)
@@ -8573,6 +8729,7 @@ export async function fetchTopupGatewayConfig(): Promise<TopupGatewayStatus | nu
 
 export async function applyVerifiedTopupAction(
   order: TopupOrderRecord,
+  options?: { manualSlipRequestId?: string },
 ): Promise<{ ok: boolean; duplicate?: boolean; message: string; order?: TopupOrderRecord }> {
   const p = player()
   const prem = ensurePremiumState(p)
@@ -8584,13 +8741,27 @@ export async function applyVerifiedTopupAction(
   }
 
   const fbUser = firebaseAuth.currentUser
+  const isVerifiedFirebase = Boolean(fbUser && fbUser.emailVerified)
   const slotId = prem.wallet.characterId || getActiveCharacterSlot()
-  if (fbUser && fbUser.emailVerified && order.gatewayRef) {
+  if (isVerifiedFirebase && fbUser && order.gatewayRef) {
     const alreadyInCloud = await isGatewayRefRecorded(fbUser.uid, slotId, order.gatewayRef).catch(() => false)
     if (alreadyInCloud) {
       return { ok: false, duplicate: true, message: 'รายการชำระเงินนี้ถูกบันทึกในบัญชีแล้ว' }
     }
   }
+
+  const prevDiamonds = p.diamonds ?? 0
+  const prevFirstTopup = [...(prem.firstTopupPackages ?? [])]
+  const prevTotalTopupThb = prem.totalTopupThb ?? 0
+  const prevLastDailyTopupDate = prem.lastDailyTopupDate ?? null
+  const prevVipExp = prem.vip.vipExp
+  const prevVipLevel = prem.vip.vipLevel
+  const prevTopupOrders = [...(prem.topupOrders ?? [])]
+  const prevProcessedIds = [...(prem.wallet.processedRequestIds ?? [])]
+  const prevTotalEarned = prem.wallet.totalEarned
+  const prevBalance = prem.wallet.diamondBalance
+  const prevHistory = [...(prem.wallet.transactionHistory ?? [])]
+  const prevAuditLogs = [...(prem.auditLogs ?? [])]
 
   const txRes = commitDiamondDelta(p, order.totalDiamonds, {
     type: 'earn',
@@ -8604,6 +8775,7 @@ export async function applyVerifiedTopupAction(
     serverVerified: Boolean(order.serverVerified),
     serverSignature: order.serverSignature ? order.serverSignature : undefined,
     timestampMs: order.createdAtMs,
+    skipCloudPersist: isVerifiedFirebase,
   })
   if (!txRes.ok) {
     return { ok: false, duplicate: txRes.duplicate, message: txRes.message }
@@ -8635,25 +8807,63 @@ export async function applyVerifiedTopupAction(
   activePrem.topupOrders.unshift(order)
   if (activePrem.topupOrders.length > 40) activePrem.topupOrders.length = 40
 
-  logPremiumAudit(p, {
+  const auditEntry = logPremiumAudit(p, {
     action: 'DIAMOND_EARN',
     txId: order.txId,
     details: `เติมเงินจริง [${order.provider}] ${order.packageName} ฿${order.amountThb} -> +${order.totalDiamonds.toLocaleString()} D (Ref: ${order.gatewayRef})`,
     verifiedByServer: Boolean(order.serverVerified),
+    skipCloudPersist: isVerifiedFirebase,
   })
 
-  if (fbUser && fbUser.emailVerified) {
-    await recordTopupOrder(fbUser.uid, slotId, order).catch(() => {})
+  if (isVerifiedFirebase && fbUser) {
+    try {
+      await commitAtomicTopupToCloud({
+        userId: fbUser.uid,
+        characterId: slotId,
+        save: p,
+        order,
+        tx: txRes.tx,
+        audit: auditEntry,
+        manualSlipRequestId: options?.manualSlipRequestId,
+      })
+      if (typeof window !== 'undefined' && game.persist) {
+        p.savedAt = Date.now()
+        try {
+          localStorage.setItem(localSaveKey(), JSON.stringify(p))
+          game.lastSavedAt = Date.now()
+        } catch {
+          // Ignore local storage quota errors after cloud commit succeeds
+        }
+      }
+    } catch (err) {
+      // Roll back optimistic local wallet mutations if atomic Firestore batch failed
+      p.diamonds = prevDiamonds
+      const rollbackPrem = ensurePremiumState(p)
+      rollbackPrem.firstTopupPackages = prevFirstTopup
+      rollbackPrem.totalTopupThb = prevTotalTopupThb
+      rollbackPrem.lastDailyTopupDate = prevLastDailyTopupDate
+      rollbackPrem.vip.vipExp = prevVipExp
+      rollbackPrem.vip.vipLevel = prevVipLevel
+      rollbackPrem.topupOrders = prevTopupOrders
+      rollbackPrem.wallet.processedRequestIds = prevProcessedIds
+      rollbackPrem.wallet.totalEarned = prevTotalEarned
+      rollbackPrem.wallet.diamondBalance = prevBalance
+      rollbackPrem.wallet.transactionHistory = prevHistory
+      rollbackPrem.auditLogs = prevAuditLogs
+      notify()
+      return {
+        ok: false,
+        message: formatReadableTopupError(err, 'บันทึกรายการเติมเงินบน Cloud ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'),
+      }
+    }
+  } else {
+    saveGame()
   }
 
   say(
     'loot',
     `★ เติมเงินสำเร็จ! ${order.packageName} (฿${order.amountThb.toLocaleString()}) รับ +${order.totalDiamonds.toLocaleString()} D`,
   )
-  saveGame()
-  if (fbUser && fbUser.emailVerified) {
-    await flushCloudSave().catch(() => {})
-  }
   notify()
   return {
     ok: true,
@@ -9043,13 +9253,18 @@ export async function redeemGiftCodeAction(rawCode: string): Promise<{ ok: boole
       })
       rewardParts.push(`${claimed.diamonds.toLocaleString()} D`)
     }
+    const redeemPrem = ensurePremiumState(p)
+    const prevRedeemCodes = redeemPrem.claimedRedeemCodes ?? []
+    redeemPrem.claimedRedeemCodes = [
+      ...prevRedeemCodes.filter((c) => c !== claimed.code).slice(-59),
+      claimed.code,
+    ]
     if (claimed.vipExp > 0) {
-      const activePrem = ensurePremiumState(p)
-      activePrem.vip.vipExp += claimed.vipExp
-      if (isVipActive(activePrem.vip)) {
-        activePrem.vip.vipLevel = Math.max(
-          activePrem.vip.vipLevel,
-          resolveVipLevelFromExp(activePrem.vip.vipExp),
+      redeemPrem.vip.vipExp += claimed.vipExp
+      if (isVipActive(redeemPrem.vip)) {
+        redeemPrem.vip.vipLevel = Math.max(
+          redeemPrem.vip.vipLevel,
+          resolveVipLevelFromExp(redeemPrem.vip.vipExp),
         ) as VipTierId
       }
       rewardParts.push(`${claimed.vipExp} VIP EXP`)
@@ -9355,17 +9570,9 @@ export async function claimApprovedManualTopupAction(
       return { ok: false, message: res.message || 'ไม่สามารถรับเพชรจากคำขอที่อนุมัติได้' }
     }
 
-    try {
-      await markTopupSlipRequestClaimed(req.requestId)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : ''
-      if (msg.includes('รับเพชรจากคำขอนี้ไปแล้ว') || msg.includes('ยังไม่ได้รับการอนุมัติ')) {
-        return { ok: false, message: msg }
-      }
-      // If document only existed in server volatile store, proceed with server-signed order
-    }
-
-    return await applyVerifiedTopupAction(res.data.order)
+    return await applyVerifiedTopupAction(res.data.order, {
+      manualSlipRequestId: req.requestId,
+    })
   } catch (err) {
     return {
       ok: false,
@@ -9809,6 +10016,9 @@ function runCommand(text: string) {
   }
 
   const grantGems = () => {
+    if (!isGmAccountUser(firebaseAuth.currentUser)) {
+      return say('error', 'เฉพาะบัญชี GM ที่ยืนยันตัวตนแล้วเท่านั้นที่เสกเพชรได้')
+    }
     const amount = Number(args[0])
     const maxGrant = 1_000_000
     const maxBalance = 1_000_000_000
@@ -9819,13 +10029,10 @@ function runCommand(text: string) {
     if (currentBalance + amount > maxBalance) {
       return say('error', `ยอดเพชรสูงสุดคือ ${maxBalance.toLocaleString()} เพชร`)
     }
-    commitDiamondDelta(p, amount, {
-      type: 'sandbox_grant',
-      source: 'gm_chat_command',
-      note: `GM /gem +${amount.toLocaleString()} D`,
-      isGm: true,
+    void sandboxGrantDiamondsAction(amount, undefined, 'gm').then((res) => {
+      if (!res.ok) say('error', res.message)
+      notify()
     })
-    say('gm', `เสกเพชรสำเร็จ +${amount.toLocaleString()} | ยอดรวม ${p.diamonds.toLocaleString()} เพชร`)
   }
 
   const gmCommands: Record<string, () => void> = {
@@ -10246,11 +10453,15 @@ async function saveCloudGame(p: SaveData) {
   }
 }
 
-export async function listAccountCharacters(): Promise<CloudCharacterRecord[]> {
+export async function listAccountCharacters(options?: {
+  skipProfileSync?: boolean
+}): Promise<CloudCharacterRecord[]> {
   const fbUser = firebaseAuth.currentUser
   if (!fbUser) return []
   setGameAccountIdentity(fbUser.uid)
-  await ensureUserProfile(fbUser)
+  if (!options?.skipProfileSync) {
+    await ensureUserProfile(fbUser)
+  }
   return listUserCharacters(fbUser.uid)
 }
 
@@ -10269,8 +10480,10 @@ export async function loadCloudGame() {
     const fbUser = firebaseAuth.currentUser
     if (fbUser) {
       setGameAccountIdentity(fbUser.uid)
-      await ensureUserProfile(fbUser)
-      const chars = await listUserCharacters(fbUser.uid)
+      const [_, chars] = await Promise.all([
+        ensureUserProfile(fbUser),
+        listUserCharacters(fbUser.uid),
+      ])
       const selected = chars.find((c) => c.id === activeCharacterSlot) ?? chars[0]
       if (selected) {
         activeCharacterSlot = selected.id
@@ -10300,6 +10513,11 @@ export async function loadCloudGame() {
     }
   } catch {
     // Fall back to local save if Firestore query fails.
+  }
+
+  if (!isSupabaseConfigured()) {
+    setGameAccountIdentity(null)
+    return readSave()
   }
 
   try {

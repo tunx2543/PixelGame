@@ -12,6 +12,8 @@ export const GAME_VERSION = '1.4.2'
 export const GAME_BUILD_DATE = '2026-11-22'
 export const GAME_RELEASE_TITLE = 'คูณ EXP & ดรอปทั้งเซิร์ฟเวอร์ • ระบบไอเทมโค้ด & Patch Notes เรียลไทม์'
 export const LOCAL_SEEN_VERSION_KEY = 'pixelquest_last_seen_version'
+export const GAME_BUILD_ID =
+  (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_BUILD_ID?.trim()) || 'dev-local'
 
 export const GAME_CHANGELOG: ReleaseNote[] = [
   {
@@ -129,6 +131,8 @@ export const GAME_CHANGELOG: ReleaseNote[] = [
 
 export interface VersionPayload {
   version: string
+  buildId?: string
+  deployVersionId?: string | null
   buildDate: string
   title: string
   latestNotes: string[]
@@ -175,6 +179,38 @@ export function hasRemoteUpdate(
 ): boolean {
   if (!remoteVersion || typeof remoteVersion !== 'string') return false
   return compareSemver(remoteVersion, clientVersion) > 0
+}
+
+export function hasRemoteBuildUpdate(input: {
+  clientVersion: string
+  remoteVersion?: string | null
+  clientBuildId?: string | null
+  remoteBuildId?: string | null
+  initialDeployVersionId?: string | null
+  remoteDeployVersionId?: string | null
+}): boolean {
+  if (hasRemoteUpdate(input.clientVersion, input.remoteVersion)) {
+    return true
+  }
+  const clientBuild = typeof input.clientBuildId === 'string' ? input.clientBuildId.trim() : ''
+  const remoteBuild = typeof input.remoteBuildId === 'string' ? input.remoteBuildId.trim() : ''
+  if (
+    clientBuild &&
+    remoteBuild &&
+    clientBuild !== 'dev-local' &&
+    remoteBuild !== 'dev-local' &&
+    clientBuild !== remoteBuild
+  ) {
+    return true
+  }
+  const initialDeploy =
+    typeof input.initialDeployVersionId === 'string' ? input.initialDeployVersionId.trim() : ''
+  const remoteDeploy =
+    typeof input.remoteDeployVersionId === 'string' ? input.remoteDeployVersionId.trim() : ''
+  if (initialDeploy && remoteDeploy && initialDeploy !== remoteDeploy) {
+    return true
+  }
+  return false
 }
 
 export function isVersionUnseen(
@@ -248,11 +284,14 @@ export function mergeReleaseNotes(
 export function buildVersionPayload(
   customNotes: ReleaseNote[] = [],
   nowMs = Date.now(),
+  meta?: { buildId?: string; deployVersionId?: string | null },
 ): VersionPayload {
   const merged = mergeReleaseNotes(customNotes, GAME_CHANGELOG)
   const latest = merged[0] ?? GAME_CHANGELOG[0]
   return {
     version: latest?.version ?? GAME_VERSION,
+    buildId: meta?.buildId ?? GAME_BUILD_ID,
+    deployVersionId: meta?.deployVersionId ?? null,
     buildDate: latest?.date ?? GAME_BUILD_DATE,
     title: latest?.title ?? GAME_RELEASE_TITLE,
     latestNotes: latest?.highlights ?? [],

@@ -131,6 +131,11 @@
           "type": "object",
           "description": "Native Firestore map containing full SaveData state."
         },
+        "lastDiamondGainAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the last diamond balance increase for anti-spam cooldown enforcement."
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time",

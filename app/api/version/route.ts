@@ -8,16 +8,35 @@ import {
   upsertLivePatchNote,
 } from '@/lib/server/patch-notes-store'
 
+import { GAME_BUILD_ID } from '@/lib/game/version'
+
 export const dynamic = 'force-dynamic'
+
+const CF_CONTEXT_SYMBOL = Symbol.for('__cloudflare-context__')
 
 const NO_STORE_HEADERS = {
   'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
 }
 
+function getCloudflareDeployVersionId(): string | null {
+  const g = globalThis as Record<PropertyKey, unknown>
+  const ctx = g[CF_CONTEXT_SYMBOL] as
+    | { env?: { CF_VERSION_METADATA?: { id?: unknown } } }
+    | undefined
+  const id = ctx?.env?.CF_VERSION_METADATA?.id
+  return typeof id === 'string' && id.trim() ? id.trim() : null
+}
+
 export async function GET() {
-  return NextResponse.json(getMergedVersionPayload(), {
-    headers: NO_STORE_HEADERS,
-  })
+  return NextResponse.json(
+    getMergedVersionPayload(Date.now(), {
+      buildId: GAME_BUILD_ID,
+      deployVersionId: getCloudflareDeployVersionId(),
+    }),
+    {
+      headers: NO_STORE_HEADERS,
+    },
+  )
 }
 
 export async function POST(req: Request) {

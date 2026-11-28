@@ -202,6 +202,7 @@ service cloud.firestore {
           'mapId',
           'playTime',
           'saveData',
+          'lastDiamondGainAt',
           'createdAt',
           'updatedAt'
         ]) &&
@@ -240,6 +241,14 @@ service cloud.firestore {
         data.saveData.keys().size() <= 60 &&
         (!('diamonds' in data.saveData) || data.saveData.diamonds == data.diamonds) &&
         (!('gm' in data.saveData) || data.saveData.gm == false || isGmAccount()) &&
+        (!('god' in data.saveData) || data.saveData.god == false || isGmAccount()) &&
+        (!('invisible' in data.saveData) || data.saveData.invisible == false || isGmAccount()) &&
+        (!('premium' in data.saveData) || (
+          data.saveData.premium is map &&
+          (!('totalTopupThb' in data.saveData.premium) || (data.saveData.premium.totalTopupThb is int && data.saveData.premium.totalTopupThb >= 0 && data.saveData.premium.totalTopupThb <= 10000000)) &&
+          (!('vip' in data.saveData.premium) || !(data.saveData.premium.vip is map) || (!('vipLevel' in data.saveData.premium.vip) || (data.saveData.premium.vip.vipLevel is int && data.saveData.premium.vip.vipLevel >= 0 && data.saveData.premium.vip.vipLevel <= 5)))
+        )) &&
+        (!('lastDiamondGainAt' in data) || data.lastDiamondGainAt is timestamp) &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
     }
@@ -336,10 +345,17 @@ service cloud.firestore {
               (
                 data.serverVerified == true &&
                 data.serverSignature is string &&
-                data.serverSignature.size() >= 16
+                data.serverSignature.matches('^[a-fA-F0-9]{32}$')
               )
             ) &&
-            (data.type != 'earn' || data.serverVerified == true || data.amount <= 5000)
+            (
+              !data.serverVerified ||
+              (
+                data.serverSignature is string &&
+                data.serverSignature.matches('^[a-fA-F0-9]{32}$')
+              )
+            ) &&
+            (data.type != 'earn' || data.serverVerified == true || data.amount <= 250)
           )
         ) &&
         data.serverVerified is bool &&
@@ -538,8 +554,14 @@ service cloud.firestore {
         data.characterId == characterId &&
         data.characterId.size() <= 64 &&
         isValidId(data.packageId) &&
-        data.packageId.size() >= 2 &&
-        data.packageId.size() <= 64 &&
+        data.packageId in [
+          'topup_starter',
+          'topup_pouch',
+          'topup_chest',
+          'topup_treasury',
+          'topup_royal',
+          'topup_mythic'
+        ] &&
         data.packageName is string &&
         data.packageName.size() >= 1 &&
         data.packageName.size() <= 120 &&
@@ -548,21 +570,21 @@ service cloud.firestore {
         data.gatewayRef.size() >= 4 &&
         data.gatewayRef.size() <= 128 &&
         data.amountThb is int &&
-        data.amountThb >= 1 &&
-        data.amountThb <= 100000 &&
+        data.amountThb >= 29 &&
+        data.amountThb <= 1490 &&
         data.baseDiamonds is int &&
-        data.baseDiamonds >= 1 &&
-        data.baseDiamonds <= 1000000 &&
+        data.baseDiamonds >= 60 &&
+        data.baseDiamonds <= 4200 &&
         data.bonusDiamonds is int &&
-        data.bonusDiamonds >= 0 &&
-        data.bonusDiamonds <= 1000000 &&
+        data.bonusDiamonds >= 10 &&
+        data.bonusDiamonds <= data.baseDiamonds + 1500 &&
         data.totalDiamonds is int &&
-        data.totalDiamonds >= 1 &&
-        data.totalDiamonds <= 2000000 &&
+        data.totalDiamonds >= 70 &&
+        data.totalDiamonds <= 9900 &&
         data.totalDiamonds == data.baseDiamonds + data.bonusDiamonds &&
         data.vipExpGranted is int &&
-        data.vipExpGranted >= 0 &&
-        data.vipExpGranted <= 100000 &&
+        data.vipExpGranted >= 30 &&
+        data.vipExpGranted <= 1950 &&
         data.status == 'credited' &&
         isValidId(data.txId) &&
         data.txId.size() >= 4 &&
@@ -577,18 +599,357 @@ service cloud.firestore {
             data.provider in ['stripe_promptpay', 'stripe_checkout', 'promptpay_slip'] &&
             data.serverVerified == true &&
             data.serverSignature is string &&
-            data.serverSignature.size() >= 16
+            data.serverSignature.matches('^[a-fA-F0-9]{32}$')
           ) ||
           (
             data.provider == 'promptpay_manual_gm' &&
+            data.serverVerified == true &&
+            data.serverSignature is string &&
+            data.serverSignature.matches('^[a-fA-F0-9]{32}$') &&
             isValidId(data.gatewayRef) &&
             exists(/databases/$(database)/documents/topupSlipRequests/$(data.gatewayRef)) &&
             get(/databases/$(database)/documents/topupSlipRequests/$(data.gatewayRef)).data.status == 'approved' &&
+            get(/databases/$(database)/documents/topupSlipRequests/$(data.gatewayRef)).data.claimed == false &&
             get(/databases/$(database)/documents/topupSlipRequests/$(data.gatewayRef)).data.ownerId == request.auth.uid &&
+            get(/databases/$(database)/documents/topupSlipRequests/$(data.gatewayRef)).data.characterId == characterId &&
             get(/databases/$(database)/documents/topupSlipRequests/$(data.gatewayRef)).data.packageId == data.packageId &&
-            get(/databases/$(database)/documents/topupSlipRequests/$(data.gatewayRef)).data.totalDiamonds == data.totalDiamonds
+            get(/databases/$(database)/documents/topupSlipRequests/$(data.gatewayRef)).data.amountThb == data.amountThb &&
+            get(/databases/$(database)/documents/topupSlipRequests/$(data.gatewayRef)).data.totalDiamonds == data.totalDiamonds &&
+            getAfter(/databases/$(database)/documents/topupSlipRequests/$(data.gatewayRef)).data.claimed == true
           )
         );
+    }
+
+    function hasPremMap(saveData) {
+      return 'premium' in saveData && saveData.premium is map;
+    }
+
+    function hasTopupThb(saveData) {
+      return hasPremMap(saveData) &&
+        'totalTopupThb' in saveData.premium &&
+        saveData.premium.totalTopupThb is int;
+    }
+
+    function hasDailyTopupDate(saveData) {
+      return hasPremMap(saveData) && 'lastDailyTopupDate' in saveData.premium;
+    }
+
+    function hasVipMap(saveData) {
+      return hasPremMap(saveData) &&
+        'vip' in saveData.premium &&
+        saveData.premium.vip is map;
+    }
+
+    function hasTopupOrder0(saveData) {
+      return hasPremMap(saveData) &&
+        'topupOrders' in saveData.premium &&
+        saveData.premium.topupOrders is list &&
+        saveData.premium.topupOrders.size() > 0 &&
+        saveData.premium.topupOrders[0] is map &&
+        'orderId' in saveData.premium.topupOrders[0] &&
+        isValidId(saveData.premium.topupOrders[0].orderId);
+    }
+
+    function isAtomicNewTopupOrder(userId, characterId) {
+      return hasTopupOrder0(incoming().saveData) &&
+        !exists(/databases/$(database)/documents/users/$(userId)/characters/$(characterId)/topupOrders/$(incoming().saveData.premium.topupOrders[0].orderId)) &&
+        existsAfter(/databases/$(database)/documents/users/$(userId)/characters/$(characterId)/topupOrders/$(incoming().saveData.premium.topupOrders[0].orderId));
+    }
+
+    function hasVipExp(saveData) {
+      return hasVipMap(saveData) &&
+        'vipExp' in saveData.premium.vip &&
+        saveData.premium.vip.vipExp is int;
+    }
+
+    function hasVipExpiresAtMs(saveData) {
+      return hasVipMap(saveData) &&
+        'expiresAtMs' in saveData.premium.vip &&
+        saveData.premium.vip.expiresAtMs is int;
+    }
+
+    function hasClaimedRedeemCodeLast(saveData) {
+      return hasPremMap(saveData) &&
+        'claimedRedeemCodes' in saveData.premium &&
+        saveData.premium.claimedRedeemCodes is list &&
+        saveData.premium.claimedRedeemCodes.size() > 0 &&
+        saveData.premium.claimedRedeemCodes[saveData.premium.claimedRedeemCodes.size() - 1] is string &&
+        saveData.premium.claimedRedeemCodes[saveData.premium.claimedRedeemCodes.size() - 1].matches('^[A-Z0-9_\\-]{4,32}$');
+    }
+
+    function isNewlyClaimedDailyTopupBonus() {
+      return hasDailyTopupDate(existing().saveData) &&
+        existing().saveData.premium.lastDailyTopupDate is string &&
+        existing().saveData.premium.lastDailyTopupDate.size() == 10 &&
+        (
+          !('claimedDailyTopupDate' in existing().saveData.premium) ||
+          existing().saveData.premium.claimedDailyTopupDate != existing().saveData.premium.lastDailyTopupDate
+        ) &&
+        hasPremMap(incoming().saveData) &&
+        'claimedDailyTopupDate' in incoming().saveData.premium &&
+        incoming().saveData.premium.claimedDailyTopupDate == existing().saveData.premium.lastDailyTopupDate;
+    }
+
+    function isNewlyClaimedRedeemCode(characterId) {
+      return hasClaimedRedeemCodeLast(incoming().saveData) &&
+        (
+          !hasPremMap(existing().saveData) ||
+          !('claimedRedeemCodes' in existing().saveData.premium) ||
+          !(existing().saveData.premium.claimedRedeemCodes is list) ||
+          !(incoming().saveData.premium.claimedRedeemCodes[incoming().saveData.premium.claimedRedeemCodes.size() - 1] in existing().saveData.premium.claimedRedeemCodes)
+        ) &&
+        exists(/databases/$(database)/documents/redeemCodes/$(incoming().saveData.premium.claimedRedeemCodes[incoming().saveData.premium.claimedRedeemCodes.size() - 1])) &&
+        exists(/databases/$(database)/documents/redeemCodes/$(incoming().saveData.premium.claimedRedeemCodes[incoming().saveData.premium.claimedRedeemCodes.size() - 1])/claims/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/redeemCodes/$(incoming().saveData.premium.claimedRedeemCodes[incoming().saveData.premium.claimedRedeemCodes.size() - 1])/claims/$(request.auth.uid)).data.characterId == characterId &&
+        request.time < get(/databases/$(database)/documents/redeemCodes/$(incoming().saveData.premium.claimedRedeemCodes[incoming().saveData.premium.claimedRedeemCodes.size() - 1])/claims/$(request.auth.uid)).data.createdAt + duration.value(120, 's');
+    }
+
+    function isValidNonGmVipExpGrowth(userId, characterId) {
+      return !hasVipExp(incoming().saveData) ||
+        (!hasVipExp(existing().saveData) && incoming().saveData.premium.vip.vipExp == 0) ||
+        (hasVipExp(existing().saveData) && incoming().saveData.premium.vip.vipExp <= existing().saveData.premium.vip.vipExp) ||
+        (
+          incoming().diamonds < existing().diamonds &&
+          (
+            (!hasVipExp(existing().saveData) && incoming().saveData.premium.vip.vipExp <= 25000) ||
+            (hasVipExp(existing().saveData) && incoming().saveData.premium.vip.vipExp <= existing().saveData.premium.vip.vipExp + 25000)
+          )
+        ) ||
+        (
+          isAtomicNewTopupOrder(userId, characterId) &&
+          (
+            (!hasVipExp(existing().saveData) && incoming().saveData.premium.vip.vipExp <= getAfter(/databases/$(database)/documents/users/$(userId)/characters/$(characterId)/topupOrders/$(incoming().saveData.premium.topupOrders[0].orderId)).data.vipExpGranted) ||
+            (hasVipExp(existing().saveData) && incoming().saveData.premium.vip.vipExp <= existing().saveData.premium.vip.vipExp + getAfter(/databases/$(database)/documents/users/$(userId)/characters/$(characterId)/topupOrders/$(incoming().saveData.premium.topupOrders[0].orderId)).data.vipExpGranted)
+          )
+        ) ||
+        (
+          hasTopupThb(existing().saveData) &&
+          existing().saveData.premium.totalTopupThb >= 29 &&
+          isNewlyClaimedMilestone('milestone_29') &&
+          hasVipExp(existing().saveData) &&
+          incoming().saveData.premium.vip.vipExp <= existing().saveData.premium.vip.vipExp + 20
+        ) ||
+        (
+          hasTopupThb(existing().saveData) &&
+          existing().saveData.premium.totalTopupThb >= 100 &&
+          isNewlyClaimedMilestone('milestone_100') &&
+          hasVipExp(existing().saveData) &&
+          incoming().saveData.premium.vip.vipExp <= existing().saveData.premium.vip.vipExp + 50
+        ) ||
+        (
+          hasTopupThb(existing().saveData) &&
+          existing().saveData.premium.totalTopupThb >= 300 &&
+          isNewlyClaimedMilestone('milestone_300') &&
+          hasVipExp(existing().saveData) &&
+          incoming().saveData.premium.vip.vipExp <= existing().saveData.premium.vip.vipExp + 120
+        ) ||
+        (
+          hasTopupThb(existing().saveData) &&
+          existing().saveData.premium.totalTopupThb >= 600 &&
+          isNewlyClaimedMilestone('milestone_600') &&
+          hasVipExp(existing().saveData) &&
+          incoming().saveData.premium.vip.vipExp <= existing().saveData.premium.vip.vipExp + 250
+        ) ||
+        (
+          hasTopupThb(existing().saveData) &&
+          existing().saveData.premium.totalTopupThb >= 1500 &&
+          isNewlyClaimedMilestone('milestone_1500') &&
+          hasVipExp(existing().saveData) &&
+          incoming().saveData.premium.vip.vipExp <= existing().saveData.premium.vip.vipExp + 600
+        ) ||
+        (
+          isNewlyClaimedDailyTopupBonus() &&
+          hasVipExp(existing().saveData) &&
+          incoming().saveData.premium.vip.vipExp <= existing().saveData.premium.vip.vipExp + 15
+        ) ||
+        (
+          isNewlyClaimedRedeemCode(characterId) &&
+          hasVipExp(existing().saveData) &&
+          incoming().saveData.premium.vip.vipExp <= existing().saveData.premium.vip.vipExp +
+            get(/databases/$(database)/documents/redeemCodes/$(incoming().saveData.premium.claimedRedeemCodes[incoming().saveData.premium.claimedRedeemCodes.size() - 1])).data.vipExp
+        );
+    }
+
+    function isValidNonGmVipExpiry() {
+      return !hasVipExpiresAtMs(incoming().saveData) ||
+        incoming().diamonds < existing().diamonds ||
+        (
+          hasVipExpiresAtMs(existing().saveData) &&
+          incoming().saveData.premium.vip.expiresAtMs <= existing().saveData.premium.vip.expiresAtMs
+        );
+    }
+
+    function isValidNonGmTopupState(userId, characterId) {
+      return (
+        (
+          isAtomicNewTopupOrder(userId, characterId) &&
+          (
+            !hasTopupThb(incoming().saveData) ||
+            (
+              !hasTopupThb(existing().saveData) &&
+              incoming().saveData.premium.totalTopupThb <=
+                getAfter(/databases/$(database)/documents/users/$(userId)/characters/$(characterId)/topupOrders/$(incoming().saveData.premium.topupOrders[0].orderId)).data.amountThb
+            ) ||
+            (
+              hasTopupThb(existing().saveData) &&
+              incoming().saveData.premium.totalTopupThb <=
+                existing().saveData.premium.totalTopupThb +
+                getAfter(/databases/$(database)/documents/users/$(userId)/characters/$(characterId)/topupOrders/$(incoming().saveData.premium.topupOrders[0].orderId)).data.amountThb
+            )
+          )
+        ) ||
+        (
+          (
+            !hasTopupThb(incoming().saveData) ||
+            (!hasTopupThb(existing().saveData) && incoming().saveData.premium.totalTopupThb == 0) ||
+            (hasTopupThb(existing().saveData) && incoming().saveData.premium.totalTopupThb == existing().saveData.premium.totalTopupThb)
+          ) &&
+          (
+            !hasDailyTopupDate(incoming().saveData) ||
+            (!hasDailyTopupDate(existing().saveData) && incoming().saveData.premium.lastDailyTopupDate == null) ||
+            (hasDailyTopupDate(existing().saveData) && incoming().saveData.premium.lastDailyTopupDate == existing().saveData.premium.lastDailyTopupDate)
+          )
+        )
+      ) &&
+      (
+        !hasPremMap(existing().saveData) ||
+        !('claimedTopupMilestones' in existing().saveData.premium) ||
+        !(existing().saveData.premium.claimedTopupMilestones is list) ||
+        (
+          hasPremMap(incoming().saveData) &&
+          'claimedTopupMilestones' in incoming().saveData.premium &&
+          incoming().saveData.premium.claimedTopupMilestones is list &&
+          incoming().saveData.premium.claimedTopupMilestones.hasAll(existing().saveData.premium.claimedTopupMilestones)
+        )
+      ) &&
+      (
+        !hasVipMap(existing().saveData) ||
+        !('claimedTierRewards' in existing().saveData.premium.vip) ||
+        !(existing().saveData.premium.vip.claimedTierRewards is list) ||
+        (
+          hasVipMap(incoming().saveData) &&
+          'claimedTierRewards' in incoming().saveData.premium.vip &&
+          incoming().saveData.premium.vip.claimedTierRewards is list &&
+          incoming().saveData.premium.vip.claimedTierRewards.hasAll(existing().saveData.premium.vip.claimedTierRewards)
+        )
+      ) &&
+      (
+        !hasClaimedRedeemCodeLast(existing().saveData) ||
+        existing().saveData.premium.claimedRedeemCodes.size() >= 60 ||
+        (
+          hasPremMap(incoming().saveData) &&
+          'claimedRedeemCodes' in incoming().saveData.premium &&
+          incoming().saveData.premium.claimedRedeemCodes is list &&
+          incoming().saveData.premium.claimedRedeemCodes.hasAll(existing().saveData.premium.claimedRedeemCodes)
+        )
+      ) &&
+      isValidNonGmVipExpGrowth(userId, characterId) &&
+      isValidNonGmVipExpiry();
+    }
+
+    function isNewlyClaimedMilestone(milestoneId) {
+      return hasPremMap(incoming().saveData) &&
+        'claimedTopupMilestones' in incoming().saveData.premium &&
+        incoming().saveData.premium.claimedTopupMilestones is list &&
+        milestoneId in incoming().saveData.premium.claimedTopupMilestones &&
+        (
+          !hasPremMap(existing().saveData) ||
+          !('claimedTopupMilestones' in existing().saveData.premium) ||
+          !(existing().saveData.premium.claimedTopupMilestones is list) ||
+          !(milestoneId in existing().saveData.premium.claimedTopupMilestones)
+        );
+    }
+
+    function isNewlyClaimedVipTier(tierLevel) {
+      return hasVipMap(incoming().saveData) &&
+        'claimedTierRewards' in incoming().saveData.premium.vip &&
+        incoming().saveData.premium.vip.claimedTierRewards is list &&
+        tierLevel in incoming().saveData.premium.vip.claimedTierRewards &&
+        (
+          !hasVipMap(existing().saveData) ||
+          !('claimedTierRewards' in existing().saveData.premium.vip) ||
+          !(existing().saveData.premium.vip.claimedTierRewards is list) ||
+          !(tierLevel in existing().saveData.premium.vip.claimedTierRewards)
+        );
+    }
+
+    function isNewlyClaimedServerGiftDrop() {
+      return 'claimedGiftDropIds' in incoming().saveData &&
+        incoming().saveData.claimedGiftDropIds is list &&
+        incoming().saveData.claimedGiftDropIds.size() > 0 &&
+        incoming().saveData.claimedGiftDropIds[incoming().saveData.claimedGiftDropIds.size() - 1] is string &&
+        isValidId(incoming().saveData.claimedGiftDropIds[incoming().saveData.claimedGiftDropIds.size() - 1]) &&
+        (
+          !('claimedGiftDropIds' in existing().saveData) ||
+          !(existing().saveData.claimedGiftDropIds is list) ||
+          !(incoming().saveData.claimedGiftDropIds[incoming().saveData.claimedGiftDropIds.size() - 1] in existing().saveData.claimedGiftDropIds)
+        ) &&
+        exists(/databases/$(database)/documents/serverGiftDrops/$(incoming().saveData.claimedGiftDropIds[incoming().saveData.claimedGiftDropIds.size() - 1]));
+    }
+
+    function isValidNonGmDiamondChange(userId, characterId) {
+      return (
+        incoming().diamonds <= existing().diamonds &&
+        !('lastDiamondGainAt' in incoming().diff(existing()).affectedKeys())
+      ) ||
+      (
+        incoming().diamonds > existing().diamonds &&
+        'lastDiamondGainAt' in incoming() &&
+        incoming().lastDiamondGainAt == request.time &&
+        (
+          (
+            incoming().diamonds <= existing().diamonds + 250 &&
+            (
+              !('lastDiamondGainAt' in existing()) ||
+              !(existing().lastDiamondGainAt is timestamp) ||
+              request.time >= existing().lastDiamondGainAt + duration.value(5, 's')
+            )
+          ) ||
+          (
+            isAtomicNewTopupOrder(userId, characterId) &&
+            incoming().diamonds <= existing().diamonds +
+              getAfter(/databases/$(database)/documents/users/$(userId)/characters/$(characterId)/topupOrders/$(incoming().saveData.premium.topupOrders[0].orderId)).data.totalDiamonds
+          ) ||
+          (
+            hasTopupThb(existing().saveData) &&
+            existing().saveData.premium.totalTopupThb >= 600 &&
+            isNewlyClaimedMilestone('milestone_600') &&
+            incoming().diamonds <= existing().diamonds + 450
+          ) ||
+          (
+            hasTopupThb(existing().saveData) &&
+            existing().saveData.premium.totalTopupThb >= 1500 &&
+            isNewlyClaimedMilestone('milestone_1500') &&
+            incoming().diamonds <= existing().diamonds + 1200
+          ) ||
+          (
+            hasVipMap(existing().saveData) &&
+            'vipExp' in existing().saveData.premium.vip &&
+            existing().saveData.premium.vip.vipExp is int &&
+            existing().saveData.premium.vip.vipExp >= 2200 &&
+            isNewlyClaimedVipTier(4) &&
+            incoming().diamonds <= existing().diamonds + 450
+          ) ||
+          (
+            hasVipMap(existing().saveData) &&
+            'vipExp' in existing().saveData.premium.vip &&
+            existing().saveData.premium.vip.vipExp is int &&
+            existing().saveData.premium.vip.vipExp >= 5000 &&
+            isNewlyClaimedVipTier(5) &&
+            incoming().diamonds <= existing().diamonds + 800
+          ) ||
+          (
+            isNewlyClaimedServerGiftDrop() &&
+            incoming().diamonds <= existing().diamonds +
+              get(/databases/$(database)/documents/serverGiftDrops/$(incoming().saveData.claimedGiftDropIds[incoming().saveData.claimedGiftDropIds.size() - 1])).data.diamonds
+          ) ||
+          (
+            isNewlyClaimedRedeemCode(characterId) &&
+            incoming().diamonds <= existing().diamonds +
+              get(/databases/$(database)/documents/redeemCodes/$(incoming().saveData.premium.claimedRedeemCodes[incoming().saveData.premium.claimedRedeemCodes.size() - 1])).data.diamonds
+          )
+        )
+      );
     }
 
     function isValidPromptPayShopSettings(data, settingId) {
@@ -2502,7 +2863,19 @@ service cloud.firestore {
           isValidId(characterId) &&
           userId == request.auth.uid &&
           isValidCharacterSave(incoming(), characterId) &&
-          (isGmAccount() || incoming().diamonds <= 500) &&
+          (
+            isGmAccount() ||
+            (
+              incoming().diamonds <= 250 &&
+              (!('lastDiamondGainAt' in incoming()) || incoming().lastDiamondGainAt == request.time) &&
+              (!hasTopupThb(incoming().saveData) || incoming().saveData.premium.totalTopupThb == 0) &&
+              (!hasDailyTopupDate(incoming().saveData) || incoming().saveData.premium.lastDailyTopupDate == null) &&
+              !hasTopupOrder0(incoming().saveData) &&
+              (!hasVipExp(incoming().saveData) || incoming().saveData.premium.vip.vipExp == 0) &&
+              !hasVipExpiresAtMs(incoming().saveData) &&
+              !hasClaimedRedeemCodeLast(incoming().saveData)
+            )
+          ) &&
           incoming().createdAt == request.time &&
           incoming().updatedAt == request.time &&
           isUserAccountOwner(userId);
@@ -2515,29 +2888,9 @@ service cloud.firestore {
           isValidCharacterSave(incoming(), characterId) &&
           (
             isGmAccount() ||
-            incoming().diamonds <= existing().diamonds + 5000 ||
             (
-              'premium' in incoming().saveData &&
-              incoming().saveData.premium is map &&
-              'topupOrders' in incoming().saveData.premium &&
-              incoming().saveData.premium.topupOrders is list &&
-              incoming().saveData.premium.topupOrders.size() > 0 &&
-              incoming().saveData.premium.topupOrders[0] is map &&
-              'orderId' in incoming().saveData.premium.topupOrders[0] &&
-              isValidId(incoming().saveData.premium.topupOrders[0].orderId) &&
-              exists(/databases/$(database)/documents/users/$(userId)/characters/$(characterId)/topupOrders/$(incoming().saveData.premium.topupOrders[0].orderId)) &&
-              (
-                !('premium' in existing().saveData) ||
-                !(existing().saveData.premium is map) ||
-                !('topupOrders' in existing().saveData.premium) ||
-                !(existing().saveData.premium.topupOrders is list) ||
-                existing().saveData.premium.topupOrders.size() == 0 ||
-                !(existing().saveData.premium.topupOrders[0] is map) ||
-                !('orderId' in existing().saveData.premium.topupOrders[0]) ||
-                existing().saveData.premium.topupOrders[0].orderId != incoming().saveData.premium.topupOrders[0].orderId
-              ) &&
-              incoming().diamonds <= existing().diamonds + 5000 +
-                get(/databases/$(database)/documents/users/$(userId)/characters/$(characterId)/topupOrders/$(incoming().saveData.premium.topupOrders[0].orderId)).data.totalDiamonds
+              isValidNonGmDiamondChange(userId, characterId) &&
+              isValidNonGmTopupState(userId, characterId)
             )
           ) &&
           incoming().id == existing().id &&
@@ -2556,6 +2909,7 @@ service cloud.firestore {
             'mapId',
             'playTime',
             'saveData',
+            'lastDiamondGainAt',
             'updatedAt'
           ]) &&
           isUserAccountOwner(userId);
@@ -2740,6 +3094,7 @@ service cloud.firestore {
           isValidId(mailId) &&
           isValidMailMessage(incoming(), mailId) &&
           incoming().claimed == false &&
+          (isGmAccount() || (incoming().diamonds == 0 && incoming().senderGameUid != '0000')) &&
           incoming().createdAt == request.time &&
           incoming().updatedAt == request.time &&
           isUserAccountOwner(request.auth.uid) &&

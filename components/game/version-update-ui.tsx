@@ -36,7 +36,9 @@ export function VersionUpdateBanner() {
           <p className="truncate font-bold text-amber-300">
             {targetVersion
               ? `มีอัปเดตเวอร์ชั่นใหม่ v${targetVersion} พร้อมให้เล่นแล้ว!`
-              : 'พบไฟล์เกมเวอร์ชั่นใหม่พร้อมอัปเดต!'}
+              : v.buildUpdateDetected
+                ? 'พบโค้ดเกมอัปเดตใหม่บนเซิร์ฟเวอร์ พร้อมโหลดทันที!'
+                : 'พบไฟล์เกมเวอร์ชั่นใหม่พร้อมอัปเดต!'}
           </p>
           <p className="truncate text-[10px] text-muted-foreground">
             {v.remoteReleaseTitle || `เวอร์ชั่นปัจจุบันของคุณ v${v.currentVersion}`}

@@ -14,9 +14,12 @@ import {
   setDoc,
   updateDoc,
   where,
+  writeBatch,
 } from 'firebase/firestore'
 import type { SaveData } from '@/lib/game/engine'
 import { normalizeJobId } from '@/lib/game/data'
+import type { TopupOrderRecord } from '@/lib/game/premium/topup'
+import type { AuditLogEntry, DiamondTransaction } from '@/lib/game/premium/types'
 import { sanitizeRpgExt } from '@/lib/game/rpg-systems'
 import {
   PERMANENT_GM_GAME_UID,
@@ -439,6 +442,15 @@ export async function listUserCharacters(userId: string): Promise<CloudCharacter
 
 const inFlightCharacterSave = new Map<string, Promise<void>>()
 
+function readTimestampMillis(val: unknown): number | null {
+  if (!val) return null
+  if (typeof val === 'object' && typeof (val as { toMillis?: () => number }).toMillis === 'function') {
+    const ms = (val as { toMillis: () => number }).toMillis()
+    return Number.isFinite(ms) ? ms : null
+  }
+  return null
+}
+
 async function performSaveUserCharacter(userId: string, characterId: string, save: SaveData): Promise<void> {
   const currentUser = auth.currentUser
   if (!currentUser || currentUser.uid !== userId || !currentUser.emailVerified) return
@@ -469,6 +481,7 @@ async function performSaveUserCharacter(userId: string, characterId: string, sav
     try {
       await setDoc(charRef, {
         ...payload,
+        lastDiamondGainAt: serverTimestamp(),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
@@ -476,6 +489,19 @@ async function performSaveUserCharacter(userId: string, characterId: string, sav
       handleFirestoreError(error, OperationType.CREATE, charPath)
     }
   } else {
+    const existingData = existingSnap.data()
+    const existingDiamonds = toSafeInt(existingData?.diamonds, 0, Number.MAX_SAFE_INTEGER, 0)
+    const diamondDelta = payload.diamonds - existingDiamonds
+    const lastGainMs = readTimestampMillis(existingData?.lastDiamondGainAt)
+
+    // Respect 5-second Firestore diamond-gain cooldown for normal non-GM gameplay earns
+    if (!identity.isGm && diamondDelta > 0 && diamondDelta <= 250 && lastGainMs !== null) {
+      const elapsed = Date.now() - lastGainMs
+      if (elapsed >= 0 && elapsed < 5500) {
+        await new Promise((resolve) => setTimeout(resolve, 5500 - elapsed))
+      }
+    }
+
     try {
       await updateDoc(charRef, {
         name: payload.name,
@@ -490,6 +516,7 @@ async function performSaveUserCharacter(userId: string, characterId: string, sav
         playTime: payload.playTime,
         saveData: payload.saveData,
         updatedAt: serverTimestamp(),
+        ...(diamondDelta > 0 ? { lastDiamondGainAt: serverTimestamp() } : {}),
       })
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, charPath)
@@ -501,6 +528,192 @@ async function performSaveUserCharacter(userId: string, characterId: string, sav
     level: payload.level,
     jobId: payload.jobId,
   })
+}
+
+export async function commitAtomicTopupToCloud(input: {
+  userId: string
+  characterId: string
+  save: SaveData
+  order: TopupOrderRecord
+  tx?: DiamondTransaction
+  audit?: AuditLogEntry
+  manualSlipRequestId?: string
+}): Promise<void> {
+  const currentUser = auth.currentUser
+  if (!currentUser || currentUser.uid !== input.userId || !currentUser.emailVerified) return
+
+  const safeCharId = sanitizeSafeId(input.characterId, 'slot_1', 64)
+  const queueKey = `${input.userId}:${safeCharId}`
+  const previous = inFlightCharacterSave.get(queueKey) ?? Promise.resolve()
+
+  const run = previous.catch(() => undefined).then(async () => {
+    const identity = await ensureUserProfile(currentUser)
+    const charPath = `users/${input.userId}/characters/${safeCharId}`
+    const charRef = doc(db, 'users', input.userId, 'characters', safeCharId)
+
+    let existingSnap
+    try {
+      existingSnap = await getDocFromServer(charRef)
+    } catch {
+      existingSnap = await getDoc(charRef)
+    }
+
+    // Ensure base character doc exists before running the atomic update + topupOrders batch
+    if (!existingSnap.exists()) {
+      const baseSave = sanitizeCharacterPayload(input.userId, safeCharId, {
+        ...input.save,
+        diamonds: 0,
+        gameUid: identity.gameUid,
+        uid: identity.isGm ? 0 : Number(identity.gameUid),
+        gm: identity.isGm,
+        premium: undefined,
+      })
+      await setDoc(charRef, {
+        ...baseSave,
+        lastDiamondGainAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+    }
+
+    const payload = sanitizeCharacterPayload(input.userId, safeCharId, {
+      ...input.save,
+      gameUid: identity.gameUid,
+      uid: identity.isGm ? 0 : Number(identity.gameUid),
+      gm: identity.isGm,
+    })
+
+    const safeOrderId = sanitizeSafeId(input.order.orderId, `ORD-${Date.now()}`, 64)
+    const safeTxId = sanitizeSafeId(input.order.txId, `TOPTX-${Date.now()}`, 64)
+    const baseDiamonds = Math.max(1, Math.floor(input.order.baseDiamonds))
+    const bonusDiamonds = Math.max(0, Math.floor(input.order.bonusDiamonds))
+
+    const batch = writeBatch(db)
+
+    if (input.order.provider === 'promptpay_manual_gm') {
+      const reqId = sanitizeSafeId(input.manualSlipRequestId || input.order.gatewayRef, '', 64)
+      if (reqId) {
+        const slipRef = doc(db, 'topupSlipRequests', reqId)
+        const slipSnap = await getDocFromServer(slipRef).catch(() => getDoc(slipRef))
+        if (slipSnap.exists()) {
+          const slipData = slipSnap.data()
+          if (slipData?.ownerId !== input.userId) {
+            throw new Error('คำขอสลิปนี้ไม่ใช่ของบัญชีคุณ')
+          }
+          if (slipData?.status !== 'approved') {
+            throw new Error('คำขอสลิปนี้ยังไม่ได้รับการอนุมัติ')
+          }
+          if (slipData?.claimed === true) {
+            throw new Error('รับเพชรจากคำขอสลิปนี้ไปแล้ว')
+          }
+          batch.update(slipRef, {
+            claimed: true,
+            claimedAtMs: Date.now(),
+            updatedAt: serverTimestamp(),
+          })
+        }
+      }
+    }
+
+    batch.set(doc(db, 'users', input.userId, 'characters', safeCharId, 'topupOrders', safeOrderId), {
+      orderId: safeOrderId,
+      ownerId: input.userId,
+      characterId: safeCharId,
+      packageId: sanitizeSafeId(input.order.packageId, 'topup_starter', 64),
+      packageName: String(input.order.packageName || 'Topup Package').slice(0, 120),
+      provider: input.order.provider,
+      gatewayRef: String(input.order.gatewayRef || safeOrderId).slice(0, 128),
+      amountThb: Math.max(1, Math.floor(input.order.amountThb)),
+      baseDiamonds,
+      bonusDiamonds,
+      totalDiamonds: baseDiamonds + bonusDiamonds,
+      vipExpGranted: Math.max(0, Math.floor(input.order.vipExpGranted)),
+      status: 'credited',
+      txId: safeTxId,
+      serverVerified: Boolean(input.order.serverVerified),
+      serverSignature: input.order.serverSignature ? String(input.order.serverSignature).slice(0, 64) : null,
+      createdAtMs: Math.max(0, Math.floor(input.order.createdAtMs || Date.now())),
+      createdAt: serverTimestamp(),
+    })
+
+    if (input.tx) {
+      const ledgerTxId = sanitizeSafeId(input.tx.txId, safeTxId, 64)
+      batch.set(doc(db, 'users', input.userId, 'characters', safeCharId, 'diamondTransactions', ledgerTxId), {
+        txId: ledgerTxId,
+        requestId: sanitizeSafeId(input.tx.requestId, ledgerTxId, 64),
+        ownerId: input.userId,
+        characterId: safeCharId,
+        type: input.tx.type,
+        source: String(input.tx.source).slice(0, 48),
+        amount: Math.max(0, Math.floor(input.tx.amount)),
+        balanceBefore: Math.max(0, Math.floor(input.tx.balanceBefore)),
+        balanceAfter: Math.max(0, Math.floor(input.tx.balanceAfter)),
+        productId: input.tx.productId ? String(input.tx.productId).slice(0, 64) : null,
+        itemId: input.tx.itemId ? String(input.tx.itemId).slice(0, 64) : null,
+        note: String(input.tx.note || 'Topup credit').slice(0, 180),
+        actorUid: String(input.tx.actorUid || input.userId).slice(0, 128),
+        isGm: false,
+        serverVerified: Boolean(input.tx.serverVerified),
+        serverSignature: input.tx.serverSignature ? String(input.tx.serverSignature).slice(0, 64) : null,
+        createdAtMs: Math.max(0, Math.floor(input.tx.createdAtMs)),
+        createdAt: serverTimestamp(),
+      })
+    }
+
+    if (input.audit) {
+      const safeLogId = sanitizeSafeId(input.audit.logId, `AUD-${Date.now()}`, 64)
+      batch.set(doc(db, 'users', input.userId, 'characters', safeCharId, 'auditLogs', safeLogId), {
+        logId: safeLogId,
+        ownerId: input.userId,
+        characterId: safeCharId,
+        action: input.audit.action,
+        actorUid: String(input.audit.actorUid || input.userId).slice(0, 128),
+        actorRole: 'player',
+        txId: input.audit.txId ? sanitizeSafeId(input.audit.txId, safeLogId, 64) : null,
+        details: String(input.audit.details || '-').slice(0, 240),
+        verifiedByServer: Boolean(input.audit.verifiedByServer),
+        createdAtMs: Math.max(0, Math.floor(input.audit.createdAtMs)),
+        createdAt: serverTimestamp(),
+      })
+    }
+
+    batch.update(charRef, {
+      name: payload.name,
+      jobId: payload.jobId,
+      level: payload.level,
+      exp: payload.exp,
+      hp: payload.hp,
+      mp: payload.mp,
+      gold: payload.gold,
+      diamonds: payload.diamonds,
+      mapId: payload.mapId,
+      playTime: payload.playTime,
+      saveData: payload.saveData,
+      lastDiamondGainAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+
+    try {
+      await batch.commit()
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, charPath)
+    }
+
+    void syncPlayerDirectorySummary(input.userId, {
+      characterName: payload.name,
+      level: payload.level,
+      jobId: payload.jobId,
+    })
+  })
+
+  inFlightCharacterSave.set(queueKey, run)
+  try {
+    await run
+  } finally {
+    if (inFlightCharacterSave.get(queueKey) === run) {
+      inFlightCharacterSave.delete(queueKey)
+    }
+  }
 }
 
 export async function saveUserCharacter(userId: string, characterId: string, save: SaveData): Promise<void> {
@@ -533,8 +746,41 @@ export async function importGuestSaveToSlot(
   slotId: CharacterSlotId,
   guestSave: SaveData,
 ): Promise<void> {
+  const currentUser = auth.currentUser
+  const gmAllowed = Boolean(currentUser && isGmAccountUser(currentUser))
+  const clampedDiamonds = gmAllowed
+    ? toSafeInt(guestSave.diamonds, 0, Number.MAX_SAFE_INTEGER, 0)
+    : toSafeInt(guestSave.diamonds, 0, 250, 0)
+
+  const sanitizedPrem = guestSave.premium && typeof guestSave.premium === 'object'
+    ? {
+        ...guestSave.premium,
+        wallet: {
+          ...guestSave.premium.wallet,
+          diamondBalance: clampedDiamonds,
+        },
+        vip: {
+          ...guestSave.premium.vip,
+          vipLevel: 0 as const,
+          vipExp: 0,
+          expiresAtMs: null,
+        },
+        topupOrders: [],
+        totalTopupThb: 0,
+        lastDailyTopupDate: null,
+        claimedDailyTopupDate: null,
+        claimedTopupMilestones: [],
+        claimedRedeemCodes: [],
+      }
+    : undefined
+
   await saveUserCharacter(userId, slotId, {
     ...guestSave,
+    diamonds: clampedDiamonds,
+    gm: gmAllowed,
+    god: gmAllowed ? guestSave.god : false,
+    invisible: gmAllowed ? guestSave.invisible : false,
+    premium: gmAllowed ? guestSave.premium : sanitizedPrem,
     savedAt: Date.now(),
   })
 }

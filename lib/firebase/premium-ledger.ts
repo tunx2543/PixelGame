@@ -11,9 +11,12 @@ import {
   setDoc,
   where,
 } from 'firebase/firestore'
+import { isGmAccountUser } from '@/lib/game/permissions'
 import type { TopupOrderRecord, TopupProvider } from '@/lib/game/premium/topup'
 import type { AuditLogEntry, DiamondTransaction } from '@/lib/game/premium/types'
 import { OperationType, auth, db, handleFirestoreError } from './client'
+
+const GM_ONLY_TX_SOURCES = new Set(['gm_sandbox_console', 'gm_grant', 'gm_dev_console', 'gm_chat_command'])
 
 function safeDocId(raw: string, fallback: string): string {
   const cleaned = raw.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64)
@@ -27,6 +30,10 @@ export async function recordDiamondTransaction(
 ): Promise<void> {
   const currentUser = auth.currentUser
   if (!currentUser || !currentUser.emailVerified || currentUser.uid !== userId) return
+  const gmVerified = isGmAccountUser(currentUser)
+  if (!gmVerified && (tx.type === 'sandbox_grant' || tx.isGm || GM_ONLY_TX_SOURCES.has(tx.source))) {
+    return
+  }
   const safeCharId = safeDocId(characterId, 'slot_1')
   const safeTxId = safeDocId(tx.txId, `TX-${Date.now()}`)
   const path = `users/${userId}/characters/${safeCharId}/diamondTransactions/${safeTxId}`
@@ -63,6 +70,10 @@ export async function recordPremiumAuditLog(
 ): Promise<void> {
   const currentUser = auth.currentUser
   if (!currentUser || !currentUser.emailVerified || currentUser.uid !== userId) return
+  const gmVerified = isGmAccountUser(currentUser)
+  if (!gmVerified && (entry.action === 'SANDBOX_GRANT' || entry.actorRole === 'gm')) {
+    return
+  }
   const safeCharId = safeDocId(characterId, 'slot_1')
   const safeLogId = safeDocId(entry.logId, `AUD-${Date.now()}`)
   const path = `users/${userId}/characters/${safeCharId}/auditLogs/${safeLogId}`
