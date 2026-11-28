@@ -296,7 +296,12 @@ export async function createStripeCheckoutSession(input: {
   const orderId = makeServerTxId('ORD')
   const reward = calculateTopupReward(pkg, input.isFirstPurchase)
 
-  const baseOrigin = (getRuntimeEnv('NEXT_PUBLIC_APP_URL') || input.originUrl).replace(/\/$/, '')
+  const baseOrigin = (
+    getRuntimeEnv('NEXT_PUBLIC_APP_URL') ||
+    getRuntimeEnv('APP_URL') ||
+    input.originUrl ||
+    'https://pixelgame.ffsmilepay53.workers.dev'
+  ).replace(/\/$/, '')
   const successUrl = `${baseOrigin}/?topup_session_id={CHECKOUT_SESSION_ID}&topup_order=${encodeURIComponent(orderId)}`
   const cancelUrl = `${baseOrigin}/?topup_cancelled=1`
 

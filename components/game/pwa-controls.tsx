@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Download, Smartphone, WifiOff, X } from 'lucide-react'
+import { getConfiguredGameLauncherUrl } from '@/lib/game/launcher-config'
 import { useOnlineStatus, usePWAInstall } from '@/lib/game/use-pwa'
 import { markServiceWorkerUpdateReady } from '@/lib/game/use-version-update'
 import { VersionChangelogModal, VersionUpdateBanner } from './version-update-ui'
@@ -167,8 +168,9 @@ export function PWAInstallButton({ variant = 'title' }: { variant?: 'title' | 'h
                     <strong className="text-emerald-300">ติดตั้งแอป (Install app)</strong>
                   </li>
                   <li>
-                    <strong className="text-foreground">แปลงเป็นไฟล์ .APK:</strong> นำ URL ของเกมไปวางใน{' '}
-                    <span className="font-mono text-primary">pwabuilder.com</span> เพื่อแพ็กไฟล์ Android APK
+                    <strong className="text-foreground">แปลงเป็นไฟล์ .APK:</strong> นำ URL{' '}
+                    <span className="font-mono text-primary">{getConfiguredGameLauncherUrl()}</span>{' '}
+                    ไปวางใน <span className="font-mono text-primary">pwabuilder.com</span> เพื่อแพ็กไฟล์ Android APK
                   </li>
                 </ul>
               </div>

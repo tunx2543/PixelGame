@@ -1,9 +1,18 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { Component, useCallback, useEffect, type ErrorInfo, type ReactNode } from 'react'
-import { AlertTriangle, Home, RotateCcw } from 'lucide-react'
+import { Component, useCallback, useEffect, useState, type ErrorInfo, type ReactNode } from 'react'
+import { AlertTriangle, ExternalLink, Globe, Home, RotateCcw } from 'lucide-react'
 import { quitToTitle } from '@/lib/game/engine'
+import {
+  getConfiguredGameLauncherUrl,
+  getLauncherHostLabel,
+  isRunningOnTargetOrigin,
+  readStoredLauncherMode,
+  setStoredLauncherMode,
+  subscribeLauncherMode,
+  type LauncherTargetMode,
+} from '@/lib/game/launcher-config'
 import {
   closeChangelogModal,
   setExternalChangelogHost,
@@ -96,6 +105,10 @@ class GameErrorBoundary extends Component<{ children: ReactNode }, BoundaryState
 
 export function GameLoader() {
   const versionInfo = useVersionUpdate()
+  const launcherUrl = getConfiguredGameLauncherUrl()
+  const launcherHost = getLauncherHostLabel(launcherUrl)
+  const [launcherMode, setLauncherMode] = useState<LauncherTargetMode>('local')
+  const [isSameOriginHost, setIsSameOriginHost] = useState(false)
 
   useEffect(() => {
     setExternalChangelogHost(true)
@@ -104,9 +117,51 @@ export function GameLoader() {
     }
   }, [])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    setIsSameOriginHost(isRunningOnTargetOrigin(window.location.origin, launcherUrl))
+    setLauncherMode(readStoredLauncherMode())
+    return subscribeLauncherMode(setLauncherMode)
+  }, [launcherUrl])
+
   const handleClosePatchNotes = useCallback(() => {
     closeChangelogModal()
   }, [])
+
+  if (!isSameOriginHost && launcherMode === 'workers') {
+    return (
+      <div className="relative h-full w-full overflow-hidden bg-[#071122]" data-testid="workers-launcher-stage">
+        <div className="fixed left-3 top-3 z-40 flex flex-wrap items-center gap-1.5 rounded-lg border border-sky-400/45 bg-[#071326]/92 px-2.5 py-1.5 text-[11px] text-slate-100 shadow-lg backdrop-blur-sm">
+          <Globe className="size-3.5 shrink-0 text-emerald-400" aria-hidden />
+          <span className="font-mono font-bold text-emerald-300">{launcherHost}</span>
+          <a
+            href={launcherUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 rounded border border-emerald-400/50 bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-200 hover:bg-emerald-500/30"
+          >
+            เปิดแท็บใหม่
+            <ExternalLink className="size-3" aria-hidden />
+          </a>
+          <button
+            type="button"
+            data-testid="switch-local-launcher"
+            onClick={() => setStoredLauncherMode('local')}
+            className="rounded border border-slate-500/60 bg-slate-800/90 px-2 py-0.5 text-[10px] font-semibold text-slate-200 hover:text-white"
+          >
+            กลับตัวเกมในเครื่อง
+          </button>
+        </div>
+
+        <iframe
+          src={launcherUrl}
+          title={`Pixel Quest - ${launcherHost}`}
+          allow="autoplay; fullscreen; clipboard-read; clipboard-write"
+          className="h-full w-full border-0 bg-[#071122]"
+        />
+      </div>
+    )
+  }
 
   return (
     <GameErrorBoundary>

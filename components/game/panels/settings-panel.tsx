@@ -1,7 +1,16 @@
 'use client'
 
-import { useState } from 'react'
-import { Disc3, Gauge, Keyboard, Layout, Music, PackageCheck, Play, RefreshCw, RotateCcw, Sliders, Sparkles, Volume2, VolumeX } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Disc3, ExternalLink, Gauge, Globe, Keyboard, Layout, Music, PackageCheck, Play, RefreshCw, RotateCcw, Sliders, Sparkles, Volume2, VolumeX } from 'lucide-react'
+import {
+  getConfiguredGameLauncherUrl,
+  getLauncherHostLabel,
+  isRunningOnTargetOrigin,
+  readStoredLauncherMode,
+  setStoredLauncherMode,
+  subscribeLauncherMode,
+  type LauncherTargetMode,
+} from '@/lib/game/launcher-config'
 import {
   BGM_TRACK_CATEGORY_LABELS,
   getBgmTrackMeta,
@@ -57,6 +66,17 @@ export function SettingsPanel({ onClose }: { onClose?: () => void } = {}) {
   const sfx = useSfxState()
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [jukeboxCategory, setJukeboxCategory] = useState<BgmTrackCategory | 'all'>('town')
+  const launcherUrl = getConfiguredGameLauncherUrl()
+  const launcherHost = getLauncherHostLabel(launcherUrl)
+  const [launcherMode, setLauncherMode] = useState<LauncherTargetMode>('local')
+  const [isOnWorkersHost, setIsOnWorkersHost] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    setIsOnWorkersHost(isRunningOnTargetOrigin(window.location.origin, launcherUrl))
+    setLauncherMode(readStoredLauncherMode())
+    return subscribeLauncherMode(setLauncherMode)
+  }, [launcherUrl])
 
   const bgmVol = Math.round(bgm.volume * 100)
   const sfxVol = Math.round(sfx.volume * 100)
@@ -603,6 +623,59 @@ export function SettingsPanel({ onClose }: { onClose?: () => void } = {}) {
                 </div>
               ))}
             </div>
+          </div>
+        </section>
+
+        {/* Game Launcher Target */}
+        <section className="space-y-2.5 rounded border border-border bg-secondary/35 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="flex items-center gap-1.5 text-sm font-bold text-primary">
+              <Globe className="size-4" aria-hidden />
+              ตัวเปิดเกม &amp; เซิร์ฟเวอร์ปลายทาง
+            </h3>
+            <span className="rounded border border-emerald-400/50 bg-emerald-500/15 px-2 py-0.5 font-mono text-[10px] font-bold text-emerald-300">
+              {launcherHost}
+            </span>
+          </div>
+
+          <div className="rounded border border-border/70 bg-background/50 p-2.5 text-[11px]">
+            <p className="font-semibold text-foreground">URL ตัวเปิดเกมหลัก (Cloudflare Workers)</p>
+            <p className="mt-0.5 break-all font-mono text-[11px] text-sky-300">{launcherUrl}</p>
+            <p className="mt-1 text-muted-foreground">
+              {isOnWorkersHost
+                ? 'คุณกำลังเปิดเกมอยู่บน Cloudflare Workers โดยตรง'
+                : launcherMode === 'workers'
+                  ? 'กำลังเปิดเกมผ่านโหมดฝัง Cloudflare Workers'
+                  : 'โหมดในเครื่อง (Fast 2D Sprite) — กดสลับไปใช้ Cloudflare Workers ได้ทันที'}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <a
+              href={launcherUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="pixel-btn inline-flex items-center gap-1.5 bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white hover:brightness-110"
+            >
+              <ExternalLink className="size-3.5" aria-hidden />
+              เปิดเกมบน Cloudflare Workers
+            </a>
+            {!isOnWorkersHost && (
+              <PxButton
+                variant="secondary"
+                onClick={() => {
+                  const next = launcherMode === 'workers' ? 'local' : 'workers'
+                  setStoredLauncherMode(next)
+                  setStatusMsg(
+                    next === 'workers'
+                      ? `สลับตัวเปิดเกมไปที่ ${launcherHost} แล้ว`
+                      : 'สลับกลับมาใช้ตัวเกมในเครื่องแล้ว',
+                  )
+                }}
+              >
+                {launcherMode === 'workers' ? 'สลับกลับตัวเกมในเครื่อง' : 'เปิดโหมด Workers ในหน้านี้'}
+              </PxButton>
+            )}
           </div>
         </section>
 

@@ -1,11 +1,16 @@
 /** @type {import('next').NextConfig} */
-const appHost = (() => {
+const appHost = [
+  process.env.APP_URL,
+  process.env.NEXT_PUBLIC_APP_URL,
+  process.env.NEXT_PUBLIC_GAME_LAUNCHER_URL,
+  'https://pixelgame.ffsmilepay53.workers.dev',
+].flatMap((candidate) => {
   try {
-    return process.env.APP_URL ? [new URL(process.env.APP_URL).hostname] : []
+    return candidate ? [new URL(candidate).hostname] : []
   } catch {
     return []
   }
-})()
+})
 
 const resolvedBuildId =
   process.env.NEXT_PUBLIC_BUILD_ID ||
@@ -25,7 +30,7 @@ const nextConfig = {
     '**.aistudio.google.com',
     'localhost',
     '127.0.0.1',
-    ...appHost,
+    ...Array.from(new Set(appHost)),
   ],
   typescript: {
     ignoreBuildErrors: true,

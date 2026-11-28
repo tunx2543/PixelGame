@@ -10,6 +10,8 @@ import {
   Check,
   Copy,
   Crown,
+  ExternalLink,
+  Globe,
   Loader2,
   LogIn,
   LogOut,
@@ -72,6 +74,12 @@ import {
   useVersionUpdate,
 } from '@/lib/game/use-version-update'
 import { resolveFashionLoadoutFromSave } from '@/lib/game/fashion-renderer'
+import {
+  getConfiguredGameLauncherUrl,
+  getLauncherHostLabel,
+  isRunningOnTargetOrigin,
+  setStoredLauncherMode,
+} from '@/lib/game/launcher-config'
 import { syncBgmContext } from '@/lib/game/bgm'
 import { MAPS } from '@/lib/game/maps'
 import { cn } from '@/lib/utils'
@@ -127,6 +135,14 @@ export function TitleScreen() {
   const [cloudError, setCloudError] = useState('')
   const [authBusy, setAuthBusy] = useState(false)
   const [authError, setAuthError] = useState('')
+  const [isOnWorkersOrigin, setIsOnWorkersOrigin] = useState(false)
+  const launcherUrl = getConfiguredGameLauncherUrl()
+  const launcherHost = getLauncherHostLabel(launcherUrl)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    setIsOnWorkersOrigin(isRunningOnTargetOrigin(window.location.origin, launcherUrl))
+  }, [launcherUrl])
 
   const computeRecoverables = (currentUserId: string, cloudList: CloudCharacterRecord[]) => {
     const cloudSignatures = new Set(
@@ -537,7 +553,7 @@ export function TitleScreen() {
       )}
 
       {/* Main Entry Layout: Centered lower dock underneath the artwork's Pixel Quest crest so left heroes & right castle/village stay clear */}
-      <main className="relative z-10 flex flex-1 items-end justify-center px-4 pt-48 pb-3 sm:px-6 sm:pt-[42vh] md:pb-3">
+      <main className="relative z-10 flex flex-1 items-end justify-center px-4 pt-44 pb-3 sm:px-6 sm:pt-[37vh] md:pb-3">
         <h1 className="sr-only">Pixel Quest 2D</h1>
         <motion.section
           initial={{ opacity: 0, y: 12 }}
@@ -698,6 +714,41 @@ export function TitleScreen() {
                 )}
               </div>
             </div>
+
+            {/* Cloudflare Workers Game Opener Card */}
+            {!isOnWorkersOrigin && (
+              <div className="rounded-lg border border-sky-400/35 bg-[#09182f]/94 px-2.5 py-2 text-[11px] text-slate-100">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="inline-flex shrink-0 items-center gap-1.5 font-semibold text-sky-200">
+                    <Globe className="size-3.5 shrink-0 text-emerald-400" aria-hidden />
+                    <span>Workers</span>
+                  </span>
+                  <span className="truncate font-mono text-[10px] font-bold text-emerald-300">
+                    {launcherHost}
+                  </span>
+                </div>
+                <div className="mt-1.5 flex items-center gap-1.5">
+                  <a
+                    href={launcherUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid="launch-workers-link"
+                    className="inline-flex flex-1 items-center justify-center gap-1.5 rounded border border-emerald-400/60 bg-gradient-to-b from-emerald-600 to-emerald-800 px-2.5 py-1 text-[11px] font-bold text-white shadow hover:brightness-110"
+                  >
+                    เปิดเกมที่ Workers
+                    <ExternalLink className="size-3 shrink-0" aria-hidden />
+                  </a>
+                  <button
+                    type="button"
+                    data-testid="switch-workers-embed"
+                    onClick={() => setStoredLauncherMode('workers')}
+                    className="inline-flex items-center justify-center rounded border border-sky-400/50 bg-[#15294a] px-2.5 py-1 text-[11px] font-semibold text-sky-100 hover:brightness-115"
+                  >
+                    เปิดในหน้านี้
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </motion.section>
       </main>
