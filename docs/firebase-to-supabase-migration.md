@@ -10,6 +10,9 @@ This branch builds the Supabase Auth foundation. It does **not** switch the live
 - Current `public.user_profile` rows: 0
 - Current `public.character_save` rows: 0
 - Identity bridge migration `firebase_to_supabase_identity_bridge` is applied and committed.
+- GM profile hardening migration `lock_gm_profile_to_trusted_provisioning` is applied and committed.
+- The only configured GM/top-up administrator email is `ffsmilepay53@gmail.com`; permanent GM Game UID remains `0000` (numeric UID 0).
+- The GM role and reserved UID cannot be self-assigned by an authenticated browser client. A trusted server/service-role provisioning path must assign the GM profile after Supabase verifies the exact email.
 - Existing game still has Firebase Auth and Firestore dependencies across character saves, social features, presence, chat, mail, parties, trading, GM tools, premium shop, top-ups and payment verification.
 
 ## Migration rules
@@ -26,6 +29,8 @@ This branch builds the Supabase Auth foundation. It does **not** switch the live
 - Added `public.legacy_identity_link`: maps a Supabase Auth UUID to the original Firebase UID and stable game UID. It is not exposed to browser roles; service-role access only.
 - Added `auth_user_id` to `public.user_profile` and `owner_auth_id` to `public.character_save`.
 - Added owner-scoped RLS policies for profile and character read/write/delete.
+- Restricted browser profile insert/update to the signed-in user's own ordinary player profile, matching the verified JWT email, with `role='player'` and Game UID other than `0000`.
+- The GM profile must be provisioned only by trusted server/service-role code. The browser cannot grant itself GM privileges or reserve UID `0000`.
 - The new mapping and owner columns are nullable so the empty Supabase project can accept the migration without fabricating users or changing old IDs.
 - Existing user/profile/character tables remain empty; no Firebase data has been imported.
 
@@ -52,5 +57,5 @@ Application environment:
 - Migrate presence, chat, friends, parties, mail, trades, guilds, missions, GM events and announcements to Supabase Realtime/RPC with owner-scoped RLS.
 - Rebuild premium/top-up/payment APIs to verify Supabase JWTs and use trusted server-side database transactions.
 - Add tests for signup/login, character load/save, account-link collision handling, reconnect and economy transaction idempotency.
-- Remove Firebase packages, config files, rules and secrets only after repository-wide search and end-to-end tests show no remaining Firebase runtime dependency.
+- Only after all consumers have moved and end-to-end tests pass, delete the obsolete `lib/firebase/` modules, Firebase config, rules, Firebase ESLint plugin and Firebase npm dependency.
 - Deploy to a staging URL, test the full game, then schedule production cutover.
