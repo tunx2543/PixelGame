@@ -2,13 +2,14 @@
 
 ## Status
 
-This branch starts the Supabase Auth foundation. It does **not** switch the live game yet.
+This branch builds the Supabase Auth foundation. It does **not** switch the live game yet.
 
 - Supabase project: `fzyvkuvndeinywphtior` (Sydney / ap-southeast-2)
 - Supabase schema scaffold: 38 public tables with RLS enabled
 - Current Supabase Auth users: 0
 - Current `public.user_profile` rows: 0
 - Current `public.character_save` rows: 0
+- Identity bridge migration `firebase_to_supabase_identity_bridge` is applied and committed.
 - Existing game still has Firebase Auth and Firestore dependencies across character saves, social features, presence, chat, mail, parties, trading, GM tools, premium shop, top-ups and payment verification.
 
 ## Migration rules
@@ -18,7 +19,15 @@ This branch starts the Supabase Auth foundation. It does **not** switch the live
 3. Do not delete or disable either Firebase project until export, import, account linking, and end-to-end verification are complete.
 4. Keep all premium balances, top-up approvals, redeem grants and inventory grants server-authoritative. Never allow browser clients to write balances directly.
 5. Keep Firebase data read-only during the migration window; do not dual-write sensitive game-economy records.
-6. The old data-bearing Firebase project was previously identified as `gen-lang-client-0085175453`; `key-generator-xzbz0` is a separate project. Export must target the project that actually contains the live player data.
+6. The historical data source previously identified is `gen-lang-client-0085175453`; the committed app config currently points at `key-generator-xzbz0`. This discrepancy must be resolved against the live Firebase console before exporting or disabling anything.
+
+## Completed database foundation
+
+- Added `public.legacy_identity_link`: maps a Supabase Auth UUID to the original Firebase UID and stable game UID. It is not exposed to browser roles; service-role access only.
+- Added `auth_user_id` to `public.user_profile` and `owner_auth_id` to `public.character_save`.
+- Added owner-scoped RLS policies for profile and character read/write/delete.
+- The new mapping and owner columns are nullable so the empty Supabase project can accept the migration without fabricating users or changing old IDs.
+- Existing user/profile/character tables remain empty; no Firebase data has been imported.
 
 ## Supabase Auth setup required
 
@@ -38,10 +47,10 @@ Application environment:
 ## Remaining work before production cutover
 
 - Complete Google OAuth provider setup and test PKCE callback/session refresh.
-- Add an identity-link table that maps Supabase Auth UUIDs to legacy Firebase UIDs and existing game UIDs.
-- Export the live Firebase Auth user list and Firestore documents from the data-bearing Firebase project, then import with idempotent checks and reconciliation reports.
+- Export the actual live Firebase Auth user list and Firestore documents from the correct data-bearing project, then import with idempotent checks and reconciliation reports.
 - Replace Firebase-dependent character/profile persistence and all Firebase client auth subscriptions.
 - Migrate presence, chat, friends, parties, mail, trades, guilds, missions, GM events and announcements to Supabase Realtime/RPC with owner-scoped RLS.
 - Rebuild premium/top-up/payment APIs to verify Supabase JWTs and use trusted server-side database transactions.
+- Add tests for signup/login, character load/save, account-link collision handling, reconnect and economy transaction idempotency.
 - Remove Firebase packages, config files, rules and secrets only after repository-wide search and end-to-end tests show no remaining Firebase runtime dependency.
-- Deploy to a staging URL, test account creation/login, character load/save, reconnect, social features and economy flows, then schedule the production cutover.
+- Deploy to a staging URL, test the full game, then schedule production cutover.
