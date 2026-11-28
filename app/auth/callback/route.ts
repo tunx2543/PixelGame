@@ -1,34 +1,17 @@
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
-import { NextResponse } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
+import { createServerSupabaseClient } from '@/lib/supabase/server'
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
-  if (!code) return NextResponse.redirect(new URL('/', requestUrl.origin))
+  const nextPath = requestUrl.searchParams.get('next')
+  const safeNext = nextPath?.startsWith('/') && !nextPath.startsWith('//') ? nextPath : '/'
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.NEXT_PUBLIC_TUNX2543_SUPABASE_URL
-  const supabaseKey =
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
-    process.env.NEXT_PUBLIC_TUNX2543_SUPABASE_PUBLISHABLE_KEY ??
-    process.env.NEXT_PUBLIC_TUNX2543_SUPABASE_ANON_KEY
-
-  if (!supabaseUrl || !supabaseKey) {
-    return NextResponse.redirect(new URL('/', requestUrl.origin))
+  if (code) {
+    const supabase = await createServerSupabaseClient()
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    if (!error) return NextResponse.redirect(new URL(safeNext, requestUrl.origin))
   }
 
-  const cookieStore = await cookies()
-  const supabase = createServerClient(
-    supabaseUrl,
-    supabaseKey,
-    {
-      cookies: {
-        getAll: () => cookieStore.getAll(),
-        setAll: (cookiesToSet) => cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)),
-      },
-    },
-  )
-  await supabase.auth.exchangeCodeForSession(code)
-  return NextResponse.redirect(new URL('/', requestUrl.origin))
+  return NextResponse.redirect(new URL('/?auth_error=oauth_callback', requestUrl.origin))
 }
