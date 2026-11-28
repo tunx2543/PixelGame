@@ -1,6 +1,9 @@
 name: Deploy Pixel Quest to Cloudflare Workers
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
